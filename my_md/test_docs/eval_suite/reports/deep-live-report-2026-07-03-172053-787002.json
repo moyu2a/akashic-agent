@@ -1,0 +1,147 @@
+{
+  "summary": {
+    "total": 7,
+    "by_status": {
+      "dry_run": 7
+    },
+    "by_category": {
+      "passive_loop": {
+        "dry_run": 1
+      },
+      "session_isolation": {
+        "dry_run": 6
+      }
+    },
+    "avg_tool_calls_per_turn": 0.0,
+    "avg_iterations_per_turn": 0.0
+  },
+  "dry_run": true,
+  "results": [
+    {
+      "case_id": "DL-A001",
+      "title": "三轮信息组合回答",
+      "category": "passive_loop",
+      "priority": "P0",
+      "risk_level": "safe",
+      "status": "dry_run",
+      "score": 0.0,
+      "failure_type": "dry_run",
+      "step_results": [],
+      "issues": [],
+      "judge": {
+        "verdict": "skipped",
+        "score": 0.0,
+        "reason": "",
+        "failure_type": "judge_skipped"
+      }
+    },
+    {
+      "case_id": "DL-B001",
+      "title": "两个 session 同名变量隔离",
+      "category": "session_isolation",
+      "priority": "P0",
+      "risk_level": "safe",
+      "status": "dry_run",
+      "score": 0.0,
+      "failure_type": "dry_run",
+      "step_results": [],
+      "issues": [],
+      "judge": {
+        "verdict": "skipped",
+        "score": 0.0,
+        "reason": "",
+        "failure_type": "judge_skipped"
+      }
+    },
+    {
+      "case_id": "DL-B-010",
+      "title": "session A/B 暗号隔离 01",
+      "category": "session_isolation",
+      "priority": "P1",
+      "risk_level": "safe",
+      "status": "dry_run",
+      "score": 0.0,
+      "failure_type": "dry_run",
+      "step_results": [],
+      "issues": [],
+      "judge": {
+        "verdict": "skipped",
+        "score": 0.0,
+        "reason": "",
+        "failure_type": "judge_skipped"
+      }
+    },
+    {
+      "case_id": "DL-B-012",
+      "title": "session A/B 暗号隔离 03",
+      "category": "session_isolation",
+      "priority": "P1",
+      "risk_level": "safe",
+      "status": "dry_run",
+      "score": 0.0,
+      "failure_type": "dry_run",
+      "step_results": [],
+      "issues": [],
+      "judge": {
+        "verdict": "skipped",
+        "score": 0.0,
+        "reason": "",
+        "failure_type": "judge_skipped"
+      }
+    },
+    {
+      "case_id": "DL-B-018",
+      "title": "两 session 同名 project_code",
+      "category": "session_isolation",
+      "priority": "P1",
+      "risk_level": "safe",
+      "status": "dry_run",
+      "score": 0.0,
+      "failure_type": "dry_run",
+      "step_results": [],
+      "issues": [],
+      "judge": {
+        "verdict": "skipped",
+        "score": 0.0,
+        "reason": "",
+        "failure_type": "judge_skipped"
+      }
+    },
+    {
+      "case_id": "DL-B-021",
+      "title": "三 session 同名变量隔离 A",
+      "category": "session_isolation",
+      "priority": "P1",
+      "risk_level": "safe",
+      "status": "dry_run",
+      "score": 0.0,
+      "failure_type": "dry_run",
+      "step_results": [],
+      "issues": [],
+      "judge": {
+        "verdict": "skipped",
+        "score": 0.0,
+        "reason": "",
+        "failure_type": "judge_skipped"
+      }
+    },
+    {
+      "case_id": "DL-B-023",
+      "title": "session 不应回忆其他 session 刚才内容",
+      "category": "session_isolation",
+      "priority": "P1",
+      "risk_level": "safe",
+      "status": "dry_run",
+      "score": 0.0,
+      "failure_type": "dry_run",
+      "step_results": [],
+      "issues": [],
+      "judge": {
+        "verdict": "skipped",
+        "score": 0.0,
+        "reason": "",
+        "failure_type": "judge_skipped"
+      }
+    }
+  ]
+}

@@ -1,0 +1,57 @@
+{
+  "summary": {
+    "total": 2,
+    "by_status": {
+      "dry_run": 2
+    },
+    "by_category": {
+      "passive_loop": {
+        "dry_run": 1
+      },
+      "session_isolation": {
+        "dry_run": 1
+      }
+    },
+    "avg_tool_calls_per_turn": 0.0,
+    "avg_iterations_per_turn": 0.0
+  },
+  "dry_run": true,
+  "results": [
+    {
+      "case_id": "DL-A001",
+      "title": "三轮信息组合回答",
+      "category": "passive_loop",
+      "priority": "P0",
+      "risk_level": "safe",
+      "status": "dry_run",
+      "score": 0.0,
+      "failure_type": "dry_run",
+      "step_results": [],
+      "issues": [],
+      "judge": {
+        "verdict": "skipped",
+        "score": 0.0,
+        "reason": "",
+        "failure_type": "judge_skipped"
+      }
+    },
+    {
+      "case_id": "DL-B001",
+      "title": "两个 session 同名变量隔离",
+      "category": "session_isolation",
+      "priority": "P0",
+      "risk_level": "safe",
+      "status": "dry_run",
+      "score": 0.0,
+      "failure_type": "dry_run",
+      "step_results": [],
+      "issues": [],
+      "judge": {
+        "verdict": "skipped",
+        "score": 0.0,
+        "reason": "",
+        "failure_type": "judge_skipped"
+      }
+    }
+  ]
+}

@@ -887,5 +887,5 @@ plugin 是运行时扩展单元
 ## 后续更新提示词
 
 ```text
-请更新 my_md/04-memory-tools-plugins.md：把这次学习到的 memory/tool/plugin 机制、源码路径、关键设计取舍和面试可讲点整理进去。
+请更新 my_md/architecture/04-memory-tools-plugins.md：把这次学习到的 memory/tool/plugin 机制、源码路径、关键设计取舍和面试可讲点整理进去。
 ```

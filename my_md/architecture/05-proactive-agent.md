@@ -373,5 +373,5 @@ workspace 下会维护：
 ## 后续更新提示词
 
 ```text
-请更新 my_md/05-proactive-agent.md：把这次学习到的 proactive tick、数据源、gate、推送/跳过逻辑和源码路径补充进去。
+请更新 my_md/architecture/05-proactive-agent.md：把这次学习到的 proactive tick、数据源、gate、推送/跳过逻辑和源码路径补充进去。
 ```

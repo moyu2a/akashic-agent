@@ -1102,5 +1102,5 @@ ProactiveLoop
 ## 后续更新提示词
 
 ```text
-请更新 my_md/02-architecture.md：根据这次阅读源码的结果，补充架构图、关键对象职责、调用链路和源码路径。
+请更新 my_md/architecture/02-architecture.md：根据这次阅读源码的结果，补充架构图、关键对象职责、调用链路和源码路径。
 ```

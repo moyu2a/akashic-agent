@@ -1,0 +1,36 @@
+{
+  "summary": {
+    "total": 1,
+    "by_status": {
+      "dry_run": 1
+    },
+    "by_category": {
+      "passive_loop": {
+        "dry_run": 1
+      }
+    },
+    "avg_tool_calls_per_turn": 0.0,
+    "avg_iterations_per_turn": 0.0
+  },
+  "dry_run": true,
+  "results": [
+    {
+      "case_id": "DL-A001",
+      "title": "三轮信息组合回答",
+      "category": "passive_loop",
+      "priority": "P0",
+      "risk_level": "safe",
+      "status": "dry_run",
+      "score": 0.0,
+      "failure_type": "dry_run",
+      "step_results": [],
+      "issues": [],
+      "judge": {
+        "verdict": "skipped",
+        "score": 0.0,
+        "reason": "",
+        "failure_type": "judge_skipped"
+      }
+    }
+  ]
+}

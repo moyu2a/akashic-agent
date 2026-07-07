@@ -634,5 +634,5 @@ ctx = await event_bus.emit(ctx)
 ## 后续更新提示词
 
 ```text
-请更新 my_md/03-passive-agent-loop.md：把这次追踪到的被动对话调用链、关键函数、Phase 行为和未理解问题补充进去。
+请更新 my_md/architecture/03-passive-agent-loop.md：把这次追踪到的被动对话调用链、关键函数、Phase 行为和未理解问题补充进去。
 ```

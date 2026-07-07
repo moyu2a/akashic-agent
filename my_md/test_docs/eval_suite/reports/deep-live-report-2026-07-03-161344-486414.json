@@ -1,0 +1,1875 @@
+{
+  "summary": {
+    "total": 102,
+    "by_status": {
+      "dry_run": 102
+    },
+    "by_category": {
+      "passive_loop": {
+        "dry_run": 20
+      },
+      "session_isolation": {
+        "dry_run": 15
+      },
+      "long_memory": {
+        "dry_run": 18
+      },
+      "memory_rag": {
+        "dry_run": 18
+      },
+      "tool_use": {
+        "dry_run": 15
+      },
+      "observe_cost": {
+        "dry_run": 7
+      },
+      "scheduler_spawn": {
+        "dry_run": 5
+      },
+      "regression": {
+        "dry_run": 4
+      }
+    },
+    "avg_tool_calls_per_turn": 0.0,
+    "avg_iterations_per_turn": 0.0
+  },
+  "dry_run": true,
+  "results": [
+    {
+      "case_id": "DL-A001",
+      "title": "三轮信息组合回答",
+      "category": "passive_loop",
+      "priority": "P0",
+      "risk_level": "safe",
+      "status": "dry_run",
+      "score": 0.0,
+      "failure_type": "dry_run",
+      "step_results": [],
+      "issues": [],
+      "judge": {
+        "verdict": "skipped",
+        "score": 0.0,
+        "reason": "",
+        "failure_type": "judge_skipped"
+      }
+    },
+    {
+      "case_id": "DL-B001",
+      "title": "两个 session 同名变量隔离",
+      "category": "session_isolation",
+      "priority": "P0",
+      "risk_level": "safe",
+      "status": "dry_run",
+      "score": 0.0,
+      "failure_type": "dry_run",
+      "step_results": [],
+      "issues": [],
+      "judge": {
+        "verdict": "skipped",
+        "score": 0.0,
+        "reason": "",
+        "failure_type": "judge_skipped"
+      }
+    },
+    {
+      "case_id": "DL-C001",
+      "title": "测试记忆写入后跨 session 召回",
+      "category": "long_memory",
+      "priority": "P0",
+      "risk_level": "safe",
+      "status": "dry_run",
+      "score": 0.0,
+      "failure_type": "dry_run",
+      "step_results": [],
+      "issues": [],
+      "judge": {
+        "verdict": "skipped",
+        "score": 0.0,
+        "reason": "",
+        "failure_type": "judge_skipped"
+      }
+    },
+    {
+      "case_id": "DL-C002",
+      "title": "纠错后旧记忆不得作为当前事实",
+      "category": "long_memory",
+      "priority": "P0",
+      "risk_level": "safe",
+      "status": "dry_run",
+      "score": 0.0,
+      "failure_type": "dry_run",
+      "step_results": [],
+      "issues": [],
+      "judge": {
+        "verdict": "skipped",
+        "score": 0.0,
+        "reason": "",
+        "failure_type": "judge_skipped"
+      }
+    },
+    {
+      "case_id": "DL-D001",
+      "title": "召回后必须回源验证",
+      "category": "memory_rag",
+      "priority": "P0",
+      "risk_level": "safe",
+      "status": "dry_run",
+      "score": 0.0,
+      "failure_type": "dry_run",
+      "step_results": [],
+      "issues": [],
+      "judge": {
+        "verdict": "skipped",
+        "score": 0.0,
+        "reason": "",
+        "failure_type": "judge_skipped"
+      }
+    },
+    {
+      "case_id": "DL-D002",
+      "title": "不存在偏好不得编造",
+      "category": "memory_rag",
+      "priority": "P0",
+      "risk_level": "safe",
+      "status": "dry_run",
+      "score": 0.0,
+      "failure_type": "dry_run",
+      "step_results": [],
+      "issues": [],
+      "judge": {
+        "verdict": "skipped",
+        "score": 0.0,
+        "reason": "",
+        "failure_type": "judge_skipped"
+      }
+    },
+    {
+      "case_id": "DL-F001",
+      "title": "只读 README 应调用 read_file 不调用 shell",
+      "category": "tool_use",
+      "priority": "P0",
+      "risk_level": "safe",
+      "status": "dry_run",
+      "score": 0.0,
+      "failure_type": "dry_run",
+      "step_results": [],
+      "issues": [],
+      "judge": {
+        "verdict": "skipped",
+        "score": 0.0,
+        "reason": "",
+        "failure_type": "judge_skipped"
+      }
+    },
+    {
+      "case_id": "DL-F002",
+      "title": "文件工具搜索应返回文件能力",
+      "category": "tool_use",
+      "priority": "P0",
+      "risk_level": "safe",
+      "status": "dry_run",
+      "score": 0.0,
+      "failure_type": "dry_run",
+      "step_results": [],
+      "issues": [],
+      "judge": {
+        "verdict": "skipped",
+        "score": 0.0,
+        "reason": "",
+        "failure_type": "judge_skipped"
+      }
+    },
+    {
+      "case_id": "DL-H001",
+      "title": "简单问答成本不应异常膨胀",
+      "category": "observe_cost",
+      "priority": "P1",
+      "risk_level": "safe",
+      "status": "dry_run",
+      "score": 0.0,
+      "failure_type": "dry_run",
+      "step_results": [],
+      "issues": [],
+      "judge": {
+        "verdict": "skipped",
+        "score": 0.0,
+        "reason": "",
+        "failure_type": "judge_skipped"
+      }
+    },
+    {
+      "case_id": "DL-A-010",
+      "title": "简单概念解释 runtime",
+      "category": "passive_loop",
+      "priority": "P1",
+      "risk_level": "safe",
+      "status": "dry_run",
+      "score": 0.0,
+      "failure_type": "dry_run",
+      "step_results": [],
+      "issues": [],
+      "judge": {
+        "verdict": "skipped",
+        "score": 0.0,
+        "reason": "",
+        "failure_type": "judge_skipped"
+      }
+    },
+    {
+      "case_id": "DL-A-011",
+      "title": "简单概念解释 tool governance",
+      "category": "passive_loop",
+      "priority": "P1",
+      "risk_level": "safe",
+      "status": "dry_run",
+      "score": 0.0,
+      "failure_type": "dry_run",
+      "step_results": [],
+      "issues": [],
+      "judge": {
+        "verdict": "skipped",
+        "score": 0.0,
+        "reason": "",
+        "failure_type": "judge_skipped"
+      }
+    },
+    {
+      "case_id": "DL-A-012",
+      "title": "简单概念解释 observe",
+      "category": "passive_loop",
+      "priority": "P1",
+      "risk_level": "safe",
+      "status": "dry_run",
+      "score": 0.0,
+      "failure_type": "dry_run",
+      "step_results": [],
+      "issues": [],
+      "judge": {
+        "verdict": "skipped",
+        "score": 0.0,
+        "reason": "",
+        "failure_type": "judge_skipped"
+      }
+    },
+    {
+      "case_id": "DL-A-013",
+      "title": "简短回答控制",
+      "category": "passive_loop",
+      "priority": "P1",
+      "risk_level": "safe",
+      "status": "dry_run",
+      "score": 0.0,
+      "failure_type": "dry_run",
+      "step_results": [],
+      "issues": [],
+      "judge": {
+        "verdict": "skipped",
+        "score": 0.0,
+        "reason": "",
+        "failure_type": "judge_skipped"
+      }
+    },
+    {
+      "case_id": "DL-A-014",
+      "title": "禁止工具下回答常识",
+      "category": "passive_loop",
+      "priority": "P1",
+      "risk_level": "safe",
+      "status": "dry_run",
+      "score": 0.0,
+      "failure_type": "dry_run",
+      "step_results": [],
+      "issues": [],
+      "judge": {
+        "verdict": "skipped",
+        "score": 0.0,
+        "reason": "",
+        "failure_type": "judge_skipped"
+      }
+    },
+    {
+      "case_id": "DL-A-015",
+      "title": "指令冲突处理",
+      "category": "passive_loop",
+      "priority": "P1",
+      "risk_level": "safe",
+      "status": "dry_run",
+      "score": 0.0,
+      "failure_type": "dry_run",
+      "step_results": [],
+      "issues": [],
+      "judge": {
+        "verdict": "skipped",
+        "score": 0.0,
+        "reason": "",
+        "failure_type": "judge_skipped"
+      }
+    },
+    {
+      "case_id": "DL-A-016",
+      "title": "固定格式 JSON",
+      "category": "passive_loop",
+      "priority": "P1",
+      "risk_level": "safe",
+      "status": "dry_run",
+      "score": 0.0,
+      "failure_type": "dry_run",
+      "step_results": [],
+      "issues": [],
+      "judge": {
+        "verdict": "skipped",
+        "score": 0.0,
+        "reason": "",
+        "failure_type": "judge_skipped"
+      }
+    },
+    {
+      "case_id": "DL-A-017",
+      "title": "英文问题语言保持",
+      "category": "passive_loop",
+      "priority": "P1",
+      "risk_level": "safe",
+      "status": "dry_run",
+      "score": 0.0,
+      "failure_type": "dry_run",
+      "step_results": [],
+      "issues": [],
+      "judge": {
+        "verdict": "skipped",
+        "score": 0.0,
+        "reason": "",
+        "failure_type": "judge_skipped"
+      }
+    },
+    {
+      "case_id": "DL-A-018",
+      "title": "长输入摘要",
+      "category": "passive_loop",
+      "priority": "P1",
+      "risk_level": "safe",
+      "status": "dry_run",
+      "score": 0.0,
+      "failure_type": "dry_run",
+      "step_results": [],
+      "issues": [],
+      "judge": {
+        "verdict": "skipped",
+        "score": 0.0,
+        "reason": "",
+        "failure_type": "judge_skipped"
+      }
+    },
+    {
+      "case_id": "DL-A-019",
+      "title": "不编造本地状态",
+      "category": "passive_loop",
+      "priority": "P1",
+      "risk_level": "safe",
+      "status": "dry_run",
+      "score": 0.0,
+      "failure_type": "dry_run",
+      "step_results": [],
+      "issues": [],
+      "judge": {
+        "verdict": "skipped",
+        "score": 0.0,
+        "reason": "",
+        "failure_type": "judge_skipped"
+      }
+    },
+    {
+      "case_id": "DL-A-020",
+      "title": "普通非技术问答",
+      "category": "passive_loop",
+      "priority": "P1",
+      "risk_level": "safe",
+      "status": "dry_run",
+      "score": 0.0,
+      "failure_type": "dry_run",
+      "step_results": [],
+      "issues": [],
+      "judge": {
+        "verdict": "skipped",
+        "score": 0.0,
+        "reason": "",
+        "failure_type": "judge_skipped"
+      }
+    },
+    {
+      "case_id": "DL-A-021",
+      "title": "多要求合并",
+      "category": "passive_loop",
+      "priority": "P1",
+      "risk_level": "safe",
+      "status": "dry_run",
+      "score": 0.0,
+      "failure_type": "dry_run",
+      "step_results": [],
+      "issues": [],
+      "judge": {
+        "verdict": "skipped",
+        "score": 0.0,
+        "reason": "",
+        "failure_type": "judge_skipped"
+      }
+    },
+    {
+      "case_id": "DL-A-022",
+      "title": "拒绝无上下文猜测",
+      "category": "passive_loop",
+      "priority": "P1",
+      "risk_level": "safe",
+      "status": "dry_run",
+      "score": 0.0,
+      "failure_type": "dry_run",
+      "step_results": [],
+      "issues": [],
+      "judge": {
+        "verdict": "skipped",
+        "score": 0.0,
+        "reason": "",
+        "failure_type": "judge_skipped"
+      }
+    },
+    {
+      "case_id": "DL-A-023",
+      "title": "数学不调用工具",
+      "category": "passive_loop",
+      "priority": "P1",
+      "risk_level": "safe",
+      "status": "dry_run",
+      "score": 0.0,
+      "failure_type": "dry_run",
+      "step_results": [],
+      "issues": [],
+      "judge": {
+        "verdict": "skipped",
+        "score": 0.0,
+        "reason": "",
+        "failure_type": "judge_skipped"
+      }
+    },
+    {
+      "case_id": "DL-A-024",
+      "title": "列表输出",
+      "category": "passive_loop",
+      "priority": "P1",
+      "risk_level": "safe",
+      "status": "dry_run",
+      "score": 0.0,
+      "failure_type": "dry_run",
+      "step_results": [],
+      "issues": [],
+      "judge": {
+        "verdict": "skipped",
+        "score": 0.0,
+        "reason": "",
+        "failure_type": "judge_skipped"
+      }
+    },
+    {
+      "case_id": "DL-A-025",
+      "title": "中文短答不跑工具",
+      "category": "passive_loop",
+      "priority": "P1",
+      "risk_level": "safe",
+      "status": "dry_run",
+      "score": 0.0,
+      "failure_type": "dry_run",
+      "step_results": [],
+      "issues": [],
+      "judge": {
+        "verdict": "skipped",
+        "score": 0.0,
+        "reason": "",
+        "failure_type": "judge_skipped"
+      }
+    },
+    {
+      "case_id": "DL-A-026",
+      "title": "约束格式段落",
+      "category": "passive_loop",
+      "priority": "P1",
+      "risk_level": "safe",
+      "status": "dry_run",
+      "score": 0.0,
+      "failure_type": "dry_run",
+      "step_results": [],
+      "issues": [],
+      "judge": {
+        "verdict": "skipped",
+        "score": 0.0,
+        "reason": "",
+        "failure_type": "judge_skipped"
+      }
+    },
+    {
+      "case_id": "DL-A-027",
+      "title": "澄清模糊需求",
+      "category": "passive_loop",
+      "priority": "P1",
+      "risk_level": "safe",
+      "status": "dry_run",
+      "score": 0.0,
+      "failure_type": "dry_run",
+      "step_results": [],
+      "issues": [],
+      "judge": {
+        "verdict": "skipped",
+        "score": 0.0,
+        "reason": "",
+        "failure_type": "judge_skipped"
+      }
+    },
+    {
+      "case_id": "DL-A-028",
+      "title": "不使用工具解释本地不确定性",
+      "category": "passive_loop",
+      "priority": "P1",
+      "risk_level": "safe",
+      "status": "dry_run",
+      "score": 0.0,
+      "failure_type": "dry_run",
+      "step_results": [],
+      "issues": [],
+      "judge": {
+        "verdict": "skipped",
+        "score": 0.0,
+        "reason": "",
+        "failure_type": "judge_skipped"
+      }
+    },
+    {
+      "case_id": "DL-B-010",
+      "title": "session A/B 暗号隔离 01",
+      "category": "session_isolation",
+      "priority": "P1",
+      "risk_level": "safe",
+      "status": "dry_run",
+      "score": 0.0,
+      "failure_type": "dry_run",
+      "step_results": [],
+      "issues": [],
+      "judge": {
+        "verdict": "skipped",
+        "score": 0.0,
+        "reason": "",
+        "failure_type": "judge_skipped"
+      }
+    },
+    {
+      "case_id": "DL-B-011",
+      "title": "session A/B 暗号隔离 02",
+      "category": "session_isolation",
+      "priority": "P1",
+      "risk_level": "safe",
+      "status": "dry_run",
+      "score": 0.0,
+      "failure_type": "dry_run",
+      "step_results": [],
+      "issues": [],
+      "judge": {
+        "verdict": "skipped",
+        "score": 0.0,
+        "reason": "",
+        "failure_type": "judge_skipped"
+      }
+    },
+    {
+      "case_id": "DL-B-012",
+      "title": "session A/B 暗号隔离 03",
+      "category": "session_isolation",
+      "priority": "P1",
+      "risk_level": "safe",
+      "status": "dry_run",
+      "score": 0.0,
+      "failure_type": "dry_run",
+      "step_results": [],
+      "issues": [],
+      "judge": {
+        "verdict": "skipped",
+        "score": 0.0,
+        "reason": "",
+        "failure_type": "judge_skipped"
+      }
+    },
+    {
+      "case_id": "DL-B-013",
+      "title": "session 当前总结不串线",
+      "category": "session_isolation",
+      "priority": "P1",
+      "risk_level": "safe",
+      "status": "dry_run",
+      "score": 0.0,
+      "failure_type": "dry_run",
+      "step_results": [],
+      "issues": [],
+      "judge": {
+        "verdict": "skipped",
+        "score": 0.0,
+        "reason": "",
+        "failure_type": "judge_skipped"
+      }
+    },
+    {
+      "case_id": "DL-B-014",
+      "title": "session 搜索当前范围",
+      "category": "session_isolation",
+      "priority": "P1",
+      "risk_level": "safe",
+      "status": "dry_run",
+      "score": 0.0,
+      "failure_type": "dry_run",
+      "step_results": [],
+      "issues": [],
+      "judge": {
+        "verdict": "skipped",
+        "score": 0.0,
+        "reason": "",
+        "failure_type": "judge_skipped"
+      }
+    },
+    {
+      "case_id": "DL-B-015",
+      "title": "长期记忆跨 session 可用",
+      "category": "session_isolation",
+      "priority": "P1",
+      "risk_level": "safe",
+      "status": "dry_run",
+      "score": 0.0,
+      "failure_type": "dry_run",
+      "step_results": [],
+      "issues": [],
+      "judge": {
+        "verdict": "skipped",
+        "score": 0.0,
+        "reason": "",
+        "failure_type": "judge_skipped"
+      }
+    },
+    {
+      "case_id": "DL-B-016",
+      "title": "当前会话与长期记忆区分",
+      "category": "session_isolation",
+      "priority": "P1",
+      "risk_level": "safe",
+      "status": "dry_run",
+      "score": 0.0,
+      "failure_type": "dry_run",
+      "step_results": [],
+      "issues": [],
+      "judge": {
+        "verdict": "skipped",
+        "score": 0.0,
+        "reason": "",
+        "failure_type": "judge_skipped"
+      }
+    },
+    {
+      "case_id": "DL-B-017",
+      "title": "工具解锁不跨 session",
+      "category": "session_isolation",
+      "priority": "P1",
+      "risk_level": "safe",
+      "status": "dry_run",
+      "score": 0.0,
+      "failure_type": "dry_run",
+      "step_results": [],
+      "issues": [],
+      "judge": {
+        "verdict": "skipped",
+        "score": 0.0,
+        "reason": "",
+        "failure_type": "judge_skipped"
+      }
+    },
+    {
+      "case_id": "DL-B-018",
+      "title": "两 session 同名 project_code",
+      "category": "session_isolation",
+      "priority": "P1",
+      "risk_level": "safe",
+      "status": "dry_run",
+      "score": 0.0,
+      "failure_type": "dry_run",
+      "step_results": [],
+      "issues": [],
+      "judge": {
+        "verdict": "skipped",
+        "score": 0.0,
+        "reason": "",
+        "failure_type": "judge_skipped"
+      }
+    },
+    {
+      "case_id": "DL-B-019",
+      "title": "两 session 同名 project_code 反向",
+      "category": "session_isolation",
+      "priority": "P1",
+      "risk_level": "safe",
+      "status": "dry_run",
+      "score": 0.0,
+      "failure_type": "dry_run",
+      "step_results": [],
+      "issues": [],
+      "judge": {
+        "verdict": "skipped",
+        "score": 0.0,
+        "reason": "",
+        "failure_type": "judge_skipped"
+      }
+    },
+    {
+      "case_id": "DL-B-020",
+      "title": "后台任务回灌原 session",
+      "category": "session_isolation",
+      "priority": "P1",
+      "risk_level": "safe",
+      "status": "dry_run",
+      "score": 0.0,
+      "failure_type": "dry_run",
+      "step_results": [],
+      "issues": [],
+      "judge": {
+        "verdict": "skipped",
+        "score": 0.0,
+        "reason": "",
+        "failure_type": "judge_skipped"
+      }
+    },
+    {
+      "case_id": "DL-B-021",
+      "title": "三 session 同名变量隔离 A",
+      "category": "session_isolation",
+      "priority": "P1",
+      "risk_level": "safe",
+      "status": "dry_run",
+      "score": 0.0,
+      "failure_type": "dry_run",
+      "step_results": [],
+      "issues": [],
+      "judge": {
+        "verdict": "skipped",
+        "score": 0.0,
+        "reason": "",
+        "failure_type": "judge_skipped"
+      }
+    },
+    {
+      "case_id": "DL-B-022",
+      "title": "三 session 同名变量隔离 C",
+      "category": "session_isolation",
+      "priority": "P1",
+      "risk_level": "safe",
+      "status": "dry_run",
+      "score": 0.0,
+      "failure_type": "dry_run",
+      "step_results": [],
+      "issues": [],
+      "judge": {
+        "verdict": "skipped",
+        "score": 0.0,
+        "reason": "",
+        "failure_type": "judge_skipped"
+      }
+    },
+    {
+      "case_id": "DL-B-023",
+      "title": "session 不应回忆其他 session 刚才内容",
+      "category": "session_isolation",
+      "priority": "P1",
+      "risk_level": "safe",
+      "status": "dry_run",
+      "score": 0.0,
+      "failure_type": "dry_run",
+      "step_results": [],
+      "issues": [],
+      "judge": {
+        "verdict": "skipped",
+        "score": 0.0,
+        "reason": "",
+        "failure_type": "judge_skipped"
+      }
+    },
+    {
+      "case_id": "DL-C-010",
+      "title": "preference 写入 010",
+      "category": "long_memory",
+      "priority": "P1",
+      "risk_level": "safe",
+      "status": "dry_run",
+      "score": 0.0,
+      "failure_type": "dry_run",
+      "step_results": [],
+      "issues": [],
+      "judge": {
+        "verdict": "skipped",
+        "score": 0.0,
+        "reason": "",
+        "failure_type": "judge_skipped"
+      }
+    },
+    {
+      "case_id": "DL-C-011",
+      "title": "preference 召回 010",
+      "category": "long_memory",
+      "priority": "P1",
+      "risk_level": "safe",
+      "status": "dry_run",
+      "score": 0.0,
+      "failure_type": "dry_run",
+      "step_results": [],
+      "issues": [],
+      "judge": {
+        "verdict": "skipped",
+        "score": 0.0,
+        "reason": "",
+        "failure_type": "judge_skipped"
+      }
+    },
+    {
+      "case_id": "DL-C-012",
+      "title": "fact 写入",
+      "category": "long_memory",
+      "priority": "P1",
+      "risk_level": "safe",
+      "status": "dry_run",
+      "score": 0.0,
+      "failure_type": "dry_run",
+      "step_results": [],
+      "issues": [],
+      "judge": {
+        "verdict": "skipped",
+        "score": 0.0,
+        "reason": "",
+        "failure_type": "judge_skipped"
+      }
+    },
+    {
+      "case_id": "DL-C-013",
+      "title": "纠错写入",
+      "category": "long_memory",
+      "priority": "P1",
+      "risk_level": "safe",
+      "status": "dry_run",
+      "score": 0.0,
+      "failure_type": "dry_run",
+      "step_results": [],
+      "issues": [],
+      "judge": {
+        "verdict": "skipped",
+        "score": 0.0,
+        "reason": "",
+        "failure_type": "judge_skipped"
+      }
+    },
+    {
+      "case_id": "DL-C-014",
+      "title": "遗忘指定记忆",
+      "category": "long_memory",
+      "priority": "P1",
+      "risk_level": "safe",
+      "status": "dry_run",
+      "score": 0.0,
+      "failure_type": "dry_run",
+      "step_results": [],
+      "issues": [],
+      "judge": {
+        "verdict": "skipped",
+        "score": 0.0,
+        "reason": "",
+        "failure_type": "judge_skipped"
+      }
+    },
+    {
+      "case_id": "DL-C-015",
+      "title": "重复记忆去重",
+      "category": "long_memory",
+      "priority": "P1",
+      "risk_level": "safe",
+      "status": "dry_run",
+      "score": 0.0,
+      "failure_type": "dry_run",
+      "step_results": [],
+      "issues": [],
+      "judge": {
+        "verdict": "skipped",
+        "score": 0.0,
+        "reason": "",
+        "failure_type": "judge_skipped"
+      }
+    },
+    {
+      "case_id": "DL-C-016",
+      "title": "不要记住",
+      "category": "long_memory",
+      "priority": "P1",
+      "risk_level": "safe",
+      "status": "dry_run",
+      "score": 0.0,
+      "failure_type": "dry_run",
+      "step_results": [],
+      "issues": [],
+      "judge": {
+        "verdict": "skipped",
+        "score": 0.0,
+        "reason": "",
+        "failure_type": "judge_skipped"
+      }
+    },
+    {
+      "case_id": "DL-C-018",
+      "title": "低价值闲聊不写记忆",
+      "category": "long_memory",
+      "priority": "P1",
+      "risk_level": "safe",
+      "status": "dry_run",
+      "score": 0.0,
+      "failure_type": "dry_run",
+      "step_results": [],
+      "issues": [],
+      "judge": {
+        "verdict": "skipped",
+        "score": 0.0,
+        "reason": "",
+        "failure_type": "judge_skipped"
+      }
+    },
+    {
+      "case_id": "DL-C-019",
+      "title": "相似项目区分",
+      "category": "long_memory",
+      "priority": "P1",
+      "risk_level": "safe",
+      "status": "dry_run",
+      "score": 0.0,
+      "failure_type": "dry_run",
+      "step_results": [],
+      "issues": [],
+      "judge": {
+        "verdict": "skipped",
+        "score": 0.0,
+        "reason": "",
+        "failure_type": "judge_skipped"
+      }
+    },
+    {
+      "case_id": "DL-C-020",
+      "title": "时间相关记忆",
+      "category": "long_memory",
+      "priority": "P1",
+      "risk_level": "safe",
+      "status": "dry_run",
+      "score": 0.0,
+      "failure_type": "dry_run",
+      "step_results": [],
+      "issues": [],
+      "judge": {
+        "verdict": "skipped",
+        "score": 0.0,
+        "reason": "",
+        "failure_type": "judge_skipped"
+      }
+    },
+    {
+      "case_id": "DL-C-021",
+      "title": "类型过滤偏好",
+      "category": "long_memory",
+      "priority": "P1",
+      "risk_level": "safe",
+      "status": "dry_run",
+      "score": 0.0,
+      "failure_type": "dry_run",
+      "step_results": [],
+      "issues": [],
+      "judge": {
+        "verdict": "skipped",
+        "score": 0.0,
+        "reason": "",
+        "failure_type": "judge_skipped"
+      }
+    },
+    {
+      "case_id": "DL-C-022",
+      "title": "回源上下文",
+      "category": "long_memory",
+      "priority": "P1",
+      "risk_level": "safe",
+      "status": "dry_run",
+      "score": 0.0,
+      "failure_type": "dry_run",
+      "step_results": [],
+      "issues": [],
+      "judge": {
+        "verdict": "skipped",
+        "score": 0.0,
+        "reason": "",
+        "failure_type": "judge_skipped"
+      }
+    },
+    {
+      "case_id": "DL-C-023",
+      "title": "无关问题不召回测试记忆",
+      "category": "long_memory",
+      "priority": "P1",
+      "risk_level": "safe",
+      "status": "dry_run",
+      "score": 0.0,
+      "failure_type": "dry_run",
+      "step_results": [],
+      "issues": [],
+      "judge": {
+        "verdict": "skipped",
+        "score": 0.0,
+        "reason": "",
+        "failure_type": "judge_skipped"
+      }
+    },
+    {
+      "case_id": "DL-C-024",
+      "title": "多记忆排序",
+      "category": "long_memory",
+      "priority": "P1",
+      "risk_level": "safe",
+      "status": "dry_run",
+      "score": 0.0,
+      "failure_type": "dry_run",
+      "step_results": [],
+      "issues": [],
+      "judge": {
+        "verdict": "skipped",
+        "score": 0.0,
+        "reason": "",
+        "failure_type": "judge_skipped"
+      }
+    },
+    {
+      "case_id": "DL-C-025",
+      "title": "明确记忆学习目标",
+      "category": "long_memory",
+      "priority": "P1",
+      "risk_level": "safe",
+      "status": "dry_run",
+      "score": 0.0,
+      "failure_type": "dry_run",
+      "step_results": [],
+      "issues": [],
+      "judge": {
+        "verdict": "skipped",
+        "score": 0.0,
+        "reason": "",
+        "failure_type": "judge_skipped"
+      }
+    },
+    {
+      "case_id": "DL-C-026",
+      "title": "召回学习目标",
+      "category": "long_memory",
+      "priority": "P1",
+      "risk_level": "safe",
+      "status": "dry_run",
+      "score": 0.0,
+      "failure_type": "dry_run",
+      "step_results": [],
+      "issues": [],
+      "judge": {
+        "verdict": "skipped",
+        "score": 0.0,
+        "reason": "",
+        "failure_type": "judge_skipped"
+      }
+    },
+    {
+      "case_id": "DL-D-010",
+      "title": "typo agnet 召回",
+      "category": "memory_rag",
+      "priority": "P1",
+      "risk_level": "safe",
+      "status": "dry_run",
+      "score": 0.0,
+      "failure_type": "dry_run",
+      "step_results": [],
+      "issues": [],
+      "judge": {
+        "verdict": "skipped",
+        "score": 0.0,
+        "reason": "",
+        "failure_type": "judge_skipped"
+      }
+    },
+    {
+      "case_id": "DL-D-011",
+      "title": "学习关注方向证据",
+      "category": "memory_rag",
+      "priority": "P1",
+      "risk_level": "safe",
+      "status": "dry_run",
+      "score": 0.0,
+      "failure_type": "dry_run",
+      "step_results": [],
+      "issues": [],
+      "judge": {
+        "verdict": "skipped",
+        "score": 0.0,
+        "reason": "",
+        "failure_type": "judge_skipped"
+      }
+    },
+    {
+      "case_id": "DL-D-012",
+      "title": "不存在偏好拒答",
+      "category": "memory_rag",
+      "priority": "P1",
+      "risk_level": "safe",
+      "status": "dry_run",
+      "score": 0.0,
+      "failure_type": "dry_run",
+      "step_results": [],
+      "issues": [],
+      "judge": {
+        "verdict": "skipped",
+        "score": 0.0,
+        "reason": "",
+        "failure_type": "judge_skipped"
+      }
+    },
+    {
+      "case_id": "DL-D-013",
+      "title": "source_ref 回源",
+      "category": "memory_rag",
+      "priority": "P1",
+      "risk_level": "safe",
+      "status": "dry_run",
+      "score": 0.0,
+      "failure_type": "dry_run",
+      "step_results": [],
+      "issues": [],
+      "judge": {
+        "verdict": "skipped",
+        "score": 0.0,
+        "reason": "",
+        "failure_type": "judge_skipped"
+      }
+    },
+    {
+      "case_id": "DL-D-014",
+      "title": "当前与历史区分",
+      "category": "memory_rag",
+      "priority": "P1",
+      "risk_level": "safe",
+      "status": "dry_run",
+      "score": 0.0,
+      "failure_type": "dry_run",
+      "step_results": [],
+      "issues": [],
+      "judge": {
+        "verdict": "skipped",
+        "score": 0.0,
+        "reason": "",
+        "failure_type": "judge_skipped"
+      }
+    },
+    {
+      "case_id": "DL-D-015",
+      "title": "通用问题不污染",
+      "category": "memory_rag",
+      "priority": "P1",
+      "risk_level": "safe",
+      "status": "dry_run",
+      "score": 0.0,
+      "failure_type": "dry_run",
+      "step_results": [],
+      "issues": [],
+      "judge": {
+        "verdict": "skipped",
+        "score": 0.0,
+        "reason": "",
+        "failure_type": "judge_skipped"
+      }
+    },
+    {
+      "case_id": "DL-D-016",
+      "title": "低相关召回不主导",
+      "category": "memory_rag",
+      "priority": "P1",
+      "risk_level": "safe",
+      "status": "dry_run",
+      "score": 0.0,
+      "failure_type": "dry_run",
+      "step_results": [],
+      "issues": [],
+      "judge": {
+        "verdict": "skipped",
+        "score": 0.0,
+        "reason": "",
+        "failure_type": "judge_skipped"
+      }
+    },
+    {
+      "case_id": "DL-D-017",
+      "title": "证据忠实",
+      "category": "memory_rag",
+      "priority": "P1",
+      "risk_level": "safe",
+      "status": "dry_run",
+      "score": 0.0,
+      "failure_type": "dry_run",
+      "step_results": [],
+      "issues": [],
+      "judge": {
+        "verdict": "skipped",
+        "score": 0.0,
+        "reason": "",
+        "failure_type": "judge_skipped"
+      }
+    },
+    {
+      "case_id": "DL-D-018",
+      "title": "多条记忆合成",
+      "category": "memory_rag",
+      "priority": "P1",
+      "risk_level": "safe",
+      "status": "dry_run",
+      "score": 0.0,
+      "failure_type": "dry_run",
+      "step_results": [],
+      "issues": [],
+      "judge": {
+        "verdict": "skipped",
+        "score": 0.0,
+        "reason": "",
+        "failure_type": "judge_skipped"
+      }
+    },
+    {
+      "case_id": "DL-D-019",
+      "title": "citation 要求",
+      "category": "memory_rag",
+      "priority": "P1",
+      "risk_level": "safe",
+      "status": "dry_run",
+      "score": 0.0,
+      "failure_type": "dry_run",
+      "step_results": [],
+      "issues": [],
+      "judge": {
+        "verdict": "skipped",
+        "score": 0.0,
+        "reason": "",
+        "failure_type": "judge_skipped"
+      }
+    },
+    {
+      "case_id": "DL-D-020",
+      "title": "不跨类型串扰",
+      "category": "memory_rag",
+      "priority": "P1",
+      "risk_level": "safe",
+      "status": "dry_run",
+      "score": 0.0,
+      "failure_type": "dry_run",
+      "step_results": [],
+      "issues": [],
+      "judge": {
+        "verdict": "skipped",
+        "score": 0.0,
+        "reason": "",
+        "failure_type": "judge_skipped"
+      }
+    },
+    {
+      "case_id": "DL-D-021",
+      "title": "相似项目 B 精确召回",
+      "category": "memory_rag",
+      "priority": "P1",
+      "risk_level": "safe",
+      "status": "dry_run",
+      "score": 0.0,
+      "failure_type": "dry_run",
+      "step_results": [],
+      "issues": [],
+      "judge": {
+        "verdict": "skipped",
+        "score": 0.0,
+        "reason": "",
+        "failure_type": "judge_skipped"
+      }
+    },
+    {
+      "case_id": "DL-D-022",
+      "title": "相似项目 A 精确召回",
+      "category": "memory_rag",
+      "priority": "P1",
+      "risk_level": "safe",
+      "status": "dry_run",
+      "score": 0.0,
+      "failure_type": "dry_run",
+      "step_results": [],
+      "issues": [],
+      "judge": {
+        "verdict": "skipped",
+        "score": 0.0,
+        "reason": "",
+        "failure_type": "judge_skipped"
+      }
+    },
+    {
+      "case_id": "DL-D-023",
+      "title": "测试目标召回证据",
+      "category": "memory_rag",
+      "priority": "P1",
+      "risk_level": "safe",
+      "status": "dry_run",
+      "score": 0.0,
+      "failure_type": "dry_run",
+      "step_results": [],
+      "issues": [],
+      "judge": {
+        "verdict": "skipped",
+        "score": 0.0,
+        "reason": "",
+        "failure_type": "judge_skipped"
+      }
+    },
+    {
+      "case_id": "DL-D-024",
+      "title": "无关 RAG 问题拒绝测试记忆",
+      "category": "memory_rag",
+      "priority": "P1",
+      "risk_level": "safe",
+      "status": "dry_run",
+      "score": 0.0,
+      "failure_type": "dry_run",
+      "step_results": [],
+      "issues": [],
+      "judge": {
+        "verdict": "skipped",
+        "score": 0.0,
+        "reason": "",
+        "failure_type": "judge_skipped"
+      }
+    },
+    {
+      "case_id": "DL-D-025",
+      "title": "不存在测试 ID 拒答",
+      "category": "memory_rag",
+      "priority": "P1",
+      "risk_level": "safe",
+      "status": "dry_run",
+      "score": 0.0,
+      "failure_type": "dry_run",
+      "step_results": [],
+      "issues": [],
+      "judge": {
+        "verdict": "skipped",
+        "score": 0.0,
+        "reason": "",
+        "failure_type": "judge_skipped"
+      }
+    },
+    {
+      "case_id": "DL-F-010",
+      "title": "list_dir 项目根目录",
+      "category": "tool_use",
+      "priority": "P1",
+      "risk_level": "safe",
+      "status": "dry_run",
+      "score": 0.0,
+      "failure_type": "dry_run",
+      "step_results": [],
+      "issues": [],
+      "judge": {
+        "verdict": "skipped",
+        "score": 0.0,
+        "reason": "",
+        "failure_type": "judge_skipped"
+      }
+    },
+    {
+      "case_id": "DL-F-011",
+      "title": "read_file 不存在文件",
+      "category": "tool_use",
+      "priority": "P1",
+      "risk_level": "safe",
+      "status": "dry_run",
+      "score": 0.0,
+      "failure_type": "dry_run",
+      "step_results": [],
+      "issues": [],
+      "judge": {
+        "verdict": "skipped",
+        "score": 0.0,
+        "reason": "",
+        "failure_type": "judge_skipped"
+      }
+    },
+    {
+      "case_id": "DL-F-012",
+      "title": "shell pwd",
+      "category": "tool_use",
+      "priority": "P1",
+      "risk_level": "safe",
+      "status": "dry_run",
+      "score": 0.0,
+      "failure_type": "dry_run",
+      "step_results": [],
+      "issues": [],
+      "judge": {
+        "verdict": "skipped",
+        "score": 0.0,
+        "reason": "",
+        "failure_type": "judge_skipped"
+      }
+    },
+    {
+      "case_id": "DL-F-013",
+      "title": "禁止工具不调用",
+      "category": "tool_use",
+      "priority": "P1",
+      "risk_level": "safe",
+      "status": "dry_run",
+      "score": 0.0,
+      "failure_type": "dry_run",
+      "step_results": [],
+      "issues": [],
+      "judge": {
+        "verdict": "skipped",
+        "score": 0.0,
+        "reason": "",
+        "failure_type": "judge_skipped"
+      }
+    },
+    {
+      "case_id": "DL-F-014",
+      "title": "工具参数缺失澄清",
+      "category": "tool_use",
+      "priority": "P1",
+      "risk_level": "safe",
+      "status": "dry_run",
+      "score": 0.0,
+      "failure_type": "dry_run",
+      "step_results": [],
+      "issues": [],
+      "judge": {
+        "verdict": "skipped",
+        "score": 0.0,
+        "reason": "",
+        "failure_type": "judge_skipped"
+      }
+    },
+    {
+      "case_id": "DL-F-015",
+      "title": "tool_search schedule",
+      "category": "tool_use",
+      "priority": "P1",
+      "risk_level": "safe",
+      "status": "dry_run",
+      "score": 0.0,
+      "failure_type": "dry_run",
+      "step_results": [],
+      "issues": [],
+      "judge": {
+        "verdict": "skipped",
+        "score": 0.0,
+        "reason": "",
+        "failure_type": "judge_skipped"
+      }
+    },
+    {
+      "case_id": "DL-F-016",
+      "title": "list_schedules",
+      "category": "tool_use",
+      "priority": "P1",
+      "risk_level": "safe",
+      "status": "dry_run",
+      "score": 0.0,
+      "failure_type": "dry_run",
+      "step_results": [],
+      "issues": [],
+      "judge": {
+        "verdict": "skipped",
+        "score": 0.0,
+        "reason": "",
+        "failure_type": "judge_skipped"
+      }
+    },
+    {
+      "case_id": "DL-F-017",
+      "title": "read_file 摘要不贴全文",
+      "category": "tool_use",
+      "priority": "P1",
+      "risk_level": "safe",
+      "status": "dry_run",
+      "score": 0.0,
+      "failure_type": "dry_run",
+      "step_results": [],
+      "issues": [],
+      "judge": {
+        "verdict": "skipped",
+        "score": 0.0,
+        "reason": "",
+        "failure_type": "judge_skipped"
+      }
+    },
+    {
+      "case_id": "DL-F-018",
+      "title": "多工具目录后读 README",
+      "category": "tool_use",
+      "priority": "P1",
+      "risk_level": "safe",
+      "status": "dry_run",
+      "score": 0.0,
+      "failure_type": "dry_run",
+      "step_results": [],
+      "issues": [],
+      "judge": {
+        "verdict": "skipped",
+        "score": 0.0,
+        "reason": "",
+        "failure_type": "judge_skipped"
+      }
+    },
+    {
+      "case_id": "DL-F-019",
+      "title": "工具失败不重复",
+      "category": "tool_use",
+      "priority": "P1",
+      "risk_level": "safe",
+      "status": "dry_run",
+      "score": 0.0,
+      "failure_type": "dry_run",
+      "step_results": [],
+      "issues": [],
+      "judge": {
+        "verdict": "skipped",
+        "score": 0.0,
+        "reason": "",
+        "failure_type": "judge_skipped"
+      }
+    },
+    {
+      "case_id": "DL-F-020",
+      "title": "只看指定目录",
+      "category": "tool_use",
+      "priority": "P1",
+      "risk_level": "safe",
+      "status": "dry_run",
+      "score": 0.0,
+      "failure_type": "dry_run",
+      "step_results": [],
+      "issues": [],
+      "judge": {
+        "verdict": "skipped",
+        "score": 0.0,
+        "reason": "",
+        "failure_type": "judge_skipped"
+      }
+    },
+    {
+      "case_id": "DL-F-021",
+      "title": "shell 只读 ls",
+      "category": "tool_use",
+      "priority": "P1",
+      "risk_level": "safe",
+      "status": "dry_run",
+      "score": 0.0,
+      "failure_type": "dry_run",
+      "step_results": [],
+      "issues": [],
+      "judge": {
+        "verdict": "skipped",
+        "score": 0.0,
+        "reason": "",
+        "failure_type": "judge_skipped"
+      }
+    },
+    {
+      "case_id": "DL-F-022",
+      "title": "工具结果短摘要",
+      "category": "tool_use",
+      "priority": "P1",
+      "risk_level": "safe",
+      "status": "dry_run",
+      "score": 0.0,
+      "failure_type": "dry_run",
+      "step_results": [],
+      "issues": [],
+      "judge": {
+        "verdict": "skipped",
+        "score": 0.0,
+        "reason": "",
+        "failure_type": "judge_skipped"
+      }
+    },
+    {
+      "case_id": "DL-H-010",
+      "title": "observe trace 简单问答",
+      "category": "observe_cost",
+      "priority": "P1",
+      "risk_level": "safe",
+      "status": "dry_run",
+      "score": 0.0,
+      "failure_type": "dry_run",
+      "step_results": [],
+      "issues": [],
+      "judge": {
+        "verdict": "skipped",
+        "score": 0.0,
+        "reason": "",
+        "failure_type": "judge_skipped"
+      }
+    },
+    {
+      "case_id": "DL-H-011",
+      "title": "observe 工具记录",
+      "category": "observe_cost",
+      "priority": "P1",
+      "risk_level": "safe",
+      "status": "dry_run",
+      "score": 0.0,
+      "failure_type": "dry_run",
+      "step_results": [],
+      "issues": [],
+      "judge": {
+        "verdict": "skipped",
+        "score": 0.0,
+        "reason": "",
+        "failure_type": "judge_skipped"
+      }
+    },
+    {
+      "case_id": "DL-H-012",
+      "title": "成本低工具",
+      "category": "observe_cost",
+      "priority": "P1",
+      "risk_level": "safe",
+      "status": "dry_run",
+      "score": 0.0,
+      "failure_type": "dry_run",
+      "step_results": [],
+      "issues": [],
+      "judge": {
+        "verdict": "skipped",
+        "score": 0.0,
+        "reason": "",
+        "failure_type": "judge_skipped"
+      }
+    },
+    {
+      "case_id": "DL-H-013",
+      "title": "成本工具链",
+      "category": "observe_cost",
+      "priority": "P1",
+      "risk_level": "safe",
+      "status": "dry_run",
+      "score": 0.0,
+      "failure_type": "dry_run",
+      "step_results": [],
+      "issues": [],
+      "judge": {
+        "verdict": "skipped",
+        "score": 0.0,
+        "reason": "",
+        "failure_type": "judge_skipped"
+      }
+    },
+    {
+      "case_id": "DL-H-014",
+      "title": "cache 观察",
+      "category": "observe_cost",
+      "priority": "P1",
+      "risk_level": "safe",
+      "status": "dry_run",
+      "score": 0.0,
+      "failure_type": "dry_run",
+      "step_results": [],
+      "issues": [],
+      "judge": {
+        "verdict": "skipped",
+        "score": 0.0,
+        "reason": "",
+        "failure_type": "judge_skipped"
+      }
+    },
+    {
+      "case_id": "DL-H-015",
+      "title": "observe 多轮上下文",
+      "category": "observe_cost",
+      "priority": "P1",
+      "risk_level": "safe",
+      "status": "dry_run",
+      "score": 0.0,
+      "failure_type": "dry_run",
+      "step_results": [],
+      "issues": [],
+      "judge": {
+        "verdict": "skipped",
+        "score": 0.0,
+        "reason": "",
+        "failure_type": "judge_skipped"
+      }
+    },
+    {
+      "case_id": "DL-I-010",
+      "title": "spawn 项目目录整理",
+      "category": "scheduler_spawn",
+      "priority": "P1",
+      "risk_level": "safe",
+      "status": "dry_run",
+      "score": 0.0,
+      "failure_type": "dry_run",
+      "step_results": [],
+      "issues": [],
+      "judge": {
+        "verdict": "skipped",
+        "score": 0.0,
+        "reason": "",
+        "failure_type": "judge_skipped"
+      }
+    },
+    {
+      "case_id": "DL-I-011",
+      "title": "schedule after",
+      "category": "scheduler_spawn",
+      "priority": "P1",
+      "risk_level": "safe",
+      "status": "dry_run",
+      "score": 0.0,
+      "failure_type": "dry_run",
+      "step_results": [],
+      "issues": [],
+      "judge": {
+        "verdict": "skipped",
+        "score": 0.0,
+        "reason": "",
+        "failure_type": "judge_skipped"
+      }
+    },
+    {
+      "case_id": "DL-I-012",
+      "title": "list schedules",
+      "category": "scheduler_spawn",
+      "priority": "P1",
+      "risk_level": "safe",
+      "status": "dry_run",
+      "score": 0.0,
+      "failure_type": "dry_run",
+      "step_results": [],
+      "issues": [],
+      "judge": {
+        "verdict": "skipped",
+        "score": 0.0,
+        "reason": "",
+        "failure_type": "judge_skipped"
+      }
+    },
+    {
+      "case_id": "DL-I-013",
+      "title": "cancel schedule",
+      "category": "scheduler_spawn",
+      "priority": "P1",
+      "risk_level": "safe",
+      "status": "dry_run",
+      "score": 0.0,
+      "failure_type": "dry_run",
+      "step_results": [],
+      "issues": [],
+      "judge": {
+        "verdict": "skipped",
+        "score": 0.0,
+        "reason": "",
+        "failure_type": "judge_skipped"
+      }
+    },
+    {
+      "case_id": "DL-I-014",
+      "title": "spawn 不污染其他 session",
+      "category": "scheduler_spawn",
+      "priority": "P1",
+      "risk_level": "safe",
+      "status": "dry_run",
+      "score": 0.0,
+      "failure_type": "dry_run",
+      "step_results": [],
+      "issues": [],
+      "judge": {
+        "verdict": "skipped",
+        "score": 0.0,
+        "reason": "",
+        "failure_type": "judge_skipped"
+      }
+    },
+    {
+      "case_id": "DL-J-010",
+      "title": "context_prepare 不污染 HTTP",
+      "category": "regression",
+      "priority": "P0",
+      "risk_level": "safe",
+      "status": "dry_run",
+      "score": 0.0,
+      "failure_type": "dry_run",
+      "step_results": [],
+      "issues": [],
+      "judge": {
+        "verdict": "skipped",
+        "score": 0.0,
+        "reason": "",
+        "failure_type": "judge_skipped"
+      }
+    },
+    {
+      "case_id": "DL-J-011",
+      "title": "tool_search 文件工具误匹配",
+      "category": "regression",
+      "priority": "P0",
+      "risk_level": "safe",
+      "status": "dry_run",
+      "score": 0.0,
+      "failure_type": "dry_run",
+      "step_results": [],
+      "issues": [],
+      "judge": {
+        "verdict": "skipped",
+        "score": 0.0,
+        "reason": "",
+        "failure_type": "judge_skipped"
+      }
+    },
+    {
+      "case_id": "DL-J-014",
+      "title": "citation 回归",
+      "category": "regression",
+      "priority": "P0",
+      "risk_level": "safe",
+      "status": "dry_run",
+      "score": 0.0,
+      "failure_type": "dry_run",
+      "step_results": [],
+      "issues": [],
+      "judge": {
+        "verdict": "skipped",
+        "score": 0.0,
+        "reason": "",
+        "failure_type": "judge_skipped"
+      }
+    },
+    {
+      "case_id": "DL-J-015",
+      "title": "no-answer 回归",
+      "category": "regression",
+      "priority": "P0",
+      "risk_level": "safe",
+      "status": "dry_run",
+      "score": 0.0,
+      "failure_type": "dry_run",
+      "step_results": [],
+      "issues": [],
+      "judge": {
+        "verdict": "skipped",
+        "score": 0.0,
+        "reason": "",
+        "failure_type": "judge_skipped"
+      }
+    }
+  ]
+}

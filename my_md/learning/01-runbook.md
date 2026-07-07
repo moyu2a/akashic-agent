@@ -164,5 +164,5 @@ uv run python main.py setup
 ## 后续更新提示词
 
 ```text
-请更新 my_md/01-runbook.md：把这次运行、配置、报错、解决方法和验证命令记录进去，要求能被以后复现。
+请更新 my_md/learning/01-runbook.md：把这次运行、配置、报错、解决方法和验证命令记录进去，要求能被以后复现。
 ```
