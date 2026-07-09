@@ -16,6 +16,14 @@ from zoneinfo import ZoneInfo
 from agent.config_models import (
     ChannelsConfig,
     Config,
+    DocRagChunkingConfig,
+    DocRagCitationConfig,
+    DocRagConfig,
+    DocRagEmbeddingConfig,
+    DocRagEvalConfig,
+    DocRagRetrievalConfig,
+    DocRagSourcesConfig,
+    DocRagTraceConfig,
     FitbitIntegrationConfig,
     MemoryConfig,
     MemoryEmbeddingConfig,
@@ -56,6 +64,7 @@ def _normalize_cli_socket_endpoint(value: str | None) -> str:
     port_seed = zlib.crc32(text.encode("utf-8")) % 20000
     return f"127.0.0.1:{20000 + port_seed}"
 
+
 def _validated_timezone(tz_name: str, *, enabled: bool) -> str:
     """仅当 anyaction_enabled=True 时校验时区合法性，无效则启动时 fail-fast。"""
     if not enabled:
@@ -89,6 +98,7 @@ def load_config(path: str | Path = "config.toml") -> Config:
     peer_agents = _load_peer_agents_config(data)
     fitbit = _load_fitbit_config(data)
     wiring = _load_wiring_config(data)
+    doc_rag = _load_doc_rag_config(data)
 
     return Config(
         provider=provider,
@@ -105,7 +115,12 @@ def load_config(path: str | Path = "config.toml") -> Config:
         memory_window=int(
             agent_context.get("memory_window", data.get("memory_window", 24))
         ),
-        base_url=str(llm_main.get("base_url") or data.get("base_url") or _PRESETS.get(provider) or ""),
+        base_url=str(
+            llm_main.get("base_url")
+            or data.get("base_url")
+            or _PRESETS.get(provider)
+            or ""
+        ),
         extra_body=_load_extra_body(data),
         channels=channels,
         proactive=proactive,
@@ -125,16 +140,12 @@ def load_config(path: str | Path = "config.toml") -> Config:
         light_api_key=_resolve(
             str(llm_fast.get("api_key") or data.get("light_api_key", ""))
         ),
-        light_base_url=str(
-            llm_fast.get("base_url") or data.get("light_base_url", "")
-        ),
+        light_base_url=str(llm_fast.get("base_url") or data.get("light_base_url", "")),
         agent_model=str(llm_agent.get("model") or data.get("agent_model", "")),
         agent_api_key=_resolve(
             str(llm_agent.get("api_key") or data.get("agent_api_key", ""))
         ),
-        agent_base_url=str(
-            llm_agent.get("base_url") or data.get("agent_base_url", "")
-        ),
+        agent_base_url=str(llm_agent.get("base_url") or data.get("agent_base_url", "")),
         memory=memory,
         fitbit=fitbit,
         tool_search_enabled=bool(
@@ -158,6 +169,7 @@ def load_config(path: str | Path = "config.toml") -> Config:
         vl_base_url=str(llm_vl.get("base_url") or data.get("vl_base_url", "")),
         peer_agents=peer_agents,
         wiring=wiring,
+        doc_rag=doc_rag,
     )
 
 
@@ -181,12 +193,9 @@ def _load_channels_config(data: dict) -> ChannelsConfig:
         if bool(qq_data.get("enabled", True)) and bot_uin:
             groups = [
                 QQGroupConfig(
-                    group_id=str(
-                        g["group_id"] if "group_id" in g else g["groupId"]
-                    ),
+                    group_id=str(g["group_id"] if "group_id" in g else g["groupId"]),
                     allow_from=[
-                        str(u)
-                        for u in g.get("allow_from", g.get("allowFrom", []))
+                        str(u) for u in g.get("allow_from", g.get("allowFrom", []))
                     ],
                     require_at=g.get("require_at", g.get("requireAt", True)),
                 )
@@ -210,7 +219,9 @@ def _load_channels_config(data: dict) -> ChannelsConfig:
             _resolve(str(qqbot_data.get("app_id", qqbot_data.get("appId", ""))))
         )
         client_secret = _normalize_optional_config_text(
-            _resolve(str(qqbot_data.get("client_secret", qqbot_data.get("clientSecret", ""))))
+            _resolve(
+                str(qqbot_data.get("client_secret", qqbot_data.get("clientSecret", "")))
+            )
         )
         if bool(qqbot_data.get("enabled", True)) and app_id and client_secret:
             groups = [
@@ -219,8 +230,7 @@ def _load_channels_config(data: dict) -> ChannelsConfig:
                         g["group_openid"] if "group_openid" in g else g["groupOpenid"]
                     ),
                     allow_from=[
-                        str(u)
-                        for u in g.get("allow_from", g.get("allowFrom", []))
+                        str(u) for u in g.get("allow_from", g.get("allowFrom", []))
                     ],
                     require_at=g.get("require_at", g.get("requireAt", True)),
                     allow_proactive=bool(
@@ -234,7 +244,9 @@ def _load_channels_config(data: dict) -> ChannelsConfig:
                 client_secret=client_secret,
                 allow_from=[
                     str(u)
-                    for u in qqbot_data.get("allow_from", qqbot_data.get("allowFrom", []))
+                    for u in qqbot_data.get(
+                        "allow_from", qqbot_data.get("allowFrom", [])
+                    )
                 ],
                 groups=groups,
             )
@@ -273,6 +285,104 @@ def _load_memory_config(data: dict) -> MemoryConfig:
             model=str(embedding.get("model", "text-embedding-v3")),
             api_key=_resolve(str(embedding.get("api_key", ""))),
             base_url=str(embedding.get("base_url", "")),
+        ),
+    )
+
+
+def _load_doc_rag_config(data: dict) -> DocRagConfig:
+    raw = _as_dict(data.get("doc_rag"))
+    sources = _as_dict(raw.get("sources"))
+    chunking = _as_dict(raw.get("chunking"))
+    embedding = _as_dict(raw.get("embedding"))
+    retrieval = _as_dict(raw.get("retrieval"))
+    trace = _as_dict(raw.get("trace"))
+    citation = _as_dict(raw.get("citation"))
+    eval_cfg = _as_dict(raw.get("eval"))
+    return DocRagConfig(
+        enabled=bool(raw.get("enabled", False)),
+        source_root=str(raw.get("source_root", ".")),
+        store_path=str(
+            raw.get("store_path", "~/.akashic/workspace/doc_rag/doc_rag.db")
+        ),
+        collection_id=str(raw.get("collection_id", "default")),
+        sources=DocRagSourcesConfig(
+            include_globs=[
+                str(x)
+                for x in sources.get("include_globs", ["my_md/doc_rag_corpus/**/*.md"])
+            ],
+            exclude_globs=[
+                str(x)
+                for x in sources.get(
+                    "exclude_globs",
+                    [
+                        "**/*.db",
+                        "**/*.sqlite",
+                        "**/*.jsonl",
+                        "**/*.log",
+                        "**/__pycache__/**",
+                        "**/.pytest_cache/**",
+                    ],
+                )
+            ],
+            allowed_extensions=[
+                str(x).lower()
+                for x in sources.get("allowed_extensions", [".md", ".markdown"])
+            ],
+            max_file_size_bytes=int(
+                sources.get("max_file_size_bytes", 2 * 1024 * 1024)
+            ),
+            allow_external_symlink=bool(sources.get("allow_external_symlink", False)),
+        ),
+        chunking=DocRagChunkingConfig(
+            chunker_version=str(chunking.get("chunker_version", "heading_block_v0")),
+            target_chunk_chars=int(chunking.get("target_chunk_chars", 1600)),
+            max_chunk_chars=int(chunking.get("max_chunk_chars", 2400)),
+            min_chunk_chars=int(chunking.get("min_chunk_chars", 300)),
+            chunk_overlap_chars=int(chunking.get("chunk_overlap_chars", 200)),
+        ),
+        embedding=DocRagEmbeddingConfig(
+            mode=str(embedding.get("mode", "inherit_memory")),
+            model=str(embedding.get("model", "")),
+            api_key=_resolve(str(embedding.get("api_key", ""))),
+            base_url=str(embedding.get("base_url", "")),
+            dim=int(embedding.get("dim", 1024)),
+            batch_size=int(embedding.get("batch_size", 16)),
+            max_retries=int(embedding.get("max_retries", 2)),
+            timeout_seconds=int(embedding.get("timeout_seconds", 30)),
+        ),
+        retrieval=DocRagRetrievalConfig(
+            top_k=int(retrieval.get("top_k", 5)),
+            similarity_threshold=float(retrieval.get("similarity_threshold", 0.45)),
+            retrieval_mode=str(retrieval.get("retrieval_mode", "vector_only")),
+            fallback_enabled=bool(retrieval.get("fallback_enabled", True)),
+        ),
+        trace=DocRagTraceConfig(
+            enabled=bool(trace.get("enabled", True)),
+            format=str(trace.get("format", "jsonl")),
+            path=str(
+                trace.get(
+                    "path",
+                    "~/.akashic/workspace/doc_rag/retrieval_traces.jsonl",
+                )
+            ),
+            include_content=bool(trace.get("include_content", False)),
+            max_content_chars=int(trace.get("max_content_chars", 2000)),
+        ),
+        citation=DocRagCitationConfig(
+            required_for_doc_answer=bool(citation.get("required_for_doc_answer", True)),
+            format=str(citation.get("format", "[source_path > heading_path]")),
+            include_chunk_id_for_debug=bool(
+                citation.get("include_chunk_id_for_debug", False)
+            ),
+            on_no_hits=str(citation.get("on_no_hits", "state_no_evidence")),
+        ),
+        eval=DocRagEvalConfig(
+            eval_set_path=str(
+                eval_cfg.get(
+                    "eval_set_path", "my_md/rag/eval_sets/doc_rag_eval_v0.jsonl"
+                )
+            ),
+            report_dir=str(eval_cfg.get("report_dir", "my_md/rag/eval_reports")),
         ),
     )
 
@@ -372,6 +482,7 @@ __all__ = [
     "ChannelsConfig",
     "Config",
     "DEFAULT_SOCKET",
+    "DocRagConfig",
     "MemoryConfig",
     "MemoryEmbeddingConfig",
     "QQChannelConfig",

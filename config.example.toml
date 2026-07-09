@@ -107,6 +107,70 @@ api_key = "sk-..."
 base_url = "https://dashscope.aliyuncs.com/compatible-mode/v1"
 
 # =============================================================================
+# Document RAG（可选，默认关闭）
+# =============================================================================
+
+[doc_rag]
+enabled = false
+source_root = "."
+store_path = "~/.akashic/workspace/doc_rag/doc_rag.db"
+collection_id = "default"
+
+[doc_rag.sources]
+include_globs = ["my_md/doc_rag_corpus/**/*.md"]
+exclude_globs = [
+  "**/*.db",
+  "**/*.sqlite",
+  "**/*.jsonl",
+  "**/*.log",
+  "**/__pycache__/**",
+  "**/.pytest_cache/**"
+]
+allowed_extensions = [".md", ".markdown"]
+max_file_size_bytes = 2097152
+allow_external_symlink = false
+
+[doc_rag.chunking]
+chunker_version = "heading_block_v0"
+target_chunk_chars = 1600
+max_chunk_chars = 2400
+min_chunk_chars = 300
+chunk_overlap_chars = 200
+
+[doc_rag.embedding]
+mode = "inherit_memory"
+model = ""
+api_key = ""
+base_url = ""
+dim = 1024
+batch_size = 16
+max_retries = 2
+timeout_seconds = 30
+
+[doc_rag.retrieval]
+top_k = 5
+similarity_threshold = 0.45
+retrieval_mode = "vector_only"
+fallback_enabled = true
+
+[doc_rag.trace]
+enabled = true
+format = "jsonl"
+path = "~/.akashic/workspace/doc_rag/retrieval_traces.jsonl"
+include_content = false
+max_content_chars = 2000
+
+[doc_rag.citation]
+required_for_doc_answer = true
+format = "[source_path > heading_path]"
+include_chunk_id_for_debug = false
+on_no_hits = "state_no_evidence"
+
+[doc_rag.eval]
+eval_set_path = "my_md/rag/eval_sets/doc_rag_eval_v0.jsonl"
+report_dir = "my_md/rag/eval_reports"
+
+# =============================================================================
 # 主动推送（可选）
 # 先跑通基本对话再开启这部分。
 # =============================================================================

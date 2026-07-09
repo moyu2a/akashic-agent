@@ -1,0 +1,3 @@
+from doc_rag.models import INDEX_FORMAT_VERSION, SCHEMA_VERSION
+
+__all__ = ["INDEX_FORMAT_VERSION", "SCHEMA_VERSION"]

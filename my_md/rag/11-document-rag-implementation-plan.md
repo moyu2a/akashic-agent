@@ -20,20 +20,22 @@ Document RAG 可用 + 有评估 + 有 trace
 
 | 阶段 | 任务 | 状态 |
 | --- | --- | --- |
-| P0 | 明确设计边界和数据结构 | 进行中 |
-| P1 | Markdown loader | 设计中 |
-| P2 | Markdown chunker | 设计中 |
-| P3 | embedding 与 store | 设计中 |
-| P4 | retriever | 设计中 |
-| P5 | search_docs / fetch_doc_chunk 工具 | 设计中 |
-| P6 | 接入 ToolRegistry | 设计中 |
-| P7 | citation 与回答引用规则 | 设计中 |
-| P8 | 评估集和评估脚本 | 待开始 |
-| P9 | trace 记录 | 待开始 |
-| P10 | hybrid search | 待开始 |
-| P11 | query rewrite | 待开始 |
-| P12 | 轻量 GraphRAG 原型 | 待开始 |
-| P13 | LLM Wiki 页面雏形 | 待开始 |
+| P0 | config / models | 已完成初步实现 |
+| P1 | store / schema | 已完成初步实现 |
+| P2 | Markdown loader | 已完成初步实现 |
+| P3 | Markdown chunker | 已完成初步实现 |
+| P4 | embedding client | 待实现 |
+| P5 | indexer | 待实现 |
+| P6 | retriever | 待实现 |
+| P7 | search_docs / fetch_doc_chunk 工具 | 待实现 |
+| P8 | 接入 ToolRegistry | 待实现 |
+| P9 | citation 与回答引用规则 | 待实现 |
+| P10 | 评估集和评估脚本 | 待实现 |
+| P11 | trace 记录 | 待实现 |
+| P12 | hybrid search | 待开始 |
+| P13 | query rewrite | 待开始 |
+| P14 | 轻量 GraphRAG 原型 | 待开始 |
+| P15 | LLM Wiki 页面雏形 | 待开始 |
 
 ## Day 1：设计和边界
 
@@ -95,10 +97,16 @@ Document RAG 可用 + 有评估 + 有 trace
 - 已确定 v0 最终验收标准：Document RAG v0 必须覆盖索引、切块、检索、工具、答案引用、评估、安全复盘七类验收；最低标准是能索引、能召回、能引用、能评估、能复盘。
 - 已形成第一阶段 P0-P3 文件级实现计划：见 `my_md/rag/15-document-rag-p0-p3-implementation-plan.md`，覆盖 config/models、store/schema、Markdown loader、Markdown chunker 和对应 pytest 验收。
 - 已完成 P0-P3 实现计划审阅，并按审阅意见修正：补充 index run/store 事务原子性、sqlite-vec blob 写入、loader symlink/非 Markdown 错误、chunker fallback split/table header 测试和 P0-P3 验收矩阵。
+- 已完成 P0-P3 初步实现：新增独立 `doc_rag` 包，包含 shared models、SQLite schema/store、Markdown loader、Markdown chunker；新增 `[doc_rag]` 配置读取和 `config.example.toml` 示例。
+- 已完成 P0-P3 单元验证：`uv run --with pytest pytest tests/test_doc_rag_config.py tests/test_doc_rag_models.py tests/test_doc_rag_store.py tests/test_doc_rag_loader.py tests/test_doc_rag_chunker.py -v`，结果 `22 passed, 1 warning`。
+- 自审中发现并修正 `vec_chunks.rowid` 对齐问题：向量表现在使用 `chunks.rowid`，而不是从 `chunk_id` 推导，便于后续 KNN 结果直接回表到 chunk。
+- 已完成既有回归验证：`uv run --with pytest pytest tests/test_memory2_retrieval_baseline.py tests/test_tool_discovery_routing.py -v`，结果 `16 passed, 1 warning`。
+- 当前实现仍未接入 AgentLoop、ToolRegistry、embedding API、indexer、retriever 和工具调用链路；因此不会影响现有 Agent 运行行为。
 
 下一步：
 
-- 可以开始 P0-P3 第一阶段实现；实现时按 `15-document-rag-p0-p3-implementation-plan.md` 逐任务执行，并在每个任务后运行对应 pytest。
+- 进入 P4-P6：实现 `DocEmbeddingClient`、indexer 和 retriever，让 Document RAG 从“可加载/可切块/可入库”进入“可索引/可召回/可 trace”。
+- 继续保持 TDD：先写 embedding/indexer/retriever 测试，再实现代码；仍不急于接 Agent 工具，避免底层问题和 Agent 行为问题混在一起。
 
 ## v0 总体验收
 
