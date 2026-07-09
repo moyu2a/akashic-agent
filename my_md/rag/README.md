@@ -10,6 +10,7 @@
 - [12-document-rag-params-experiments.md](./12-document-rag-params-experiments.md): Document RAG 参数实验记录。
 - [13-document-rag-evaluation.md](./13-document-rag-evaluation.md): Document RAG 评估集、指标和结果记录。
 - [14-document-rag-interview-notes.md](./14-document-rag-interview-notes.md): Document RAG / GraphRAG / LLM Wiki 相关面试表达。
+- [15-document-rag-p0-p3-implementation-plan.md](./15-document-rag-p0-p3-implementation-plan.md): Document RAG 第一阶段 P0-P3 文件级实现计划。
 
 ## 使用规则
 
