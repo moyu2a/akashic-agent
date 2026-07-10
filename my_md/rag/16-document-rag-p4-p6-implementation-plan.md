@@ -35,11 +35,19 @@ uv run python -m scripts.doc_rag_retrieve_check --help
 
 最终结果：
 
-- Doc RAG 测试矩阵：`45 passed, 1 warning`。
+- Doc RAG 测试矩阵：`46 passed, 1 warning`。
 - 既有 memory2/tool discovery 回归：`16 passed, 1 warning`。
 - black check：通过。
 - compileall：通过。
 - 手动脚本入口：通过。
+
+手动测试修正：
+
+- 现象：直接运行 `uv run python -m scripts.doc_rag_index_check --rebuild` 报 `RuntimeError: shared http resources not configured`。
+- 原因：脚本绕过了 `main.py` / `AppRuntime.start()`，没有配置 `memory2.Embedder` 所需的共享 HTTP requester。
+- 修复：`scripts/doc_rag_index_check.py` 和 `scripts/doc_rag_retrieve_check.py` 在运行期间创建、注册并关闭 `SharedHttpResources`。
+- 新增覆盖：`tests/test_doc_rag_scripts.py`。
+- 修复后验证：Doc RAG 测试矩阵 `46 passed, 1 warning`，black check 和 compileall 通过。
 
 自审修正：
 

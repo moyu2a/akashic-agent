@@ -109,7 +109,8 @@ Document RAG 可用 + 有评估 + 有 trace
 - 已完成 P6 retriever 初步实现：新增 `DocRagRetriever` 和 JSONL trace writer；支持空 query 错误、query embedding、vector 检索、可选 trace content 截断记录，并避免 API key 进入 trace。
 - 自审中补齐 deleted 文档清理策略：当文档从默认语料范围消失时，store 会在同一事务中将 document 标记为 deleted，并清理该文档的 chunks、FTS 记录和 sqlite-vec 向量，避免旧 chunk 长期残留。
 - 已新增手动检查脚本：`scripts/doc_rag_index_check.py` 用于真实索引，`scripts/doc_rag_retrieve_check.py` 用于真实检索；运行方式分别是 `uv run python -m scripts.doc_rag_index_check` 和 `uv run python -m scripts.doc_rag_retrieve_check "agent runtime"`。
-- 已完成 P4-P6 最终验证：Doc RAG 测试矩阵 `45 passed, 1 warning`；既有 memory2/tool discovery 回归 `16 passed, 1 warning`；black check 通过；`python3 -m compileall -q doc_rag scripts` 通过；两个手动脚本的 `--help` 入口验证通过。
+- 手动测试中发现 standalone 脚本直接运行时报 `shared http resources not configured`：原因是 `DocEmbeddingClient` 复用 `memory2.Embedder`，而 `Embedder` 默认依赖主程序 bootstrap 配置的共享 HTTP requester；单独运行脚本时没有经过 `main.py` / `AppRuntime.start()`。已修复为两个手动脚本自行创建、注册并关闭 `SharedHttpResources`。
+- 已完成 P4-P6 最终验证：Doc RAG 测试矩阵 `46 passed, 1 warning`；既有 memory2/tool discovery 回归 `16 passed, 1 warning`；black check 通过；`python3 -m compileall -q doc_rag scripts` 通过；两个手动脚本的 `--help` 入口验证通过。
 
 下一步：
 

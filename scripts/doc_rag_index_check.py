@@ -4,6 +4,11 @@ import argparse
 import asyncio
 
 from agent.config import load_config
+from core.net.http import (
+    SharedHttpResources,
+    clear_default_shared_http_resources,
+    configure_default_shared_http_resources,
+)
 from doc_rag.indexer import DocRagIndexer, IndexOptions
 
 
@@ -18,9 +23,15 @@ def _parser() -> argparse.ArgumentParser:
 async def _main() -> None:
     args = _parser().parse_args()
     cfg = load_config(args.config)
-    summary = await DocRagIndexer(cfg).run(
-        IndexOptions(rebuild=args.rebuild, dry_run=args.dry_run)
-    )
+    http_resources = SharedHttpResources()
+    configure_default_shared_http_resources(http_resources)
+    try:
+        summary = await DocRagIndexer(cfg).run(
+            IndexOptions(rebuild=args.rebuild, dry_run=args.dry_run)
+        )
+    finally:
+        clear_default_shared_http_resources(http_resources)
+        await http_resources.aclose()
 
     print("status:", summary.status)
     print("run_id:", summary.run_id)

@@ -4,6 +4,11 @@ import argparse
 import asyncio
 
 from agent.config import load_config
+from core.net.http import (
+    SharedHttpResources,
+    clear_default_shared_http_resources,
+    configure_default_shared_http_resources,
+)
 from doc_rag.retriever import DocRagRetriever
 
 
@@ -19,7 +24,13 @@ async def _main() -> None:
     args = _parser().parse_args()
     query = " ".join(args.query).strip() or "agent runtime"
     cfg = load_config(args.config)
-    result = await DocRagRetriever(cfg).search(query, top_k=args.top_k)
+    http_resources = SharedHttpResources()
+    configure_default_shared_http_resources(http_resources)
+    try:
+        result = await DocRagRetriever(cfg).search(query, top_k=args.top_k)
+    finally:
+        clear_default_shared_http_resources(http_resources)
+        await http_resources.aclose()
 
     print("query:", query)
     print("trace_id:", result.trace_id)
