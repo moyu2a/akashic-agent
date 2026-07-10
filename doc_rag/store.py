@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 import sqlite3
 import struct
 import threading
@@ -10,7 +11,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
-from doc_rag.models import ChunkRecord, DocumentRecord
+from doc_rag.models import ChunkRecord, DocumentRecord, RetrievalHit
 
 try:
     import sqlite_vec
@@ -25,8 +26,36 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _normalize_embedding(vec: list[float]) -> list[float]:
+    norm = math.sqrt(sum(value * value for value in vec))
+    if norm < 1e-9:
+        return vec
+    return [value / norm for value in vec]
+
+
 def _emb_to_blob(vec: list[float]) -> bytes:
-    return struct.pack(f"{len(vec)}f", *vec)
+    normalized = _normalize_embedding(vec)
+    return struct.pack(f"{len(normalized)}f", *normalized)
+
+
+def _l2dist_to_cosine(distance: float) -> float:
+    return 1.0 - (distance * distance) / 2.0
+
+
+def _cosine_similarity(a: list[float], b: list[float]) -> float:
+    a_norm = math.sqrt(sum(value * value for value in a))
+    b_norm = math.sqrt(sum(value * value for value in b))
+    if a_norm < 1e-9 or b_norm < 1e-9:
+        return 0.0
+    dot = sum(left * right for left, right in zip(a, b, strict=False))
+    return dot / a_norm / b_norm
+
+
+def _snippet(text: str, max_chars: int = 240) -> str:
+    normalized = " ".join(text.split())
+    if len(normalized) <= max_chars:
+        return normalized
+    return normalized[: max(0, max_chars - 1)].rstrip() + "…"
 
 
 class DocRagStore:
@@ -222,6 +251,21 @@ CREATE VIRTUAL TABLE IF NOT EXISTS vec_chunks USING vec0(
         ).fetchone()
         if row is None:
             return None
+        return self._row_to_document(row)
+
+    def list_documents(self, status: str | None = "active") -> list[DocumentRecord]:
+        if status is None:
+            rows = self._db.execute(
+                "SELECT * FROM documents ORDER BY source_path"
+            ).fetchall()
+        else:
+            rows = self._db.execute(
+                "SELECT * FROM documents WHERE status=? ORDER BY source_path",
+                (status,),
+            ).fetchall()
+        return [self._row_to_document(row) for row in rows]
+
+    def _row_to_document(self, row: sqlite3.Row) -> DocumentRecord:
         return DocumentRecord(
             doc_id=row["doc_id"],
             source_path=row["source_path"],
@@ -386,12 +430,190 @@ CREATE VIRTUAL TABLE IF NOT EXISTS vec_chunks USING vec0(
             "DELETE FROM vec_chunks WHERE rowid=?", [(rowid,) for rowid in rowids]
         )
 
+    def list_chunks(self, source_path: str | None = None) -> list[ChunkRecord]:
+        if source_path is None:
+            rows = self._db.execute(
+                "SELECT * FROM chunks ORDER BY source_path, chunk_index"
+            ).fetchall()
+        else:
+            rows = self._db.execute(
+                """
+                SELECT * FROM chunks
+                WHERE source_path=?
+                ORDER BY chunk_index
+                """,
+                (source_path,),
+            ).fetchall()
+        return [self._row_to_chunk(row) for row in rows]
+
+    def mark_missing_documents_deleted(self, active_source_paths: set[str]) -> int:
+        with self._lock:
+            try:
+                self._db.execute("BEGIN IMMEDIATE")
+                if active_source_paths:
+                    placeholders = ",".join("?" for _ in active_source_paths)
+                    params = tuple(sorted(active_source_paths))
+                    documents = self._db.execute(
+                        f"""
+                        SELECT doc_id, source_path
+                        FROM documents
+                        WHERE status='active'
+                          AND source_path NOT IN ({placeholders})
+                        """,
+                        params,
+                    ).fetchall()
+                else:
+                    documents = self._db.execute("""
+                        SELECT doc_id, source_path
+                        FROM documents
+                        WHERE status='active'
+                    """).fetchall()
+
+                if not documents:
+                    self._db.commit()
+                    return 0
+
+                doc_ids = [str(row["doc_id"]) for row in documents]
+                source_paths = [str(row["source_path"]) for row in documents]
+                doc_placeholders = ",".join("?" for _ in doc_ids)
+                old_rows = self._db.execute(
+                    f"SELECT rowid FROM chunks WHERE doc_id IN ({doc_placeholders})",
+                    tuple(doc_ids),
+                ).fetchall()
+                old_rowids = [int(row["rowid"]) for row in old_rows]
+
+                if self._vec_enabled:
+                    self._delete_vec_chunks(old_rowids)
+                self._db.execute(
+                    f"DELETE FROM chunks WHERE doc_id IN ({doc_placeholders})",
+                    tuple(doc_ids),
+                )
+                self._db.executemany(
+                    "DELETE FROM chunks_fts WHERE source_path=?",
+                    [(source_path,) for source_path in source_paths],
+                )
+                self._db.execute(
+                    f"""
+                    UPDATE documents
+                    SET status='deleted', updated_at=CURRENT_TIMESTAMP
+                    WHERE doc_id IN ({doc_placeholders})
+                    """,
+                    tuple(doc_ids),
+                )
+                self._db.commit()
+                return len(documents)
+            except Exception:
+                self._db.rollback()
+                raise
+
+    def search_vector(
+        self,
+        query_vec: list[float],
+        top_k: int,
+        similarity_threshold: float,
+    ) -> list[RetrievalHit]:
+        if self._vec_enabled:
+            try:
+                return self._search_vector_sqlite_vec(
+                    query_vec, top_k, similarity_threshold
+                )
+            except Exception:
+                return self._search_vector_fullscan(
+                    query_vec, top_k, similarity_threshold
+                )
+        return self._search_vector_fullscan(query_vec, top_k, similarity_threshold)
+
+    def _search_vector_sqlite_vec(
+        self,
+        query_vec: list[float],
+        top_k: int,
+        similarity_threshold: float,
+    ) -> list[RetrievalHit]:
+        rows = self._db.execute(
+            """
+            SELECT c.*, v.distance
+            FROM (
+                SELECT rowid, distance
+                FROM vec_chunks
+                WHERE embedding MATCH ?
+                  AND k = ?
+            ) v
+            JOIN chunks c ON c.rowid = v.rowid
+            JOIN documents d ON d.doc_id = c.doc_id
+            WHERE d.status='active'
+              AND c.embedding_status='ready'
+              AND c.embedding IS NOT NULL
+            ORDER BY v.distance ASC
+            """,
+            (_emb_to_blob(query_vec), top_k),
+        ).fetchall()
+        hits: list[RetrievalHit] = []
+        for row in rows:
+            score = _l2dist_to_cosine(float(row["distance"]))
+            if score < similarity_threshold:
+                continue
+            hits.append(self._row_to_hit(row, len(hits) + 1, score, "vector"))
+            if len(hits) >= top_k:
+                break
+        return hits
+
+    def _search_vector_fullscan(
+        self,
+        query_vec: list[float],
+        top_k: int,
+        similarity_threshold: float,
+    ) -> list[RetrievalHit]:
+        rows = self._db.execute("""
+            SELECT c.*
+            FROM chunks c
+            JOIN documents d ON d.doc_id = c.doc_id
+            WHERE d.status='active'
+              AND c.embedding_status='ready'
+              AND c.embedding IS NOT NULL
+            """).fetchall()
+        scored: list[tuple[sqlite3.Row, float]] = []
+        for row in rows:
+            embedding = json.loads(row["embedding"]) if row["embedding"] else None
+            if not isinstance(embedding, list):
+                continue
+            score = _cosine_similarity(query_vec, [float(value) for value in embedding])
+            if score >= similarity_threshold:
+                scored.append((row, score))
+        scored.sort(key=lambda item: item[1], reverse=True)
+        return [
+            self._row_to_hit(row, rank, score, "vector_fallback")
+            for rank, (row, score) in enumerate(scored[:top_k], start=1)
+        ]
+
+    def _row_to_hit(
+        self,
+        row: sqlite3.Row,
+        rank: int,
+        score: float,
+        score_type: str,
+    ) -> RetrievalHit:
+        return RetrievalHit(
+            rank=rank,
+            chunk_id=row["chunk_id"],
+            chunk_key=row["chunk_key"],
+            source_path=row["source_path"],
+            heading_path=row["heading_path"],
+            score=round(score, 6),
+            score_type=score_type,
+            snippet=_snippet(row["content"]),
+            chunk_content_hash=row["chunk_content_hash"],
+            document_content_hash=row["document_content_hash"],
+        )
+
     def get_chunk(self, chunk_id: str) -> ChunkRecord | None:
         row = self._db.execute(
             "SELECT * FROM chunks WHERE chunk_id=?", (chunk_id,)
         ).fetchone()
         if row is None:
             return None
+        return self._row_to_chunk(row)
+
+    def _row_to_chunk(self, row: sqlite3.Row) -> ChunkRecord:
         embedding = json.loads(row["embedding"]) if row["embedding"] else None
         return ChunkRecord(
             chunk_id=row["chunk_id"],

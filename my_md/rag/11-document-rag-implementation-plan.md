@@ -24,9 +24,9 @@ Document RAG 可用 + 有评估 + 有 trace
 | P1 | store / schema | 已完成初步实现 |
 | P2 | Markdown loader | 已完成初步实现 |
 | P3 | Markdown chunker | 已完成初步实现 |
-| P4 | embedding client | 待实现 |
-| P5 | indexer | 待实现 |
-| P6 | retriever | 待实现 |
+| P4 | embedding client | 已完成初步实现 |
+| P5 | indexer | 已完成初步实现 |
+| P6 | retriever | 已完成初步实现 |
 | P7 | search_docs / fetch_doc_chunk 工具 | 待实现 |
 | P8 | 接入 ToolRegistry | 待实现 |
 | P9 | citation 与回答引用规则 | 待实现 |
@@ -102,11 +102,18 @@ Document RAG 可用 + 有评估 + 有 trace
 - 自审中发现并修正 `vec_chunks.rowid` 对齐问题：向量表现在使用 `chunks.rowid`，而不是从 `chunk_id` 推导，便于后续 KNN 结果直接回表到 chunk。
 - 已完成既有回归验证：`uv run --with pytest pytest tests/test_memory2_retrieval_baseline.py tests/test_tool_discovery_routing.py -v`，结果 `16 passed, 1 warning`。
 - 当前实现仍未接入 AgentLoop、ToolRegistry、embedding API、indexer、retriever 和工具调用链路；因此不会影响现有 Agent 运行行为。
+- 已形成第二阶段 P4-P6 文件级实现计划：见 `my_md/rag/16-document-rag-p4-p6-implementation-plan.md`，覆盖 embedding client、store search 扩展、indexer、retriever、JSONL trace、手动检查脚本和验收矩阵。
+- 已完成 P4 embedding client 初步实现：新增 `DocEmbeddingClient`，支持 `inherit_memory` / `custom` 两种配置模式，支持批量请求、超时、重试、维度校验和 API key 脱敏；embedding text 会加入 source_path、title、heading_path 和 chunk content。
+- 已完成 store search 扩展：新增 active documents/chunks 列表、缺失文档 deleted 标记、vector-only search；sqlite-vec 和 JSON fallback 都按归一化向量计算相似度，只返回 active document + ready chunk。
+- 已完成 P5 indexer 初步实现：新增 `DocRagIndexer`，串联 loader -> chunker -> embedding -> store；支持 rebuild、dry_run、增量跳过、缺失文档删除、文档级失败记录和更新失败保留旧索引。
+- 已完成 P6 retriever 初步实现：新增 `DocRagRetriever` 和 JSONL trace writer；支持空 query 错误、query embedding、vector 检索、可选 trace content 截断记录，并避免 API key 进入 trace。
+- 自审中补齐 deleted 文档清理策略：当文档从默认语料范围消失时，store 会在同一事务中将 document 标记为 deleted，并清理该文档的 chunks、FTS 记录和 sqlite-vec 向量，避免旧 chunk 长期残留。
+- 已新增手动检查脚本：`scripts/doc_rag_index_check.py` 用于真实索引，`scripts/doc_rag_retrieve_check.py` 用于真实检索；运行方式分别是 `uv run python -m scripts.doc_rag_index_check` 和 `uv run python -m scripts.doc_rag_retrieve_check "agent runtime"`。
+- 已完成 P4-P6 最终验证：Doc RAG 测试矩阵 `45 passed, 1 warning`；既有 memory2/tool discovery 回归 `16 passed, 1 warning`；black check 通过；`python3 -m compileall -q doc_rag scripts` 通过；两个手动脚本的 `--help` 入口验证通过。
 
 下一步：
 
-- 进入 P4-P6：实现 `DocEmbeddingClient`、indexer 和 retriever，让 Document RAG 从“可加载/可切块/可入库”进入“可索引/可召回/可 trace”。
-- 继续保持 TDD：先写 embedding/indexer/retriever 测试，再实现代码；仍不急于接 Agent 工具，避免底层问题和 Agent 行为问题混在一起。
+- 进入 P7-P8：实现 `search_docs` / `fetch_doc_chunk` 工具、接入 ToolRegistry，并补 retrieval-only / agent e2e 评估 runner。
 
 ## v0 总体验收
 
