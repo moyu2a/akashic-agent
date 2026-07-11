@@ -417,6 +417,43 @@ retrieval_failed
 | 待填 | 错误 chunk_id | fetch_doc_chunk | 待填 | chunk_not_found | 待填 | 待填 | 待填 |
 | 待填 | 用户记忆问题 | recall_memory | 待填 | 待填 | 待填 | 待填 | 待填 |
 
+### 工具意图预加载实验
+
+实验目标：
+
+- 降低强文档问题中的工具发现成本。
+- 避免把非文档问题误导到 Document RAG。
+- 验证同 session 上一轮使用过 `search_docs` 后，下一轮强记忆/session 问题不会因为 LRU 残留暴露 Document RAG 工具。
+
+当前设计原则：
+
+```text
+宁可漏预加载，让模型走 tool_search；也不要乱预加载，把记忆/session 问题带偏到 Document RAG。
+```
+
+候选参数和统计项：
+
+```text
+doc_rag_intent_preload_enabled
+doc_rag_intent_preload_rate
+doc_rag_tool_search_avoided_rate
+doc_rag_false_preload_count
+doc_rag_lru_suppression_count
+memory_after_doc_lru_leak_count
+avg_react_iterations_doc_question
+avg_tool_calls_doc_question
+```
+
+实验 case：
+
+| case | 预期行为 | 关键指标 | 风险 |
+| --- | --- | --- | --- |
+| 明确文档知识库问题 | 当前 turn 预加载 `search_docs` | `doc_rag_tool_search_avoided_rate` | 规则过窄导致仍走 `tool_search` |
+| 文档原文/证据展开问题 | 当前 turn 预加载 `search_docs` 和 `fetch_doc_chunk` | `avg_react_iterations_doc_question` | 过早展开导致 token 成本上升 |
+| 普通架构问题 | 不做 Document RAG 预加载 | `doc_rag_false_preload_count` | 错误意图导致工具空间污染 |
+| 记忆/session 问题 | 不做 Document RAG 预加载 | `doc_rag_false_preload_count` | 记忆问题被文档工具误导 |
+| memory-after-doc-LRU | 当前 turn 临时压制 doc_rag LRU 残留 | `doc_rag_lru_suppression_count`, `memory_after_doc_lru_leak_count` | 上一轮工具使用影响下一轮 |
+
 ## 存储和向量库实验
 
 ### 当前 v0 选择

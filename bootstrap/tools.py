@@ -157,7 +157,9 @@ class CoreRuntime:
         before_reasoning_modules = (
             manager.before_reasoning_modules if manager is not None else []
         )
-        prompt_render_modules = manager.prompt_render_modules if manager is not None else []
+        prompt_render_modules = (
+            manager.prompt_render_modules if manager is not None else []
+        )
         before_step_modules = manager.before_step_modules if manager is not None else []
         after_step_modules = manager.after_step_modules if manager is not None else []
         after_reasoning_modules = (
@@ -224,7 +226,10 @@ class CoreRuntime:
                 "after_turn",
                 default_after_turn_modules(
                     self.event_bus,
-                    cast(Any, getattr(pipeline, "_outbound_port", BusOutboundPort(self.bus))),
+                    cast(
+                        Any,
+                        getattr(pipeline, "_outbound_port", BusOutboundPort(self.bus)),
+                    ),
                     cast(Any, context),
                     cast(int, getattr(pipeline, "_history_window", 500)),
                     plugin_modules=cast(Any, after_turn_modules),
@@ -495,6 +500,7 @@ def build_core_runtime(
     )
 
     from agent.plugins.manager import PluginManager as _PluginManager
+
     plugin_manager = _PluginManager(
         plugin_dirs=_resolve_plugin_dirs(workspace),
         event_bus=event_bus,
@@ -502,6 +508,7 @@ def build_core_runtime(
         workspace=workspace,
         session_manager=session_manager,
         memory_engine=memory_runtime.engine,
+        app_config=config,
     )
 
     return CoreRuntime(

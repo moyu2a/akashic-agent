@@ -8,7 +8,7 @@ import logging
 import sys
 from pathlib import Path
 from collections.abc import Callable
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
 from agent.lifecycle.types import (
     AfterReasoningCtx,
@@ -28,6 +28,9 @@ from agent.tool_hooks.types import HookContext, HookOutcome
 from bus.event_bus import EventBus
 
 logger = logging.getLogger(__name__)
+
+if TYPE_CHECKING:
+    from agent.config_models import Config
 
 _EVENT_TYPE_MAP: dict[PluginEventType, type] = {
     PluginEventType.BEFORE_TURN: BeforeTurnCtx,
@@ -52,6 +55,7 @@ class PluginManager:
         workspace: Path | None = None,
         session_manager: Any = None,
         memory_engine: Any = None,
+        app_config: "Config | None" = None,
     ) -> None:
         self._dirs = plugin_dirs
         self._event_bus = event_bus
@@ -59,6 +63,7 @@ class PluginManager:
         self._workspace = workspace
         self._session_manager = session_manager
         self._memory_engine = memory_engine
+        self._app_config = app_config
         self._loaded: set[str] = set()
         self._tool_hooks: list[ToolHook] = []
         self._before_turn_modules: list[object] = []
@@ -141,11 +146,13 @@ class PluginManager:
                     continue
                 seen_names.add(child.name)
                 # 3. import_path 带上 source 避免不同目录同名插件覆盖 sys.modules
-                mods.append({
-                    "name": child.name,
-                    "module_path": str(main),
-                    "import_path": f"akasic_plugin_{source}_{child.name}",
-                })
+                mods.append(
+                    {
+                        "name": child.name,
+                        "module_path": str(main),
+                        "import_path": f"akasic_plugin_{source}_{child.name}",
+                    }
+                )
         return mods
 
     async def load_all(self) -> None:
@@ -175,6 +182,7 @@ class PluginManager:
         plugin_id = str(instance.name) if instance.name else mod["name"]
         plugin_config = _load_plugin_config(plugin_dir)
         from agent.plugins.context import PluginContext, PluginKVStore
+
         instance.context = PluginContext(  # type: ignore[attr-defined]
             event_bus=self._event_bus,
             tool_registry=self._tool_registry,
@@ -182,6 +190,7 @@ class PluginManager:
             plugin_dir=plugin_dir,
             kv_store=PluginKVStore(plugin_dir / ".kv.json"),
             config=plugin_config,
+            app_config=self._app_config,
             workspace=self._workspace,
             session_manager=self._session_manager,
             memory_engine=self._memory_engine,
@@ -246,6 +255,7 @@ class PluginManager:
         if self._tool_registry is None:
             return tool_names
         from agent.tools.base import Tool as AgentTool
+
         for md in plugin_registry.get_handlers_by_module_path(module_path):
             # 1. 只处理 TOOL 类型元数据
             if md.kind != MetadataKind.TOOL:
@@ -253,7 +263,11 @@ class PluginManager:
             bound = functools.partial(md.handler, instance, None)
             tool_name = md.tool_name or md.handler_name
             description = (md.handler.__doc__ or "").strip()
-            schema = md.tool_schema or {"type": "object", "properties": {}, "required": []}
+            schema = md.tool_schema or {
+                "type": "object",
+                "properties": {},
+                "required": [],
+            }
             # 2. 动态创建 Tool 子类并绑定 execute
             ToolCls = type(
                 f"PluginTool_{tool_name}",
@@ -389,6 +403,7 @@ class PluginManager:
 def _load_plugin_config(plugin_dir: Path) -> "Any":
     # 1. 读取 _conf_schema.json，提取每个字段的 default 值
     from agent.plugins.config import PluginConfig
+
     schema_path = plugin_dir / "_conf_schema.json"
     if not schema_path.exists():
         return None
@@ -424,7 +439,9 @@ def _load_plugin_config(plugin_dir: Path) -> "Any":
                         continue
                     values[key] = value
             else:
-                logger.warning("plugin_config.json 格式错误，期望 dict (%s)", plugin_dir)
+                logger.warning(
+                    "plugin_config.json 格式错误，期望 dict (%s)", plugin_dir
+                )
     return PluginConfig(values)
 
 
@@ -433,17 +450,23 @@ def _load_module_list(instance: Any, method_name: str) -> list[object]:
     if provider is None:
         return []
     if not callable(provider):
-        logger.warning("插件 %s.%s 不是可调用对象", type(instance).__name__, method_name)
+        logger.warning(
+            "插件 %s.%s 不是可调用对象", type(instance).__name__, method_name
+        )
         return []
     try:
         loaded = provider()
     except Exception as e:
-        logger.warning("插件 %s.%s 加载失败: %s", type(instance).__name__, method_name, e)
+        logger.warning(
+            "插件 %s.%s 加载失败: %s", type(instance).__name__, method_name, e
+        )
         return []
     if loaded is None:
         return []
     if not isinstance(loaded, list):
-        logger.warning("插件 %s.%s 返回值不是 list", type(instance).__name__, method_name)
+        logger.warning(
+            "插件 %s.%s 返回值不是 list", type(instance).__name__, method_name
+        )
         return []
     return loaded
 
@@ -457,6 +480,7 @@ def _apply_manifest(instance: Any, plugin_dir: Path) -> None:
         return
     try:
         import yaml
+
         loaded = yaml.safe_load(manifest_path.read_text(encoding="utf-8"))
     except Exception as e:
         logger.warning("manifest.yaml 读取失败 (%s): %s", plugin_dir, e)
@@ -486,6 +510,7 @@ def _make_execute(bound: Any) -> Any:
         if inspect.isawaitable(result):
             result = await result
         return str(result)
+
     return execute
 
 

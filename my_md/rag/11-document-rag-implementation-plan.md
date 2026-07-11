@@ -27,9 +27,9 @@ Document RAG 可用 + 有评估 + 有 trace
 | P4 | embedding client | 已完成初步实现 |
 | P5 | indexer | 已完成初步实现 |
 | P6 | retriever | 已完成初步实现 |
-| P7 | search_docs / fetch_doc_chunk 工具 | 待实现 |
-| P8 | 接入 ToolRegistry | 待实现 |
-| P9 | citation 与回答引用规则 | 待实现 |
+| P7 | search_docs / fetch_doc_chunk 工具 | 已完成初步实现 |
+| P8 | 接入 ToolRegistry | 已完成初步实现 |
+| P9 | citation 与回答引用规则 | 已完成初步实现 |
 | P10 | 评估集和评估脚本 | 待实现 |
 | P11 | trace 记录 | 待实现 |
 | P12 | hybrid search | 待开始 |
@@ -111,10 +111,35 @@ Document RAG 可用 + 有评估 + 有 trace
 - 已新增手动检查脚本：`scripts/doc_rag_index_check.py` 用于真实索引，`scripts/doc_rag_retrieve_check.py` 用于真实检索；运行方式分别是 `uv run python -m scripts.doc_rag_index_check` 和 `uv run python -m scripts.doc_rag_retrieve_check "agent runtime"`。
 - 手动测试中发现 standalone 脚本直接运行时报 `shared http resources not configured`：原因是 `DocEmbeddingClient` 复用 `memory2.Embedder`，而 `Embedder` 默认依赖主程序 bootstrap 配置的共享 HTTP requester；单独运行脚本时没有经过 `main.py` / `AppRuntime.start()`。已修复为两个手动脚本自行创建、注册并关闭 `SharedHttpResources`。
 - 已完成 P4-P6 最终验证：Doc RAG 测试矩阵 `46 passed, 1 warning`；既有 memory2/tool discovery 回归 `16 passed, 1 warning`；black check 通过；`python3 -m compileall -q doc_rag scripts` 通过；两个手动脚本的 `--help` 入口验证通过。
+- 已完成 P4-P6 手动链路验收：`uv run python -m scripts.doc_rag_index_check --rebuild` 成功，扫描 2 个文档、索引 2 个文档、生成 11 个 ready chunks、失败数为 0；SQLite 查看确认 `README.md` 被切为 9 个 chunk，`manual_test.md` 被切为 2 个 chunk，全部 `embedding_status=ready`。
+- 已完成 P6 检索手动验收：`uv run python -m scripts.doc_rag_retrieve_check "agent runtime 负责什么"` 返回 `hits=5`，`error` 为空，`latency_ms=307.336`；top1 命中 `my_md/doc_rag_corpus/manual_test.md > Agent Runtime`，score `0.806164`，证明 query embedding + vector-only retrieval + store search 可用。
+- 已完成 retrieval trace 手动验收：`tail -n 1 ~/.akashic/workspace/doc_rag/retrieval_traces.jsonl` 能看到同一个 `trace_id=1fd2984b7b504ddda6ea4b1f84de4378`，记录了 `query`、`retrieval_mode=vector_only`、`top_k=5`、`hit_count=5`、每个 hit 的 `chunk_id/source_path/heading_path/score/snippet`，且 `error` 为空。
+- 手动验收观察：rank1/rank2 命中测试文档，说明基础召回正确；rank3-rank5 命中 README 中语义相关但不够精确的 chunk，这是 vector-only baseline 的正常现象，后续可通过 threshold、hybrid search、rerank 和语料清理优化；`manual_test.md` 中出现 `EOF` 字样属于测试文档内容问题，本轮暂不处理。
+- 已形成 P7-P8 工具接入计划：见 `my_md/rag/17-document-rag-p7-tools-plan.md`，目标是把当前脚本可调用的 retriever 暴露为 Agent 可调用的 `search_docs` / `fetch_doc_chunk` 工具，并接入 ToolRegistry。
+- 已完成 P7 工具类初步实现：新增 `SearchDocsTool` 和 `FetchDocChunkTool`，工具返回结构化 JSON；`search_docs` 返回 `trace_id/hit_count/chunk_id/source_path/heading_path/score/snippet`，不返回完整 content；`fetch_doc_chunk` 按 `chunk_id` 返回 capped content 和 `content_truncated`。
+- 已完成 P7 错误语义：`doc_rag_disabled`、`empty_query`、`invalid_top_k`、`retrieval_error`、`invalid_chunk_id`、`invalid_max_chars`、`chunk_not_found`、`store_error`；no-hit 检索定义为 `ok=true, hit_count=0, hits=[]`。
+- 已完成 P8 toolset 初步接入：新增 `DocRagToolsetProvider`，并在默认 wiring 中加入 `doc_rag`；工具默认注册为 read-only、非 always-on，即使 `doc_rag.enabled=false` 也注册，执行时返回 `doc_rag_disabled`。
+- 已完成 P7/P8 局部单元验证：`uv run --with pytest pytest tests/test_doc_rag_tools.py tests/test_doc_rag_toolset.py -v`，结果 `12 passed, 1 warning`。
+- 已完成 P7 直接工具路径手动验证：临时启用 `cfg.doc_rag.enabled=True` 后直接调用 `SearchDocsTool`，查询 `agent runtime 负责什么` 返回 `ok=true`、`hit_count=5`、top1 为 `my_md/doc_rag_corpus/manual_test.md > Agent Runtime`、`chunk_id=0cf46daf12216544`；随后调用 `FetchDocChunkTool` 成功取回同一 chunk，`fetch_ok=true`、返回内容长度 50。
+- 已完成 P7/P8 当前验证收口：Doc RAG 测试矩阵 `58 passed, 1 warning`；既有 memory2/tool discovery 回归 `16 passed, 1 warning`；black check 通过；`python3 -m compileall -q doc_rag agent/tools bootstrap/toolsets scripts` 通过。
+- 已完成 P7/P8 CLI smoke 验证：使用临时配置 `/tmp/akashic-doc-rag-smoke.toml` 启用 `doc_rag.enabled=true`，通过专用 socket `/tmp/akashic-doc-rag-smoke.sock` 发送文档问题；Agent 成功通过 `tool_search` 解锁并调用 `search_docs`，未使用 `recall_memory`。
+- CLI smoke 实际链路：`tool_search` -> `search_docs` -> `read_file`；`search_docs` 返回 `trace_id=90eaa095ed4940f3912cc969de9f6e31`、`hit_count=5`，top1 为 `my_md/doc_rag_corpus/manual_test.md > Agent Runtime`，回答基于文档证据“Agent runtime 负责管理 agent 的一次运行过程。”
+- CLI smoke 观察到的缺口：Agent 在需要展开证据时选择了通用 `read_file`，而不是新工具 `fetch_doc_chunk`。这不影响 P7/P8 的最小通过，因为直接工具路径已验证 `fetch_doc_chunk` 可用；但 P9/P10 需要通过 citation 规则、工具说明和评估 case 引导 Agent 优先用 `fetch_doc_chunk` 展开 chunk。
+- 已形成 P9 citation 实现计划：见 `my_md/rag/18-document-rag-p9-citation-plan.md`。计划经审阅后升级为一步到位方案：工具输出增加 `citation` 字段、插件上下文暴露全局 app config、仅在 `doc_rag.enabled=true` 时注入 Document RAG 引用规则、复用现有 `plugins/citation` 增加 Document RAG citation validator，负责移除假引用、缺引用时追加真实来源、无证据回答不追加引用；不修改 AgentLoop，不混用 memory citation 协议。
+- 已完成 P9 初步实现：`search_docs` 每个 hit 返回 `citation`，`fetch_doc_chunk` 的 chunk 返回 `citation`；工具描述和 tool search hint 明确要求文档回答使用 citation，snippet 不足时优先调用 `fetch_doc_chunk` 而不是 `read_file`。
+- 已完成插件全局配置透传：`PluginContext.app_config` 接收全局 `Config`，`PluginManager` 保持可选参数兼容旧调用点，启动装配处向插件管理器传入全局配置；`PluginContext.config` 仍然只表示插件本地配置。
+- 已完成 Document RAG citation validator：从当前轮 `search_docs` / `fetch_doc_chunk` 工具结果构造 `allowed_citations`；移除未被当前轮工具返回的伪造文档引用；在使用文档证据但缺引用时追加 `参考来源：...`；对 no-hit 和明确无证据回复不追加引用；validator 摘要写入 `outbound_metadata["doc_rag_citation"]`。
+- 已保持 memory citation 边界：原有 `§cited:[id]§` 仍作为内部记忆引用协议，Document RAG 使用用户可见的 `[source_path > heading_path]`，两者不混用。
+- 已完成 P9 自动化验证：`uv run --with pytest --with pytest-asyncio pytest ...` 覆盖 Document RAG、citation、plugin manager、memory2 baseline 和 tool discovery，共 `135 passed`；`black --check` 通过；`python3 -m compileall` 通过。
+- P9 尚未执行真实 CLI/LLM smoke：当前已完成工具层、插件层和单元/集成回归验证；真实 Agent 端到端验证需要启动服务并走 LLM/IPC，可作为下一次手动验收执行。
+- P10 已拆成两个子方向：
+  - P10a：工具意图预加载与成本治理，计划见 `my_md/rag/19-document-rag-p10-intent-preload-plan.md`。核心方案是强文档意图 turn-local 预加载 `search_docs`，强文档意图且需要原文/证据展开时预加载 `fetch_doc_chunk`，强记忆/session 意图时临时压制 doc_rag LRU 残留；不改 always-on，不写入 LRU。
+  - P10b：retrieval-only 与 Agent e2e eval runner，继续覆盖 Recall@k、MRR、citation、faithfulness、工具路径和成本指标。
 
 下一步：
 
-- 进入 P7-P8：实现 `search_docs` / `fetch_doc_chunk` 工具、接入 ToolRegistry，并补 retrieval-only / agent e2e 评估 runner。
+- 优先执行 P10a：实现经审阅的 turn-local intent preload，降低明确文档问题中的 `tool_search` 轮次，同时保证记忆/session 问题不会被 Document RAG 工具污染。
+- 再推进 P10b：构建 retrieval-only 和 agent e2e 评估，覆盖 Recall@k、工具路径、引用是否存在、答案是否忠实、无证据问题是否拒答、`tool_search` 避免率和 ReAct 轮次。
 
 ## v0 总体验收
 

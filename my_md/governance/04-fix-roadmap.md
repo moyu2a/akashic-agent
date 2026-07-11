@@ -4,6 +4,83 @@
 
 ## 修复优先级
 
+### 第零阶段：P9 Document RAG live smoke 配置与 disabled 行为
+
+目标：
+
+- 让 P9 真实 CLI/LLM smoke 能验证已实现的 citation 闭环。
+- 避免 Document RAG 未启用时模型继续 fallback 到 `read_file` 形成无效工具链。
+
+任务：
+
+- 在本地测试配置中显式加入 `[doc_rag] enabled=true`，重启 Agent 后重新执行 P9 smoke。
+- 确认 `search_docs` 在启用状态下返回 `ok=true`、`hit_count>0`、hits 带 `citation`。
+- 确认最终回答包含 `[my_md/doc_rag_corpus/manual_test.md > Agent Runtime]`。
+- 已完成：disabled 场景增强，`search_docs` / `fetch_doc_chunk` 返回 `retryable=false`、`terminal=true`、`terminal_scope=document_rag`、`fallback_allowed=false`、`recommended_action=answer_doc_rag_disabled`。
+- 已完成：工具描述补充 `doc_rag_disabled` 时直接告知用户启用配置，不要改用本地文件读取、`list_dir` 或 `shell` 替代 Document RAG 检索。
+- 待执行：disabled live smoke，确认模型是否遵循工具协议停止 fallback。
+
+验证：
+
+- 启用场景：
+  - `tool_search -> search_docs -> answer with citation`
+  - 可选复杂问题：`tool_search -> search_docs -> fetch_doc_chunk -> answer with citation`
+- 禁用场景：
+  - `search_docs -> doc_rag_disabled -> final answer asks user to enable Document RAG`
+  - 不应继续调用 `read_file`。
+- 已通过自动化测试：
+  - `tests/test_doc_rag_tools.py`
+  - `tests/test_doc_rag_toolset.py`
+  - `tests/test_doc_rag_citation_plugin.py`
+  - `tests/test_citation_plugin.py`
+  - `tests/test_plugin_manager.py`
+- disabled live smoke 结果：
+  - 已满足：不再调用 `read_file/list_dir/shell` 替代 Document RAG。
+  - 待修正：最终回复必须明确“修改 `doc_rag.enabled=true` 后需要重启 Agent 服务”，不能暗示当前 Agent 可以直接启用并立即生效。
+- 第二小步代码已完成：
+  - disabled payload 已标记 `restart_required=true`、`restart_target=agent_service`、`current_process_can_enable=false`、`retrieval_available_this_turn=false`。
+  - 工具返回和工具描述已明确：设置 `doc_rag.enabled=true` 后必须重启 Agent 服务。
+  - 待执行：再次 disabled live smoke，确认最终回答包含“当前运行中的 Agent 无法继续检索 / 需要重启 Agent 服务”。
+
+### 第零点五阶段：Document RAG 工具可见性、成本和 citation 忠实度
+
+目标：
+
+- 让 Document RAG happy path 不再因为工具未加载浪费 ReAct 轮次。
+- 让 citation 不只“来源真实”，还要尽量做到“结论被证据直接支撑”。
+
+任务：
+
+- 新增强文档意图判断，强文档意图时只在当前 turn 预加载 `search_docs`。
+- 强文档意图且命中原文/文档证据展开意图时，只在当前 turn 预加载 `fetch_doc_chunk`。
+- 强记忆/session 意图且无强文档意图时，只在当前 turn 临时压制 `search_docs` / `fetch_doc_chunk` 的 LRU 残留。
+- 不改 `doc_rag` toolset 的 always-on 策略，不向 `ToolDiscoveryState` 写入意图预加载结果。
+- 为文档问答增加早停策略：简单事实问题如果 `search_docs` snippet 已足够回答，不强制展开 chunk。
+- 在工具描述或回答约束中加入：如果结论只是从标题层级推断，必须用“从章节结构看 / 可以理解为”等弱断言表达。
+- 在评估集中增加：
+  - `max_react_iterations`
+  - `max_tool_calls`
+  - `expected_tools`
+  - `forbidden_tools`
+  - `citation_valid`
+  - `evidence_alignment`
+
+验证：
+
+- 启用场景简单问题：
+  - 预期链路：`search_docs -> final`
+  - 目标 ReAct 轮次：2-3。
+- 启用场景复杂问题：
+  - 预期链路：`search_docs -> fetch_doc_chunk -> final`
+  - 目标 ReAct 轮次：3-4。
+- 记忆/session 场景：
+  - fresh 记忆问题不应预加载 `search_docs`。
+  - 同 session 上一轮调用过 `search_docs` 后，下一轮强记忆问题也不应因 LRU 残留暴露 `search_docs`。
+- citation 忠实度：
+  - 直接事实必须由 chunk 正文支撑。
+  - 标题结构推断必须用弱断言表达。
+  - 不应把“相关能力”写成“明确下辖”，除非正文直接支持。
+
 ### 第一阶段：降低测试噪声
 
 目标：

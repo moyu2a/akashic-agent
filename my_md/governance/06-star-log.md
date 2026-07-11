@@ -310,3 +310,115 @@ STAR 复盘：
 面试表达：
 
 我在排查 session 隔离失败时，没有只看表面现象，而是先区分短期会话上下文、长期记忆和消息回源工具三层。第一轮怀疑是临时信息污染长期记忆，但小范围 live 回归显示消息回源也可能跨 session 取到其他会话内容。随后我审查消息查询工具，确认默认搜索和回源缺少当前会话边界。进一步查实际工具参数和记忆注入记录后，我发现两个失败 case 类型不同：一个是临时测试数据进入长期记忆后被自动注入 prompt，另一个确实读取了旧 session 的 source_ref。因此修复路线分成两部分：先治理记忆写入边界和污染清理，再收紧消息回源工具权限，默认限定当前会话。
+
+### CASE-003: Document RAG live smoke 发现配置、工具成本和 citation 忠实度问题
+
+日期：2026-07-11
+
+关联问题：
+
+- RAG-005
+- RAG-006
+- RAG-007
+
+发现方式：
+
+- P9 Document RAG citation 自动化测试通过后，执行真实 CLI/LLM smoke。
+- 通过 `observe.db` 查看真实工具链、ReAct 轮次、最终回答和 citation。
+
+问题现象：
+
+- 第一轮 live smoke 中，`search_docs` 返回 `doc_rag_disabled`，模型随后 fallback 到 `list_dir/read_file`，没有形成 Document RAG citation。
+- 启用 Document RAG 后，第二轮 live smoke 能返回正确 citation，但 `react_iteration_count=7`。
+- 最终 citation 来源真实，但“runtime 下辖 Tool Calling”这类表达属于基于标题结构的推断，正文证据没有直接写明“下辖”。
+
+证据：
+
+- `observe.db` turn id `344`：
+  - `search_docs` 返回 `error_code=doc_rag_disabled`。
+  - 后续继续调用 `list_dir/read_file`。
+- `observe.db` turn id `345`：
+  - 工具链：`search_docs -> tool_search -> search_docs -> tool_search -> fetch_doc_chunk -> fetch_doc_chunk`。
+  - `react_iteration_count=7`。
+  - 最终 citation：
+    - `[my_md/doc_rag_corpus/manual_test.md > Agent Runtime]`
+    - `[my_md/doc_rag_corpus/manual_test.md > Agent Runtime > Tool Calling]`
+- chunk 正文：
+  - `Agent runtime 负责管理 agent 的一次运行过程。`
+  - `工具调用用于让 agent 访问外部能力。`
+
+影响范围：
+
+- 如果配置未启用，live smoke 测不到 RAG citation 能力，只会测到 disabled fallback。
+- 如果工具不可见，RAG happy path 会多出 2-3 轮，增加成本和延迟。
+- 如果只校验 citation 来源，不校验 claim/evidence 对齐，仍可能出现“引用真实但结论说过头”的回答。
+
+原因分析：
+
+- `doc_rag.enabled` 默认关闭，运行配置未显式启用时，`search_docs` 正确返回 disabled。
+- disabled 返回缺少足够强的 terminal 语义，模型会继续尝试用普通文件工具完成任务。
+- `search_docs` / `fetch_doc_chunk` 初始不可见，真实对话需要先经由 `tool_search` 解锁。
+- citation validator 当前只保证 citation 来自本轮工具结果，不负责逐句判断 claim 是否被证据直接支撑。
+
+排查路径：
+
+| 顺序 | 检查点 | 检查方式 | 结果 | 结论 | 下一步 |
+| --- | --- | --- | --- | --- | --- |
+| 1 | 索引是否存在 | 查看 `doc_rag.db` | 11 个 chunks 均为 ready | 索引不是失败原因 | 查运行配置 |
+| 2 | 第一轮 smoke 为什么无 citation | 查看 `observe.db` turn 344 | `search_docs` 返回 `doc_rag_disabled` | 配置未启用 | 启用配置后重跑 |
+| 3 | 启用后是否能检索 | 查看 `observe.db` turn 345 | `search_docs` ok，最终回答带 citation | RAG happy path 可用 | 分析成本 |
+| 4 | 为什么有 7 轮 | 解析 `tool_calls` 和 `tool_chain_json` | `search_docs/fetch_doc_chunk` 都需要先解锁 | 工具可见性导致额外轮次 | 设计预加载策略 |
+| 5 | citation 是否伪造 | 对比最终引用和工具返回 citation | 两个 citation 均来自本轮工具结果 | 不是 fake citation | 检查证据强度 |
+| 6 | 结论是否被证据直接支撑 | 对比回答 claim 和 chunk 正文 | “负责管理运行过程”有直接证据，“下辖 Tool Calling”是结构推断 | 需要 faithfulness 约束 | 增加 evidence alignment |
+
+处理方案：
+
+- RAG-005：disabled 场景下增加 terminal/retryable/recommended_action 语义，并要求模型停止而不是 fallback 到 `read_file`。
+- RAG-006：采用强文档意图的 turn-local preload，而不是把 `search_docs` 改成 always-on；强文档意图当前 turn 预加载 `search_docs`，强文档意图且需要原文/证据展开时再预加载 `fetch_doc_chunk`；强记忆/session 意图且无强文档意图时，在当前 turn 临时压制 `search_docs` / `fetch_doc_chunk` 的 LRU 残留。
+- RAG-007：回答约束中区分“文档明确写明”和“基于标题结构推断”；评估中增加 `claim_evidence_alignment`。
+- RAG-005 第一阶段已执行：`doc_rag_disabled` 返回 `terminal_scope=document_rag`、`fallback_allowed=false`、`recommended_action=answer_doc_rag_disabled`、`instructions` 和 `user_message`；工具描述明确不要用本地文件读取替代 Document RAG。
+
+取舍说明：
+
+- 不把所有 RAG 工具永久 always-on，也不把意图预加载结果写入 `ToolDiscoveryState` / LRU：避免非文档问题污染工具空间，并避免“上一轮查文档，下一轮问记忆”被 LRU 残留误导。
+- 不强制每个问题都 `fetch_doc_chunk`：简单事实问题用 snippet 足够时，应优先控制成本。
+- 不把 citation valid 当作最终质量指标：citation 只能证明来源真实，不能证明每个结论都被原文充分支持。
+- RAG-005 第一阶段没有改 AgentLoop：因为 `doc_rag_disabled` 是业务工具语义，先用工具协议和工具描述收敛模型行为；如果 live smoke 仍 fallback，再考虑执行器级阻断。
+
+处理结果：
+
+- 已定位并登记 RAG-005、RAG-006、RAG-007。
+- RAG-005 第一阶段代码修复已完成，自动化回归通过。
+- RAG-005 disabled live smoke 已执行：未再 fallback 到 `read_file/list_dir/shell`，但最终话术仍暗示可以主动开启配置，需要补充“必须重启当前 Agent 服务”的表达约束。
+- RAG-005 第二小步代码已完成：disabled payload 已加入 `restart_required`、`restart_target`、`current_process_can_enable`、`retrieval_available_this_turn`、`config_key`、`required_config_value`，并强化 `instructions` / `user_message`，live smoke 待复测。
+- RAG-006 P10 计划已完成审阅并修订：实现位置应放在 `DefaultReasoner.run_turn()` 当前 turn 工具可见性计算处，新增策略模块 `agent/policies/doc_rag_intent.py`，不改 `doc_rag` toolset 的 always-on 策略，不改 LRU 写入规则。
+
+验证方式：
+
+- 启用场景简单问题：`search_docs -> final`，目标 2-3 轮。
+- 启用场景复杂问题：`search_docs -> fetch_doc_chunk -> final`，目标 3-4 轮。
+- 禁用场景：`search_docs -> doc_rag_disabled -> final`，不调用 `read_file`。
+- citation 忠实度：最终回答中每个关键结论都能对应到 chunk 正文；如果只是结构推断，必须用弱断言表达。
+- 已通过：
+  - `29 passed in 0.32s`
+  - `76 passed in 0.50s`
+
+遗留问题：
+
+- 是否需要在 citation 插件中做 claim/evidence 自动校验，还是先放在评估层处理。
+- `fetch_doc_chunk` 的预加载条件需要避免过宽，防止普通聊天工具空间膨胀。
+- RAG-006 需要新增 memory-after-doc-LRU 测试：同 session 上一轮使用过 `search_docs` 后，下一轮强记忆/session 问题不得因为 LRU 残留暴露 Document RAG 工具。
+- 如果 disabled live smoke 仍 fallback 到 `read_file/list_dir/shell`，需要第二阶段让工具执行器或 AgentLoop 消费 `fallback_allowed=false`。
+- 如果后续只剩“是否能主动开启配置”的话术问题，优先补充工具返回字段和 `user_message`，明确 `restart_required=true`、`can_self_enable=false`，再做一次 disabled live smoke。
+- 第二小步已将字段命名收紧为 `restart_target=agent_service`、`current_process_can_enable=false`、`retrieval_available_this_turn=false`；后续复测时重点看最终回答是否仍暗示“我可以现在启用”。
+
+STAR 复盘：
+
+- Situation：Document RAG P9 citation 自动化测试已经通过，但真实 CLI/LLM smoke 暴露出配置、工具链成本和引用忠实度问题。
+- Task：确认问题到底是索引失败、citation validator 失败、配置问题，还是工具治理问题，并形成后续修复路线。
+- Action：查看 `observe.db` 中两轮真实 turn，分别分析 `search_docs` 返回、工具链、ReAct 轮次、最终 citation 和 chunk 正文证据，把问题拆成 disabled fallback、工具可见性成本、claim/evidence 对齐三类。
+- Result：确认 RAG 检索和 citation 来源校验本身可用，但还需要修 disabled 终止语义、工具预加载策略和 evidence alignment 评估。
+
+面试表达：
+
+我在做 Document RAG live smoke 时没有只看“答案是否有引用”，而是继续追踪了真实工具链和证据支撑关系。第一轮发现配置未启用导致模型 fallback 到文件工具；第二轮启用后虽然 citation 来源真实，但工具链跑了 7 轮，而且部分结论是从标题结构推断出来的。于是我把问题拆成配置治理、工具成本治理和答案忠实度治理三层。这体现了我对 RAG 系统的理解：RAG 不是只要能召回和引用就结束，还要关注配置可用性、路径效率、证据是否真正支撑结论。

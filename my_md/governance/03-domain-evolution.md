@@ -413,6 +413,330 @@
 - `my_md/rag/12-document-rag-params-experiments.md`
 - `my_md/rag/13-document-rag-evaluation.md`
 
+### RAG-002: Document RAG 接入 Agent 工具链
+
+场景：
+
+- P4-P6 已完成文档索引、向量检索和 trace 后，继续把 Document RAG 暴露给 Agent 可调用工具。
+
+发现：
+
+- 后端检索已经能稳定命中测试语料，但还不能被 Agent 在对话中直接使用。
+- 文档检索和个人长期记忆检索必须保持工具边界清晰，避免文档问题误走 `recall_memory`。
+- Agent 可发现工具后，仍可能选择通用文件读取工具展开证据，而不是专门的 chunk 展开工具。
+
+处理：
+
+- 新增 `search_docs` 和 `fetch_doc_chunk` 两个只读工具。
+- 新增 `doc_rag` toolset，并接入默认 ToolRegistry wiring。
+- `search_docs` 返回 snippet、source_path、heading_path、chunk_id、score 和 trace_id，不返回完整 chunk 内容。
+- `fetch_doc_chunk` 按 chunk_id 返回 capped content，并标记是否截断。
+- 工具在 `doc_rag.enabled=false` 时仍注册，但执行时返回结构化 `doc_rag_disabled`。
+- 使用临时配置启用 Document RAG 完成 CLI smoke，不改动项目 `config.toml`。
+
+结果：
+
+- Doc RAG 测试矩阵通过：`58 passed, 1 warning`。
+- 既有 memory/tool discovery 回归通过：`16 passed, 1 warning`。
+- black check 和 compileall 均通过。
+- 真实 Agent CLI smoke 中，Agent 通过 `tool_search` 解锁并调用 `search_docs`，未调用 `recall_memory`。
+- `search_docs` 返回 `trace_id=90eaa095ed4940f3912cc969de9f6e31`，top1 命中 `my_md/doc_rag_corpus/manual_test.md > Agent Runtime`。
+
+证据：
+
+- `my_md/rag/11-document-rag-implementation-plan.md`
+- `my_md/rag/17-document-rag-p7-tools-plan.md`
+- `~/.akashic/workspace/doc_rag/retrieval_traces.jsonl`
+
+影响：
+
+- Document RAG 已从脚本级能力进入 Agent 工具调用链。
+- 后续可以开始做 citation 规则和 e2e 评估，而不是继续停留在后端检索验证。
+
+下一步：
+
+- P9：设计并实现文档回答引用规则，引导需要展开证据时优先使用 `fetch_doc_chunk`。
+- P10：设计 retrieval-only 和 Agent e2e 评估，覆盖召回、工具路径、引用和忠实度。
+
+关联文档：
+
+- `my_md/rag/10-document-rag-design.md`
+- `my_md/rag/13-document-rag-evaluation.md`
+
+### RAG-003: P9 citation 计划审阅后升级为一步到位方案
+
+场景：
+
+- 在准备实现 P9 Document RAG citation 前，对 `18-document-rag-p9-citation-plan.md` 做逻辑审阅。
+
+发现：
+
+- 原计划说能防止假引用，但轻量 guard 只能追加真实引用，不能识别和移除模型编造的 `[fake.md > Fake]`。
+- 原计划会在 tool chain 中出现 `search_docs` 时追加引用，可能给“没有足够文档证据”的拒答错误补引用。
+- 原计划的 no-fake-citation 验收只覆盖 no hits，不覆盖“回答里已有假 citation”的场景。
+- 原计划无条件注入 Document RAG 引用规则，`doc_rag.enabled=false` 时会增加提示噪声。
+
+处理：
+
+- 将 P9 目标从“轻量引用 guard”升级为“Document RAG citation validator”。
+- 计划新增 `PluginContext.app_config`，让插件能读取全局 `Config`，并只在 `doc_rag.enabled=true` 时注入 Document RAG 引用规则。
+- 计划要求 validator 从当前轮 `search_docs` / `fetch_doc_chunk` 工具结果构造 `allowed_citations`。
+- 计划要求最终回答中不在 `allowed_citations` 内的文档引用被移除，并记录到 `ctx.outbound_metadata["doc_rag_citation"]`。
+- 计划要求无证据回答和 `hit_count=0` 场景不追加引用。
+
+结果：
+
+- P9 计划已经记录当前问题、一步到位解决方案、任务拆分、测试用例和验收标准。
+- P9 执行范围扩大，但仍不改 AgentLoop，不改检索排序，不混用 memory citation 协议。
+
+证据：
+
+- `my_md/rag/18-document-rag-p9-citation-plan.md`
+- `my_md/rag/11-document-rag-implementation-plan.md`
+
+影响：
+
+- P9 不只是让答案“带引用”，还要让文档引用具备可校验性。
+- P10 评估可以直接消费 validator 输出的 `allowed_citations`、`removed_fake_citations`、`inserted_fallback` 等字段。
+
+下一步：
+
+- 按 P9 修订计划执行：先实现 `PluginContext.app_config`，再实现工具 citation 字段，最后实现 citation validator 和 CLI smoke。
+
+关联文档：
+
+- `my_md/rag/10-document-rag-design.md`
+- `my_md/rag/13-document-rag-evaluation.md`
+
+### RAG-004: P9 Document RAG 引用校验已完成自动化闭环
+
+场景：
+
+- P7/P8 已经让 Agent 能通过 `tool_search -> search_docs` 使用 Document RAG，但最终回答还缺少可校验引用，且模型可能编造 `[fake.md > Fake]` 这类文档引用。
+
+发现：
+
+- 仅靠 prompt 不能保证引用真实。
+- 仅追加引用不能处理模型已经生成的假引用。
+- `doc_rag.enabled=false` 时不应该注入 Document RAG 引用规则。
+- 普通 markdown 文本如 `[README.md]` 不应被误识别为 Document RAG citation。
+
+处理：
+
+- `search_docs` 和 `fetch_doc_chunk` 输出中新增 `citation` 字段。
+- 工具描述和 search hint 增加 citation 与 `fetch_doc_chunk` 展开证据指引。
+- `PluginContext` 新增 `app_config`，插件可以读取全局 `Config`，但不污染插件本地 `config`。
+- `plugins/citation` 增加 Document RAG citation validator，从当前轮工具结果构建 allowlist，移除未知文档引用，缺引用时追加真实来源，无证据回复不追加引用。
+- 引用识别规则收窄为 `[xxx.md > heading]`，避免误删普通 markdown 文件名。
+
+结果：
+
+- Document RAG citation 从“提示词约束”提升为“工具结果 allowlist + after-reasoning 校验”。
+- 记忆引用协议 `§cited:[id]§` 与 Document RAG 可见引用 `[source_path > heading_path]` 保持隔离。
+- 自动化验证通过：Document RAG、citation、plugin manager、memory2 baseline、tool discovery 共 `135 passed`；black check 和 compileall 通过。
+
+证据：
+
+- `my_md/rag/18-document-rag-p9-citation-plan.md`
+- `plugins/citation/plugin.py`
+- `tests/test_doc_rag_citation_plugin.py`
+- `tests/test_citation_plugin.py`
+
+影响：
+
+- 后续 P10 可以直接评估 `citation_missing`、`citation_fake`、`no_evidence_failed` 等失败类型。
+- 当前自动测试已证明 citation 机制可校验，但还需要真实 CLI/LLM smoke 验证模型在实际对话中是否自然使用 `fetch_doc_chunk` 和 citation。
+
+下一步：
+
+- 执行 P9 CLI/LLM smoke。
+- 进入 P10 评估 runner，建立 retrieval-only 和 agent e2e 的可重复评估。
+
+关联文档：
+
+- `my_md/rag/11-document-rag-implementation-plan.md`
+- `my_md/rag/18-document-rag-p9-citation-plan.md`
+
+### RAG-005: P9 live smoke 发现 Document RAG 未启用与 disabled fallback 问题
+
+场景：
+
+- P9 citation validator 已完成自动化验证后，进入真实 CLI/LLM smoke。
+- 用户提问：`请从文档知识库中检索agent runtime负责什么？回答必须带文档引用`。
+
+发现：
+
+- Agent 能通过 `tool_search` 找到 `search_docs` / `fetch_doc_chunk`，说明工具注册和工具发现生效。
+- Agent 调用了 `search_docs`，但返回 `doc_rag_disabled`。
+- 当前 `config.toml` 未配置 `[doc_rag]`，实际 `doc_rag.enabled=false`。
+- 索引库本身正常：`doc_rag.db` 中已有 11 个 ready chunks。
+- 模型在 `doc_rag_disabled` 后继续使用 `list_dir` / `read_file` 组织答案，最终没有 Document RAG citation。
+
+处理：
+
+- 将该问题登记为 `RAG-005`。
+- 明确短期处理是启用 `[doc_rag] enabled=true` 并重启 Agent 后重跑 P9 smoke。
+- 明确中期优化是增强 disabled 工具返回和工具描述，要求模型在 disabled 场景停止并提示启用配置，而不是 fallback 到 `read_file`。
+
+结果：
+
+- 当前 P9 自动化闭环仍然有效，但真实 live smoke 未通过。
+- 失败原因被定位为运行配置未启用 Document RAG，以及 disabled 场景工具治理不足。
+- 2026-07-11 已完成第一阶段修复：增强 `doc_rag_disabled` 工具返回协议，并补充工具描述与回归测试。
+- 第一阶段没有改 AgentLoop；它依赖模型遵循工具结果语义，不是执行器级硬阻断。
+
+证据：
+
+- `observe.db` turn id `344`
+- `search_docs` 结果：`error_code=doc_rag_disabled`
+- `Config.load("config.toml").doc_rag.enabled == False`
+- `doc_rag.db` ready chunks = 11
+- 代码修复：
+  - `agent/tools/doc_rag.py`
+  - `tests/test_doc_rag_tools.py`
+  - `tests/test_doc_rag_citation_plugin.py`
+  - `tests/test_doc_rag_toolset.py`
+- 自动化回归：
+  - `29 passed in 0.32s`
+  - `76 passed in 0.50s`
+
+影响：
+
+- 后续测试必须先确认运行配置，否则 live smoke 会测到 disabled fallback，而不是 citation 能力。
+- P10 e2e eval 应加入 disabled 场景，把“停止并提示启用”作为正确行为。
+
+下一步：
+
+- 关闭或保持 `doc_rag.enabled=false`，重跑 disabled live smoke，确认是否停止并提示启用。
+- 启用本地 `[doc_rag]` 配置并重启 Agent，重跑 P9 CLI smoke。
+- 如果 disabled live smoke 仍 fallback 到文件工具，再进入第二阶段设计执行器级阻断。
+
+最新 disabled live smoke：
+
+- `observe.db` turn id `346`
+- 用户问题：`请从文档知识库中检索 agent runtime 负责什么？回答必须带文档引用`
+- 工具链：`tool_search -> search_docs -> final`
+- 结果：未再 fallback 到 `read_file/list_dir/shell`，第一阶段工具协议约束基本生效。
+- 新发现：最终回复仍暗示“我可以先把 doc_rag 开启再查”，没有足够明确说明当前运行中的 Agent 需要重启后才能加载新配置。
+- 结论：RAG-005 第一阶段解决了替代工具链问题，但需要补充 disabled 话术/协议字段，例如 `restart_required=true`、`can_self_enable=false` 或更明确的 `user_message`。
+- 2026-07-11 第二小步已补充：
+  - `restart_required=true`
+  - `restart_target=agent_service`
+  - `current_process_can_enable=false`
+  - `retrieval_available_this_turn=false`
+  - `config_key=doc_rag.enabled`
+  - `required_config_value=true`
+  - `user_message` 明确当前运行中的 Agent 不能继续检索，需修改配置并重启 Agent 服务。
+  - 自动化回归通过，disabled live smoke 待复测。
+
+关联文档：
+
+- `my_md/governance/01-issue-index.md`
+- `my_md/governance/02-current-issues.md`
+- `my_md/governance/04-fix-roadmap.md`
+
+### RAG-006: Document RAG 启用后 live smoke 暴露工具可见性和成本问题
+
+场景：
+
+- 完成 RAG-005 的配置启用后，重新执行 P9 live smoke。
+- 用户提问：`请从文档知识库中检索agent runtime负责什么？回答必须带文档引用`。
+
+发现：
+
+- `search_docs` 已能成功进入检索链路，说明 Document RAG 索引、检索和 citation 字段可用。
+- 最终回答包含真实 Document RAG citation：
+  - `[my_md/doc_rag_corpus/manual_test.md > Agent Runtime]`
+  - `[my_md/doc_rag_corpus/manual_test.md > Agent Runtime > Tool Calling]`
+- 但本轮 `react_iteration_count=7`，原因是 `search_docs` 和 `fetch_doc_chunk` 初始不可见，需要先失败或通过 `tool_search` 解锁。
+
+处理：
+
+- 将该问题登记为 `RAG-006`。
+- 明确它不是检索质量问题，而是工具可见性和成本治理问题。
+- 已调用审阅 skill 审阅计划。
+- 修订后的方案不是把 `search_docs` 改成 always-on，而是在当前 turn 根据强文档意图做 turn-local preload。
+- 修订后的方案要求强记忆/session 意图时临时压制 doc_rag LRU 残留，避免“上一轮查文档，下一轮问记忆”仍暴露 `search_docs`。
+- 详细计划写入 `my_md/rag/19-document-rag-p10-intent-preload-plan.md`。
+
+结果：
+
+- Document RAG happy path 已经跑通，但路径效率不达标。
+- 后续 P10 评估需要同时看“是否答对”和“是否以合理成本答对”。
+- 计划审阅后已明确实现边界：不改 always-on，不写 LRU，只改当前 turn 的 effective visible tools。
+
+证据：
+
+- `observe.db` turn id `345`
+- 工具链：`search_docs -> tool_search -> search_docs -> tool_search -> fetch_doc_chunk -> fetch_doc_chunk`
+- `react_iteration_count=7`
+- `react_input_sum_tokens=42008`
+
+影响：
+
+- 如果不治理工具可见性，真实用户每次文档问答都可能多跑 2-3 轮。
+- 成本指标会影响后续对 RAG 版本优化的判断。
+
+下一步：
+
+- 实现 `agent/policies/doc_rag_intent.py`。
+- 在 `DefaultReasoner.run_turn()` 接入 turn-local intent preload。
+- 增加 unit intent 测试和 memory-after-doc-LRU 集成测试。
+- 在 e2e eval 中加入 `max_react_iterations` 和 `max_tool_calls`。
+
+关联文档：
+
+- `my_md/governance/02-current-issues.md`
+- `my_md/governance/04-fix-roadmap.md`
+- `my_md/rag/19-document-rag-p10-intent-preload-plan.md`
+
+### RAG-007: Document RAG citation 有效但证据支撑强度需要继续治理
+
+场景：
+
+- 同一轮 P9 live smoke 中，最终回答带有两个有效 citation。
+- 用户指出可能存在“引用证据不匹配”的问题。
+
+发现：
+
+- 从来源校验看，两个 citation 均来自本轮 `search_docs` / `fetch_doc_chunk`，不是伪引用。
+- 从语义忠实度看，“Agent runtime 负责管理 agent 的一次运行过程”有直接证据。
+- “runtime 下辖 Tool Calling”更多来自 heading path `Agent Runtime > Tool Calling` 的结构推断，正文没有直接写明“下辖”。
+
+处理：
+
+- 将该问题登记为 `RAG-007`。
+- 明确 citation validator 目前解决的是来源有效性，不等价于 claim/evidence 完全对齐。
+- 后续要在回答约束和评估指标中区分“文档明确写了”和“从结构推断”。
+
+结果：
+
+- 当前 P9 citation 机制没有失败，但暴露出 P10 faithfulness 评估需求。
+- 后续回答应避免把结构推断包装成文档明示事实。
+
+证据：
+
+- `fetch_doc_chunk` 返回：
+  - `Agent runtime 负责管理 agent 的一次运行过程。`
+  - `工具调用用于让 agent 访问外部能力。`
+- 最终回答中的“下辖 Tool Calling”不是原文直接表述。
+
+影响：
+
+- 后续 judge 可能判为 evidence weak。
+- 企业知识库问答中，即使 citation 真实，也需要防止模型对证据过度解释。
+
+下一步：
+
+- 在 Document RAG 回答约束中加入“直接证据/推断表达”的区分。
+- 在 P10 eval 中增加 `claim_evidence_alignment`。
+- 增加标题暗示但正文未明说的测试 case。
+
+关联文档：
+
+- `my_md/rag/12-document-rag-params-experiments.md`
+- `my_md/rag/13-document-rag-evaluation.md`
+
 ## System
 
 ### SYS-001: 建立集中式治理文档体系

@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any, Callable, Mapping
 from agent.context import ContextBuilder
 from agent.lifecycle.facade import TurnLifecycle
 from agent.tools.base import Tool
+from bootstrap.toolsets.doc_rag import DocRagToolsetProvider
 from bootstrap.toolsets.mcp import McpToolsetProvider
 from bootstrap.toolsets.memory import MemoryToolsetProvider
 from bootstrap.toolsets.meta import CommonMetaToolsetProvider, SpawnToolsetProvider
@@ -42,6 +43,7 @@ _CONTEXT_WIRING: dict[str, ContextFactory] = {
     "default": lambda workspace, memory: ContextBuilder(workspace, memory=memory),
 }
 _TOOLSET_WIRING: dict[str, ToolsetProviderFactory] = {
+    "doc_rag": DocRagToolsetProvider,
     "spawn": SpawnToolsetProvider,
     "schedule": SchedulerToolsetProvider,
     "mcp": McpToolsetProvider,

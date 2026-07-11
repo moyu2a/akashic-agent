@@ -11,6 +11,10 @@
 - [13-document-rag-evaluation.md](./13-document-rag-evaluation.md): Document RAG 评估集、指标和结果记录。
 - [14-document-rag-interview-notes.md](./14-document-rag-interview-notes.md): Document RAG / GraphRAG / LLM Wiki 相关面试表达。
 - [15-document-rag-p0-p3-implementation-plan.md](./15-document-rag-p0-p3-implementation-plan.md): Document RAG 第一阶段 P0-P3 文件级实现计划。
+- [16-document-rag-p4-p6-implementation-plan.md](./16-document-rag-p4-p6-implementation-plan.md): Document RAG 第二阶段 P4-P6 实现计划、验证结果和手动测试记录。
+- [17-document-rag-p7-tools-plan.md](./17-document-rag-p7-tools-plan.md): Document RAG 工具接入 P7-P8 实现计划。
+- [18-document-rag-p9-citation-plan.md](./18-document-rag-p9-citation-plan.md): Document RAG 回答引用规则 P9 实现计划。
+- [19-document-rag-p10-intent-preload-plan.md](./19-document-rag-p10-intent-preload-plan.md): Document RAG 强文档意图 turn-local 工具预加载计划。
 
 ## 使用规则
 

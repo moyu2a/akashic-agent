@@ -49,6 +49,132 @@ uv run python -m scripts.doc_rag_retrieve_check --help
 - 新增覆盖：`tests/test_doc_rag_scripts.py`。
 - 修复后验证：Doc RAG 测试矩阵 `46 passed, 1 warning`，black check 和 compileall 通过。
 
+## Manual Test Record 2026-07-10
+
+本节记录 P4-P6 后端链路的真实手动验收结果。
+
+### 1. Index Check
+
+命令：
+
+```bash
+uv run python -m scripts.doc_rag_index_check --rebuild
+```
+
+实际结果：
+
+```text
+status: succeeded
+run_id: b5c6850df786470b81dcd79af9db4730
+docs_scanned: 2
+docs_indexed: 2
+docs_skipped: 0
+docs_deleted: 0
+docs_failed: 0
+chunks_created: 11
+embedding_failed: 0
+store_path: ~/.akashic/workspace/doc_rag/doc_rag.db
+```
+
+结论：
+
+- 索引任务成功。
+- loader 扫描到 2 个文档。
+- indexer 成功写入 2 个文档。
+- chunker 生成 11 个 chunk。
+- embedding 全部成功，没有文档失败。
+
+### 2. SQLite Chunk Inspection
+
+命令：
+
+```bash
+sqlite3 ~/.akashic/workspace/doc_rag/doc_rag.db \
+  "select source_path, heading_path, chunk_index, char_count, embedding_status from chunks order by source_path, chunk_index;"
+```
+
+实际观察：
+
+- `my_md/doc_rag_corpus/README.md` 被切成 9 个 chunk，覆盖 `akashic Agent`、`Quickstart`、`系统全景`、`被动回复`、`主动推送（Proactive）`、`记忆系统`、`Drift 空闲任务`、`其他命令`、`工作区`。
+- `my_md/doc_rag_corpus/manual_test.md` 被切成 2 个 chunk，覆盖 `Agent Runtime` 和 `Agent Runtime > Tool Calling`。
+- 所有 chunk 的 `embedding_status` 都是 `ready`。
+
+结论：
+
+- `source_path` 使用 repo 相对路径，符合设计。
+- `heading_path` 能反映 Markdown 标题层级，符合 chunker 设计。
+- 所有 chunk 都可被检索，说明 embedding 写入成功。
+
+### 3. Retrieval Check
+
+命令：
+
+```bash
+uv run python -m scripts.doc_rag_retrieve_check "agent runtime 负责什么"
+```
+
+实际结果摘要：
+
+```text
+query: agent runtime 负责什么
+trace_id: 1fd2984b7b504ddda6ea4b1f84de4378
+error:
+latency_ms: 307.336
+hits: 5
+rank 1: my_md/doc_rag_corpus/manual_test.md > Agent Runtime, score=0.806164
+rank 2: my_md/doc_rag_corpus/manual_test.md > Agent Runtime > Tool Calling, score=0.675723
+rank 3: my_md/doc_rag_corpus/README.md > akashic Agent > Drift 空闲任务, score=0.653374
+rank 4: my_md/doc_rag_corpus/README.md > akashic Agent > 系统全景, score=0.620955
+rank 5: my_md/doc_rag_corpus/README.md > akashic Agent, score=0.603753
+```
+
+结论：
+
+- retriever 正常返回 top_k 结果。
+- `error` 为空，说明 query embedding、store search 和结果序列化都成功。
+- top1 命中最相关测试文档 `manual_test.md > Agent Runtime`，基础召回正确。
+- rank3-rank5 命中 README 中语义相关但不够精确的内容，这是 vector-only baseline 的正常表现，后续可通过 `similarity_threshold`、hybrid search、rerank 和语料清理优化。
+
+### 4. Trace Check
+
+命令：
+
+```bash
+tail -n 1 ~/.akashic/workspace/doc_rag/retrieval_traces.jsonl
+```
+
+实际观察：
+
+- trace 中记录了 `trace_id=1fd2984b7b504ddda6ea4b1f84de4378`。
+- trace 中记录了 `query="agent runtime 负责什么"`。
+- trace 中记录了 `retrieval_mode="vector_only"`。
+- trace 中记录了 `top_k=5` 和 `hit_count=5`。
+- 每个 hit 都包含 `rank`、`chunk_id`、`source_path`、`heading_path`、`score`、`snippet`。
+- `error` 为空。
+
+结论：
+
+- JSONL trace 可用于后续 retrieval-only evaluation。
+- trace 默认只记录 snippet，不记录完整 content，符合 P4-P6 设计。
+
+### 5. Current Manual Acceptance Status
+
+| 测试项 | 结果 | 证据 |
+| --- | --- | --- |
+| 文档扫描 | 通过 | `docs_scanned=2` |
+| 文档索引 | 通过 | `docs_indexed=2` |
+| chunk 生成 | 通过 | `chunks_created=11` |
+| embedding 写入 | 通过 | 全部 `embedding_status=ready` |
+| vector-only 检索 | 通过 | `hits=5`，top1 命中目标文档 |
+| retrieval trace | 通过 | JSONL 有对应 `trace_id` |
+| standalone 脚本 | 通过 | HTTP resources 初始化问题已修复 |
+
+### 6. Observations
+
+- `manual_test.md` 的第二个 chunk snippet 中出现 `EOF`，这来自测试文档内容本身，不是 chunker 或 retriever 的程序错误；当前用户决定暂不处理。
+- 当前还没有接入 Agent 工具，所以 CLI 对话中不能直接调用 Document RAG；必须进入 P7 才能让 Agent 使用 `search_docs` / `fetch_doc_chunk`。
+- 当前检索只是 vector-only baseline，不代表最终 RAG 质量；后续评估需要引入 Recall@k、MRR、证据命中和 citation 检查。
+
 自审修正：
 
 - 补齐 deleted 文档清理行为：`mark_missing_documents_deleted` 不只更新 document status，还会清理对应 chunks、chunks_fts 和 vec_chunks；新增 `test_store_clears_chunks_when_marking_missing_documents_deleted` 覆盖该行为。

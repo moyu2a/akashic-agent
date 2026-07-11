@@ -418,10 +418,10 @@ def _load_wiring_config(data: dict) -> WiringConfig:
     raw = _as_dict(agent_cfg.get("wiring")) or data.get("wiring", {}) or {}
     toolsets = raw.get(
         "toolsets",
-        ["meta_common", "spawn", "schedule", "mcp"],
+        ["meta_common", "spawn", "schedule", "mcp", "doc_rag"],
     )
     if not isinstance(toolsets, list):
-        toolsets = ["meta_common", "spawn", "schedule", "mcp"]
+        toolsets = ["meta_common", "spawn", "schedule", "mcp", "doc_rag"]
     return WiringConfig(
         context=str(raw.get("context", "default") or "default"),
         memory=str(raw.get("memory", "default") or "default"),

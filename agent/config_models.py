@@ -179,6 +179,7 @@ class WiringConfig:
             "spawn",
             "schedule",
             "mcp",
+            "doc_rag",
         ]
     )
 

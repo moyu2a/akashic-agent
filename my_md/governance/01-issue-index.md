@@ -22,6 +22,9 @@
 | EV-004 | eval | test-noise | P0 | 部分测试断言过硬，把正确行为判为失败 | 干扰真实问题定位 | [02-current-issues.md](./02-current-issues.md) |
 | EV-005 | eval-infra | open | P1 | judge 依赖环境不完整时会跳过语义评审 | 报告缺少 LLM judge 判断 | [02-current-issues.md](./02-current-issues.md) |
 | EV-006 | session-isolation | open | P0 | `fetch_messages` 可能跨 session 回源到其他会话内容 | 私有会话内容被错误用于当前 session 回答 | [02-current-issues.md](./02-current-issues.md) |
+| RAG-005 | rag-config/tool-governance | fixed | P1 | Document RAG live smoke 中 `doc_rag.enabled=false`，`search_docs` 返回 disabled 后模型继续 fallback 到 `read_file`；第一阶段已增强 disabled 工具语义，live smoke 待验证 | P9 真实链路无法验证 citation，且 disabled 场景产生无效工具链 | [02-current-issues.md](./02-current-issues.md) |
+| RAG-006 | rag-tool-governance/cost | open | P1 | Document RAG 启用后 live smoke 仍出现 7 轮 ReAct；已形成经审阅的 P10 方案：强文档意图做 turn-local 预加载，强记忆/session 意图临时压制 doc_rag LRU 残留，不改 always-on | 增加延迟、token、工具调用成本；若不压制 LRU，还可能把记忆问题误导到文档检索 | [02-current-issues.md](./02-current-issues.md), [../rag/19-document-rag-p10-intent-preload-plan.md](../rag/19-document-rag-p10-intent-preload-plan.md) |
+| RAG-007 | rag-citation/faithfulness | open | P1 | Document RAG citation 来源有效，但部分结论属于标题结构推断，证据支撑强度不足 | citation valid 不等于答案忠实，可能被 judge 判为 evidence weak | [02-current-issues.md](./02-current-issues.md) |
 
 ## 后续补充模板
 

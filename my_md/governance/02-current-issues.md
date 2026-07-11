@@ -21,6 +21,194 @@
 
 ## 真实问题
 
+### RAG-005 Document RAG 未启用时 live smoke 失败并触发 fallback 工具链
+
+现象：
+
+- 2026-07-11 真实 CLI smoke 提问：`请从文档知识库中检索agent runtime负责什么？回答必须带文档引用`。
+- Agent 正确通过 `tool_search` 找到 `search_docs` / `fetch_doc_chunk`。
+- Agent 实际调用 `search_docs`，但工具返回 `doc_rag_disabled`。
+- 随后模型继续调用多次 `list_dir` / `read_file`，改用源码和 README 组织答案。
+- 最终回答没有 `[my_md/doc_rag_corpus/manual_test.md > Agent Runtime]` 形式的 Document RAG citation。
+
+证据：
+
+- `observe.db` turn id `344`：
+  - `tool_search -> search_docs -> list_dir/read_file...`
+  - `search_docs` 结果：`{"ok": false, "error_code": "doc_rag_disabled", "message": "Document RAG is disabled", "hits": []}`
+- 当前 `config.toml` 没有 `[doc_rag]` 段，`Config.load("config.toml").doc_rag.enabled == False`。
+- `~/.akashic/workspace/doc_rag/doc_rag.db` 中已有 11 个 `ready` chunks，说明索引库正常，失败点不在索引。
+- `retrieval_traces.jsonl` 没有 2026-07-11 新增检索 trace，符合 disabled 时未进入 retriever 的行为。
+
+可能原因：
+
+- 运行配置未显式启用 `[doc_rag].enabled=true`，服务启动时使用默认 `false`。
+- `search_docs` 对 disabled 场景只返回错误，没有提供足够强的“终止/不要 fallback 到 read_file”的机器可读信号。
+- 工具描述强调了正常检索路径，但没有明确说明 `doc_rag_disabled` 时应直接告知用户启用配置。
+- 模型为了完成用户问题，在 Document RAG 不可用时改用通用文件工具补答案。
+
+影响：
+
+- P9 自动化测试通过，但真实 live smoke 无法验证 citation 闭环。
+- disabled 场景下会产生无效工具链，增加 token、延迟和 observe 噪声。
+- 用户要求“文档知识库”时，fallback 到 `read_file` 容易混淆“Document RAG 结果”和“源码文件阅读结果”。
+
+当前结论：
+
+- 这不是索引失败，也不是 citation validator 失败。
+- 当前主要是运行配置问题，同时暴露出 disabled 场景的工具治理可以增强。
+- 2026-07-11 已完成第一阶段代码修复：`search_docs` / `fetch_doc_chunk` 在 disabled 时返回 `terminal=true`、`terminal_scope=document_rag`、`retryable=false`、`fallback_allowed=false`、`recommended_action=answer_doc_rag_disabled`、`instructions` 和中文 `user_message`。
+- 该修复是工具协议层约束，能显著降低 fallback 概率；当前 AgentLoop 尚未消费这些字段，因此不是执行器级硬阻断。
+
+修复方向：
+
+- 已完成：`search_docs` 返回 disabled 时增加 `retryable=false`、`terminal=true`、`terminal_reason=doc_rag_disabled`、`terminal_scope=document_rag`、`fallback_allowed=false`、`recommended_action=answer_doc_rag_disabled` 等字段。
+- 已完成：`fetch_doc_chunk` disabled 返回同样的终止语义字段。
+- 已完成：工具描述补充“如果返回 `doc_rag_disabled`，不要改用本地文件读取、`list_dir` 或 `shell` 替代 Document RAG 检索，应直接说明未启用”。
+- 已完成：单元测试覆盖 disabled 输出结构、工具描述、citation 插件 disabled tool-chain 行为。
+- 待验证：关闭 `doc_rag.enabled` 后执行真实 CLI smoke，确认模型是否不再 fallback。
+- 后续：在 P10 e2e 评估中加入 disabled 场景，明确预期是停止并提示启用，而不是 fallback 工具链。
+- 若 live smoke 仍出现 fallback，则进入第二阶段：在工具执行器或 AgentLoop 层消费 `fallback_allowed=false` / `terminal_scope=document_rag`，阻断后续文件工具替代路径。
+
+验证方式：
+
+- 已通过自动化回归：
+  - `uv run --with pytest --with pytest-asyncio pytest tests/test_doc_rag_tools.py tests/test_doc_rag_citation_plugin.py tests/test_doc_rag_toolset.py -q`
+  - 结果：`29 passed in 0.32s`
+  - `uv run --with pytest --with pytest-asyncio pytest tests/test_doc_rag_tools.py tests/test_doc_rag_toolset.py tests/test_doc_rag_citation_plugin.py tests/test_citation_plugin.py tests/test_plugin_manager.py -q`
+  - 结果：`76 passed in 0.50s`
+- 待执行 live smoke：关闭 `doc_rag.enabled` 再问同题，预期直接回答未启用，不调用 `read_file/list_dir/shell`。
+- 2026-07-11 disabled live smoke 结果：
+  - `observe.db` turn id `346`
+  - 工具链：`tool_search -> search_docs -> final`
+  - `search_docs` 返回增强后的 `doc_rag_disabled` 结构。
+  - 未再调用 `read_file/list_dir/shell`，说明第一阶段对 fallback 的约束基本生效。
+  - 仍有话术缺口：最终回答说“我可以先把 doc_rag 开启再查”，容易暗示当前运行中的 Agent 能主动启用并立即生效；正确表达应是“需要你修改配置并重启当前 Agent 服务，重启前本轮无法从 Document RAG 检索”。
+  - 本轮 `react_iteration_count=3`，不是 3 次工具调用，而是三次 LLM/ReAct 循环：第 1 轮加载 `search_docs`，第 2 轮调用 `search_docs`，第 3 轮生成最终回复。
+- 2026-07-11 已完成第二小步代码修复：
+  - `doc_rag_disabled` payload 新增 `restart_required=true`、`restart_target=agent_service`、`current_process_can_enable=false`、`retrieval_available_this_turn=false`、`config_key=doc_rag.enabled`、`required_config_value=true`。
+  - `instructions` 明确要求不要声称可为当前运行进程启用，必须设置配置并重启 Agent 服务，且本轮不要继续检索。
+  - `user_message` 明确写入“当前运行中的 Agent”“重启 Agent 服务”“重启前本轮不能继续检索”。
+  - 工具 description 明确 disabled 时需设置 `doc_rag.enabled=true` 并重启 Agent 服务。
+  - 自动化回归通过：`29 passed in 0.34s`，相关回归 `76 passed in 0.50s`。
+  - 该小步仍需重新执行 disabled live smoke，确认最终回答不再暗示“我可以先打开再查”。
+
+### RAG-006 Document RAG 启用后工具可见性导致 ReAct 轮次过长
+
+现象：
+
+- 2026-07-11 重新启用 Document RAG 后，再次提问：`请从文档知识库中检索agent runtime负责什么？回答必须带文档引用`。
+- `observe.db` turn id `345` 显示最终回答正确带有文档引用。
+- 但本轮 `react_iteration_count=7`，实际工具链为：
+  - `search_docs` 失败：工具 schema 当前不可见。
+  - `tool_search(select:search_docs)` 解锁 `search_docs`。
+  - `search_docs` 成功返回 5 个 hits。
+  - `tool_search(select:fetch_doc_chunk)` 解锁 `fetch_doc_chunk`。
+  - `fetch_doc_chunk` 读取 `Agent Runtime`。
+  - `fetch_doc_chunk` 读取 `Agent Runtime > Tool Calling`。
+  - 最后一轮生成回答。
+
+证据：
+
+- `observe.db` turn id `345`：
+  - `react_iteration_count=7`
+  - `react_input_sum_tokens=42008`
+  - `react_input_peak_tokens=7749`
+  - 工具调用：`search_docs -> tool_search -> search_docs -> tool_search -> fetch_doc_chunk -> fetch_doc_chunk`
+- 第一次 `search_docs` 返回：工具当前未加载，提示先调用 `tool_search(query="select:search_docs")`。
+
+可能原因：
+
+- `search_docs` / `fetch_doc_chunk` 当前不是 always-on 工具，真实 CLI 回合开始时未直接可见。
+- 模型虽然知道要查文档知识库，但需要先经历工具不可见失败，再通过 `tool_search` 解锁。
+- `fetch_doc_chunk` 也需要单独解锁，导致额外 ReAct 轮次。
+- 简单问题中第二个 chunk 是否必须读取不明确，模型倾向多取证据以保证回答完整。
+
+影响：
+
+- 文档 RAG 虽然成功，但链路偏长。
+- 增加 token、延迟和 observe 噪声。
+- 自动评估中会拉低成本指标、工具正确率和路径效率。
+- 用户只问“agent runtime 负责什么”时，理想链路不应超过 `search_docs -> 可选 fetch_doc_chunk -> final`。
+
+当前结论：
+
+- 这不是检索失败，也不是 citation validator 失败。
+- 这是 Document RAG 工具可见性和成本治理问题。
+- 已调用审阅 skill 审阅 RAG-006 计划，核心修订是：预加载必须是 turn-local，不得写入 LRU；强记忆/session 意图时需要临时压制 doc_rag LRU 残留。
+
+修复方向：
+
+- 新增 `agent/policies/doc_rag_intent.py`，实现纯规则 `decide_doc_rag_preload(text)`。
+- 在 `DefaultReasoner.run_turn()` 中做 turn-local intent preload：只影响当前 turn 的 effective visible tools，不写回 `ToolDiscoveryState`。
+- 强文档意图时，当前 turn 预加载 `search_docs`。
+- 强文档意图且需要原文/文档证据展开时，当前 turn 同时预加载 `fetch_doc_chunk`。
+- 强记忆/session 意图且无强文档意图时，当前 turn 临时从 effective preloaded 中移除 `search_docs` / `fetch_doc_chunk`，避免 LRU 残留污染。
+- 对文档问答链路增加工具预算或早停规则：如果 `search_docs` snippet 已足够回答简单事实问题，则不强制 `fetch_doc_chunk`。
+- 增加回归测试：文档问答 happy path 不应先出现“工具未加载”失败。
+- 在评估集中增加 `max_react_iterations`、`max_tool_calls`、`expected_tools`、`forbidden_tools` 指标。
+- 计划详见：`my_md/rag/19-document-rag-p10-intent-preload-plan.md`。
+
+验证方式：
+
+- 启用 Document RAG 后重跑同题。
+- 预期工具链：
+  - 简单问题：`search_docs -> final`
+  - 需要展开证据的问题：`search_docs -> fetch_doc_chunk -> final`
+- 不应出现第一次 `search_docs` schema 不可见。
+- 记忆/session 问题不应因为上一轮 RAG 工具 LRU 残留而暴露 `search_docs`。
+- ReAct 轮次目标：简单问题 2-3 轮，复杂问题 3-4 轮。
+
+### RAG-007 Document RAG citation 来源有效但 claim/evidence 对齐不够严格
+
+现象：
+
+- `observe.db` turn id `345` 最终回答包含两个 citation：
+  - `[my_md/doc_rag_corpus/manual_test.md > Agent Runtime]`
+  - `[my_md/doc_rag_corpus/manual_test.md > Agent Runtime > Tool Calling]`
+- 这两个 citation 都来自本轮 `search_docs` / `fetch_doc_chunk`，不是伪造引用。
+- 但回答中“它下辖 Tool Calling”这一表达，主要来自标题层级 `Agent Runtime > Tool Calling` 的结构推断，正文没有直接写明“Tool Calling 被 runtime 下辖”。
+
+证据：
+
+- `fetch_doc_chunk(0cf46daf12216544)` 返回正文：`Agent runtime 负责管理 agent 的一次运行过程。`
+- `fetch_doc_chunk(3495544fd55c741a)` 返回正文：`工具调用用于让 agent 访问外部能力。`
+- 最终回答把第二段解释成“它下辖 Tool Calling”，属于合理推断，但不是强证据原文。
+
+可能原因：
+
+- 当前 citation validator 解决的是“引用必须来自本轮工具结果”，不是“每个 claim 必须被引用内容直接支撑”。
+- 模型会把 heading path 当作语义关系，进而生成更强的结构性结论。
+- 评估指标目前更偏 `citation_valid`，缺少 `claim_evidence_alignment` / `answer_faithfulness_with_citation` 的细粒度判断。
+
+影响：
+
+- citation 来源真实，但答案仍可能被严格 judge 判为 evidence weak。
+- 用户可能误以为文档明确写了某个架构关系，实际只是从章节结构推断。
+- 后续企业文档 RAG 场景中，这类问题会影响答案忠实度和可审计性。
+
+当前结论：
+
+- 本轮不是 fake citation。
+- 问题属于 faithfulness 层：citation valid 不等于 claim fully supported。
+
+修复方向：
+
+- 回答生成约束中区分：
+  - “文档明确写明”：可以直接陈述并引用。
+  - “从标题结构/上下文推断”：必须写成“从章节结构看 / 可以理解为 / 可能表示”，不能当成确定事实。
+- 在 citation 插件或后续评估中记录 `claim -> evidence` 检查结果。
+- 对 Document RAG e2e 测试增加 `evidence_alignment` 指标。
+- 在测试集里增加“标题暗示但正文未明说”的 case，验证模型是否会说过头。
+- 对这次回答的推荐表达是：`文档在 Agent Runtime 章节下列出了 Tool Calling 小节，说明工具调用是 runtime 相关能力之一。`
+
+验证方式：
+
+- 同题重跑时，最终回答中：
+  - 可以直接说：`Agent runtime 负责管理 agent 的一次运行过程。`
+  - 对 Tool Calling 只能说：`文档在该章节下列出了 Tool Calling，它用于让 agent 访问外部能力。`
+  - 不应直接说：`runtime 下辖 Tool Calling`，除非文档正文明确写出这种关系。
+
 ### EV-001 临时 session 信息写入长期记忆
 
 现象：

@@ -32,3 +32,15 @@
 ### 3. 清理协议标签（ProtocolTagCleanupModule）
 
 在 persist 之前再做一次扫描，用正则清除 reply 末尾所有残留的 `<tag:value>` 形式协议标签（包括其他插件可能留下的），保证对外输出的文本干净。
+
+### 4. Document RAG 引用校验（DocRagCitationValidatorModule）
+
+Document RAG 引用是对用户可见的来源引用，格式为 `[source_path > heading_path]`。
+它只允许来自当前轮 `search_docs` / `fetch_doc_chunk` 工具结果中的 `citation` 字段。
+
+- 记忆引用使用内部协议 `§cited:[id]§`，不会展示给用户。
+- Document RAG 引用使用可见协议 `[source_path > heading_path]`，用于回答文档知识库问题。
+- 当全局配置 `app_config.doc_rag.enabled=true` 时，插件才会向系统 prompt 注入 Document RAG 引用规则。
+- 如果最终回复里出现当前轮工具结果没有返回过的文档引用，插件会移除该引用，并把移除记录写入 `outbound_metadata["doc_rag_citation"]`。
+- 如果使用了 Document RAG 工具证据但回复漏掉引用，插件会追加 `参考来源：...`，引用来自当前轮工具结果。
+- 如果文档知识库无命中，或回复明确表示没有足够文档证据，插件不会编造引用。

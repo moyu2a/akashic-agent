@@ -61,6 +61,25 @@ MRR = mean(1 / rank)
 
 回答引用是否指向正确来源。
 
+### Tool Path And Cost
+
+Document RAG 不能只看“答对没答对”，还要看是否用了合理路径答对。
+
+```text
+tool_search_avoidance_rate = 强文档意图中未调用 tool_search 的问题数 / 强文档意图问题数
+intent_preload_precision = 正确预加载的问题数 / 实际预加载的问题数
+memory_intent_doc_rag_leak_rate = 记忆/session 问题中暴露或调用 Document RAG 工具的问题数 / 记忆/session 问题数
+```
+
+同时记录：
+
+- `react_iteration_count`
+- `tool_call_count`
+- `expected_tools`
+- `forbidden_tools`
+- `used_tool_search`
+- `doc_rag_lru_suppressed`
+
 ### No-answer Accuracy
 
 文档没有答案时，是否能明确说没有找到依据。
@@ -109,6 +128,19 @@ MRR = mean(1 / rank)
 - Q021：项目是否已经完整实现 Document RAG？
 - Q022：项目是否已经训练了 Query Rewrite LoRA？
 - Q023：项目是否已经有完整 GraphRAG？
+
+### 工具意图预加载类
+
+- Q024：请从文档知识库中检索 agent runtime 负责什么？回答必须带文档引用。
+  - 预期：强文档意图，当前 turn 预加载 `search_docs`，不需要先调用 `tool_search`。
+- Q025：请从文档知识库中检索 agent runtime 负责什么？如果需要展开原文证据，请读取命中的 chunk。
+  - 预期：强文档意图 + 原文证据展开，当前 turn 预加载 `search_docs` 和 `fetch_doc_chunk`。
+- Q026：这个项目的 agent runtime 是什么？
+  - 预期：语义上可能是架构问题，但没有明确文档知识库意图；v0 规则可以不预加载，让模型自行决定是否 `tool_search`。
+- Q027：请从长期记忆里检索：我学习 agent 时最关注哪些方向？
+  - 预期：强记忆意图，不预加载 `search_docs` / `fetch_doc_chunk`。
+- Q028：同 session 上一轮刚查过文档后，再问“你还记得我刚才说我关注哪些学习方向吗？”
+  - 预期：memory-after-doc-LRU 场景，当前 turn 临时压制 doc_rag LRU 残留，不暴露或调用 `search_docs`。
 
 ## 评估结果记录
 

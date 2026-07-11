@@ -28,6 +28,10 @@
 - [rag/12-document-rag-params-experiments.md](./rag/12-document-rag-params-experiments.md): Document RAG 参数实验记录。
 - [rag/13-document-rag-evaluation.md](./rag/13-document-rag-evaluation.md): Document RAG 评估集、指标和结果记录。
 - [rag/14-document-rag-interview-notes.md](./rag/14-document-rag-interview-notes.md): Document RAG / GraphRAG / LLM Wiki 相关面试表达。
+- [rag/16-document-rag-p4-p6-implementation-plan.md](./rag/16-document-rag-p4-p6-implementation-plan.md): Document RAG 后端索引/检索/trace 实现计划和手动测试记录。
+- [rag/17-document-rag-p7-tools-plan.md](./rag/17-document-rag-p7-tools-plan.md): Document RAG 工具接入计划。
+- [rag/18-document-rag-p9-citation-plan.md](./rag/18-document-rag-p9-citation-plan.md): Document RAG 回答引用规则实现计划。
+- [rag/19-document-rag-p10-intent-preload-plan.md](./rag/19-document-rag-p10-intent-preload-plan.md): Document RAG 强文档意图 turn-local 工具预加载计划。
 - [governance/01-issue-index.md](./governance/01-issue-index.md): 全局问题总表。
 - [governance/02-current-issues.md](./governance/02-current-issues.md): 当前待解决问题。
 - [governance/03-domain-evolution.md](./governance/03-domain-evolution.md): 领域演进记录。
