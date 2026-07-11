@@ -360,6 +360,15 @@ STAR 复盘：
 - `search_docs` / `fetch_doc_chunk` 初始不可见，真实对话需要先经由 `tool_search` 解锁。
 - citation validator 当前只保证 citation 来自本轮工具结果，不负责逐句判断 claim 是否被证据直接支撑。
 
+工具治理演进脉络：
+
+- 最初的工具发现机制是 `tool_search`：基础工具保持少量 always-on，其他工具按需通过 `tool_search` 解锁。这降低了默认 prompt 工具空间，但强文档问题会先经历“工具不可见 -> 调用 tool_search -> 再调用目标工具”的额外 ReAct 轮次。
+- 为了减少明确文档问题的循环次数，P10a 增加了 turn-local intent preload：强文档意图当前 turn 预加载 `search_docs`，强文档 + 原文/证据展开意图再预加载 `fetch_doc_chunk`。该方案刻意不改 always-on，也不写入 `ToolDiscoveryState` / LRU，避免把 Document RAG 工具长期暴露给普通聊天或记忆问题。
+- P10a live smoke 证明预加载本身有效，但也暴露了下一层问题：工具“可见”不等于工具“应该使用”。强文档证据问题仍可能被模型解释成“查项目源码/仓库文件”，转向 `shell/read_file/list_dir`，形成更长工具链。
+- 继续在 `DefaultReasoner.run_turn()` 里叠加 if 只能局部缓解，无法处理 `tool_search` 重新解锁、执行前兜底、terminal 工具结果禁止 fallback 等多个入口。工具可用性判断已经分散在 always-on、LRU、disabled_tools、P10a preload、tool_search、tool hook 和工具结果语义中。
+- 因此后续演进方向调整为 Tool Access Gateway：把“当前 turn 哪些工具可见、哪些工具可被 tool_search 解锁、哪些工具即使被调用也不得执行、工具结果如何改变后续访问”收束到一个 core policy boundary。它不是普通插件，也不重写 AgentLoop；第一版只窄接入 `DefaultReasoner` 的 prompt schema、`tool_search` unlock 和工具执行前后。
+- Gateway 的定位是 access control plane，插件仍作为 behavior extension plane。未来插件可以贡献 `ToolAccessPolicy`，但不得绕过 `disabled_tools`、不得直接改 LRU、不得直接改 LLM message list 或替换 `ToolRegistry.execute`。
+
 排查路径：
 
 | 顺序 | 检查点 | 检查方式 | 结果 | 结论 | 下一步 |
@@ -370,17 +379,22 @@ STAR 复盘：
 | 4 | 为什么有 7 轮 | 解析 `tool_calls` 和 `tool_chain_json` | `search_docs/fetch_doc_chunk` 都需要先解锁 | 工具可见性导致额外轮次 | 设计预加载策略 |
 | 5 | citation 是否伪造 | 对比最终引用和工具返回 citation | 两个 citation 均来自本轮工具结果 | 不是 fake citation | 检查证据强度 |
 | 6 | 结论是否被证据直接支撑 | 对比回答 claim 和 chunk 正文 | “负责管理运行过程”有直接证据，“下辖 Tool Calling”是结构推断 | 需要 faithfulness 约束 | 增加 evidence alignment |
+| 7 | P10a 预加载是否解决工具链过长 | 查看 14:26 live smoke 日志和 observe turn 349 | 预加载生效，但链路转向 `shell/read_file` | 单纯可见性治理不足 | 设计强文档非 RAG 工具约束 |
+| 8 | 工具约束应放在哪里 | 对比 prompt visibility、tool_search unlock、执行前 hook、terminal result | 单点 hook 无法覆盖所有绕路 | 需要统一工具访问边界 | 设计 Tool Access Gateway |
 
 处理方案：
 
 - RAG-005：disabled 场景下增加 terminal/retryable/recommended_action 语义，并要求模型停止而不是 fallback 到 `read_file`。
 - RAG-006：采用强文档意图的 turn-local preload，而不是把 `search_docs` 改成 always-on；强文档意图当前 turn 预加载 `search_docs`，强文档意图且需要原文/证据展开时再预加载 `fetch_doc_chunk`；强记忆/session 意图且无强文档意图时，在当前 turn 临时压制 `search_docs` / `fetch_doc_chunk` 的 LRU 残留。
+- RAG-006 P10a.1：从“只控制工具可见性”升级为 Tool Access Gateway，统一治理 prompt 可见性、`tool_search` 解锁、执行前拦截和 terminal 结果后的 fallback 阻断。
 - RAG-007：回答约束中区分“文档明确写明”和“基于标题结构推断”；评估中增加 `claim_evidence_alignment`。
 - RAG-005 第一阶段已执行：`doc_rag_disabled` 返回 `terminal_scope=document_rag`、`fallback_allowed=false`、`recommended_action=answer_doc_rag_disabled`、`instructions` 和 `user_message`；工具描述明确不要用本地文件读取替代 Document RAG。
 
 取舍说明：
 
 - 不把所有 RAG 工具永久 always-on，也不把意图预加载结果写入 `ToolDiscoveryState` / LRU：避免非文档问题污染工具空间，并避免“上一轮查文档，下一轮问记忆”被 LRU 残留误导。
+- 不把 Tool Access Gateway 做成普通插件：普通插件的 pre-tool hook 介入太晚，不能控制 prompt schema，也不能阻止 `tool_search` 把被压制工具重新解锁。Gateway 应作为 core policy boundary，未来再允许插件贡献受限的 policy。
+- 不改 AgentLoop 主体循环：工具访问治理只需要窄接入 `DefaultReasoner` 的工具路径，不应影响 channel、scheduler、session storage 和 outbound dispatch。
 - 不强制每个问题都 `fetch_doc_chunk`：简单事实问题用 snippet 足够时，应优先控制成本。
 - 不把 citation valid 当作最终质量指标：citation 只能证明来源真实，不能证明每个结论都被原文充分支持。
 - RAG-005 第一阶段没有改 AgentLoop：因为 `doc_rag_disabled` 是业务工具语义，先用工具协议和工具描述收敛模型行为；如果 live smoke 仍 fallback，再考虑执行器级阻断。
@@ -398,6 +412,7 @@ STAR 复盘：
 - CLI-001 已完成自动化修复：CLI IPC v2 使用 `AKIP2` magic + length-prefixed frame、稳定 client/session id、CLI/TUI `tool_summary` 投影、payload 治理和 workspace 文件日志。
 - 2026-07-11 16:17 复测：CLI IPC v2 未断连，session 仍为 `cli:cli-d76d211cea0546619146f9a7b1c4e268-default`；但强文档长证据 prompt 在 turn `354` 再次跑偏为 `read_file -> read_file -> shell -> search_docs -> shell -> shell -> read_file -> search_docs -> read_file`，`react_iteration_count=7`，`react_input_peak_tokens~=37978`。P10a.1 保持 open，本轮不修，后续回到工具治理处理。
 - 2026-07-11 16:32 用户真实 CLI 测试确认：默认启动 CLI 会继承之前 session，说明 CLI-001 的稳定 client/session id 路径已在真实界面生效。CLI-001 可按 fixed 记录；后续主问题是 RAG-006 P10a.1。
+- 2026-07-11 已形成 Tool Access Gateway 设计：将散落的工具可用性判断收束为 current-turn `ToolAccessPlan`，统一输出 `visible_add`、`visible_suppress`、`tool_search_block` 和 `execution_block`；第一阶段服务 RAG-006 P10a.1，不引入持久 RBAC，不替代插件系统，不重写 AgentLoop。
 
 验证方式：
 
@@ -415,7 +430,7 @@ STAR 复盘：
 - 是否需要在 citation 插件中做 claim/evidence 自动校验，还是先放在评估层处理。
 - `fetch_doc_chunk` 的预加载条件已按 P10a 保守实现，仍需真实 CLI/LLM smoke 观察是否过宽或过窄。
 - RAG-006 memory-after-doc-LRU 自动化测试已新增；仍需真实 CLI/LLM smoke 验证同 session 行为。
-- RAG-006 P10a.1：强文档意图 turn 未显式要求源码/本地文件时，应压制或强约束 `shell/read_file/list_dir`；强文档证据 case 的默认展开路径应是 `fetch_doc_chunk`。
+- RAG-006 P10a.1：实现 Tool Access Gateway；强文档意图 turn 未显式要求源码/本地文件时，应通过同一个 access plan 压制或强约束 `shell/read_file/list_dir`，并阻止 `tool_search` 重新解锁这些工具；强文档证据 case 的默认展开路径应是 `fetch_doc_chunk`。
 - CLI-001：transport/session 侧已由自动化和真实 CLI 重连 smoke 验证；继续常规观察即可。
 - 如果 disabled live smoke 仍 fallback 到 `read_file/list_dir/shell`，需要第二阶段让工具执行器或 AgentLoop 消费 `fallback_allowed=false`。
 - 如果后续只剩“是否能主动开启配置”的话术问题，优先补充工具返回字段和 `user_message`，明确 `restart_required=true`、`can_self_enable=false`，再做一次 disabled live smoke。
@@ -425,8 +440,8 @@ STAR 复盘：
 
 - Situation：Document RAG P9 citation 自动化测试已经通过，但真实 CLI/LLM smoke 暴露出配置、工具链成本和引用忠实度问题。
 - Task：确认问题到底是索引失败、citation validator 失败、配置问题，还是工具治理问题，并形成后续修复路线。
-- Action：查看 `observe.db` 中两轮真实 turn，分别分析 `search_docs` 返回、工具链、ReAct 轮次、最终 citation 和 chunk 正文证据，把问题拆成 disabled fallback、工具可见性成本、claim/evidence 对齐三类。
-- Result：确认 RAG 检索和 citation 来源校验本身可用，但还需要修 disabled 终止语义、工具预加载策略和 evidence alignment 评估。
+- Action：查看 `observe.db` 中多轮真实 turn，分别分析 `search_docs` 返回、工具链、ReAct 轮次、最终 citation 和 chunk 正文证据；先把问题拆成 disabled fallback、工具可见性成本、claim/evidence 对齐三类，再根据 P10a live smoke 继续识别出“工具可见性”和“工具可用性”不是同一个层面。
+- Result：确认 RAG 检索和 citation 来源校验本身可用；第一步通过 turn-local preload 降低明确文档问题的工具发现成本，但后续 smoke 显示仍需 Tool Access Gateway 把 prompt 可见性、tool_search 解锁、执行前拦截和 terminal fallback 阻断收束到同一工具访问边界。
 
 面试表达：
 
