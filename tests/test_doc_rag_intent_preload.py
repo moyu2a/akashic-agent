@@ -110,7 +110,9 @@ def test_run_turn_preloads_search_docs_for_strong_doc_intent() -> None:
     )
 
     kwargs = reasoner.run.call_args.kwargs  # type: ignore[attr-defined]
-    assert kwargs["preloaded_tools"] == {"search_docs"}
+    assert kwargs["preloaded_tools"] == set()
+    assert {"search_docs", "tool_search"} <= kwargs["initial_visible_names"]
+    assert "fetch_doc_chunk" not in kwargs["initial_visible_names"]
     assert discovery.get_preloaded("cli:1") == set()
 
 
@@ -126,7 +128,10 @@ def test_run_turn_preloads_fetch_doc_chunk_for_doc_evidence_intent() -> None:
     )
 
     kwargs = reasoner.run.call_args.kwargs  # type: ignore[attr-defined]
-    assert kwargs["preloaded_tools"] == {"search_docs", "fetch_doc_chunk"}
+    assert kwargs["preloaded_tools"] == set()
+    assert {"search_docs", "fetch_doc_chunk", "tool_search"} <= kwargs[
+        "initial_visible_names"
+    ]
     assert discovery.get_preloaded("cli:1") == set()
 
 
@@ -146,7 +151,14 @@ def test_memory_after_doc_lru_suppresses_doc_rag_for_current_turn_only() -> None
     )
 
     kwargs = reasoner.run.call_args.kwargs  # type: ignore[attr-defined]
-    assert kwargs["preloaded_tools"] == {"recall_memory"}
+    assert kwargs["preloaded_tools"] == {
+        "search_docs",
+        "fetch_doc_chunk",
+        "recall_memory",
+    }
+    assert "recall_memory" in kwargs["initial_visible_names"]
+    assert "search_docs" not in kwargs["initial_visible_names"]
+    assert "fetch_doc_chunk" not in kwargs["initial_visible_names"]
     assert discovery.get_preloaded("cli:1") == {
         "search_docs",
         "fetch_doc_chunk",

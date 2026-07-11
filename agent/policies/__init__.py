@@ -20,6 +20,12 @@ from agent.policies.history_route import (
     RouteDecisionReasonCode,
     RouteDecisionSource,
 )
+from agent.policies.tool_access import (
+    ToolAccessContext,
+    ToolAccessGateway,
+    ToolAccessPlan,
+    ToolExecutionGateResult,
+)
 
 __all__ = [
     "DecisionMeta",
@@ -37,5 +43,9 @@ __all__ = [
     "SpawnDecisionMeta",
     "SpawnDecisionReasonCode",
     "SpawnDecisionSource",
+    "ToolAccessContext",
+    "ToolAccessGateway",
+    "ToolAccessPlan",
+    "ToolExecutionGateResult",
     "decide_doc_rag_preload",
 ]

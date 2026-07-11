@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
@@ -8,7 +9,11 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Any, Awaitable, Callable, cast
 
 import agent.core.passive_support as support
-from agent.policies.doc_rag_intent import DOC_RAG_TOOL_NAMES, decide_doc_rag_preload
+from agent.policies.tool_access import (
+    ToolAccessContext,
+    ToolAccessGateway,
+    ToolAccessPlan,
+)
 from agent.core.runtime_support import ToolDiscoveryState
 from agent.core.types import (
     ContextBundle,
@@ -553,6 +558,9 @@ class Reasoner(ABC):
         *,
         request_time: datetime | None = None,
         preloaded_tools: set[str] | None = None,
+        initial_visible_names: set[str] | None = None,
+        tool_access_context: ToolAccessContext | None = None,
+        tool_access_plan: ToolAccessPlan | None = None,
         preflight_injected: bool = True,
         on_content_delta: Callable[[dict[str, str]], Awaitable[None]] | None = None,
         tool_event_session_key: str = "",
@@ -636,6 +644,7 @@ class DefaultReasoner(Reasoner):
             _ts if isinstance(_ts, ToolSearchTool) else None
         )
         self._tool_executor = ToolExecutor([])
+        self._tool_access_gateway = ToolAccessGateway()
         self._stream_sink_factory: Callable[
             [object], Callable[[dict[str, str] | str], Awaitable[None]] | None
         ] | None = None
@@ -760,43 +769,47 @@ class DefaultReasoner(Reasoner):
             else get_history_since_consolidated(session, self._memory_window)
         )
         total_history = len(source_history)
+        disabled_tools = _disabled_tools_from_msg(msg)
         preloaded: set[str] | None = None
-        effective_preloaded: set[str] | None = None
+        tool_access_context: ToolAccessContext | None = None
+        tool_access_plan: ToolAccessPlan | None = None
+        visible_names: set[str] | None = None
         if self._tool_search_enabled:
             preloaded = self._discovery.get_preloaded(session.key)
             logger.info(
                 "[tool_search] LRU preloaded=%s",
                 sorted(preloaded) if preloaded else "[]",
             )
-            doc_rag_decision = decide_doc_rag_preload(str(msg.content or ""))
-            effective_preloaded = set(preloaded or set())
-            if doc_rag_decision.preload_search_docs:
-                effective_preloaded.add("search_docs")
-            if doc_rag_decision.preload_fetch_doc_chunk:
-                effective_preloaded.add("fetch_doc_chunk")
-            if doc_rag_decision.suppress_doc_rag_lru:
-                effective_preloaded -= set(DOC_RAG_TOOL_NAMES)
-            retry_trace["doc_rag_preload"] = {
-                "preload_search_docs": doc_rag_decision.preload_search_docs,
-                "preload_fetch_doc_chunk": doc_rag_decision.preload_fetch_doc_chunk,
-                "suppress_doc_rag_lru": doc_rag_decision.suppress_doc_rag_lru,
-                "confidence": doc_rag_decision.confidence,
-                "reason": doc_rag_decision.reason,
-                "matched_terms": list(doc_rag_decision.matched_terms),
-            }
+            tool_access_context = ToolAccessContext(
+                session_key=session.key,
+                user_text=str(msg.content or ""),
+                always_on_tools=frozenset(self._tools.get_always_on_names()),
+                lru_preloaded_tools=frozenset(preloaded or set()),
+                disabled_tools=frozenset(disabled_tools),
+                turn_metadata=getattr(msg, "metadata", {}) or {},
+            )
+            tool_access_plan = self._tool_access_gateway.build_plan(
+                tool_access_context
+            )
+            visible_names = self._tool_access_gateway.compute_visible_names(
+                tool_access_context,
+                tool_access_plan,
+            )
+            retry_trace["tool_access"] = _tool_access_trace(tool_access_plan)
             logger.info(
-                "[tool_preload] doc_rag search_docs=%s fetch_doc_chunk=%s "
-                "suppress=%s reason=%s matched=%s",
-                "yes" if doc_rag_decision.preload_search_docs else "no",
-                "yes" if doc_rag_decision.preload_fetch_doc_chunk else "no",
-                "yes" if doc_rag_decision.suppress_doc_rag_lru else "no",
-                doc_rag_decision.reason,
-                ",".join(doc_rag_decision.matched_terms) or "-",
+                "[tool_access] reason=%s policies=%s add=%s suppress=%s "
+                "tool_search_block=%s execution_block=%s matched=%s",
+                tool_access_plan.reason,
+                ",".join(tool_access_plan.policies) or "-",
+                ",".join(sorted(tool_access_plan.visible_add)) or "-",
+                ",".join(sorted(tool_access_plan.visible_suppress)) or "-",
+                ",".join(sorted(tool_access_plan.tool_search_block)) or "-",
+                ",".join(sorted(tool_access_plan.execution_block)) or "-",
+                ",".join(tool_access_plan.matched_terms) or "-",
             )
         stream_sink = (
             self._stream_sink_factory(msg) if self._stream_sink_factory is not None else None
         )
-        disabled_tools = _disabled_tools_from_msg(msg)
 
         # 2. 再按 trim plan + history window 顺序逐轮尝试。
         attempts = self._build_attempt_plans(total_history)
@@ -815,11 +828,7 @@ class DefaultReasoner(Reasoner):
             turn_injection_prompt = build_turn_injection_prompt(
                 tools=self._tools,
                 tool_search_enabled=self._tool_search_enabled,
-                visible_names=(
-                    (effective_preloaded or set()) | disabled_tools
-                    if self._tool_search_enabled
-                    else None
-                ),
+                visible_names=visible_names if self._tool_search_enabled else None,
             )
             prompt_render = await self.render_prompt(
                 PromptRenderInput(
@@ -845,7 +854,10 @@ class DefaultReasoner(Reasoner):
                 result = await self.run(
                     initial_messages,
                     request_time=msg.timestamp,
-                    preloaded_tools=effective_preloaded,
+                    preloaded_tools=preloaded,
+                    initial_visible_names=visible_names,
+                    tool_access_context=tool_access_context,
+                    tool_access_plan=tool_access_plan,
                     preflight_injected=True,
                     on_content_delta=stream_sink,
                     tool_event_session_key=session.key,
@@ -940,6 +952,9 @@ class DefaultReasoner(Reasoner):
         *,
         request_time: datetime | None = None,
         preloaded_tools: set[str] | None = None,
+        initial_visible_names: set[str] | None = None,
+        tool_access_context: ToolAccessContext | None = None,
+        tool_access_plan: ToolAccessPlan | None = None,
         preflight_injected: bool = True,
         on_content_delta: Callable[[dict[str, str]], Awaitable[None]] | None = None,
         tool_event_session_key: str = "",
@@ -961,7 +976,10 @@ class DefaultReasoner(Reasoner):
         disabled = set(disabled_tools or set())
         if self._tool_search_enabled:
             always_on = self._tools.get_always_on_names()
-            visible_names = (always_on | (preloaded_tools or set())) - disabled
+            if initial_visible_names is not None:
+                visible_names = set(initial_visible_names) - disabled
+            else:
+                visible_names = (always_on | (preloaded_tools or set())) - disabled
             logger.info(
                 "[tool_search] visible=%d 个工具 always_on=%d preloaded=%d need_search=%s",
                 len(visible_names),
@@ -1094,6 +1112,51 @@ class DefaultReasoner(Reasoner):
                             }
                         )
                         continue
+                    if tool_access_plan is not None:
+                        gate = self._tool_access_gateway.check_tool_call(
+                            tool_access_plan,
+                            tool_call.name,
+                            tool_call.arguments,
+                        )
+                        if not gate.allowed:
+                            result = json.dumps(
+                                {
+                                    "ok": False,
+                                    "error_code": gate.error_code,
+                                    "message": gate.message,
+                                    "recommended_tools": list(gate.recommended_tools),
+                                    "fallback_allowed": False,
+                                },
+                                ensure_ascii=False,
+                            )
+                            append_tool_result(
+                                messages,
+                                tool_call_id=tool_call.id,
+                                content=result,
+                                tool_name=tool_call.name,
+                            )
+                            await self._observe_tool_call_completed(
+                                session_key=tool_event_session_key,
+                                channel=tool_event_channel,
+                                chat_id=tool_event_chat_id,
+                                iteration=iteration + 1,
+                                call_id=tool_call.id,
+                                tool_name=tool_call.name,
+                                arguments=tool_call.arguments,
+                                final_arguments=tool_call.arguments,
+                                status="blocked_by_tool_access_gateway",
+                                result_preview=support.log_preview(result),
+                            )
+                            iter_calls.append(
+                                {
+                                    "call_id": tool_call.id,
+                                    "name": tool_call.name,
+                                    "status": "blocked_by_tool_access_gateway",
+                                    "arguments": tool_call.arguments,
+                                    "result": result,
+                                }
+                            )
+                            continue
                     # 6.1 deferred 工具未解锁时，先回填 select: 引导错误。
                     if visible_names is not None and tool_call.name not in visible_names:
                         exec_result = await self._tool_executor.preflight(
@@ -1271,6 +1334,18 @@ class DefaultReasoner(Reasoner):
                     if exec_result.status == "success":
                         tools_used.append(tool_call.name)
                     result = exec_result.output
+                    tool_search_blocked: tuple[str, ...] = ()
+                    if (
+                        exec_result.status == "success"
+                        and tool_call.name == "tool_search"
+                        and tool_access_plan is not None
+                    ):
+                        result, tool_search_blocked = (
+                            self._tool_access_gateway.filter_tool_search_matches(
+                                tool_access_plan,
+                                str(result),
+                            )
+                        )
                     await self._bus.fanout(AfterToolResultCtx(
                         session_key=tool_event_session_key,
                         channel=tool_event_channel,
@@ -1317,11 +1392,43 @@ class DefaultReasoner(Reasoner):
                         _newly_unlocked = self._discovery.unlock_from_result(normalized.text)
                         _newly_unlocked -= visible_names  # keep only genuinely new ones
                         _newly_unlocked -= disabled
-                        if _newly_unlocked:
+                        if tool_access_context is not None and tool_access_plan is not None:
+                            visible_names = self._tool_access_gateway.merge_tool_search_unlocks(
+                                current_visible=visible_names,
+                                unlocked=_newly_unlocked,
+                                context=tool_access_context,
+                                plan=tool_access_plan,
+                            )
+                            _newly_unlocked = set(visible_names) - (
+                                set(schema_names or set()) if schema_names is not None else set()
+                            )
+                        elif _newly_unlocked:
                             visible_names.update(_newly_unlocked)
+                        if _newly_unlocked:
                             logger.info("[工具解锁] tool_search 新解锁: %s", sorted(_newly_unlocked))
                         else:
                             logger.info("[工具解锁] tool_search 未解锁新工具")
+                        if tool_search_blocked:
+                            logger.info(
+                                "[tool_access] tool_search blocked matches: %s",
+                                sorted(tool_search_blocked),
+                            )
+                    if (
+                        exec_result.status == "success"
+                        and tool_access_plan is not None
+                        and tool_access_context is not None
+                    ):
+                        updated_plan = self._tool_access_gateway.observe_tool_result(
+                            tool_access_plan,
+                            tool_call.name,
+                            str(result),
+                        )
+                        if updated_plan != tool_access_plan:
+                            tool_access_plan = updated_plan
+                            if visible_names is not None:
+                                visible_names |= set(tool_access_plan.visible_add)
+                                visible_names -= set(tool_access_context.disabled_tools)
+                                visible_names -= set(tool_access_plan.visible_suppress)
                     # tool_chain 持久化的是“执行后的事实”：
                     # 最终参数、hook trace、结果预览，供后续回放与 session 复原。
                     iter_calls.append(
@@ -1841,6 +1948,19 @@ def build_deferred_tools_hint(
         "- 描述功能   → tool_search(query=\"关键词\") 搜索匹配"
     )
     return "\n".join(lines) + "\n\n"
+
+
+def _tool_access_trace(plan: ToolAccessPlan) -> dict[str, object]:
+    return {
+        "reason": plan.reason,
+        "policies": list(plan.policies),
+        "visible_add": sorted(plan.visible_add),
+        "visible_suppress": sorted(plan.visible_suppress),
+        "tool_search_block": sorted(plan.tool_search_block),
+        "execution_block": sorted(plan.execution_block),
+        "matched_terms": list(plan.matched_terms),
+        "filter_error": plan.filter_error,
+    }
 
 
 def build_loop_state_hint(

@@ -84,6 +84,7 @@ uv run --with pytest --with pytest-asyncio pytest \
 - 2026-07-11 16:17 复测没有复现 CLI 断连，但复现了 P10a.1 工具链跑偏：turn `354` 对强文档长证据 prompt 调用了 `read_file/read_file/shell/search_docs/shell/shell/read_file/search_docs/read_file`，`react_iteration_count=7`，`react_input_peak_tokens~=37978`。因此不能将 P10a.1 记为“未复现并跳过”；本轮仅记录，后续回到工具治理时继续处理。
 - 2026-07-11 16:25 最新检查确认：当前没有更新的 observe turn 能覆盖 turn `354` 的结论。按本轮决策暂不继续实现 P10a.1 修复，但文档状态保持“已复现/open”，以后出现同类现象时从这里继续。
 - 2026-07-11 16:32 用户真实 CLI 测试确认：默认重启 CLI 会继承之前 session。CLI-001 的稳定 session 路径已完成真实界面验证；P10a/P10a.1 后续不再把 CLI session 断连作为主阻塞项。
+- 2026-07-11 P10a.1 Tool Access Gateway 已完成自动化实现：`agent/policies/tool_access.py` 统一输出 current-turn `visible_add`、`visible_suppress`、`tool_search_block`、`execution_block`；`DefaultReasoner` 接入初始 schema 可见性、`tool_search` 结果过滤与解锁合并、执行前 gate、工具结果观察。强文档证据请求未显式要求源码/本地文件时会压制并阻断 `shell/read_file/list_dir`；显式源码/路径请求仍放行。真实 CLI/LLM smoke 待执行。
 
 ## 审阅结论
 

@@ -59,3 +59,24 @@
   - Updated docs to record that this is not a “not reproduced / skip” case; P10a.1 remains open and should be revisited later for tool-governance fixes.
 - 2026-07-11 16:25 CST rechecked the latest `agent.log` tail and `observe.db`; no newer successful non-long-chain turn superseded turn `354`. Current decision: do not continue fixing P10a.1 in this pass, but keep it recorded as reproduced/open instead of skipped as "not reproduced".
 - 2026-07-11 16:32 CST user confirmed via real CLI testing that restarting the CLI defaults to inheriting the previous session. Updated governance/RAG docs: CLI-001 is now fixed, while the next active issue is RAG-006 P10a.1 strong-document tool governance.
+- Committed and pushed the governance/STAR documentation update as `5443262 Document tool access governance evolution` on `main`.
+- Implemented P10a.1 Tool Access Gateway on `main`:
+  - added `agent/policies/tool_access.py` with modular policies for Document RAG intent, session/meta memory intent, and terminal result fallback blocking;
+  - moved P10a current-turn visibility from `effective_preloaded` into a `ToolAccessPlan`, keeping LRU/preloaded state unmutated;
+  - integrated `DefaultReasoner` at prompt schema visibility, `tool_search` result filtering/unlock merging, execution pre-gate, and tool-result observation;
+  - blocked `shell/read_file/list_dir` for strong document evidence turns unless the user explicitly asks for source/local/path inspection;
+  - preserved explicit source requests and always-on policy semantics.
+- Added automated coverage:
+  - pure gateway tests for strong-doc suppression, explicit-source allow, memory-after-doc-LRU suppression, `tool_search` filtering, execution gate blocking, and terminal fallback blocking;
+  - reasoner integration tests for schema suppression, filtered `tool_search` payloads, blocked local tool calls not executing/not counting as used, and explicit-source schema availability;
+  - updated P10a preload tests to assert the new `initial_visible_names` contract instead of writing intent preload into `preloaded_tools`.
+- Verification:
+  - `uv run --with pytest --with pytest-asyncio pytest tests/test_tool_access_gateway.py tests/test_tool_access_gateway_reasoner.py -q` -> `10 passed in 0.13s`.
+  - `uv run --with pytest --with pytest-asyncio pytest tests/test_doc_rag_intent.py tests/test_doc_rag_intent_preload.py tests/test_agent_core_p2_reasoner.py tests/test_tool_search.py tests/test_tool_access_gateway.py tests/test_tool_access_gateway_reasoner.py -q` -> `92 passed, 2 warnings in 0.26s`.
+  - `uv run --with pytest --with pytest-asyncio pytest tests/test_doc_rag_toolset.py tests/test_doc_rag_citation_plugin.py tests/test_runtime_smoke.py tests/test_more_support_modules.py tests/test_io_modules.py tests/test_channel_clients.py tests/test_ipc_protocol.py tests/test_bootstrap_logging.py -q` -> `81 passed in 5.13s`.
+  - `python3 -m compileall agent/policies agent/core/passive_turn.py tests/test_tool_access_gateway.py tests/test_tool_access_gateway_reasoner.py tests/test_doc_rag_intent_preload.py` -> passed.
+- Full-suite verification exposed an existing bootstrap toolset test stub that did not include the current default `doc_rag` toolset provider; updated `tests/test_bootstrap_toolsets_p1.py` to include `doc_rag`.
+- Final verification:
+  - `uv run --with pytest --with pytest-asyncio pytest -q` -> `1336 passed, 3 warnings in 35.29s`.
+  - `python3 -m compileall agent/policies agent/core/passive_turn.py tests/test_tool_access_gateway.py tests/test_tool_access_gateway_reasoner.py tests/test_doc_rag_intent_preload.py tests/test_bootstrap_toolsets_p1.py` -> passed.
+- Updated governance/RAG docs to mark P10a.1 as automated implementation complete, with real CLI/LLM smoke still pending.

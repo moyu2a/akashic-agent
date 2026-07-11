@@ -75,6 +75,11 @@ def test_build_registered_tools_uses_toolset_providers(monkeypatch, tmp_path: Pa
                 extras={"mcp_registry": object()},
             )
 
+    class _DocRagProvider:
+        def register(self, registry, deps):
+            calls.append("doc_rag")
+            return ToolsetRegistrationResult(source_name="doc_rag")
+
     monkeypatch.setattr(
         "bootstrap.tools.resolve_memory_toolset_provider",
         lambda name: _MemoryProvider(),
@@ -86,6 +91,7 @@ def test_build_registered_tools_uses_toolset_providers(monkeypatch, tmp_path: Pa
             "spawn": _SpawnProvider(),
             "schedule": _ScheduleProvider(),
             "mcp": _McpProvider(),
+            "doc_rag": _DocRagProvider(),
         }[name],
     )
     monkeypatch.setattr("bootstrap.tools.build_readonly_tools", lambda *_, **__: {})
@@ -113,7 +119,7 @@ def test_build_registered_tools_uses_toolset_providers(monkeypatch, tmp_path: Pa
         )
     )
 
-    assert calls == ["memory", "meta", "spawn", "schedule", "mcp"]
+    assert calls == ["memory", "meta", "spawn", "schedule", "mcp", "doc_rag"]
     assert push_tool is not None
     assert scheduler is not None
     assert mcp_registry is not None
