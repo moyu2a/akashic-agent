@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import json
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -29,7 +30,8 @@ from agent.tools.filesystem import (
 from agent.tools.vision import _encode_image_data_uri
 from bus.events import OutboundMessage
 from bus.queue import MessageBus
-from infra.channels.ipc_server import IPCServerChannel
+from infra.channels.ipc_server import IPCServerChannel, _ClientState
+from infra.channels.ipc_protocol import build_hello_payload, encode_frame, read_frame
 
 
 class _Pipe:
@@ -47,6 +49,42 @@ class _Pipe:
         if self._lines:
             return self._lines.pop(0)
         return b""
+
+
+class _FrameReader:
+    def __init__(self, payloads: list[bytes]) -> None:
+        self._buf = bytearray(b"".join(payloads))
+
+    async def readexactly(self, n: int) -> bytes:
+        if len(self._buf) < n:
+            raise asyncio.IncompleteReadError(bytes(self._buf), n)
+        out = bytes(self._buf[:n])
+        del self._buf[:n]
+        return out
+
+    async def readline(self) -> bytes:
+        if not self._buf:
+            return b""
+        try:
+            idx = self._buf.index(ord("\n"))
+        except ValueError:
+            out = bytes(self._buf)
+            self._buf.clear()
+            return out
+        out = bytes(self._buf[: idx + 1])
+        del self._buf[: idx + 1]
+        return out
+
+
+def _writer(writes: list[bytes]):
+    return SimpleNamespace(
+        get_extra_info=lambda name: "peer",
+        write=lambda data: writes.append(data),
+        drain=AsyncMock(),
+        close=MagicMock(),
+        wait_closed=AsyncMock(),
+        is_closing=lambda: False,
+    )
 
 
 class _Proc:
@@ -376,16 +414,13 @@ async def test_ipc_server_channel_covers_connection_command_and_response(
     await channel.stop()
     server.close.assert_called_once()
 
-    reader = SimpleNamespace(
-        readline=AsyncMock(
-            side_effect=[
-                b'{"content":"hello"}\n',
-                b'{"type":"command","command":"noop"}\n',
-                b'{"type":"command","command":"unknown"}\n',
-                b'not json\n',
-                b"",
-            ]
-        )
+    reader = _FrameReader(
+        [
+            b'{"content":"hello"}\n',
+            b'{"type":"command","command":"noop"}\n',
+            b'{"type":"command","command":"unknown"}\n',
+            b'not json\n',
+        ]
     )
     writes: list[bytes] = []
     writer = SimpleNamespace(
@@ -402,7 +437,7 @@ async def test_ipc_server_channel_covers_connection_command_and_response(
     inbound = await bus.consume_inbound()
     assert inbound.content == "hello"
     assert any("command_result" in payload.decode() for payload in writes)
-    assert any('"ok": false' in payload.decode() for payload in writes)
+    assert any('"ok":false' in payload.decode() for payload in writes)
     assert any("unknown command" in payload.decode() for payload in writes)
 
     msg = OutboundMessage(channel="cli", chat_id="missing", content="hi")
@@ -410,6 +445,144 @@ async def test_ipc_server_channel_covers_connection_command_and_response(
     chat_id = next(iter(channel._writers.keys()), None)
     if chat_id:
         await channel._on_response(OutboundMessage(channel="cli", chat_id=chat_id, content="hi"))
+
+
+@pytest.mark.asyncio
+async def test_ipc_server_v2_hello_uses_stable_chat_id() -> None:
+    bus = MessageBus()
+    channel = IPCServerChannel(bus, "/tmp/unused.sock", None)
+    writes: list[bytes] = []
+    reader = _FrameReader(
+        [
+            encode_frame(build_hello_payload("client-a", "rag-smoke")),
+            encode_frame({"type": "user", "content": "hello"}),
+        ]
+    )
+    await channel._handle_connection(
+        cast(asyncio.StreamReader, reader),
+        cast(asyncio.StreamWriter, _writer(writes)),
+    )
+    inbound = await asyncio.wait_for(bus.consume_inbound(), timeout=1)
+    assert inbound.chat_id == "cli-client-a-rag-smoke"
+    assert inbound.content == "hello"
+
+
+@pytest.mark.asyncio
+async def test_ipc_server_legacy_line_client_still_works() -> None:
+    bus = MessageBus()
+    channel = IPCServerChannel(bus, "/tmp/unused.sock", None)
+    writes: list[bytes] = []
+    reader = _FrameReader([b'{"content":"legacy hello"}\n'])
+    await channel._handle_connection(
+        cast(asyncio.StreamReader, reader),
+        cast(asyncio.StreamWriter, _writer(writes)),
+    )
+    inbound = await asyncio.wait_for(bus.consume_inbound(), timeout=1)
+    assert inbound.chat_id.startswith("cli-")
+    assert inbound.content == "legacy hello"
+
+
+@pytest.mark.asyncio
+async def test_ipc_server_rejects_malformed_v2_prefix_without_legacy_fallback() -> None:
+    bus = MessageBus()
+    channel = IPCServerChannel(bus, "/tmp/unused.sock", None)
+    writes: list[bytes] = []
+    reader = _FrameReader([b"AKIPx" + b'{"content":"should not parse"}\n'])
+    await channel._handle_connection(
+        cast(asyncio.StreamReader, reader),
+        cast(asyncio.StreamWriter, _writer(writes)),
+    )
+    assert channel._writers == {}
+    with pytest.raises(asyncio.TimeoutError):
+        await asyncio.wait_for(bus.consume_inbound(), timeout=0.01)
+
+
+@pytest.mark.asyncio
+async def test_ipc_server_v2_command_result_is_framed() -> None:
+    bus = MessageBus()
+    channel = IPCServerChannel(bus, "/tmp/unused.sock", None)
+    writes: list[bytes] = []
+    reader = _FrameReader(
+        [
+            encode_frame(build_hello_payload("client-a", "default")),
+            encode_frame({"type": "command", "command": "noop"}),
+        ]
+    )
+    await channel._handle_connection(
+        cast(asyncio.StreamReader, reader),
+        cast(asyncio.StreamWriter, _writer(writes)),
+    )
+    decoded = await read_frame(_FrameReader(writes))  # type: ignore[arg-type]
+    assert decoded["type"] == "command_result"
+    assert decoded["ok"] is False
+
+
+@pytest.mark.asyncio
+async def test_ipc_server_v2_outbound_projects_large_tool_chain() -> None:
+    bus = MessageBus()
+    channel = IPCServerChannel(bus, "/tmp/unused.sock", None)
+    writes: list[bytes] = []
+    writer = _writer(writes)
+    channel._writers["cli-client-a-default"] = _ClientState(
+        writer=cast(asyncio.StreamWriter, writer),
+        protocol=2,
+    )
+    huge_metadata = {
+        "tools_used": ["read_file"],
+        "tool_chain": [
+            {
+                "text": "x" * 1000,
+                "calls": [
+                    {
+                        "name": "read_file",
+                        "result": "R" * 100000,
+                        "arguments": {"path": "a.py"},
+                    }
+                ],
+            }
+        ],
+    }
+    await channel._on_response(
+        OutboundMessage(
+            channel="cli",
+            chat_id="cli-client-a-default",
+            content="answer",
+            metadata=huge_metadata,
+        )
+    )
+    assert writes
+    decoded = await read_frame(_FrameReader(writes))  # type: ignore[arg-type]
+    assert decoded["metadata"]["tool_summary"]["count"] == 1
+    assert "tool_chain" not in decoded["metadata"]
+    assert b"R" * 500 not in writes[0]
+
+
+@pytest.mark.asyncio
+async def test_ipc_server_legacy_outbound_projects_large_tool_chain() -> None:
+    bus = MessageBus()
+    channel = IPCServerChannel(bus, "/tmp/unused.sock", None)
+    writes: list[bytes] = []
+    writer = _writer(writes)
+    channel._writers["cli-legacy"] = _ClientState(
+        writer=cast(asyncio.StreamWriter, writer),
+        protocol=1,
+    )
+    await channel._on_response(
+        OutboundMessage(
+            channel="cli",
+            chat_id="cli-legacy",
+            content="answer",
+            metadata={
+                "tool_chain": [
+                    {"calls": [{"name": "shell", "result": "R" * 100000}]}
+                ]
+            },
+        )
+    )
+    payload = json.loads(writes[0].decode("utf-8"))
+    assert payload["metadata"]["tool_summary"]["names"] == ["shell"]
+    assert "tool_chain" not in payload["metadata"]
+    assert len(writes[0]) < 64 * 1024
 
 
 @pytest.mark.asyncio
@@ -435,6 +608,71 @@ async def test_ipc_server_uses_tcp_for_explicit_host_port_on_all_platforms(
     chmod.assert_not_called()
     await channel.stop()
     server.close.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_ipc_v2_large_response_survives_roundtrip(tmp_path: Path) -> None:
+    if not hasattr(asyncio, "open_unix_connection"):
+        pytest.skip("unix sockets unavailable")
+
+    bus = MessageBus()
+    socket_path = str(tmp_path / "agent.sock")
+    channel = IPCServerChannel(bus, socket_path, None)
+    await channel.start()
+    try:
+        reader, writer = await asyncio.open_unix_connection(socket_path)
+        writer.write(encode_frame(build_hello_payload("client-a", "default")))
+        writer.write(encode_frame({"type": "user", "content": "hello"}))
+        await writer.drain()
+        inbound = await asyncio.wait_for(bus.consume_inbound(), timeout=1)
+        assert inbound.chat_id == "cli-client-a-default"
+        await channel._on_response(
+            OutboundMessage(
+                channel="cli",
+                chat_id=inbound.chat_id,
+                content="answer",
+                metadata={
+                    "tool_chain": [
+                        {
+                            "calls": [
+                                {"name": "read_file", "result": "R" * 200000}
+                            ]
+                        }
+                    ]
+                },
+            )
+        )
+        data = await asyncio.wait_for(read_frame(reader), timeout=1)
+        assert data["content"] == "answer"
+        assert data["metadata"]["tool_summary"]["names"] == ["read_file"]
+        assert "tool_chain" not in data["metadata"]
+        writer.close()
+        await writer.wait_closed()
+    finally:
+        await channel.stop()
+
+
+@pytest.mark.asyncio
+async def test_ipc_v2_reconnect_same_hello_same_chat_id(tmp_path: Path) -> None:
+    if not hasattr(asyncio, "open_unix_connection"):
+        pytest.skip("unix sockets unavailable")
+
+    bus = MessageBus()
+    socket_path = str(tmp_path / "agent.sock")
+    channel = IPCServerChannel(bus, socket_path, None)
+    await channel.start()
+    try:
+        for content in ["one", "two"]:
+            reader, writer = await asyncio.open_unix_connection(socket_path)
+            writer.write(encode_frame(build_hello_payload("client-a", "rag-smoke")))
+            writer.write(encode_frame({"type": "user", "content": content}))
+            await writer.drain()
+            inbound = await asyncio.wait_for(bus.consume_inbound(), timeout=1)
+            assert inbound.chat_id == "cli-client-a-rag-smoke"
+            writer.close()
+            await writer.wait_closed()
+    finally:
+        await channel.stop()
 
 
 @pytest.mark.asyncio

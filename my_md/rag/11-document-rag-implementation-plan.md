@@ -133,13 +133,17 @@ Document RAG 可用 + 有评估 + 有 trace
 - 已完成 P9 自动化验证：`uv run --with pytest --with pytest-asyncio pytest ...` 覆盖 Document RAG、citation、plugin manager、memory2 baseline 和 tool discovery，共 `135 passed`；`black --check` 通过；`python3 -m compileall` 通过。
 - P9 尚未执行真实 CLI/LLM smoke：当前已完成工具层、插件层和单元/集成回归验证；真实 Agent 端到端验证需要启动服务并走 LLM/IPC，可作为下一次手动验收执行。
 - P10 已拆成两个子方向：
-  - P10a：工具意图预加载与成本治理，计划见 `my_md/rag/19-document-rag-p10-intent-preload-plan.md`。核心方案是强文档意图 turn-local 预加载 `search_docs`，强文档意图且需要原文/证据展开时预加载 `fetch_doc_chunk`，强记忆/session 意图时临时压制 doc_rag LRU 残留；不改 always-on，不写入 LRU。
+  - P10a：工具意图预加载与成本治理，计划见 `my_md/rag/19-document-rag-p10-intent-preload-plan.md`。代码侧已完成：强文档意图 turn-local 预加载 `search_docs`，强文档意图且需要原文/证据展开时预加载 `fetch_doc_chunk`，强记忆/session 意图时临时压制 doc_rag LRU 残留；不改 always-on，不写入 LRU。已通过相关自动化回归 `43 passed in 0.48s`。
+  - P10a.1：live smoke 发现 P10a 预加载生效但工具路径仍可能跑偏：强文档证据问题实际走 `search_docs -> shell/read_file...`，共 15 次工具调用，`react_iteration_count=10`。后续需治理强文档 turn 的非 RAG 工具空间。CLI/IPC 稳定 session 与 outbound metadata 裁剪已由 CLI IPC v2 修复，并已由真实 CLI 默认重连继承 session 验证。
+  - P10a.1 最新复测：2026-07-11 16:17 turn `354` 未复现 CLI 断连，但再次复现强文档长证据 prompt 跑偏到 `read_file/shell`，工具链 9 次，`react_iteration_count=7`，`react_input_peak_tokens~=37978`。该问题保持 open，后续回到工具治理处理。
   - P10b：retrieval-only 与 Agent e2e eval runner，继续覆盖 Recall@k、MRR、citation、faithfulness、工具路径和成本指标。
 
 下一步：
 
-- 优先执行 P10a：实现经审阅的 turn-local intent preload，降低明确文档问题中的 `tool_search` 轮次，同时保证记忆/session 问题不会被 Document RAG 工具污染。
-- 再推进 P10b：构建 retrieval-only 和 agent e2e 评估，覆盖 Recall@k、工具路径、引用是否存在、答案是否忠实、无证据问题是否拒答、`tool_search` 避免率和 ReAct 轮次。
+- 优先执行 P10a.1：强文档 turn 未显式要求源码时压制或强约束 `shell/read_file/list_dir`，并让 `fetch_doc_chunk` 成为证据展开优先路径。
+- CLI/IPC smoke 稳定性已完成自动化和真实 CLI 重连验证：稳定 CLI session id、发送给 CLI/TUI 的 `tool_chain` metadata 投影为 `tool_summary`、`AKIP2` frame、payload 治理和 workspace 文件日志均已落地；默认 CLI 重启会继承之前 session。
+- 继续执行 P10a 验收：用真实 CLI/LLM smoke 验证简单文档问题、原文证据问题和 memory-after-doc-LRU 场景的实际工具链。
+- 推进 P10b：构建 retrieval-only 和 agent e2e 评估，覆盖 Recall@k、工具路径、引用是否存在、答案是否忠实、无证据问题是否拒答、`tool_search` 避免率和 ReAct 轮次。
 
 ## v0 总体验收
 

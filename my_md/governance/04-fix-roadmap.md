@@ -51,12 +51,20 @@
 
 任务：
 
-- 新增强文档意图判断，强文档意图时只在当前 turn 预加载 `search_docs`。
-- 强文档意图且命中原文/文档证据展开意图时，只在当前 turn 预加载 `fetch_doc_chunk`。
-- 强记忆/session 意图且无强文档意图时，只在当前 turn 临时压制 `search_docs` / `fetch_doc_chunk` 的 LRU 残留。
-- 不改 `doc_rag` toolset 的 always-on 策略，不向 `ToolDiscoveryState` 写入意图预加载结果。
+- 已完成 P10a：新增强文档意图判断，强文档意图时只在当前 turn 预加载 `search_docs`。
+- 已完成 P10a：强文档意图且命中原文/文档证据展开意图时，只在当前 turn 预加载 `fetch_doc_chunk`。
+- 已完成 P10a：强记忆/session 意图且无强文档意图时，只在当前 turn 临时压制 `search_docs` / `fetch_doc_chunk` 的 LRU 残留。
+- 已完成 P10a：不改 `doc_rag` toolset 的 always-on 策略，不向 `ToolDiscoveryState` 写入意图预加载结果。
+- 待补 P10a.1：强文档意图 turn 中，如果用户未显式要求源码/本地文件/仓库文件，临时压制或强约束 `shell`、`read_file`、`list_dir` 等本地文件工具，避免 Document RAG 跑偏。
+- 待补 P10a.1：强文档 + 原文/证据展开意图中，`fetch_doc_chunk` 应作为 `search_docs` 命中后的优先展开路径，不能转向通用文件读取。
 - 为文档问答增加早停策略：简单事实问题如果 `search_docs` snippet 已足够回答，不强制展开 chunk。
 - 在工具描述或回答约束中加入：如果结论只是从标题层级推断，必须用“从章节结构看 / 可以理解为”等弱断言表达。
+- 修复 CLI/IPC live smoke 稳定性：
+  - 已完成：CLI 使用稳定 client/session id，不再用 `id(writer)` 作为唯一会话身份。
+  - 已完成：outbound metadata 发给 CLI/TUI 前将 `tool_chain` 投影为 `tool_summary`，完整链路只保存在 observe/session。
+  - 已完成：服务端发送前限制 payload 大小，超限时降级 metadata/content。
+  - 已完成：CLI/TUI 服务端响应使用 `AKIP2` magic + length-prefixed frame，替代 newline-delimited JSON。
+  - 已完成：运行日志落到 workspace 文件，便于追踪 IPC send/receive 异常。
 - 在评估集中增加：
   - `max_react_iterations`
   - `max_tool_calls`
@@ -67,12 +75,18 @@
 
 验证：
 
+- P10a 自动化验证已通过：`43 passed in 0.48s`，覆盖纯策略、turn-local preload、memory-after-doc-LRU、Doc RAG toolset、tool visibility、reasoner 和 safety retry。
+- 2026-07-11 14:26 live smoke 发现 P10a 后续缺口：强文档证据问题预加载已生效，但实际工具链为 `search_docs -> shell/read_file...`，共 15 次工具调用，`react_iteration_count=10`，`react_input_peak_tokens~=34858`；随后 CLI 提示 `Separator is found, but chunk is longer than limit` 并断连，第三轮未进入 observe。
+- 2026-07-11 CLI IPC v2 自动化修复已完成：`AKIP2` frame、稳定 session id、`tool_summary` 投影、payload 治理和 workspace 文件日志均已覆盖测试；随后用户真实 CLI 重连测试确认默认继承之前 session。
+- 2026-07-11 16:17 live smoke 复测：CLI IPC v2 未断连且 session 稳定，但强文档长证据 prompt 再次跑偏到 `read_file/shell`，turn `354` 工具链为 `read_file -> read_file -> shell -> search_docs -> shell -> shell -> read_file -> search_docs -> read_file`，`react_iteration_count=7`，`react_input_peak_tokens~=37978`。P10a.1 不能标记为未复现或跳过。
+- 2026-07-11 16:32 用户真实 CLI 重连测试确认：默认 CLI 会继承之前 session，CLI-001 从 transport/session 角度关闭；下一步回到 RAG-006 P10a.1，治理强文档证据 turn 跑偏到 `shell/read_file/list_dir` 的问题。
 - 启用场景简单问题：
   - 预期链路：`search_docs -> final`
   - 目标 ReAct 轮次：2-3。
 - 启用场景复杂问题：
   - 预期链路：`search_docs -> fetch_doc_chunk -> final`
   - 目标 ReAct 轮次：3-4。
+  - 禁止链路：未显式要求源码时，不应调用 `shell/read_file/list_dir`。
 - 记忆/session 场景：
   - fresh 记忆问题不应预加载 `search_docs`。
   - 同 session 上一轮调用过 `search_docs` 后，下一轮强记忆问题也不应因 LRU 残留暴露 `search_docs`。

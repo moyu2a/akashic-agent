@@ -43,6 +43,18 @@ class _SessionManager:
         return []
 
 
+class _FrameReaderFromBytes:
+    def __init__(self, payload: bytes) -> None:
+        self._buf = bytearray(payload)
+
+    async def readexactly(self, n: int) -> bytes:
+        if len(self._buf) < n:
+            raise asyncio.IncompleteReadError(bytes(self._buf), n)
+        out = bytes(self._buf[:n])
+        del self._buf[:n]
+        return out
+
+
 def _import_cli_tui(monkeypatch: pytest.MonkeyPatch):
     rich_mod = types.ModuleType("rich")
     rich_markdown = types.ModuleType("rich.markdown")
@@ -147,6 +159,115 @@ def _import_cli_tui(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setitem(sys.modules, "textual.widgets", textual_widgets)
     sys.modules.pop("infra.channels.cli_tui", None)
     return importlib.import_module("infra.channels.cli_tui")
+
+
+def test_cli_client_id_persists(tmp_path: Path) -> None:
+    from infra.channels.ipc_protocol import load_or_create_cli_client_id
+
+    path = tmp_path / "cli-id"
+    first = load_or_create_cli_client_id(path)
+    second = load_or_create_cli_client_id(path)
+    assert first == second
+    assert path.read_text(encoding="utf-8").strip() == first
+
+
+@pytest.mark.asyncio
+async def test_basic_cli_receive_reads_v2_frame(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from infra.channels.cli import CLIClient
+    from infra.channels.ipc_protocol import encode_frame
+
+    class Reader:
+        def __init__(self) -> None:
+            self._buf = bytearray(
+                encode_frame(
+                    {
+                        "type": "assistant",
+                        "content": "large " + "x" * 70000,
+                        "metadata": {},
+                    }
+                )
+            )
+
+        async def readexactly(self, n: int) -> bytes:
+            if len(self._buf) < n:
+                raise asyncio.IncompleteReadError(bytes(self._buf), n)
+            out = bytes(self._buf[:n])
+            del self._buf[:n]
+            return out
+
+    await asyncio.wait_for(CLIClient._receive(Reader()), timeout=1)  # type: ignore[arg-type]
+    out = capsys.readouterr().out
+    assert "large " in out
+
+
+def test_cli_tui_writes_tool_summary(monkeypatch: pytest.MonkeyPatch) -> None:
+    mod = _import_cli_tui(monkeypatch)
+    app = mod.CLITextualApp("/tmp/sock")
+    log = mod.RichLog()
+    meta = mod.Static()
+
+    def query_one(selector, cls=None):
+        if selector == "#meta":
+            return meta
+        return log
+
+    app.query_one = query_one
+    app._write_tool_summary(
+        {"count": 2, "names": ["search_docs", "fetch_doc_chunk"], "calls": []}
+    )
+    assert app.stats.tool_calls == 2
+    rendered = "\n".join(getattr(item, "text", str(item)) for item in log.items)
+    assert "search_docs" in rendered
+    assert "fetch_doc_chunk" in rendered
+
+
+@pytest.mark.asyncio
+async def test_cli_tui_receive_reads_framed_tool_summary(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    mod = _import_cli_tui(monkeypatch)
+    from infra.channels.ipc_protocol import encode_frame
+
+    class Reader:
+        def __init__(self) -> None:
+            self._buf = bytearray(
+                encode_frame(
+                    {
+                        "type": "assistant",
+                        "content": "answer",
+                        "metadata": {
+                            "tool_summary": {
+                                "count": 1,
+                                "names": ["search_docs"],
+                                "calls": [],
+                            }
+                        },
+                    }
+                )
+            )
+
+        async def readexactly(self, n: int) -> bytes:
+            if len(self._buf) < n:
+                raise asyncio.IncompleteReadError(bytes(self._buf), n)
+            out = bytes(self._buf[:n])
+            del self._buf[:n]
+            return out
+
+    writes: list[str] = []
+    app = mod.CLITextualApp("/tmp/sock")
+    app._reader = Reader()
+    app._write_system_message = lambda message: writes.append(f"system:{message}")
+    app._write_agent_message = lambda message: writes.append(f"agent:{message}")
+    app._write_tool_summary = lambda summary: writes.append(
+        f"tools:{summary['names'][0]}"
+    )
+    app._refresh_header = lambda: None
+    app._close_stream = AsyncMock()
+    await app._receive_loop(Reader())
+    assert "agent:answer" in writes
+    assert "tools:search_docs" in writes
 
 
 def _import_telegram_channel(monkeypatch: pytest.MonkeyPatch):
@@ -401,8 +522,10 @@ def test_qq_channel_ws_timeout_patch_is_best_effort(
 
 
 @pytest.mark.asyncio
-async def test_cli_tui_paths(monkeypatch: pytest.MonkeyPatch):
+async def test_cli_tui_paths(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
     mod = _import_cli_tui(monkeypatch)
+    from infra.channels.ipc_protocol import encode_frame, read_frame
+
     app = mod.CLITextualApp("/tmp/test.sock")
     log = mod.RichLog()
     meta = mod.Static()
@@ -458,6 +581,8 @@ async def test_cli_tui_paths(monkeypatch: pytest.MonkeyPatch):
     await app._on_input_submitted(event)
     assert writer.payloads
     assert app.stats.sent == 1
+    user = await read_frame(_FrameReaderFromBytes(writer.payloads[-1]))  # type: ignore[arg-type]
+    assert user == {"type": "user", "content": "你好"}
 
     async def _open_fail(path):
         raise FileNotFoundError
@@ -471,18 +596,31 @@ async def test_cli_tui_paths(monkeypatch: pytest.MonkeyPatch):
 
     class _Reader:
         def __init__(self):
-            self.lines = iter(
-                [
-                    b'{"content":"hello","metadata":{"tool_chain":[{"calls":[{"name":"search"}]}]}}\n',
-                    b"bad-json\n",
-                    b"",
-                ]
+            self._buf = bytearray(
+                encode_frame(
+                    {
+                        "type": "assistant",
+                        "content": "hello",
+                        "metadata": {
+                            "tool_summary": {
+                                "count": 1,
+                                "names": ["search"],
+                                "calls": [],
+                            }
+                        },
+                    }
+                )
             )
 
-        async def readline(self):
-            return next(self.lines)
+        async def readexactly(self, n: int):
+            if len(self._buf) < n:
+                raise asyncio.IncompleteReadError(bytes(self._buf), n)
+            out = bytes(self._buf[:n])
+            del self._buf[:n]
+            return out
 
     writer2 = _Writer()
+    monkeypatch.setenv("AKASHIC_CLI_CLIENT_ID_PATH", str(tmp_path / "tui-client-id"))
 
     async def _open_ok(path):
         return _Reader(), writer2
@@ -498,6 +636,8 @@ async def test_cli_tui_paths(monkeypatch: pytest.MonkeyPatch):
     await app._connect_and_receive()
     assert app.stats.received == 1
     assert app.stats.tool_calls == 1
+    hello = await read_frame(_FrameReaderFromBytes(writer2.payloads[0]))  # type: ignore[arg-type]
+    assert hello["type"] == "hello"
 
     app.connected = True
     app._writer = writer2

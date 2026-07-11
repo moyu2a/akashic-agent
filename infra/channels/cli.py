@@ -5,11 +5,16 @@ Basic CLI client for the local agent.
 from __future__ import annotations
 
 import asyncio
-import json
 import os
 import sys
 
 from agent.config import DEFAULT_SOCKET, _normalize_cli_socket_endpoint
+from infra.channels.ipc_protocol import (
+    build_hello_payload,
+    encode_frame,
+    load_or_create_cli_client_id,
+    read_frame,
+)
 
 _EXIT_CMDS = {"exit", "quit", "q"}
 
@@ -50,6 +55,10 @@ class CLIClient:
             return
 
         _print_banner()
+        client_id = load_or_create_cli_client_id()
+        session_id = os.getenv("AKASHIC_CLI_SESSION", "default")
+        writer.write(encode_frame(build_hello_payload(client_id, session_id)))
+        await writer.drain()
         receive_task = asyncio.create_task(self._receive(reader))
 
         try:
@@ -60,8 +69,7 @@ class CLIClient:
                     break
                 if not stripped:
                     continue
-                payload = json.dumps({"content": stripped}, ensure_ascii=False) + "\n"
-                writer.write(payload.encode("utf-8"))
+                writer.write(encode_frame({"type": "user", "content": stripped}))
                 await writer.drain()
         except (KeyboardInterrupt, EOFError):
             pass
@@ -74,12 +82,12 @@ class CLIClient:
     @staticmethod
     async def _receive(reader: asyncio.StreamReader) -> None:
         while True:
-            line = await reader.readline()
-            if not line:
+            try:
+                data = await read_frame(reader)
+            except asyncio.IncompleteReadError:
                 print("\n连接已断开")
                 break
-            data = json.loads(line)
-            print(f"\n{data['content']}\n> ", end="", flush=True)
+            print(f"\n{data.get('content', '')}\n> ", end="", flush=True)
 
 
 def _print_banner() -> None:

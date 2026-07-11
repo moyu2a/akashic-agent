@@ -392,6 +392,12 @@ STAR 复盘：
 - RAG-005 disabled live smoke 已执行：未再 fallback 到 `read_file/list_dir/shell`，但最终话术仍暗示可以主动开启配置，需要补充“必须重启当前 Agent 服务”的表达约束。
 - RAG-005 第二小步代码已完成：disabled payload 已加入 `restart_required`、`restart_target`、`current_process_can_enable`、`retrieval_available_this_turn`、`config_key`、`required_config_value`，并强化 `instructions` / `user_message`，live smoke 待复测。
 - RAG-006 P10 计划已完成审阅并修订：实现位置应放在 `DefaultReasoner.run_turn()` 当前 turn 工具可见性计算处，新增策略模块 `agent/policies/doc_rag_intent.py`，不改 `doc_rag` toolset 的 always-on 策略，不改 LRU 写入规则。
+- RAG-006 P10a 代码实现已完成：`DefaultReasoner.run_turn()` 使用 turn-local `effective_preloaded`，强文档意图预加载 `search_docs`，强文档 + 原文/证据展开意图预加载 `fetch_doc_chunk`，强记忆/session 意图临时压制 doc_rag LRU 残留；自动化回归 `43 passed in 0.48s`。
+- RAG-006 P10a live smoke 发现后续缺口：预加载生效，但强文档证据问题仍跑偏到 `shell/read_file`，turn `349` 实际工具链为 `search_docs -> shell/read_file...`，共 15 次工具调用，`react_iteration_count=10`，`react_input_peak_tokens~=34858`。
+- CLI-001 已登记：第二轮主链完成并写入 observe 后，CLI 提示 `Separator is found, but chunk is longer than limit`，随后 IPC 出现 `[cli] client disconnected session=cli:cli-140554156611568`；第三轮未进入 observe。该提示来自 `asyncio.StreamReader.readline()` 单行读取限制，说明 outbound 单行 JSON payload 过大。旧版 CLI/IPC 还使用 `id(writer)` 生成 session，断线重连会丢失原会话关联。
+- CLI-001 已完成自动化修复：CLI IPC v2 使用 `AKIP2` magic + length-prefixed frame、稳定 client/session id、CLI/TUI `tool_summary` 投影、payload 治理和 workspace 文件日志。
+- 2026-07-11 16:17 复测：CLI IPC v2 未断连，session 仍为 `cli:cli-d76d211cea0546619146f9a7b1c4e268-default`；但强文档长证据 prompt 在 turn `354` 再次跑偏为 `read_file -> read_file -> shell -> search_docs -> shell -> shell -> read_file -> search_docs -> read_file`，`react_iteration_count=7`，`react_input_peak_tokens~=37978`。P10a.1 保持 open，本轮不修，后续回到工具治理处理。
+- 2026-07-11 16:32 用户真实 CLI 测试确认：默认启动 CLI 会继承之前 session，说明 CLI-001 的稳定 client/session id 路径已在真实界面生效。CLI-001 可按 fixed 记录；后续主问题是 RAG-006 P10a.1。
 
 验证方式：
 
@@ -402,12 +408,15 @@ STAR 复盘：
 - 已通过：
   - `29 passed in 0.32s`
   - `76 passed in 0.50s`
+  - RAG-006 P10a 相关回归：`43 passed in 0.48s`
 
 遗留问题：
 
 - 是否需要在 citation 插件中做 claim/evidence 自动校验，还是先放在评估层处理。
-- `fetch_doc_chunk` 的预加载条件需要避免过宽，防止普通聊天工具空间膨胀。
-- RAG-006 需要新增 memory-after-doc-LRU 测试：同 session 上一轮使用过 `search_docs` 后，下一轮强记忆/session 问题不得因为 LRU 残留暴露 Document RAG 工具。
+- `fetch_doc_chunk` 的预加载条件已按 P10a 保守实现，仍需真实 CLI/LLM smoke 观察是否过宽或过窄。
+- RAG-006 memory-after-doc-LRU 自动化测试已新增；仍需真实 CLI/LLM smoke 验证同 session 行为。
+- RAG-006 P10a.1：强文档意图 turn 未显式要求源码/本地文件时，应压制或强约束 `shell/read_file/list_dir`；强文档证据 case 的默认展开路径应是 `fetch_doc_chunk`。
+- CLI-001：transport/session 侧已由自动化和真实 CLI 重连 smoke 验证；继续常规观察即可。
 - 如果 disabled live smoke 仍 fallback 到 `read_file/list_dir/shell`，需要第二阶段让工具执行器或 AgentLoop 消费 `fallback_allowed=false`。
 - 如果后续只剩“是否能主动开启配置”的话术问题，优先补充工具返回字段和 `user_message`，明确 `restart_required=true`、`can_self_enable=false`，再做一次 disabled live smoke。
 - 第二小步已将字段命名收紧为 `restart_target=agent_service`、`current_process_can_enable=false`、`retrieval_available_this_turn=false`；后续复测时重点看最终回答是否仍暗示“我可以现在启用”。

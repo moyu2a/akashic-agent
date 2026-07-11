@@ -1,0 +1,61 @@
+# Document RAG P10a Progress
+
+## 2026-07-11
+
+- Read required planning and governance documents:
+  - `my_md/rag/19-document-rag-p10-intent-preload-plan.md`
+  - `my_md/governance/02-current-issues.md` RAG-006
+  - `my_md/governance/04-fix-roadmap.md` 第零点五阶段
+  - `my_md/governance/06-star-log.md` CASE-003
+  - `my_md/rag/11-document-rag-implementation-plan.md` P10a/P10b
+- Reviewed `DefaultReasoner.run_turn()` and `DefaultReasoner.run()` visibility flow.
+- Created persistent planning files for this implementation session.
+- Added failing tests for `agent.policies.doc_rag_intent` and turn-local `DefaultReasoner.run_turn()` preload behavior.
+- Confirmed RED: `ModuleNotFoundError: No module named 'agent.policies.doc_rag_intent'`.
+- Implemented `agent/policies/doc_rag_intent.py` and integrated `effective_preloaded` in `DefaultReasoner.run_turn()`.
+- Focused new tests passed: `9 passed in 0.13s`.
+- Related reasoner/tool-discovery/Doc RAG tests passed: `43 passed in 0.48s`.
+- Updated P10a status in `my_md/rag/19-document-rag-p10-intent-preload-plan.md`, `my_md/governance/02-current-issues.md`, `my_md/governance/04-fix-roadmap.md`, `my_md/governance/06-star-log.md`, and `my_md/rag/11-document-rag-implementation-plan.md`.
+- After trimming `passive_turn.py` formatting noise, final related pytest passed: `43 passed in 0.44s`.
+- Compile check passed for `agent/policies`, `agent/core/passive_turn.py`, and the two new tests.
+- Black check passed for new policy/test files and `agent/policies/__init__.py`; `agent/core/passive_turn.py` was not included because the existing file baseline is not black-formatted and this task avoided unrelated formatting churn.
+- Investigated live smoke issue reported after P10a:
+  - Agent process and CLI process were still running.
+  - `observe.turns` showed turns 348 and 349 committed with `error=NULL`.
+  - turn 349 used 15 tools and 10 ReAct iterations, with `search_docs -> shell/read_file...`, not the intended RAG-only evidence path.
+  - No third prompt was recorded in observe, indicating the later CLI message did not reach inbound processing.
+  - Runtime logs are stdout-only; no file log was available under the workspace.
+- Recorded the live-smoke issue in governance/RAG docs:
+  - Updated `my_md/governance/01-issue-index.md` with RAG-006 wording and new CLI-001.
+  - Updated `my_md/governance/02-current-issues.md` with P10a live-smoke evidence and CLI-001 section.
+  - Updated `my_md/governance/04-fix-roadmap.md` with P10a.1 and CLI/IPC tasks.
+  - Updated `my_md/rag/19-document-rag-p10-intent-preload-plan.md` with the 14:26 smoke finding and P10a.1 plan.
+  - Updated `my_md/rag/11-document-rag-implementation-plan.md` and `my_md/governance/06-star-log.md` with follow-up status.
+- Added user-observed CLI error `Separator is found, but chunk is longer than limit` to the investigation. Confirmed it maps to Python `asyncio.StreamReader.readline()` / `readuntil()` line-length overflow, making oversized newline-delimited IPC JSON the concrete CLI disconnect cause.
+- Created executable CLI IPC v2 implementation plan at `docs/superpowers/plans/2026-07-11-cli-ipc-v2.md`.
+- The plan targets a satisfactory fix rather than a minimal patch: length-prefixed v2 frames, stable CLI handshake/session ids, CLI-safe outbound metadata projection, payload limits, workspace file logs, integration tests, and docs updates.
+- Reviewed and revised the CLI IPC v2 plan:
+  - replaced bare length sniffing with `AKIP2` magic + length framing;
+  - made v2 `command_result` responses framed, not legacy newline JSON;
+  - added explicit updates for existing basic CLI and TUI tests that previously mocked `reader.readline()`;
+  - made the TUI `_receive_loop()` extraction and `_connect_and_receive()` call path concrete;
+  - removed the unstable cancel-based basic CLI receive test pattern;
+  - documented that `docs/` is ignored and the plan needs `git add -f` if it should be committed.
+- Implemented CLI IPC v2 transport:
+  - added `infra/channels/ipc_protocol.py` with `AKIP2` magic framing, stable hello/session helpers, CLI metadata projection, payload limits, and client id persistence;
+  - updated `infra/channels/ipc_server.py` for v2 hello, stable `cli-{client_id}-{session_id}` chat ids, protocol-aware command results, projected outbound assistant payloads, and legacy newline inbound compatibility;
+  - updated `infra/channels/cli.py` and `infra/channels/cli_tui.py` to send hello/user frames and receive framed responses;
+  - added workspace file logging via `bootstrap.app.configure_workspace_file_logging()`;
+  - added/updated protocol, IPC server, CLI/TUI, logging, integration, and existing client tests.
+- CLI IPC v2 verification:
+  - `uv run --with pytest --with pytest-asyncio pytest tests/test_ipc_protocol.py tests/test_io_modules.py tests/test_channel_clients.py tests/test_bootstrap_logging.py -q` -> `36 passed in 4.54s`.
+  - `uv run --with pytest --with pytest-asyncio pytest tests/test_runtime_smoke.py tests/test_more_support_modules.py -q` -> `26 passed in 0.99s`.
+  - `uv run --with pytest --with pytest-asyncio pytest tests/test_doc_rag_intent.py tests/test_doc_rag_intent_preload.py tests/test_doc_rag_toolset.py tests/test_doc_rag_citation_plugin.py -q` -> `28 passed in 0.41s`.
+  - `python3 -m compileall infra/channels/cli.py infra/channels/cli_tui.py infra/channels/ipc_server.py infra/channels/ipc_protocol.py bootstrap/app.py` -> passed.
+- Updated governance/RAG docs: CLI-001 is fixed after automated coverage and later real CLI session-inheritance confirmation; RAG-006 P10a.1 remains open for strong document turn non-RAG tool governance.
+- Checked latest live smoke output after user asked whether the long-tool-chain bug was absent:
+  - Latest observe turn `354` did reproduce P10a.1: `read_file -> read_file -> shell -> search_docs -> shell -> shell -> read_file -> search_docs -> read_file`, `react_iteration_count=7`, `react_input_peak_tokens~=37978`, `error=NULL`.
+  - CLI IPC v2 did not disconnect and session stayed stable: `cli:cli-d76d211cea0546619146f9a7b1c4e268-default`.
+  - Updated docs to record that this is not a “not reproduced / skip” case; P10a.1 remains open and should be revisited later for tool-governance fixes.
+- 2026-07-11 16:25 CST rechecked the latest `agent.log` tail and `observe.db`; no newer successful non-long-chain turn superseded turn `354`. Current decision: do not continue fixing P10a.1 in this pass, but keep it recorded as reproduced/open instead of skipped as "not reproduced".
+- 2026-07-11 16:32 CST user confirmed via real CLI testing that restarting the CLI defaults to inheriting the previous session. Updated governance/RAG docs: CLI-001 is now fixed, while the next active issue is RAG-006 P10a.1 strong-document tool governance.

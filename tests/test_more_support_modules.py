@@ -23,6 +23,7 @@ from agent.provider import (
 from agent.tool_runtime import append_assistant_tool_calls
 from infra.channels.cli import CLIClient, _print_banner
 from infra.channels.group_filter import DefaultGroupFilter, strip_at_segments
+from infra.channels.ipc_protocol import encode_frame, read_frame
 from memory2.models import MemoryItem
 from proactive_v2.anyaction import AnyActionGate, QuotaStore
 from proactive_v2.memory_sampler import sample_memory_chunks, split_memory_chunks
@@ -725,13 +726,40 @@ async def test_group_filter_and_cli_paths(
     bad_user = SimpleNamespace(user_id="9", raw_message="hi")
     assert await DefaultGroupFilter("10001").should_process(bad_user, cast(Any, group)) is False
 
-    reader = MagicMock()
-    reader.readline = AsyncMock(side_effect=[b'{"content":"hi"}\n', b""])
+    class _CliFrameReader:
+        def __init__(self) -> None:
+            self._buf = bytearray(
+                encode_frame({"type": "assistant", "content": "hi", "metadata": {}})
+            )
+
+        async def readexactly(self, n: int) -> bytes:
+            if len(self._buf) < n:
+                raise asyncio.IncompleteReadError(bytes(self._buf), n)
+            out = bytes(self._buf[:n])
+            del self._buf[:n]
+            return out
+
+    class _CliFrameReaderFromBytes:
+        def __init__(self, payload: bytes) -> None:
+            self._buf = bytearray(payload)
+
+        async def readexactly(self, n: int) -> bytes:
+            if len(self._buf) < n:
+                raise asyncio.IncompleteReadError(bytes(self._buf), n)
+            out = bytes(self._buf[:n])
+            del self._buf[:n]
+            return out
+
+    reader = _CliFrameReader()
+    writes: list[bytes] = []
     writer = MagicMock()
-    writer.write = MagicMock()
+    writer.write = MagicMock(side_effect=lambda data: writes.append(data))
     writer.drain = AsyncMock()
     writer.close = MagicMock()
     writer.wait_closed = AsyncMock()
+    monkeypatch.setenv(
+        "AKASHIC_CLI_CLIENT_ID_PATH", str(tmp_path / "cli-client-id")
+    )
     if sys.platform == "win32":
         monkeypatch.setattr(
             "infra.channels.cli.asyncio.open_connection",
@@ -750,6 +778,10 @@ async def test_group_filter_and_cli_paths(
     monkeypatch.setattr("infra.channels.cli._read_line", _fake_read_line)
     await CLIClient("/tmp/sock").run()
     writer.write.assert_called()
+    hello = await read_frame(_CliFrameReaderFromBytes(writes[0]))  # type: ignore[arg-type]
+    user = await read_frame(_CliFrameReaderFromBytes(writes[1]))  # type: ignore[arg-type]
+    assert hello["type"] == "hello"
+    assert user == {"type": "user", "content": "hello"}
     assert "再见" in capsys.readouterr().out
 
     if sys.platform == "win32":

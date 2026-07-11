@@ -8,6 +8,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Any, Awaitable, Callable, cast
 
 import agent.core.passive_support as support
+from agent.policies.doc_rag_intent import DOC_RAG_TOOL_NAMES, decide_doc_rag_preload
 from agent.core.runtime_support import ToolDiscoveryState
 from agent.core.types import (
     ContextBundle,
@@ -760,11 +761,37 @@ class DefaultReasoner(Reasoner):
         )
         total_history = len(source_history)
         preloaded: set[str] | None = None
+        effective_preloaded: set[str] | None = None
         if self._tool_search_enabled:
             preloaded = self._discovery.get_preloaded(session.key)
             logger.info(
                 "[tool_search] LRU preloaded=%s",
                 sorted(preloaded) if preloaded else "[]",
+            )
+            doc_rag_decision = decide_doc_rag_preload(str(msg.content or ""))
+            effective_preloaded = set(preloaded or set())
+            if doc_rag_decision.preload_search_docs:
+                effective_preloaded.add("search_docs")
+            if doc_rag_decision.preload_fetch_doc_chunk:
+                effective_preloaded.add("fetch_doc_chunk")
+            if doc_rag_decision.suppress_doc_rag_lru:
+                effective_preloaded -= set(DOC_RAG_TOOL_NAMES)
+            retry_trace["doc_rag_preload"] = {
+                "preload_search_docs": doc_rag_decision.preload_search_docs,
+                "preload_fetch_doc_chunk": doc_rag_decision.preload_fetch_doc_chunk,
+                "suppress_doc_rag_lru": doc_rag_decision.suppress_doc_rag_lru,
+                "confidence": doc_rag_decision.confidence,
+                "reason": doc_rag_decision.reason,
+                "matched_terms": list(doc_rag_decision.matched_terms),
+            }
+            logger.info(
+                "[tool_preload] doc_rag search_docs=%s fetch_doc_chunk=%s "
+                "suppress=%s reason=%s matched=%s",
+                "yes" if doc_rag_decision.preload_search_docs else "no",
+                "yes" if doc_rag_decision.preload_fetch_doc_chunk else "no",
+                "yes" if doc_rag_decision.suppress_doc_rag_lru else "no",
+                doc_rag_decision.reason,
+                ",".join(doc_rag_decision.matched_terms) or "-",
             )
         stream_sink = (
             self._stream_sink_factory(msg) if self._stream_sink_factory is not None else None
@@ -789,7 +816,7 @@ class DefaultReasoner(Reasoner):
                 tools=self._tools,
                 tool_search_enabled=self._tool_search_enabled,
                 visible_names=(
-                    (preloaded or set()) | disabled_tools
+                    (effective_preloaded or set()) | disabled_tools
                     if self._tool_search_enabled
                     else None
                 ),
@@ -818,7 +845,7 @@ class DefaultReasoner(Reasoner):
                 result = await self.run(
                     initial_messages,
                     request_time=msg.timestamp,
-                    preloaded_tools=preloaded,
+                    preloaded_tools=effective_preloaded,
                     preflight_injected=True,
                     on_content_delta=stream_sink,
                     tool_event_session_key=session.key,

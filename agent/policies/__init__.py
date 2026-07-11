@@ -6,6 +6,12 @@ from agent.policies.delegation import (
     SpawnDecisionReasonCode,
     SpawnDecisionSource,
 )
+from agent.policies.doc_rag_intent import (
+    DOC_RAG_TOOL_NAMES,
+    DocRagIntentConfidence,
+    DocRagPreloadDecision,
+    decide_doc_rag_preload,
+)
 from agent.policies.history_route import (
     DecisionMeta,
     HistoryRoutePolicy,
@@ -18,6 +24,9 @@ from agent.policies.history_route import (
 __all__ = [
     "DecisionMeta",
     "DelegationPolicy",
+    "DOC_RAG_TOOL_NAMES",
+    "DocRagIntentConfidence",
+    "DocRagPreloadDecision",
     "HistoryRoutePolicy",
     "RouteDecision",
     "RouteDecisionConfidence",
@@ -28,4 +37,5 @@ __all__ = [
     "SpawnDecisionMeta",
     "SpawnDecisionReasonCode",
     "SpawnDecisionSource",
+    "decide_doc_rag_preload",
 ]

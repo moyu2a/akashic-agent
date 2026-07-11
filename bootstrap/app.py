@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import sys
+from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Awaitable, Callable
 
@@ -33,6 +34,34 @@ logging.getLogger("apscheduler").setLevel(logging.WARNING)
 logging.getLogger("openai").setLevel(logging.WARNING)
 
 logger = logging.getLogger(__name__)
+_WORKSPACE_LOG_HANDLER_ATTR = "_akashic_workspace_log_path"
+
+
+def configure_workspace_file_logging(workspace: Path) -> Path:
+    log_dir = workspace / "logs"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    log_path = log_dir / "agent.log"
+    root = logging.getLogger()
+    resolved = str(log_path.resolve())
+    for handler in root.handlers:
+        if getattr(handler, _WORKSPACE_LOG_HANDLER_ATTR, None) == resolved:
+            return log_path
+    handler = RotatingFileHandler(
+        log_path,
+        maxBytes=10 * 1024 * 1024,
+        backupCount=5,
+        encoding="utf-8",
+    )
+    handler.setLevel(logging.INFO)
+    handler.setFormatter(
+        logging.Formatter(
+            "%(asctime)s  %(levelname)-8s  %(name)s  %(message)s",
+            datefmt="%Y-%m-%d %H:%M:%S",
+        )
+    )
+    setattr(handler, _WORKSPACE_LOG_HANDLER_ATTR, resolved)
+    root.addHandler(handler)
+    return log_path
 
 
 async def _run_cleanup_steps(*steps: tuple[str, Callable[[], Awaitable[None]]]) -> None:
@@ -87,6 +116,8 @@ class AppRuntime:
     async def start(self) -> None:
         if self._started:
             return
+        log_path = configure_workspace_file_logging(self.workspace)
+        logger.info("workspace file logging enabled: %s", log_path)
         configure_default_shared_http_resources(self.http_resources)
         try:
             self.core = build_core_runtime(

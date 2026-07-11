@@ -5,12 +5,18 @@ Textual CLI client for the local agent.
 from __future__ import annotations
 
 import asyncio
-import json
 import os
 from dataclasses import dataclass
 from datetime import datetime
 
 from agent.config import DEFAULT_SOCKET, _normalize_cli_socket_endpoint
+from infra.channels.ipc_protocol import (
+    build_hello_payload,
+    build_tool_summary,
+    encode_frame,
+    load_or_create_cli_client_id,
+    read_frame,
+)
 
 try:
     from rich.markdown import Markdown
@@ -181,9 +187,8 @@ class CLITextualApp(App[None]):
             self._write_system_message("尚未连接到 agent，消息未发送。")
             return
 
-        payload = json.dumps({"content": text}, ensure_ascii=False) + "\n"
         try:
-            self._writer.write(payload.encode("utf-8"))
+            self._writer.write(encode_frame({"type": "user", "content": text}))
             await self._writer.drain()
         except Exception as exc:
             self._write_system_message(f"发送失败: {exc}")
@@ -225,41 +230,43 @@ class CLITextualApp(App[None]):
         self._refresh_header()
         self._write_system_message(f"连接成功: {self.socket_path}")
 
+        client_id = load_or_create_cli_client_id()
+        session_id = os.getenv("AKASHIC_CLI_SESSION", "default")
+        writer.write(encode_frame(build_hello_payload(client_id, session_id)))
+        await writer.drain()
+
+        try:
+            await self._receive_loop(reader)
+        finally:
+            await self._close_stream()
+
+    async def _receive_loop(self, reader: asyncio.StreamReader) -> None:
         while True:
             try:
-                line = await reader.readline()
+                data = await read_frame(reader)
+            except asyncio.IncompleteReadError:
+                self._write_system_message("连接已断开。")
+                break
             except Exception as exc:
                 self._write_system_message(f"接收异常: {exc}")
                 break
-            if not line:
-                self._write_system_message("连接已断开。")
-                break
-
-            try:
-                data = json.loads(line.decode("utf-8"))
-            except json.JSONDecodeError:
-                raw = line.decode("utf-8", errors="ignore").strip()
-                self._write_system_message(f"RAW: {raw}")
-                continue
 
             metadata = (
                 data.get("metadata") if isinstance(data.get("metadata"), dict) else {}
             )
-            tool_chain = (
-                metadata.get("tool_chain")
-                if isinstance(metadata.get("tool_chain"), list)
-                else []
+            tool_summary = (
+                metadata.get("tool_summary")
+                if isinstance(metadata.get("tool_summary"), dict)
+                else {}
             )
-            if tool_chain:
-                self._write_tool_chain(tool_chain)
+            if tool_summary:
+                self._write_tool_summary(tool_summary)
 
             content = str(data.get("content", "")).strip()
             if content:
                 self.stats.received += 1
                 self._write_agent_message(content)
                 self._refresh_header()
-
-        await self._close_stream()
 
     async def _close_stream(self) -> None:
         writer = self._writer
@@ -298,19 +305,20 @@ class CLITextualApp(App[None]):
         log.write(Text(f"  {message}", style="#bec6d2"))
 
     def _write_tool_chain(self, tool_chain: list[dict]) -> None:
+        self._write_tool_summary(build_tool_summary(tool_chain))
+
+    def _write_tool_summary(self, summary: dict) -> None:
         log = self.query_one(RichLog)
-        for item in tool_chain:
-            calls = item.get("calls", [])
-            if not isinstance(calls, list):
-                continue
-            for call in calls:
-                name = str(call.get("name", "unknown"))
-                self.stats.tool_calls += 1
-                log.write(
-                    Text(
-                        f"[{self._ts()}] TOOL {name}  (collapsed)", style="bold #7dff9f"
-                    )
+        names = summary.get("names") if isinstance(summary.get("names"), list) else []
+        for raw_name in names:
+            name = str(raw_name or "unknown")
+            self.stats.tool_calls += 1
+            log.write(
+                Text(
+                    f"[{self._ts()}] TOOL {name}  (collapsed)",
+                    style="bold #7dff9f",
                 )
+            )
         self._refresh_header()
 
 

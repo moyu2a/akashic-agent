@@ -11,12 +11,23 @@ import asyncio
 import json
 import logging
 import os
+from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from agent.config import _normalize_cli_socket_endpoint
 from bus.events import InboundMessage, OutboundMessage
 from bus.queue import MessageBus
+from infra.channels.ipc_protocol import (
+    IPC_FRAME_MAGIC,
+    ProtocolError,
+    build_cli_outbound_payload,
+    chat_id_from_hello,
+    encode_frame,
+    encode_legacy_line,
+    read_frame,
+    read_frame_after_magic,
+)
 
 if TYPE_CHECKING:
     from proactive_v2.loop import ProactiveLoop
@@ -24,6 +35,12 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 CHANNEL = "cli"
+
+
+@dataclass(slots=True)
+class _ClientState:
+    writer: asyncio.StreamWriter
+    protocol: int
 
 
 def _parse_tcp_endpoint(endpoint: str) -> tuple[str, int] | None:
@@ -52,7 +69,7 @@ class IPCServerChannel:
         self._bus = bus
         self._socket_path = _normalize_endpoint(socket_path)
         self._proactive_loop = proactive_loop
-        self._writers: dict[str, asyncio.StreamWriter] = {}
+        self._writers: dict[str, _ClientState] = {}
         self._server: asyncio.AbstractServer | None = None
         bus.subscribe_outbound(CHANNEL, self._on_response)
 
@@ -97,47 +114,123 @@ class IPCServerChannel:
     ) -> None:
         peer = writer.get_extra_info("peername") or "local"
         chat_id = f"cli-{id(writer)}"
-        self._writers[chat_id] = writer
-        logger.info("[cli] client connected session=%s peer=%s", chat_id, peer)
+        protocol = 1
+        registered = False
         try:
-            while True:
-                line = await reader.readline()
-                if not line:
-                    break
-                try:
-                    data = json.loads(line)
-                except json.JSONDecodeError:
-                    logger.warning("[cli] received non-JSON payload")
-                    continue
+            try:
+                first_payload, protocol = await self._read_first_payload(reader)
+            except asyncio.IncompleteReadError:
+                return
+            except (ProtocolError, json.JSONDecodeError) as exc:
+                logger.warning("[cli] protocol error from peer=%s: %s", peer, exc)
+                return
 
-                if data.get("type") == "command":
-                    await self._handle_command(data, chat_id, writer)
-                    continue
-
-                content = str(data.get("content", "")).strip()
-                if not content:
-                    continue
-                preview = content[:60] + "..." if len(content) > 60 else content
-                logger.info("[cli] received session=%s content=%r", chat_id, preview)
-                await self._bus.publish_inbound(
-                    InboundMessage(
-                        channel=CHANNEL,
-                        sender="cli-user",
-                        chat_id=chat_id,
-                        content=content,
-                    )
+            if first_payload and first_payload.get("type") == "hello" and protocol == 2:
+                chat_id = chat_id_from_hello(
+                    first_payload.get("client_id"),
+                    first_payload.get("session_id"),
                 )
+                logger.info("[cli] v2 hello session=%s peer=%s", chat_id, peer)
+                first_payload = None
+
+            self._writers[chat_id] = _ClientState(writer=writer, protocol=protocol)
+            registered = True
+            logger.info(
+                "[cli] client connected session=%s peer=%s protocol=v%s",
+                chat_id,
+                peer,
+                protocol,
+            )
+
+            pending = first_payload
+            while True:
+                data = pending
+                pending = None
+                if data is None:
+                    try:
+                        data = await self._read_next_payload(reader, protocol)
+                    except asyncio.IncompleteReadError:
+                        break
+                    except (ProtocolError, json.JSONDecodeError) as exc:
+                        logger.warning("[cli] protocol error session=%s: %s", chat_id, exc)
+                        break
+                if not data:
+                    break
+                await self._handle_payload(data, chat_id, writer, protocol=protocol)
         finally:
-            self._writers.pop(chat_id, None)
+            if registered:
+                self._writers.pop(chat_id, None)
             writer.close()
             await writer.wait_closed()
             logger.info("[cli] client disconnected session=%s", chat_id)
 
-    async def _handle_command(
+    async def _read_first_payload(
         self,
-        data: dict,
+        reader: asyncio.StreamReader,
+    ) -> tuple[dict[str, Any] | None, int]:
+        prefix = await reader.readexactly(len(IPC_FRAME_MAGIC))
+        if prefix == IPC_FRAME_MAGIC:
+            return await read_frame_after_magic(reader), 2
+        if not prefix.startswith(b"{"):
+            raise ProtocolError("unknown IPC protocol prefix")
+        line = prefix + await reader.readline()
+        return self._decode_legacy_line(line), 1
+
+    async def _read_next_payload(
+        self,
+        reader: asyncio.StreamReader,
+        protocol: int,
+    ) -> dict[str, Any] | None:
+        if protocol == 2:
+            return await read_frame(reader)
+        line = await reader.readline()
+        if not line:
+            return None
+        return self._decode_legacy_line(line)
+
+    @staticmethod
+    def _decode_legacy_line(line: bytes) -> dict[str, Any] | None:
+        if not line:
+            return None
+        try:
+            data = json.loads(line)
+        except json.JSONDecodeError:
+            logger.warning("[cli] received non-JSON payload")
+            return {}
+        return data if isinstance(data, dict) else {}
+
+    async def _handle_payload(
+        self,
+        data: dict[str, Any],
         chat_id: str,
         writer: asyncio.StreamWriter,
+        *,
+        protocol: int,
+    ) -> None:
+        if data.get("type") == "command":
+            await self._handle_command(data, chat_id, writer, protocol=protocol)
+            return
+        content = str(data.get("content", "")).strip()
+        if not content:
+            return
+        preview = content[:60] + "..." if len(content) > 60 else content
+        logger.info("[cli] received session=%s content=%r", chat_id, preview)
+        await self._bus.publish_inbound(
+            InboundMessage(
+                channel=CHANNEL,
+                sender="cli-user",
+                chat_id=chat_id,
+                content=content,
+            )
+        )
+
+    async def _handle_command(
+        self,
+        data: dict[str, Any],
+        chat_id: str,
+        writer: asyncio.StreamWriter,
+        *,
+        protocol: int,
     ) -> None:
         cmd = data.get("command", "")
         logger.info("[cli] received command cmd=%r session=%s", cmd, chat_id)
@@ -145,6 +238,7 @@ class IPCServerChannel:
             writer,
             ok=False,
             message=f"unknown command: {cmd!r}",
+            protocol=protocol,
         )
 
     @staticmethod
@@ -153,30 +247,20 @@ class IPCServerChannel:
         *,
         ok: bool,
         message: str,
+        protocol: int,
     ) -> None:
-        payload = (
-            json.dumps(
-                {"type": "command_result", "ok": ok, "message": message},
-                ensure_ascii=False,
-            )
-            + "\n"
-        )
-        writer.write(payload.encode("utf-8"))
+        payload = {"type": "command_result", "ok": ok, "message": message}
+        writer.write(encode_frame(payload) if protocol == 2 else encode_legacy_line(payload))
         await writer.drain()
 
     async def _on_response(self, msg: OutboundMessage) -> None:
-        writer = self._writers.get(msg.chat_id)
-        if writer and not writer.is_closing():
-            payload = (
-                json.dumps(
-                    {
-                        "type": "assistant",
-                        "content": msg.content,
-                        "metadata": msg.metadata or {},
-                    },
-                    ensure_ascii=False,
-                )
-                + "\n"
-            )
-            writer.write(payload.encode("utf-8"))
-            await writer.drain()
+        state = self._writers.get(msg.chat_id)
+        if state is None:
+            return
+        writer = state.writer
+        if writer.is_closing():
+            return
+        payload = build_cli_outbound_payload(msg.content, msg.metadata or {})
+        data = encode_frame(payload) if state.protocol == 2 else encode_legacy_line(payload)
+        writer.write(data)
+        await writer.drain()

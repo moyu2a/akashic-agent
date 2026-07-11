@@ -14,6 +14,77 @@ enabled 原文证据问题：search_docs -> fetch_doc_chunk -> final
 
 同时避免把长期记忆、聊天记录、session 问题误触发到 Document RAG。
 
+## 执行状态
+
+2026-07-11 P10a 代码实现已完成：
+
+- 新增 `agent/policies/doc_rag_intent.py`，实现纯规则 `decide_doc_rag_preload(text)`。
+- `DefaultReasoner.run_turn()` 已接入 turn-local `effective_preloaded`：
+  - 强文档意图当前 turn 预加载 `search_docs`。
+  - 强文档意图 + 原文/证据展开意图当前 turn 预加载 `fetch_doc_chunk`。
+  - 强记忆/session 意图且无强文档意图时，当前 turn 临时压制 `search_docs` / `fetch_doc_chunk` 的 LRU 残留。
+- 未修改 `doc_rag` toolset 的 always-on 策略。
+- 未将意图预加载写入 `ToolDiscoveryState` / LRU；只有实际工具调用仍按既有逻辑进入 LRU。
+- 已新增 `tests/test_doc_rag_intent.py` 和 `tests/test_doc_rag_intent_preload.py`，覆盖纯策略和 memory-after-doc-LRU 场景。
+
+自动化验证：
+
+```text
+uv run --with pytest --with pytest-asyncio pytest \
+  tests/test_doc_rag_intent.py \
+  tests/test_doc_rag_intent_preload.py \
+  tests/test_doc_rag_toolset.py \
+  tests/test_loop_tool_visibility.py \
+  tests/test_agent_core_p2_reasoner.py \
+  tests/test_safety_retry_service.py -q
+
+43 passed in 0.48s
+```
+
+仍需后续真实 CLI/LLM smoke 或 P10b e2e eval 验证：
+
+- 简单文档问题是否实际收敛到 `search_docs -> final`。
+- 原文证据问题是否实际收敛到 `search_docs -> fetch_doc_chunk -> final`。
+- 同 session 上一轮文档检索后，下一轮强记忆/session 问题是否不再暴露 Document RAG 工具。
+
+2026-07-11 14:26 live smoke 新发现：
+
+- P10a 预加载生效：第二轮日志显示 `search_docs=yes fetch_doc_chunk=yes suppress=no reason=strong_doc_with_fetch_intent`。
+- 但原文证据问题没有收敛到目标链路，实际工具链为：
+
+  ```text
+  search_docs -> shell -> read_file -> read_file ... -> final
+  ```
+
+- observe turn `349`：
+  - `react_iteration_count=10`
+  - `react_input_peak_tokens~=34858`
+  - 工具调用 15 次
+  - `error=NULL`
+- 第二轮主链完成后，IPC 日志出现 `[cli] client disconnected session=cli:cli-140554156611568`；第三轮未进入 `observe.turns`。
+- CLI 界面同时提示 `Separator is found, but chunk is longer than limit`。该提示来自 Python `asyncio.StreamReader.readline()` 的单行读取限制，说明 IPC 返回的一整行 JSON payload 过大。
+- 结论：P10a 解决的是 Document RAG 工具可见性，但还没有治理强文档 turn 的非 RAG 工具空间。强文档证据问题仍可能被模型解释成“查项目源码/仓库文件”，转向 `shell/read_file`，并放大 CLI/TUI outbound metadata。
+
+新增后续小步 P10a.1：
+
+- 强文档意图 turn 中，如果用户未显式要求源码/本地文件/仓库文件，当前 turn 临时压制或强约束 `shell`、`read_file`、`list_dir` 等本地文件工具。
+- 强文档 + 原文/证据展开意图中，`fetch_doc_chunk` 是 `search_docs` 命中后的优先展开路径。
+- e2e eval 增加 forbidden tools：强文档证据 case 默认禁止 `shell/read_file/list_dir`。
+- CLI/IPC 同步治理：
+  - 已完成 CLI IPC v2：CLI 使用稳定 session id，不用 `id(writer)` 绑定会话。
+  - 已完成 CLI IPC v2：发给 CLI/TUI 的 metadata 将 `tool_chain` 投影为 `tool_summary`，完整链路保留在 observe/session。
+  - 已完成 CLI IPC v2：服务端发送前限制 outbound payload 大小，超限时降级 metadata/content。
+  - 已完成 CLI IPC v2：服务端响应使用 `AKIP2` magic + length-prefixed frame，替代 newline-delimited JSON。
+  - 已完成 CLI IPC v2：运行日志落到 workspace 文件，便于复盘断连原因。
+
+2026-07-11 更新：
+
+- CLI-001 已由 CLI IPC v2 transport 修复，自动化回归覆盖大 payload、稳定 session 重连、CLI/TUI framed receive 和 workspace logging。
+- 剩余 P10a.1 问题仍是 Document RAG 工具治理：强文档证据请求可能跑偏到 `shell/read_file/list_dir`，需要单独约束非 RAG 工具空间。
+- 2026-07-11 16:17 复测没有复现 CLI 断连，但复现了 P10a.1 工具链跑偏：turn `354` 对强文档长证据 prompt 调用了 `read_file/read_file/shell/search_docs/shell/shell/read_file/search_docs/read_file`，`react_iteration_count=7`，`react_input_peak_tokens~=37978`。因此不能将 P10a.1 记为“未复现并跳过”；本轮仅记录，后续回到工具治理时继续处理。
+- 2026-07-11 16:25 最新检查确认：当前没有更新的 observe turn 能覆盖 turn `354` 的结论。按本轮决策暂不继续实现 P10a.1 修复，但文档状态保持“已复现/open”，以后出现同类现象时从这里继续。
+- 2026-07-11 16:32 用户真实 CLI 测试确认：默认重启 CLI 会继承之前 session。CLI-001 的稳定 session 路径已完成真实界面验证；P10a/P10a.1 后续不再把 CLI session 断连作为主阻塞项。
+
 ## 审阅结论
 
 已调用方案审阅。审阅结论：

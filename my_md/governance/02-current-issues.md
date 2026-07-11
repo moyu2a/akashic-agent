@@ -136,17 +136,46 @@
 - 这不是检索失败，也不是 citation validator 失败。
 - 这是 Document RAG 工具可见性和成本治理问题。
 - 已调用审阅 skill 审阅 RAG-006 计划，核心修订是：预加载必须是 turn-local，不得写入 LRU；强记忆/session 意图时需要临时压制 doc_rag LRU 残留。
+- 2026-07-11 P10a 代码侧已完成：新增 `agent/policies/doc_rag_intent.py`，并在 `DefaultReasoner.run_turn()` 中使用 turn-local `effective_preloaded`；未修改 always-on，未将意图预加载写入 `ToolDiscoveryState` / LRU。
+- 已新增纯策略测试和 memory-after-doc-LRU 回归测试；相关自动化回归通过：`43 passed in 0.48s`。
+- 2026-07-11 14:26 live smoke 进一步确认：P10a 预加载本身生效，第二轮日志显示 `search_docs=yes fetch_doc_chunk=yes`，但模型在 `search_docs` 后没有调用 `fetch_doc_chunk`，而是转向 `shell/read_file` 查源码，导致 10 轮 ReAct、15 次工具调用、`react_input_peak_tokens~=34858`。
+
+P10a live smoke 新证据：
+
+- session：`cli:cli-140554156611568`
+- turn id：
+  - `348`：简单文档问题，`react_iteration_count=6`，`error=NULL`。
+  - `349`：`根据项目文档回答agent runtime负责什么，并展开原文证据`，`react_iteration_count=10`，`error=NULL`。
+- 第二轮关键日志：
+  - `[tool_preload] doc_rag search_docs=yes fetch_doc_chunk=yes suppress=no reason=strong_doc_with_fetch_intent matched=项目文档,原文,展开`
+  - 第 1 轮调用 `search_docs`。
+  - 第 2 轮开始调用 `shell`。
+  - 后续连续调用 `read_file`。
+  - 最终工具链：`search_docs -> shell -> read_file...`，共 15 次工具调用。
+- 结论：P10a 解决了工具可见性，但没有约束强文档 turn 的工具空间。强文档/证据问题仍可能被模型解释成“查看项目源码/仓库文件”，从 Document RAG 跑偏到本地文件工具。
+- 2026-07-11 16:17 复测再次复现 P10a.1：
+  - session：`cli:cli-d76d211cea0546619146f9a7b1c4e268-default`
+  - turn id：`354`
+  - prompt：`根据项目文档和原文证据详细回答agent runtime负责什么，展开相关章节全文，回答必须带引用`
+  - 工具链：`read_file -> read_file -> shell -> search_docs -> shell -> shell -> read_file -> search_docs -> read_file`
+  - `react_iteration_count=7`
+  - `react_input_peak_tokens~=37978`
+  - `error=NULL`
+  - CLI IPC v2 未断连，说明 CLI-001 transport 修复有效；剩余问题仍是强文档 turn 的非 RAG 工具治理。
+- 2026-07-11 16:25 再次检查最新日志和 observe 记录：未发现比 turn `354` 更新、且能证明长工具链已消失的记录。因此本轮不继续修复 P10a.1，但不能将其按“未复现”跳过；状态保持 open，后续回到强文档工具治理时处理。
 
 修复方向：
 
-- 新增 `agent/policies/doc_rag_intent.py`，实现纯规则 `decide_doc_rag_preload(text)`。
-- 在 `DefaultReasoner.run_turn()` 中做 turn-local intent preload：只影响当前 turn 的 effective visible tools，不写回 `ToolDiscoveryState`。
-- 强文档意图时，当前 turn 预加载 `search_docs`。
-- 强文档意图且需要原文/文档证据展开时，当前 turn 同时预加载 `fetch_doc_chunk`。
-- 强记忆/session 意图且无强文档意图时，当前 turn 临时从 effective preloaded 中移除 `search_docs` / `fetch_doc_chunk`，避免 LRU 残留污染。
+- 已完成：新增 `agent/policies/doc_rag_intent.py`，实现纯规则 `decide_doc_rag_preload(text)`。
+- 已完成：在 `DefaultReasoner.run_turn()` 中做 turn-local intent preload：只影响当前 turn 的 effective visible tools，不写回 `ToolDiscoveryState`。
+- 已完成：强文档意图时，当前 turn 预加载 `search_docs`。
+- 已完成：强文档意图且需要原文/文档证据展开时，当前 turn 同时预加载 `fetch_doc_chunk`。
+- 已完成：强记忆/session 意图且无强文档意图时，当前 turn 临时从 effective preloaded 中移除 `search_docs` / `fetch_doc_chunk`，避免 LRU 残留污染。
+- 待补：强文档意图 turn 中，若用户没有明确要求“源码/本地文件/仓库文件”，应临时压制或强约束 `shell`、`read_file`、`list_dir` 等本地文件工具，避免 Document RAG 任务跑偏。
+- 待补：强文档 + 原文/证据展开意图时，`fetch_doc_chunk` 应作为优先展开路径；若 `search_docs` 已返回 chunk_id，不应转向通用文件读取。
 - 对文档问答链路增加工具预算或早停规则：如果 `search_docs` snippet 已足够回答简单事实问题，则不强制 `fetch_doc_chunk`。
 - 增加回归测试：文档问答 happy path 不应先出现“工具未加载”失败。
-- 在评估集中增加 `max_react_iterations`、`max_tool_calls`、`expected_tools`、`forbidden_tools` 指标。
+- 在评估集中增加 `max_react_iterations`、`max_tool_calls`、`expected_tools`、`forbidden_tools` 指标；强文档证据 case 应把 `shell/read_file/list_dir` 列为 forbidden，除非用户显式要求源码。
 - 计划详见：`my_md/rag/19-document-rag-p10-intent-preload-plan.md`。
 
 验证方式：
@@ -158,6 +187,82 @@
 - 不应出现第一次 `search_docs` schema 不可见。
 - 记忆/session 问题不应因为上一轮 RAG 工具 LRU 残留而暴露 `search_docs`。
 - ReAct 轮次目标：简单问题 2-3 轮，复杂问题 3-4 轮。
+
+### CLI-001 CLI/IPC 连接断开后无法关联原会话
+
+状态：已修复，并已通过真实 CLI 重连 smoke 确认默认继承之前 session。
+
+修复：
+
+- CLI/TUI 使用 `AKIP2` magic + length-prefixed v2 frame 接收服务端响应，不再用 `readline()` 读取 assistant payload。
+- CLI/TUI 启动后发送 `hello` frame，包含稳定 `client_id` 和 `session_id`；服务端映射为 `cli-{client_id}-{session_id}`，不再依赖 `id(writer)`。
+- 服务端发给 CLI/TUI 的 metadata 会投影：完整 `tool_chain` 不再出站，替换为轻量 `tool_summary`；完整工具链仍保留在 observe/session 持久化中。
+- 出站 payload 在发送前做大小治理，超限时降级 metadata/content，而不是断开 CLI。
+- workspace 文件日志写入 `<workspace>/logs/agent.log`，便于复盘 IPC connect/send/receive/disconnect。
+
+验证：
+
+- `uv run --with pytest --with pytest-asyncio pytest tests/test_ipc_protocol.py tests/test_io_modules.py tests/test_channel_clients.py tests/test_runtime_smoke.py -q`：`43 passed`。
+- `uv run --with pytest --with pytest-asyncio pytest tests/test_bootstrap_logging.py -q`：`1 passed`。
+- 2026-07-11 用户真实 CLI 测试确认：重启 CLI 后默认继承之前 session。当前默认 session 由持久化 `~/.akashic/cli_client_id` 和默认 `AKASHIC_CLI_SESSION=default` 共同决定，服务端 session 形如 `cli:<client_id>-default`。
+
+现象：
+
+- 2026-07-11 14:26 live smoke 第二轮完成后，主进程日志出现：
+  - `[LLM决策→回复] 第10轮，共调用工具15次`
+  - `[observe] turn_trace 已入队 session=cli:cli-140554156611568 tool_calls=15`
+  - `post_reply_context ... history_chars=94068 ... next_turn_baseline_tokens~=35225`
+  - `[cli] client disconnected session=cli-140554156611568`
+- CLI 界面在 14:27:33 第二个问题后提示：`Separator is found, but chunk is longer than limit`。
+- 后续第三轮在 CLI 侧显示无法与 Agent 关联；`observe.turns` 没有第三轮记录。
+
+证据：
+
+- Agent 主进程仍在，`/tmp/akashic.sock` 仍监听，说明不是 Agent 主进程崩溃。
+- turn `349` 已写入 `observe.turns` 和 `sessions.messages`，`error=NULL`，说明第二轮主链已完成。
+- 第三轮未进入 `observe.turns`，说明消息没有进入 Agent inbound 处理。
+- `Separator is found, but chunk is longer than limit` 来自 Python `asyncio.StreamReader.readline()` / `readuntil()` 的 `LimitOverrunError`。含义是：换行分隔符已经找到，但分隔符前的单行 payload 超过 reader limit。
+- 旧版 IPC server 把完整回复编码成单行 JSON：
+
+  ```python
+  json.dumps({"type": "assistant", "content": msg.content, "metadata": msg.metadata or {}}) + "\n"
+  ```
+
+- 第二轮 `tool_chain` 很大：
+  - `observe.tool_chain_json` 约 20KB。
+  - `sessions.messages.tool_chain` 约 86KB。
+  - outbound metadata 还包含工具链/上下文统计等字段，单行 JSON 很容易超过 `StreamReader` 默认 limit。
+- 旧版 `infra/channels/ipc_server.py` 使用连接对象生成会话：
+
+  ```python
+  chat_id = f"cli-{id(writer)}"
+  ```
+
+  在旧实现中，CLI 连接一旦断开再重连，会得到新的 `chat_id/session_key`，无法延续原会话。
+
+可能原因：
+
+- 已确认：第二轮工具链过长，IPC 单行 JSON payload 超过 `asyncio.StreamReader.readline()` limit，CLI 接收端抛出 `Separator is found, but chunk is longer than limit` 后断开。
+- 旧版 IPC 层把会话身份绑定到 writer 对象生命周期，而不是稳定 client/session id。
+- 旧版日志主要写 stdout，不落 workspace 文件；客户端侧断开细节没有持久化 traceback。
+
+影响：
+
+- live smoke 被连接状态打断，第三轮无法验证 memory-after-doc-LRU。
+- 用户继续提问时丢失前两轮 session 上下文。
+- 长工具链场景会放大 CLI/TUI 断连风险。
+
+已落地修复：
+
+- CLI IPC v2 已替代服务端响应的 newline-delimited JSON：使用 `AKIP2` magic + length-prefixed frame。
+- `infra.channels.ipc_protocol.project_cli_metadata()` 将 `tool_chain` 投影为 `tool_summary`。
+- `infra.channels.ipc_server.IPCServerChannel` 通过 v2 hello 生成稳定 session id，并对 legacy newline JSON inbound 保持兼容。
+- `bootstrap.app.configure_workspace_file_logging()` 提供 workspace 文件日志。
+
+后续观察：
+
+- CLI-001 transport/session 侧已完成；后续只需在常规 smoke 中继续观察是否还有异常断连。
+- RAG-006 P10a.1 仍需单独治理：强文档证据问题可能转向 `shell/read_file`，这会增加成本，但不应再导致 CLI transport 断连。
 
 ### RAG-007 Document RAG citation 来源有效但 claim/evidence 对齐不够严格
 
