@@ -183,6 +183,7 @@
 - 简单问题减少不必要工具调用。
 - P10a.2 将 Document RAG 从“工具可用性正确”推进到“工具链成本可控”：强文档证据请求不再转向本地文件工具后，继续减少多余 `tool_search`、重复 `search_docs` 和重复 `fetch_doc_chunk`。
 - 设计入口：`my_md/rag/20-document-rag-p10a2-tool-boundary-design.md`。
+- 设计已完成审阅并修订：`soft_stop` 明确为不执行目标工具的非致命边界结果；决策合并优先级明确 core access block 高于 budget/evidence/plugin；ledger 和负向测试要求已补齐。
 
 候选方案：
 
@@ -190,6 +191,7 @@
 - 增加 turn-local Document RAG 工具预算：简单文档问题通常最多 1 次 `search_docs`；强文档 + 原文/证据展开通常最多 1 次 `search_docs` 和 1-2 次 `fetch_doc_chunk`。
 - 增加 evidence-complete 早停提示：当已取得可引用 chunk 且能回答用户问题时，优先生成最终回答，不继续展开相邻 chunk。
 - 对连续同类工具调用增加 loop guard 或成本提示，重点覆盖重复 `search_docs`、重复 `fetch_doc_chunk` 和工具已可见后的 `tool_search`。
+- 保持第一版 soft governance：重复/超预算时优先 `soft_stop`，不执行目标工具但给模型结构化提示；本地文件工具误用仍由 access policy hard block。
 - 在 observe/e2e eval 中落地成本指标：`max_react_iterations`、`max_tool_calls`、`max_doc_rag_search_calls`、`max_doc_chunk_fetch_calls`。
 
 验证：
@@ -200,6 +202,7 @@
 - P10a.2 简单文档事实：预期 `search_docs -> final`，目标 2-3 轮。
 - P10a.2 强文档证据展开：预期 `search_docs -> fetch_doc_chunk -> final`，目标 3-4 轮，通常不超过 4 次工具调用。
 - 回归 turn `361` 同类 prompt：不调用 `shell/read_file/list_dir` 的 P10a.1 结论保持不变，同时工具链从 6 轮/7 次工具调用下降。
+- 负向回归：no-hit、无 citation chunk、显式 broader exploration 不应被过早 evidence-complete；插件规则不能绕过 disabled/no-tool/core access block。
 
 ## 暂不处理
 

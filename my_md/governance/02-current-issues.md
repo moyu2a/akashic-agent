@@ -190,6 +190,11 @@ P10a.2 当前剩余问题：Document RAG 工具链成本治理。
   - 增加 turn-local Document RAG 工具预算，限制重复 `search_docs` 和重复 `fetch_doc_chunk`。
   - 在已取得足够 citation/chunk 证据后给模型早停提示，避免继续展开相邻 chunk。
   - 在 e2e 指标中记录并断言 `max_react_iterations`、`max_tool_calls`、`max_doc_rag_search_calls`、`max_doc_chunk_fetch_calls`。
+- 2026-07-12 已调用审阅 skill 审阅 P10a.2 设计；无 Critical，已按 Important 反馈修订：
+  - 明确 `soft_stop` 不执行目标工具，而是返回结构化 boundary result 并插入下一轮 hint。
+  - 明确决策合并优先级：disabled/no-tool 和 core access block 不得被 budget、evidence 或插件规则放宽。
+  - 扩展 `ToolCallLedger` 结构化字段，避免 policy 回扫原始 messages。
+  - 补充 no-hit、无 citation chunk、显式 broader exploration、access block 优先级、插件不能绕过 core block 等负向测试要求。
 
 修复方向：
 
