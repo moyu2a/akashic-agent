@@ -2056,7 +2056,7 @@ In `my_md/rag/20-document-rag-p10a2-tool-boundary-design.md`, add a section near
   - targeted pytest: record the exact command from Task 5 Step 1 and its observed pass/fail summary.
   - full pytest: record the exact command from Task 5 Step 2 and its observed pass/fail summary; if it fails, list the exact failing test node ids.
   - compileall: record the exact command from Task 5 Step 3 and whether it exited 0.
-- Real CLI/LLM smoke: pending user run.
+- Real CLI/LLM smoke: completed on 2026-07-12; record both the execution-governance pass and the remaining LLM-iteration cost issue.
 ```
 
 Replace placeholders with real command output summaries from Steps 1-3.
@@ -2071,10 +2071,11 @@ In `my_md/governance/02-current-issues.md`, under P10a.2, add:
   - integrated `DefaultReasoner` through the boundary facade;
   - `soft_stop` prevents redundant target-tool execution and records boundary metadata;
   - automated verification: record the exact targeted pytest, full pytest, and compileall summaries from Task 5.
-- Real CLI/LLM smoke remains pending:
-  - repeat turn `361`-style prompt;
-  - expected no `shell/read_file/list_dir`;
-  - target chain no more than about 4 tool calls.
+- Real CLI/LLM smoke completed:
+  - repeated turn `361`-style prompt as turn `362`;
+  - no `shell/read_file/list_dir`;
+  - redundant RAG tool attempts became `tool_boundary_soft_stop`;
+  - remaining issue: 5 LLM iterations and high prompt-token cost, tracked as P10a.3.
 ```
 
 In `my_md/governance/04-fix-roadmap.md`, update 第五阶段 verification with the same automated result and pending live smoke.
@@ -2082,7 +2083,7 @@ In `my_md/governance/04-fix-roadmap.md`, update 第五阶段 verification with t
 In `my_md/governance/06-star-log.md`, add a dated result bullet:
 
 ```markdown
-- 2026-07-12 P10a.2 automated implementation completed: Turn Tool Boundary Manager now keeps P10a.1 access blocks while adding soft-stop budget/evidence governance. Real CLI/LLM smoke remains pending.
+- 2026-07-12 P10a.2 automated implementation completed: Turn Tool Boundary Manager now keeps P10a.1 access blocks while adding soft-stop budget/evidence governance. Real CLI/LLM smoke later confirmed redundant target-tool execution is stopped; remaining issue is LLM iteration/token cost after `soft_stop`, tracked as P10a.3.
 ```
 
 - [ ] **Step 6: Add manual live-smoke instructions**
@@ -2090,7 +2091,47 @@ In `my_md/governance/06-star-log.md`, add a dated result bullet:
 In `my_md/rag/21-document-rag-p10a2-implementation-plan.md`, add:
 
 ```markdown
-## Manual Live Smoke
+## Manual Live Smoke Result
+
+Status: executed on 2026-07-12.
+
+Prompt:
+`请重新从文档知识库检索，不要复用上轮内容：根据项目文档回答agent runtime负责什么，并调用原文chunk展开证据，回答必须带引用`
+
+Observed:
+
+- `tool_boundary` selected `intent=doc_qa_with_evidence`.
+- No `shell/read_file/list_dir` execution appeared in the latest turn.
+- Successful target-tool executions were limited to `search_docs` and one
+  `fetch_doc_chunk`.
+- Redundant `tool_search(select:search_docs,fetch_doc_chunk)` returned
+  `tool_boundary_soft_stop` with reason `redundant_visible_tool_search`.
+- Two additional `fetch_doc_chunk` attempts and one additional `search_docs`
+  attempt returned `tool_boundary_soft_stop` with reason
+  `document_rag_evidence_complete`.
+- The final turn had `error=NULL`; CLI did not disconnect; the old
+  `separator is found,but chunk is longer than limit` symptom did not recur.
+
+Conclusion:
+
+- P10a.2 achieved its core execution-governance goal: redundant RAG tool calls
+  no longer execute after the boundary decides evidence is complete.
+- The remaining cost problem moved up one layer. The model still spent 5 LLM
+  iterations, with `react_input_peak_tokens~=73267` and
+  `prompt_tokens=419680`, because each `soft_stop` is returned as a tool result
+  and the reasoner continues the ReAct loop.
+
+Follow-up:
+
+- Track this as P10a.3 Boundary-Driven Early Finalization.
+- When evidence is complete, or after repeated `soft_stop` decisions, the next
+  model call should be final-only: omit tool schemas and require an answer from
+  current ledger evidence.
+- Add ordinary agent-log lines for each soft stop, for example
+  `[tool_boundary] soft_stop tool=fetch_doc_chunk reason=document_rag_evidence_complete`,
+  so live debugging does not require querying observe DB.
+
+## Manual Live Smoke Recipe
 
 Use the real CLI against a Document RAG-enabled agent:
 

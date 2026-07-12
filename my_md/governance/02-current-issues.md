@@ -211,7 +211,14 @@ P10a.2 当前剩余问题：Document RAG 工具链成本治理。
   - Targeted P10a.2 / P10a / P10a.1 suite：`100 passed, 2 warnings in 0.31s`。
   - Full pytest suite：`1361 passed, 3 warnings in 35.12s`。
   - Compile check：`python3 -m compileall agent/policies agent/core/passive_turn.py tests/test_tool_ledger.py tests/test_tool_budget_policy.py tests/test_evidence_completion_policy.py tests/test_tool_boundary_manager.py tests/test_tool_boundary_reasoner.py` exited 0。
-- P10a.2 真实 CLI/LLM smoke 仍待执行：需要复测 turn `361` 同类 prompt，确认实际链路不再重复执行多余 RAG 工具。
+- 2026-07-12 P10a.2 真实 CLI/LLM smoke 已执行，结论是“工具执行治理通过，但 LLM 轮次/token 成本仍未达标”：
+  - turn `362` prompt：`请重新从文档知识库检索，不要复用上轮内容：根据项目文档回答agent runtime负责什么，并调用原文chunk展开证据，回答必须带引用`。
+  - `tool_boundary` 正确识别 `intent=doc_qa_with_evidence`，并继续压制 `shell/read_file/list_dir`。
+  - 实际成功执行的目标工具只有 `search_docs` 和 1 次 `fetch_doc_chunk`。
+  - 冗余 `tool_search(select:search_docs,fetch_doc_chunk)`、后续 2 次 `fetch_doc_chunk`、后续 1 次 `search_docs` 均返回 `tool_boundary_soft_stop`，没有执行目标工具、没有写入成功 `tools_used`。
+  - 但模型仍经历 5 轮 LLM 调用，`react_input_peak_tokens~=73267`，`prompt_tokens=419680`；说明 `soft_stop` 能避免工具副作用和真实工具成本，却不能直接避免多轮 LLM reasoning 成本。
+  - 普通 agent log 中只显示模型“尝试调用”与最终“成功工具 2 次”，soft stop 细节主要在 observe DB 的 `tool_calls/tool_chain_json`；后续需要增强普通日志可观测性。
+- 新增 P10a.3 候选问题：Boundary-Driven Early Finalization。目标是在 evidence-complete 或连续 `soft_stop` 后，让 reasoner 进入 final-only 模式，下一轮不给工具 schema，只要求基于已有证据回答，避免继续消耗工具循环和大额 prompt tokens。
 - 增加回归测试：文档问答 happy path 不应先出现“工具未加载”失败。
 - 在评估集中增加 `max_react_iterations`、`max_tool_calls`、`expected_tools`、`forbidden_tools` 指标；强文档证据 case 应把 `shell/read_file/list_dir` 列为 forbidden，除非用户显式要求源码。
 - 计划详见：`my_md/rag/19-document-rag-p10-intent-preload-plan.md`。

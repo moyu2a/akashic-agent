@@ -15,7 +15,41 @@
   - Targeted P10a.2 / P10a / P10a.1 suite: `100 passed, 2 warnings in 0.31s`.
   - Full pytest suite: `1361 passed, 3 warnings in 35.12s`.
   - Compile check: `python3 -m compileall agent/policies agent/core/passive_turn.py tests/test_tool_ledger.py tests/test_tool_budget_policy.py tests/test_evidence_completion_policy.py tests/test_tool_boundary_manager.py tests/test_tool_boundary_reasoner.py` exited 0.
-- Real CLI/LLM smoke: pending user run.
+- Real CLI/LLM smoke: completed on 2026-07-12. P10a.2 prevented redundant
+  target-tool execution, but exposed the next cost layer: soft-stopped calls
+  still consume extra LLM iterations and prompt tokens.
+
+## Live Smoke Follow-up
+
+Turn `362` reran the turn `361`-style prompt:
+
+`请重新从文档知识库检索，不要复用上轮内容：根据项目文档回答agent runtime负责什么，并调用原文chunk展开证据，回答必须带引用`
+
+Observed result:
+
+- `tool_boundary` identified `intent=doc_qa_with_evidence`.
+- `shell`, `read_file`, and `list_dir` stayed suppressed.
+- The only successful target-tool executions were `search_docs` and one
+  `fetch_doc_chunk`.
+- Redundant `tool_search(select:search_docs,fetch_doc_chunk)`, two additional
+  `fetch_doc_chunk` attempts, and one additional `search_docs` attempt returned
+  `tool_boundary_soft_stop`.
+- The final answer completed with `error=NULL`.
+
+This validates the P10a.2 boundary semantics: `soft_stop` prevents redundant
+tool execution and avoids recording the stopped target as a successful tool.
+
+However, this also exposes a new boundary problem. `soft_stop` is still a tool
+result that must be sent back through another LLM iteration. The smoke still
+used 5 LLM iterations, `react_input_peak_tokens~=73267`, and
+`prompt_tokens=419680`. Therefore P10a.2 should be considered an execution
+governance success, not a complete reasoning-cost solution.
+
+Next candidate: P10a.3 Boundary-Driven Early Finalization. Once
+`document_rag_evidence_complete` is reached, or after repeated current-turn
+`soft_stop` decisions, the reasoner should switch to a final-only mode: do not
+offer tool schemas in the next call, and instruct the model to answer from the
+ledger evidence already gathered.
 
 ## Background
 
@@ -40,6 +74,10 @@ boundary management after tools are already available:
 - repeated evidence expansion after enough citation-bearing evidence exists;
 - no clear current-turn completion signal that tells the model to stop using
   tools and answer.
+
+P10a.2 addresses this at the tool-execution boundary. It does not yet fully
+address the LLM-loop boundary: a stopped tool call still costs another model
+round-trip. That later concern belongs to P10a.3 rather than broadening P10a.2.
 
 ## Design Goal
 

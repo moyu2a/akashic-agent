@@ -184,7 +184,8 @@
 - P10a.2 将 Document RAG 从“工具可用性正确”推进到“工具链成本可控”：强文档证据请求不再转向本地文件工具后，继续减少多余 `tool_search`、重复 `search_docs` 和重复 `fetch_doc_chunk`。
 - 设计入口：`my_md/rag/20-document-rag-p10a2-tool-boundary-design.md`。
 - 设计已完成审阅并修订：`soft_stop` 明确为不执行目标工具的非致命边界结果；决策合并优先级明确 core access block 高于 budget/evidence/plugin；ledger 和负向测试要求已补齐。
-- 自动化实现已完成：`TurnToolBoundaryManager` 已接入 `DefaultReasoner`，targeted suite `100 passed, 2 warnings`，full pytest `1361 passed, 3 warnings`；真实 CLI/LLM smoke 待执行。
+- 自动化实现已完成：`TurnToolBoundaryManager` 已接入 `DefaultReasoner`，targeted suite `100 passed, 2 warnings`，full pytest `1361 passed, 3 warnings`。
+- 2026-07-12 真实 CLI/LLM smoke 已执行：P10a.2 成功把真实工具执行收敛到 `search_docs + fetch_doc_chunk`，并把冗余 `tool_search`、额外 `fetch_doc_chunk`、额外 `search_docs` 转为 `tool_boundary_soft_stop`；但仍消耗 5 轮 LLM、`react_input_peak_tokens~=73267`、`prompt_tokens=419680`，说明剩余瓶颈已从“工具执行成本”转为“soft stop 后的 LLM 轮次/token 成本”。
 
 候选方案：
 
@@ -193,6 +194,8 @@
 - 增加 evidence-complete 早停提示：当已取得可引用 chunk 且能回答用户问题时，优先生成最终回答，不继续展开相邻 chunk。
 - 对连续同类工具调用增加 loop guard 或成本提示，重点覆盖重复 `search_docs`、重复 `fetch_doc_chunk` 和工具已可见后的 `tool_search`。
 - 保持第一版 soft governance：重复/超预算时优先 `soft_stop`，不执行目标工具但给模型结构化提示；本地文件工具误用仍由 access policy hard block。
+- 下一步 P10a.3 候选：Boundary-Driven Early Finalization。`document_rag_evidence_complete` 或连续 `soft_stop` 后，reasoner 应进入 final-only 模式，不再提供工具 schema，只允许模型基于 ledger 中已有证据生成最终回答。
+- 增强普通日志：`soft_stop` 应以 `[tool_boundary] soft_stop tool=... reason=...` 形式进入 agent log，避免只能通过 observe DB 判断拦截是否发生。
 - 在 observe/e2e eval 中落地成本指标：`max_react_iterations`、`max_tool_calls`、`max_doc_rag_search_calls`、`max_doc_chunk_fetch_calls`。
 
 验证：
@@ -204,7 +207,7 @@
 - P10a.2 强文档证据展开：预期 `search_docs -> fetch_doc_chunk -> final`，目标 3-4 轮，通常不超过 4 次工具调用。
 - 回归 turn `361` 同类 prompt：不调用 `shell/read_file/list_dir` 的 P10a.1 结论保持不变，同时工具链从 6 轮/7 次工具调用下降。
 - 负向回归：no-hit、无 citation chunk、显式 broader exploration 不应被过早 evidence-complete；插件规则不能绕过 disabled/no-tool/core access block。
-- 自动化已验证；下一步需要真实 CLI/LLM smoke 验证实际模型是否收到 `soft_stop` 后按预期收敛。
+- P10a.2 自动化和真实 smoke 均已验证“目标工具不会重复执行”；P10a.3 需要验证“目标工具不重复执行后，LLM 循环也能及时停止”。
 
 ## 暂不处理
 

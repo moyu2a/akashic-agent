@@ -108,3 +108,8 @@
   - targeted suite: `100 passed, 2 warnings in 0.31s`;
   - full suite: `1361 passed, 3 warnings in 35.12s`;
   - compileall exited 0.
+- Reviewed latest real CLI/LLM logs for P10a.2:
+  - turn `362` shows `tool_boundary` blocked redundant execution correctly: only `search_docs` and one `fetch_doc_chunk` succeeded; redundant `tool_search`, extra `fetch_doc_chunk`, and extra `search_docs` returned `tool_boundary_soft_stop`;
+  - no `shell/read_file/list_dir`, no CLI disconnect, and no old separator/readline payload error;
+  - new issue: soft stops still consumed extra LLM rounds, ending at 5 iterations with `react_input_peak_tokens~=73267` and `prompt_tokens=419680`;
+  - documented this as the transition from P10a.2 execution governance to P10a.3 Boundary-Driven Early Finalization.
