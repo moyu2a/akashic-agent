@@ -137,11 +137,12 @@ Document RAG 可用 + 有评估 + 有 trace
   - P10a.1：live smoke 发现 P10a 预加载生效但工具路径仍可能跑偏：强文档证据问题实际走 `search_docs -> shell/read_file...`，共 15 次工具调用，`react_iteration_count=10`。后续需治理强文档 turn 的非 RAG 工具空间。CLI/IPC 稳定 session 与 outbound metadata 裁剪已由 CLI IPC v2 修复，并已由真实 CLI 默认重连继承 session 验证。
   - P10a.1 最新复测：2026-07-11 16:17 turn `354` 未复现 CLI 断连，但再次复现强文档长证据 prompt 跑偏到 `read_file/shell`，工具链 9 次，`react_iteration_count=7`，`react_input_peak_tokens~=37978`。该问题保持 open，后续回到工具治理处理。
   - P10a.1 自动化实现已完成：新增 Tool Access Gateway，将 P10a preload、memory-after-doc-LRU 压制、强文档本地文件工具压制、`tool_search` 过滤/解锁合并、执行前拦截和 terminal result 观察收束到 current-turn `ToolAccessPlan`。已通过新增网关测试与 reasoner 集成测试；真实 CLI/LLM smoke 待执行。
+  - P10a.1 真实 CLI/LLM smoke 已通过关键目标：2026-07-11 21:01 turn `361` 未再调用 `shell/read_file/list_dir`，工具链为 `tool_search -> search_docs -> fetch_doc_chunk -> fetch_doc_chunk -> fetch_doc_chunk -> search_docs -> fetch_doc_chunk`，`error=NULL`，CLI 未断连。剩余问题是工具链成本偏高，而不是本地文件工具跑偏。
   - P10b：retrieval-only 与 Agent e2e eval runner，继续覆盖 Recall@k、MRR、citation、faithfulness、工具路径和成本指标。
 
 下一步：
 
-- 执行 P10a.1 真实 CLI/LLM smoke：验证强文档 turn 未显式要求源码时不再调用 `shell/read_file/list_dir`，并观察复杂证据问题是否收敛到 `search_docs -> fetch_doc_chunk -> final`。
+- 执行下一轮成本治理：减少已可见工具下的多余 `tool_search`，并限制强文档证据场景重复 `search_docs/fetch_doc_chunk`，目标从 turn `361` 的 6 轮/7 次工具调用收敛到约 3-4 轮。
 - CLI/IPC smoke 稳定性已完成自动化和真实 CLI 重连验证：稳定 CLI session id、发送给 CLI/TUI 的 `tool_chain` metadata 投影为 `tool_summary`、`AKIP2` frame、payload 治理和 workspace 文件日志均已落地；默认 CLI 重启会继承之前 session。
 - 继续执行 P10a 验收：用真实 CLI/LLM smoke 验证简单文档问题、原文证据问题和 memory-after-doc-LRU 场景的实际工具链。
 - 推进 P10b：构建 retrieval-only 和 agent e2e 评估，覆盖 Recall@k、工具路径、引用是否存在、答案是否忠实、无证据问题是否拒答、`tool_search` 避免率和 ReAct 轮次。

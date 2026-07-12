@@ -165,6 +165,13 @@ P10a live smoke 新证据：
 - 2026-07-11 16:25 再次检查最新日志和 observe 记录：未发现比 turn `354` 更新、且能证明长工具链已消失的记录。因此本轮不继续修复 P10a.1，但不能将其按“未复现”跳过；状态保持 open，后续回到强文档工具治理时处理。
 - 2026-07-11 P10a.1 代码侧已实现 Tool Access Gateway：新增 `agent/policies/tool_access.py`，由 current-turn `ToolAccessPlan` 统一收束 `visible_add`、`visible_suppress`、`tool_search_block`、`execution_block`；`DefaultReasoner` 只窄接入 prompt schema 可见性、`tool_search` 结果过滤/解锁合并、工具执行前拦截和 terminal 工具结果观察，不改 AgentLoop 主体循环。
 - P10a.1 自动化验证已通过：强文档证据请求在未显式要求源码/本地文件时会从 schema 中压制 `shell/read_file/list_dir`，`tool_search(select:read_file)` 返回给模型前被过滤，模型直接调用 `read_file` 时不会执行也不会计入 `tools_used`；显式源码/本地文件请求仍允许本地文件工具。真实 CLI/LLM smoke 仍待执行。
+- 2026-07-11 21:01 真实 CLI/LLM smoke 验证 P10a.1 gateway 生效：
+  - turn id：`361`
+  - prompt：`请重新从文档知识库检索，不要复用上轮内容：根据项目文档回答agent runtime负责什么，并调用原文chunk展开证据，回答必须带引用`
+  - gateway：`reason=doc_rag_block_local_file_tools`，`add=fetch_doc_chunk,search_docs`，`suppress=list_dir,read_file,shell`，`execution_block=list_dir,read_file,shell`
+  - 工具链：`tool_search -> search_docs -> fetch_doc_chunk -> fetch_doc_chunk -> fetch_doc_chunk -> search_docs -> fetch_doc_chunk`
+  - 未调用 `shell/read_file/list_dir`，`error=NULL`，CLI 未断连。
+  - 结论：P10a.1 的“强文档证据 turn 不跑偏到本地文件工具”已由真实 CLI smoke 证明；剩余问题转为成本治理：仍有一次多余 `tool_search` 确认可用工具，以及多次 `search_docs/fetch_doc_chunk`，`react_iteration_count=6`，`react_input_peak_tokens~=68857`。
 
 修复方向：
 
@@ -175,7 +182,8 @@ P10a live smoke 新证据：
 - 已完成：强记忆/session 意图且无强文档意图时，当前 turn 临时从 effective preloaded 中移除 `search_docs` / `fetch_doc_chunk`，避免 LRU 残留污染。
 - 已完成 P10a.1 自动化实现：强文档意图 turn 中，若用户没有明确要求“源码/本地文件/仓库文件”，通过 Tool Access Gateway 临时压制并执行前拦截 `shell`、`read_file`、`list_dir`，避免 Document RAG 任务跑偏。
 - 已完成 P10a.1 自动化实现：强文档 + 原文/证据展开意图时，`search_docs` 与 `fetch_doc_chunk` 进入当前 turn 可见工具；`tool_search` 不再能重新解锁被压制的本地文件工具。
-- 对文档问答链路增加工具预算或早停规则：如果 `search_docs` snippet 已足够回答简单事实问题，则不强制 `fetch_doc_chunk`。
+- 待补成本治理：对文档问答链路增加工具预算或早停规则；如果 `search_docs` snippet 已足够回答简单事实问题，则不强制 `fetch_doc_chunk`；强文档证据场景应限制重复 `search_docs/fetch_doc_chunk`。
+- 待补成本治理：减少当前工具已可见时的多余 `tool_search(select:search_docs,fetch_doc_chunk)` 确认轮次。
 - 增加回归测试：文档问答 happy path 不应先出现“工具未加载”失败。
 - 在评估集中增加 `max_react_iterations`、`max_tool_calls`、`expected_tools`、`forbidden_tools` 指标；强文档证据 case 应把 `shell/read_file/list_dir` 列为 forbidden，除非用户显式要求源码。
 - 计划详见：`my_md/rag/19-document-rag-p10-intent-preload-plan.md`。

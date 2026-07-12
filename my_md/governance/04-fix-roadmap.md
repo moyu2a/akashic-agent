@@ -81,6 +81,8 @@
 - 2026-07-11 16:17 live smoke 复测：CLI IPC v2 未断连且 session 稳定，但强文档长证据 prompt 再次跑偏到 `read_file/shell`，turn `354` 工具链为 `read_file -> read_file -> shell -> search_docs -> shell -> shell -> read_file -> search_docs -> read_file`，`react_iteration_count=7`，`react_input_peak_tokens~=37978`。P10a.1 不能标记为未复现或跳过。
 - 2026-07-11 16:32 用户真实 CLI 重连测试确认：默认 CLI 会继承之前 session，CLI-001 从 transport/session 角度关闭；下一步回到 RAG-006 P10a.1，治理强文档证据 turn 跑偏到 `shell/read_file/list_dir` 的问题。
 - 2026-07-11 P10a.1 Tool Access Gateway 已完成自动化实现并通过回归：新增纯网关策略测试、reasoner 集成测试、P10a preload 合同迁移测试；`uv run --with pytest --with pytest-asyncio pytest tests/test_doc_rag_intent.py tests/test_doc_rag_intent_preload.py tests/test_agent_core_p2_reasoner.py tests/test_tool_search.py tests/test_tool_access_gateway.py tests/test_tool_access_gateway_reasoner.py -q` 为 `92 passed, 2 warnings`，运行时/通道 smoke 集合为 `81 passed`。真实 CLI/LLM smoke 待执行。
+- 2026-07-11 21:01 P10a.1 真实 CLI/LLM smoke 已通过关键目标：turn `361` 在强文档 + 原文 chunk 展开 prompt 下走 `tool_search -> search_docs -> fetch_doc_chunk -> fetch_doc_chunk -> fetch_doc_chunk -> search_docs -> fetch_doc_chunk`，未调用 `shell/read_file/list_dir`，`error=NULL`，CLI 未断连。gateway 日志显示本地文件工具已被 `visible_suppress` 和 `execution_block` 压制。
+- 剩余成本问题：turn `361` 仍有一次多余 `tool_search` 确认可见工具，且重复检索/展开导致 `react_iteration_count=6`、`react_input_peak_tokens~=68857`；后续应进入“第五阶段：工具链成本控制”，而不是继续处理本地文件工具跑偏。
 - 启用场景简单问题：
   - 预期链路：`search_docs -> final`
   - 目标 ReAct 轮次：2-3。

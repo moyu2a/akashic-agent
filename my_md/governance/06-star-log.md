@@ -416,6 +416,7 @@ STAR 复盘：
 - 2026-07-11 16:32 用户真实 CLI 测试确认：默认启动 CLI 会继承之前 session，说明 CLI-001 的稳定 client/session id 路径已在真实界面生效。CLI-001 可按 fixed 记录；后续主问题是 RAG-006 P10a.1。
 - 2026-07-11 已形成 Tool Access Gateway 设计：将散落的工具可用性判断收束为 current-turn `ToolAccessPlan`，统一输出 `visible_add`、`visible_suppress`、`tool_search_block` 和 `execution_block`；第一阶段服务 RAG-006 P10a.1，不引入持久 RBAC，不替代插件系统，不重写 AgentLoop。
 - 2026-07-11 Tool Access Gateway 第一版代码已完成并通过自动化回归：纯策略测试覆盖强文档压制、显式源码放行、memory-after-doc-LRU、`tool_search` 过滤、执行前拦截和 terminal fallback 阻断；reasoner 集成测试覆盖 schema 压制、过滤后 payload、blocked call 不执行/不计入 `tools_used`、显式源码放行。
+- 2026-07-11 21:01 真实 CLI/LLM smoke 验证 Tool Access Gateway 的关键目标：turn `361` 强文档 + 原文 chunk 展开 prompt 未再调用 `shell/read_file/list_dir`，实际链路为 `tool_search -> search_docs -> fetch_doc_chunk -> fetch_doc_chunk -> fetch_doc_chunk -> search_docs -> fetch_doc_chunk`，`error=NULL`，CLI 未断连。问题从“工具可用性判断错误”收敛为“工具链成本偏高”。
 
 验证方式：
 
@@ -435,7 +436,7 @@ STAR 复盘：
 - 是否需要在 citation 插件中做 claim/evidence 自动校验，还是先放在评估层处理。
 - `fetch_doc_chunk` 的预加载条件已按 P10a 保守实现，仍需真实 CLI/LLM smoke 观察是否过宽或过窄。
 - RAG-006 memory-after-doc-LRU 自动化测试已新增；仍需真实 CLI/LLM smoke 验证同 session 行为。
-- RAG-006 P10a.1：Tool Access Gateway 自动化实现已完成；仍需真实 CLI/LLM smoke 验证强文档证据 case 是否收敛到 `search_docs -> fetch_doc_chunk -> final`，以及 memory-after-doc-LRU 在同 session 下是否不误加载 Document RAG 工具。
+- RAG-006 P10a.1：Tool Access Gateway 自动化实现和真实 CLI/LLM smoke 已验证强文档证据 case 不再跑偏到本地文件工具；memory-after-doc-LRU 同 session smoke 也未误走 Document RAG。下一步是成本治理：减少多余 `tool_search` 和重复 `search_docs/fetch_doc_chunk`。
 - CLI-001：transport/session 侧已由自动化和真实 CLI 重连 smoke 验证；继续常规观察即可。
 - 如果 disabled live smoke 仍 fallback 到 `read_file/list_dir/shell`，需要第二阶段让工具执行器或 AgentLoop 消费 `fallback_allowed=false`。
 - 如果后续只剩“是否能主动开启配置”的话术问题，优先补充工具返回字段和 `user_message`，明确 `restart_required=true`、`can_self_enable=false`，再做一次 disabled live smoke。
@@ -446,7 +447,7 @@ STAR 复盘：
 - Situation：Document RAG P9 citation 自动化测试已经通过，但真实 CLI/LLM smoke 暴露出配置、工具链成本和引用忠实度问题。
 - Task：确认问题到底是索引失败、citation validator 失败、配置问题，还是工具治理问题，并形成后续修复路线。
 - Action：查看 `observe.db` 中多轮真实 turn，分别分析 `search_docs` 返回、工具链、ReAct 轮次、最终 citation 和 chunk 正文证据；先把问题拆成 disabled fallback、工具可见性成本、claim/evidence 对齐三类，再根据 P10a live smoke 继续识别出“工具可见性”和“工具可用性”不是同一个层面。
-- Result：确认 RAG 检索和 citation 来源校验本身可用；第一步通过 turn-local preload 降低明确文档问题的工具发现成本，但后续 smoke 显示仍需 Tool Access Gateway 把 prompt 可见性、tool_search 解锁、执行前拦截和 terminal fallback 阻断收束到同一工具访问边界。
+- Result：确认 RAG 检索和 citation 来源校验本身可用；第一步通过 turn-local preload 降低明确文档问题的工具发现成本，后续 smoke 显示还需要 Tool Access Gateway 把 prompt 可见性、tool_search 解锁、执行前拦截和 terminal fallback 阻断收束到同一工具访问边界。Tool Access Gateway 的真实 smoke 已证明强文档证据问题不再跑偏到本地文件工具，剩余重点转为工具链成本控制。
 
 面试表达：
 

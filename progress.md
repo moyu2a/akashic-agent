@@ -80,3 +80,10 @@
   - `uv run --with pytest --with pytest-asyncio pytest -q` -> `1336 passed, 3 warnings in 35.29s`.
   - `python3 -m compileall agent/policies agent/core/passive_turn.py tests/test_tool_access_gateway.py tests/test_tool_access_gateway_reasoner.py tests/test_doc_rag_intent_preload.py tests/test_bootstrap_toolsets_p1.py` -> passed.
 - Updated governance/RAG docs to mark P10a.1 as automated implementation complete, with real CLI/LLM smoke still pending.
+- Checked latest real CLI/LLM smoke after user reran the stronger prompt:
+  - observe turn `361` prompt: `请重新从文档知识库检索，不要复用上轮内容：根据项目文档回答agent runtime负责什么，并调用原文chunk展开证据，回答必须带引用`
+  - gateway log: `reason=doc_rag_block_local_file_tools`, `add=fetch_doc_chunk,search_docs`, `suppress=list_dir,read_file,shell`, `execution_block=list_dir,read_file,shell`.
+  - actual chain: `tool_search -> search_docs -> fetch_doc_chunk -> fetch_doc_chunk -> fetch_doc_chunk -> search_docs -> fetch_doc_chunk`.
+  - no `shell/read_file/list_dir`, `error=NULL`, CLI stayed connected.
+  - conclusion: P10a.1 gateway live smoke passed for the local-file-tool drift problem; remaining issue is cost, with an extra `tool_search` confirmation and repeated `search_docs/fetch_doc_chunk` (`react_iteration_count=6`, `react_input_peak_tokens~=68857`).
+- Updated governance/RAG/STAR docs to reflect that P10a.1 is live-smoke verified for tool drift, and that the next item is tool-chain cost governance.
