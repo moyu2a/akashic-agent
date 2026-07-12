@@ -15,6 +15,7 @@
 - [17-document-rag-p7-tools-plan.md](./17-document-rag-p7-tools-plan.md): Document RAG 工具接入 P7-P8 实现计划。
 - [18-document-rag-p9-citation-plan.md](./18-document-rag-p9-citation-plan.md): Document RAG 回答引用规则 P9 实现计划。
 - [19-document-rag-p10-intent-preload-plan.md](./19-document-rag-p10-intent-preload-plan.md): Document RAG 强文档意图 turn-local 工具预加载计划。
+- [20-document-rag-p10a2-tool-boundary-design.md](./20-document-rag-p10a2-tool-boundary-design.md): P10a.2 Turn Tool Boundary Manager 设计，覆盖工具访问、预算、证据完成、账本和审计边界。
 
 ## 使用规则
 

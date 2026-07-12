@@ -76,6 +76,8 @@ Create or evolve these modules:
   - Owns policy ordering and decision merging.
   - Exposes current-turn APIs for visibility, discovery, execution, observation,
     and next-call hints.
+  - Enforces deterministic decision precedence so cost policies and plugin rules
+    cannot weaken core access blocks.
 
 - `agent/policies/tool_access.py`
   - Existing Tool Access Gateway.
@@ -156,6 +158,17 @@ class ToolCallRecord:
     args_hash: str
     args_summary: str
     call_index: int
+    visible_before_call: bool
+    decision_action: str = "allow"
+    decision_reason: str = ""
+    requested_unlocks: tuple[str, ...] = ()
+    unlocked_tools: tuple[str, ...] = ()
+    blocked_tools: tuple[str, ...] = ()
+    result_ok: bool = False
+    hit_count: int | None = None
+    citation_refs: tuple[str, ...] = ()
+    chunk_keys: tuple[str, ...] = ()
+    terminal_scope: str = ""
     result_summary: str = ""
     result_has_evidence: bool = False
     result_has_citation: bool = False
@@ -171,6 +184,10 @@ The ledger should provide derived facts:
 - whether retrieval has succeeded;
 - whether citation-bearing evidence exists;
 - whether a tool was already visible when `tool_search` was called.
+- which tools `tool_search` attempted to unlock, actually unlocked, or had
+  blocked;
+- whether a tool result was successful and whether it returned hits, citations,
+  chunks, or terminal semantics.
 
 ### ToolBoundaryDecision
 
@@ -188,15 +205,72 @@ class ToolBoundaryDecision:
 
 Semantics:
 
-- `allow`: proceed normally.
-- `warn`: execute, but record a policy warning.
-- `soft_stop`: do not make this a fatal tool error; nudge the model to answer
-  from existing evidence.
-- `require_reason`: reserved for later high-cost or risky tools.
-- `block`: do not execute; return a structured tool result.
+- `allow`: execute normally and record the result in the ledger.
+- `warn`: execute normally, record a policy warning, and continue.
+- `soft_stop`: do not execute the requested target tool. Return a structured
+  boundary result to the model and enqueue a compact next-call hint telling the
+  model to answer from existing evidence unless the user explicitly asked for
+  broader exploration.
+- `require_reason`: reserved for later high-cost or risky tools; the first
+  P10a.2 implementation should not use it.
+- `block`: do not execute the requested target tool. Return a structured hard
+  denial result with recommended alternatives.
 
 P10a.2 should mostly use `soft_stop`, while P10a.1 local-file drift remains a
 hard access block.
+
+Action accounting:
+
+- `warn` counts as a real tool execution and contributes to tool budgets.
+- `soft_stop` counts as a boundary decision and attempted tool call, but not as
+  a successful domain tool execution. It must not update `ToolDiscoveryState` or
+  LRU, and it should not add the target tool to `tools_used`.
+- `block` counts as a boundary decision and blocked attempted call, but not as a
+  successful tool execution. It must not update `ToolDiscoveryState` or LRU, and
+  it should not add the target tool to `tools_used`.
+- All actions, including `soft_stop` and `block`, must be traceable in observe
+  metadata so live smoke can distinguish saved tool cost from actual execution.
+
+Soft-stop boundary result shape:
+
+```json
+{
+  "ok": false,
+  "error_code": "tool_boundary_soft_stop",
+  "terminal_scope": "current_turn_tool_budget",
+  "fallback_allowed": false,
+  "recommended_action": "answer_from_existing_evidence",
+  "message": "Current turn already has enough evidence; answer with existing citations instead of calling more tools."
+}
+```
+
+### Decision Merge Semantics
+
+The boundary manager must merge policy decisions deterministically.
+
+Precedence:
+
+| Rank | Source/action | Rule |
+| --- | --- | --- |
+| 1 | Disabled tools / no-tool hard policy | Cannot be downgraded by any other policy. |
+| 2 | Core `ToolAccessPolicy.block` | Wins over budget, evidence, and plugin rules. |
+| 3 | Core safety or terminal-result block | Wins over budget, evidence, and plugin rules. |
+| 4 | `ToolBudgetPolicy.soft_stop` / `EvidenceCompletionPolicy.soft_stop` | Prevents redundant execution when no higher-ranked hard policy already applies. |
+| 5 | `require_reason` | Reserved; cannot override a block or soft stop. |
+| 6 | `warn` | Executes and records warning when no stricter decision exists. |
+| 7 | `allow` | Default when no stricter policy applies. |
+
+Merge rules:
+
+- final action is the most restrictive applicable decision by the precedence
+  table;
+- all contributing reasons are preserved in trace metadata;
+- plugin-contributed rules may narrow access or add bounded warnings/soft stops;
+- plugin-contributed rules must not turn `block` into `soft_stop`, `warn`, or
+  `allow`;
+- plugin-contributed rules must not bypass `disabled_tools`, no-tool policy,
+  local-file suppression in strong Document RAG turns, or terminal
+  `fallback_allowed=false` semantics.
 
 ## Policy Responsibilities
 
@@ -284,8 +358,8 @@ Narrow integration points:
 3. Before executing a tool call:
    - ask boundary manager for access and budget decision.
    - hard blocks become structured tool results.
-   - soft stops add a corrective tool result or next-call hint, depending on
-     which path is least disruptive in the existing reasoner.
+   - soft stops do not execute the requested tool; they return a structured
+     boundary result and enqueue a next-call hint.
 
 4. After a tool returns:
    - append a `ToolCallRecord` to the ledger;
@@ -396,12 +470,22 @@ Unit tests:
 
 - tool-class mapping and default budgets;
 - ledger same-args and same-class counters;
+- ledger structured fields for visible-before-call, requested unlocks, unlocked
+  tools, blocked tools, result ok, hit count, citations, chunk keys, and terminal
+  scope;
 - redundant visible `tool_search` soft-stop;
 - repeated retrieval soft-stop;
 - evidence expansion budget soft-stop;
 - evidence completion hint when citation-bearing chunk exists;
 - explicit local-source requests still allow local file tools through access
   policy.
+- no-hit retrieval must not trigger evidence-complete soft stop;
+- fetch result without citation-bearing evidence must not trigger
+  evidence-complete soft stop;
+- explicit broader-exploration prompts should avoid premature soft stop within
+  the configured budget;
+- core access block must win over budget/evidence allow decisions;
+- plugin-contributed rules must be unable to bypass core hard blocks.
 
 Reasoner integration tests:
 
@@ -411,6 +495,10 @@ Reasoner integration tests:
 - redundant `tool_search` produces boundary metadata;
 - repeated RAG calls produce soft-stop hints;
 - memory-after-doc-LRU still suppresses stale Document RAG visibility.
+- soft-stopped calls must not execute the target tool and must not add it to LRU
+  or successful `tools_used`;
+- observe metadata must distinguish executed, soft-stopped, and blocked tool
+  calls.
 
 Live smoke:
 

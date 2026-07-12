@@ -92,3 +92,9 @@
   - clarified that turn `361` proves P10a.1 access control worked, while P10a.2 must handle redundant `tool_search`, repeated `search_docs/fetch_doc_chunk`, and evidence-complete early stop.
   - updated STAR CASE-003 because the evolution now has a new boundary: from `tool_search` discovery, to P10a preload, to P10a.1 Tool Access Gateway, then to P10a.2 budget/termination governance.
 - Wrote the formal P10a.2 design in `my_md/rag/20-document-rag-p10a2-tool-boundary-design.md`: Turn Tool Boundary Manager with access, budget, evidence completion, ledger, and trace responsibilities.
+- Requested review for the P10a.2 design. Review found no critical issues and four important design clarifications:
+  - define `soft_stop` execution semantics;
+  - define decision merge precedence so core access blocks cannot be weakened;
+  - expand `ToolCallLedger` structured fields;
+  - add negative and precedence verification cases.
+- Revised the design accordingly and added the new document to `my_md/rag/README.md`; also removed stale wording that said P10a.1 real CLI smoke was still pending.

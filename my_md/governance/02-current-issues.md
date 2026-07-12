@@ -164,7 +164,7 @@ P10a live smoke 新证据：
   - CLI IPC v2 未断连，说明 CLI-001 transport 修复有效；剩余问题仍是强文档 turn 的非 RAG 工具治理。
 - 2026-07-11 16:25 再次检查最新日志和 observe 记录：未发现比 turn `354` 更新、且能证明长工具链已消失的记录。因此本轮不继续修复 P10a.1，但不能将其按“未复现”跳过；状态保持 open，后续回到强文档工具治理时处理。
 - 2026-07-11 P10a.1 代码侧已实现 Tool Access Gateway：新增 `agent/policies/tool_access.py`，由 current-turn `ToolAccessPlan` 统一收束 `visible_add`、`visible_suppress`、`tool_search_block`、`execution_block`；`DefaultReasoner` 只窄接入 prompt schema 可见性、`tool_search` 结果过滤/解锁合并、工具执行前拦截和 terminal 工具结果观察，不改 AgentLoop 主体循环。
-- P10a.1 自动化验证已通过：强文档证据请求在未显式要求源码/本地文件时会从 schema 中压制 `shell/read_file/list_dir`，`tool_search(select:read_file)` 返回给模型前被过滤，模型直接调用 `read_file` 时不会执行也不会计入 `tools_used`；显式源码/本地文件请求仍允许本地文件工具。真实 CLI/LLM smoke 仍待执行。
+- P10a.1 自动化验证已通过：强文档证据请求在未显式要求源码/本地文件时会从 schema 中压制 `shell/read_file/list_dir`，`tool_search(select:read_file)` 返回给模型前被过滤，模型直接调用 `read_file` 时不会执行也不会计入 `tools_used`；显式源码/本地文件请求仍允许本地文件工具。后续真实 CLI/LLM smoke 已在 turn `361` 验证关键目标。
 - 2026-07-11 21:01 真实 CLI/LLM smoke 验证 P10a.1 gateway 生效：
   - turn id：`361`
   - prompt：`请重新从文档知识库检索，不要复用上轮内容：根据项目文档回答agent runtime负责什么，并调用原文chunk展开证据，回答必须带引用`
