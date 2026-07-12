@@ -101,3 +101,10 @@
 - Created the executable P10a.2 implementation plan in `my_md/rag/21-document-rag-p10a2-implementation-plan.md`.
   - Plan tasks: ToolCallLedger, ToolBudgetPolicy/EvidenceCompletionPolicy, TurnToolBoundaryManager facade, DefaultReasoner integration, final docs/verification/live-smoke instructions.
   - The plan is TDD-oriented and preserves the reviewed constraints: `soft_stop` does not execute the target tool, core access blocks win, and ledger is the shared current-turn fact source.
+- Implemented P10a.2 automated boundary governance:
+  - added `agent/policies/tool_ledger.py`, `tool_budget.py`, `evidence_completion.py`, and `tool_boundary.py`;
+  - integrated `DefaultReasoner` with `TurnToolBoundaryManager`;
+  - verified non-executing `soft_stop` for redundant visible `tool_search` and repeated evidence expansion;
+  - targeted suite: `100 passed, 2 warnings in 0.31s`;
+  - full suite: `1361 passed, 3 warnings in 35.12s`;
+  - compileall exited 0.

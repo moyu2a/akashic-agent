@@ -2161,3 +2161,36 @@ git push
 ```
 
 Expected: `main -> main` pushed successfully.
+
+## Implementation Results
+
+- Automated implementation completed on 2026-07-12.
+- Implemented modules:
+  - `agent/policies/tool_ledger.py`
+  - `agent/policies/tool_budget.py`
+  - `agent/policies/evidence_completion.py`
+  - `agent/policies/tool_boundary.py`
+- Reasoner integration:
+  - `DefaultReasoner` now uses `TurnToolBoundaryManager` for current-turn access,
+    budget, evidence completion, non-executing `soft_stop`, ledger recording,
+    tool-search filtering/unlock merging, and `tool_boundary` trace metadata.
+- Verification:
+  - Targeted suite: `100 passed, 2 warnings in 0.31s`.
+  - Full pytest suite: `1361 passed, 3 warnings in 35.12s`.
+  - Compile check exited 0.
+
+## Manual Live Smoke
+
+Use the real CLI against a Document RAG-enabled agent:
+
+1. Prompt:
+   `请重新从文档知识库检索，不要复用上轮内容：根据项目文档回答agent runtime负责什么，并调用原文chunk展开证据，回答必须带引用`
+2. Check logs:
+   - no `shell/read_file/list_dir`;
+   - `tool_boundary` decisions present;
+   - redundant `tool_search` or post-evidence `fetch_doc_chunk` is `soft_stop` if attempted;
+   - target executed tool calls: about 4 or fewer.
+3. Check observe:
+   - `error=NULL`;
+   - CLI remains connected;
+   - `tool_boundary.ledger_summary.has_citation_evidence=true` when chunk evidence exists.

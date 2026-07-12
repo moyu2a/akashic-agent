@@ -1,5 +1,22 @@
 # Turn Tool Boundary Manager Design
 
+## Implementation Status
+
+- Automated implementation: completed on 2026-07-12.
+- Implemented modules:
+  - `agent/policies/tool_ledger.py`
+  - `agent/policies/tool_budget.py`
+  - `agent/policies/evidence_completion.py`
+  - `agent/policies/tool_boundary.py`
+- Reasoner integration: `DefaultReasoner` now routes current-turn tool access,
+  budget, evidence-completion, non-executing `soft_stop`, ledger recording, and
+  trace metadata through `TurnToolBoundaryManager`.
+- Verification:
+  - Targeted P10a.2 / P10a / P10a.1 suite: `100 passed, 2 warnings in 0.31s`.
+  - Full pytest suite: `1361 passed, 3 warnings in 35.12s`.
+  - Compile check: `python3 -m compileall agent/policies agent/core/passive_turn.py tests/test_tool_ledger.py tests/test_tool_budget_policy.py tests/test_evidence_completion_policy.py tests/test_tool_boundary_manager.py tests/test_tool_boundary_reasoner.py` exited 0.
+- Real CLI/LLM smoke: pending user run.
+
 ## Background
 
 RAG-006 P10a introduced turn-local Document RAG intent preload. P10a.1 then added

@@ -205,8 +205,13 @@ P10a.2 当前剩余问题：Document RAG 工具链成本治理。
 - 已完成：强记忆/session 意图且无强文档意图时，当前 turn 临时从 effective preloaded 中移除 `search_docs` / `fetch_doc_chunk`，避免 LRU 残留污染。
 - 已完成 P10a.1 自动化实现：强文档意图 turn 中，若用户没有明确要求“源码/本地文件/仓库文件”，通过 Tool Access Gateway 临时压制并执行前拦截 `shell`、`read_file`、`list_dir`，避免 Document RAG 任务跑偏。
 - 已完成 P10a.1 自动化实现：强文档 + 原文/证据展开意图时，`search_docs` 与 `fetch_doc_chunk` 进入当前 turn 可见工具；`tool_search` 不再能重新解锁被压制的本地文件工具。
-- 待补 P10a.2 成本治理：对文档问答链路增加工具预算或早停规则；如果 `search_docs` snippet 已足够回答简单事实问题，则不强制 `fetch_doc_chunk`；强文档证据场景应限制重复 `search_docs/fetch_doc_chunk`。
-- 待补 P10a.2 成本治理：减少当前工具已可见时的多余 `tool_search(select:search_docs,fetch_doc_chunk)` 确认轮次。
+- 已完成 P10a.2 自动化实现：新增 turn-local `ToolCallLedger`、`ToolBudgetPolicy`、`EvidenceCompletionPolicy` 和 `TurnToolBoundaryManager`；`DefaultReasoner` 通过 boundary facade 处理 access、budget、evidence-complete、`soft_stop`、ledger 和 trace。
+- 已完成 P10a.2 自动化实现：冗余 `tool_search(select:search_docs,fetch_doc_chunk)` 和证据完成后的重复 `fetch_doc_chunk` 会返回非执行型 `soft_stop` boundary result，不执行目标工具、不写 LRU、不计入成功 `tools_used`。
+- P10a.2 自动化验证：
+  - Targeted P10a.2 / P10a / P10a.1 suite：`100 passed, 2 warnings in 0.31s`。
+  - Full pytest suite：`1361 passed, 3 warnings in 35.12s`。
+  - Compile check：`python3 -m compileall agent/policies agent/core/passive_turn.py tests/test_tool_ledger.py tests/test_tool_budget_policy.py tests/test_evidence_completion_policy.py tests/test_tool_boundary_manager.py tests/test_tool_boundary_reasoner.py` exited 0。
+- P10a.2 真实 CLI/LLM smoke 仍待执行：需要复测 turn `361` 同类 prompt，确认实际链路不再重复执行多余 RAG 工具。
 - 增加回归测试：文档问答 happy path 不应先出现“工具未加载”失败。
 - 在评估集中增加 `max_react_iterations`、`max_tool_calls`、`expected_tools`、`forbidden_tools` 指标；强文档证据 case 应把 `shell/read_file/list_dir` 列为 forbidden，除非用户显式要求源码。
 - 计划详见：`my_md/rag/19-document-rag-p10-intent-preload-plan.md`。

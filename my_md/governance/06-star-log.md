@@ -422,6 +422,7 @@ STAR 复盘：
 - 2026-07-11 P10a.2 已登记为下一阶段：turn `361` 的剩余问题不是 access 错误，而是预算和终止条件不足；后续应把目标从“不用错工具”提升为“少用且及时停止”。
 - 2026-07-12 P10a.2 正式设计已形成：`my_md/rag/20-document-rag-p10a2-tool-boundary-design.md`，命名为 Turn Tool Boundary Manager，将 access、budget、evidence completion、ledger 和 trace 收束到 current-turn core policy boundary。
 - 2026-07-12 已调用审阅 skill 审阅 P10a.2 设计并完成修订：补齐 `soft_stop` 执行语义、决策合并优先级、ledger 结构化字段和负向/优先级测试要求。修订后实现计划可以基于“soft_stop 不执行目标工具、core block 不可被放宽、ledger 是共享事实源”这三个控制面约束展开。
+- 2026-07-12 P10a.2 自动化实现已完成：新增 `ToolCallLedger`、`ToolBudgetPolicy`、`EvidenceCompletionPolicy`、`TurnToolBoundaryManager` 并接入 `DefaultReasoner`。验证结果：targeted suite `100 passed, 2 warnings`，full pytest `1361 passed, 3 warnings`，compileall exited 0。真实 CLI/LLM smoke 仍待执行。
 
 验证方式：
 
@@ -442,7 +443,7 @@ STAR 复盘：
 - `fetch_doc_chunk` 的预加载条件已按 P10a 保守实现，仍需真实 CLI/LLM smoke 观察是否过宽或过窄。
 - RAG-006 memory-after-doc-LRU 自动化测试已新增；仍需真实 CLI/LLM smoke 验证同 session 行为。
 - RAG-006 P10a.1：Tool Access Gateway 自动化实现和真实 CLI/LLM smoke 已验证强文档证据 case 不再跑偏到本地文件工具；memory-after-doc-LRU 同 session smoke 也未误走 Document RAG。
-- RAG-006 P10a.2：当前主要遗留问题是成本治理。turn `361` 仍有多余 `tool_search` 和重复 `search_docs/fetch_doc_chunk`，需要用 turn-local 预算、loop guard 和 evidence-complete 早停收敛到约 3-4 轮。设计已审阅并修订，下一步是写实现计划而不是继续扩展设计范围。
+- RAG-006 P10a.2：自动化实现已完成，当前遗留问题转为真实 CLI/LLM smoke。需要复测 turn `361` 同类 prompt，确认实际模型在 `soft_stop` boundary result 后收敛到约 3-4 轮且不再重复执行多余 RAG 工具。
 - CLI-001：transport/session 侧已由自动化和真实 CLI 重连 smoke 验证；继续常规观察即可。
 - 如果 disabled live smoke 仍 fallback 到 `read_file/list_dir/shell`，需要第二阶段让工具执行器或 AgentLoop 消费 `fallback_allowed=false`。
 - 如果后续只剩“是否能主动开启配置”的话术问题，优先补充工具返回字段和 `user_message`，明确 `restart_required=true`、`can_self_enable=false`，再做一次 disabled live smoke。

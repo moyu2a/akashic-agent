@@ -184,6 +184,7 @@
 - P10a.2 将 Document RAG 从“工具可用性正确”推进到“工具链成本可控”：强文档证据请求不再转向本地文件工具后，继续减少多余 `tool_search`、重复 `search_docs` 和重复 `fetch_doc_chunk`。
 - 设计入口：`my_md/rag/20-document-rag-p10a2-tool-boundary-design.md`。
 - 设计已完成审阅并修订：`soft_stop` 明确为不执行目标工具的非致命边界结果；决策合并优先级明确 core access block 高于 budget/evidence/plugin；ledger 和负向测试要求已补齐。
+- 自动化实现已完成：`TurnToolBoundaryManager` 已接入 `DefaultReasoner`，targeted suite `100 passed, 2 warnings`，full pytest `1361 passed, 3 warnings`；真实 CLI/LLM smoke 待执行。
 
 候选方案：
 
@@ -203,6 +204,7 @@
 - P10a.2 强文档证据展开：预期 `search_docs -> fetch_doc_chunk -> final`，目标 3-4 轮，通常不超过 4 次工具调用。
 - 回归 turn `361` 同类 prompt：不调用 `shell/read_file/list_dir` 的 P10a.1 结论保持不变，同时工具链从 6 轮/7 次工具调用下降。
 - 负向回归：no-hit、无 citation chunk、显式 broader exploration 不应被过早 evidence-complete；插件规则不能绕过 disabled/no-tool/core access block。
+- 自动化已验证；下一步需要真实 CLI/LLM smoke 验证实际模型是否收到 `soft_stop` 后按预期收敛。
 
 ## 暂不处理
 
