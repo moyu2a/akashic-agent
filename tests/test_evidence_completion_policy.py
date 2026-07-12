@@ -72,6 +72,35 @@ def test_no_hit_retrieval_does_not_soft_stop() -> None:
     assert decision.reason == "evidence_not_complete"
 
 
+def test_search_hit_citation_without_chunk_does_not_soft_stop() -> None:
+    ledger = ToolCallLedger()
+    ledger.add_record(
+        ToolCallRecord(
+            tool_name="search_docs",
+            tool_class="retrieval",
+            args_hash="h1",
+            args_summary="{}",
+            call_index=1,
+            visible_before_call=True,
+            result_ok=True,
+            hit_count=1,
+            citation_refs=("my_md/doc.md > Agent Runtime",),
+            result_has_evidence=True,
+            result_has_citation=True,
+        )
+    )
+
+    decision = EvidenceCompletionPolicy().evaluate_call(
+        intent="doc_qa_with_evidence",
+        ledger=ledger,
+        tool_name="fetch_doc_chunk",
+        arguments={"chunk_id": "c1"},
+    )
+
+    assert decision.action == "allow"
+    assert decision.reason == "evidence_not_complete"
+
+
 def test_chunk_without_citation_does_not_soft_stop() -> None:
     ledger = ToolCallLedger()
     ledger.add_record(

@@ -23,7 +23,11 @@ class EvidenceCompletionPolicy:
         if tool_class not in {"retrieval", "evidence_expand"}:
             return ToolBoundaryDecision(action="allow", reason="not_evidence_tool")
 
-        if ledger.has_successful_retrieval() and ledger.has_citation_evidence():
+        has_chunk_citation = any(
+            record.tool_class == "evidence_expand" and record.result_has_citation
+            for record in ledger.records
+        )
+        if ledger.has_successful_retrieval() and has_chunk_citation:
             return ToolBoundaryDecision(
                 action="soft_stop",
                 reason="document_rag_evidence_complete",

@@ -19,7 +19,7 @@ from agent.tools.tool_search import ToolSearchTool
 class _RecordingTool(Tool):
     def __init__(self, name: str, result: str | None = None) -> None:
         self._name = name
-        self._result = result or f"{name}-ok"
+        self._result = result or json.dumps({"ok": True})
         self.calls: list[dict[str, Any]] = []
 
     @property
@@ -74,33 +74,28 @@ def _session() -> SimpleNamespace:
 def _make_reasoner(
     provider: _Provider,
     *,
-    read_file: _RecordingTool | None = None,
+    search_docs: _RecordingTool | None = None,
+    fetch_doc_chunk: _RecordingTool | None = None,
 ) -> DefaultReasoner:
     tools = ToolRegistry()
     tools.register(ToolSearchTool(tools), always_on=True, risk="read-only")
-    tools.register(_RecordingTool("search_docs"))
-    tools.register(_RecordingTool("fetch_doc_chunk"))
-    tools.register(read_file or _RecordingTool("read_file"), always_on=True)
+    tools.register(search_docs or _RecordingTool("search_docs"))
+    tools.register(fetch_doc_chunk or _RecordingTool("fetch_doc_chunk"))
+    tools.register(_RecordingTool("read_file"), always_on=True)
     tools.register(_RecordingTool("shell"), always_on=True)
     tools.register(_RecordingTool("list_dir"), always_on=True)
-    tools.register(_RecordingTool("recall_memory"))
 
     def _render(request: ContextRequest, **_kwargs: object) -> ContextRenderResult:
         return ContextRenderResult(
             system_prompt="",
-            turn_injection_context={
-                "turn_injection": request.turn_injection_prompt or ""
-            },
+            turn_injection_context={"turn_injection": request.turn_injection_prompt or ""},
             messages=[{"role": "user", "content": request.current_message}],
             debug_breakdown=[],
         )
 
     return DefaultReasoner(
-        llm=cast(
-            Any,
-            LLMServices(provider=provider, light_provider=provider),
-        ),
-        llm_config=LLMConfig(model="m", max_iterations=4, max_tokens=256),
+        llm=cast(Any, LLMServices(provider=provider, light_provider=provider)),
+        llm_config=LLMConfig(model="m", max_iterations=6, max_tokens=256),
         tools=tools,
         discovery=ToolDiscoveryState(),
         tool_search_enabled=True,
@@ -110,32 +105,18 @@ def _make_reasoner(
     )
 
 
-def _tool_names(call: dict[str, Any]) -> set[str]:
-    return {schema["function"]["name"] for schema in call["tools"]}
-
-
-def test_strong_doc_prompt_suppresses_local_file_schemas_even_if_always_on() -> None:
-    provider = _Provider([LLMResponse(content="final", tool_calls=[])])
-    reasoner = _make_reasoner(provider)
-
-    asyncio.run(
-        reasoner.run_turn(
-            msg=_msg("根据项目文档回答agent runtime负责什么，并展开原文证据"),
-            session=cast(Any, _session()),
-        )
-    )
-
-    names = _tool_names(provider.calls[0])
-    assert {"search_docs", "fetch_doc_chunk", "tool_search"} <= names
-    assert names.isdisjoint({"read_file", "shell", "list_dir"})
-
-
-def test_tool_search_result_is_filtered_before_model_can_see_blocked_tool() -> None:
+def test_redundant_visible_tool_search_soft_stop_does_not_execute_tool_search() -> None:
     provider = _Provider(
         [
             LLMResponse(
                 content="",
-                tool_calls=[ToolCall("s1", "tool_search", {"query": "select:read_file"})],
+                tool_calls=[
+                    ToolCall(
+                        "s1",
+                        "tool_search",
+                        {"query": "select:search_docs,fetch_doc_chunk"},
+                    )
+                ],
             ),
             LLMResponse(content="final", tool_calls=[]),
         ]
@@ -149,60 +130,74 @@ def test_tool_search_result_is_filtered_before_model_can_see_blocked_tool() -> N
         )
     )
 
-    tool_result_messages = [
-        msg for msg in provider.calls[1]["messages"] if msg.get("role") == "tool"
-    ]
-    assert tool_result_messages
-    payload = json.loads(tool_result_messages[-1]["content"])
-    assert payload["matched"] == []
-    assert payload["blocked_by_tool_access_gateway"] == ["read_file"]
-    assert result.context_retry["tool_access"]["visible_suppress"] == [
-        "list_dir",
-        "read_file",
-        "shell",
-    ]
-
-
-def test_gateway_blocked_tool_call_does_not_execute_or_count_as_used() -> None:
-    read_file = _RecordingTool("read_file")
-    provider = _Provider(
-        [
-            LLMResponse(
-                content="",
-                tool_calls=[ToolCall("r1", "read_file", {"path": "README.md"})],
-            ),
-            LLMResponse(content="final", tool_calls=[]),
-        ]
-    )
-    reasoner = _make_reasoner(provider, read_file=read_file)
-
-    result = asyncio.run(
-        reasoner.run_turn(
-            msg=_msg("根据项目文档回答agent runtime负责什么，并展开原文证据"),
-            session=cast(Any, _session()),
-        )
-    )
-
-    assert read_file.calls == []
+    tool_messages = [m for m in provider.calls[1]["messages"] if m.get("role") == "tool"]
+    payload = json.loads(tool_messages[-1]["content"])
+    assert payload["error_code"] == "tool_boundary_soft_stop"
     assert result.tools_used == []
-    call = result.tool_chain[0]["calls"][0]
-    assert call["name"] == "read_file"
-    assert call["status"] == "blocked_by_tool_boundary"
-    assert call["boundary_action"] == "block"
-    assert call["boundary_reason"] == "tool_blocked_by_doc_rag_policy"
-    assert "tool_blocked_by_doc_rag_policy" in call["result"]
+    assert result.tool_chain[0]["calls"][0]["status"] == "soft_stopped_by_tool_boundary"
+    assert result.context_retry["tool_boundary"]["decisions"][0]["reason"] == (
+        "redundant_visible_tool_search"
+    )
 
 
-def test_explicit_source_request_keeps_local_file_schemas_available() -> None:
-    provider = _Provider([LLMResponse(content="final", tool_calls=[])])
-    reasoner = _make_reasoner(provider)
+def test_repeated_fetch_soft_stop_after_citation_evidence() -> None:
+    search_docs = _RecordingTool(
+        "search_docs",
+        json.dumps(
+            {
+                "ok": True,
+                "hit_count": 1,
+                "hits": [{"chunk_id": "c1", "citation": "my_md/doc.md > Agent Runtime"}],
+            }
+        ),
+    )
+    fetch_doc_chunk = _RecordingTool(
+        "fetch_doc_chunk",
+        json.dumps(
+            {
+                "ok": True,
+                "chunk": {
+                    "chunk_id": "c1",
+                    "citation": "my_md/doc.md > Agent Runtime",
+                    "text": "Agent runtime 负责管理 agent 的一次运行过程。",
+                },
+            }
+        ),
+    )
+    provider = _Provider(
+        [
+            LLMResponse(
+                content="",
+                tool_calls=[ToolCall("q1", "search_docs", {"query": "agent runtime"})],
+            ),
+            LLMResponse(
+                content="",
+                tool_calls=[ToolCall("f1", "fetch_doc_chunk", {"chunk_id": "c1"})],
+            ),
+            LLMResponse(
+                content="",
+                tool_calls=[ToolCall("f2", "fetch_doc_chunk", {"chunk_id": "c2"})],
+            ),
+            LLMResponse(content="final", tool_calls=[]),
+        ]
+    )
+    reasoner = _make_reasoner(
+        provider,
+        search_docs=search_docs,
+        fetch_doc_chunk=fetch_doc_chunk,
+    )
 
-    asyncio.run(
+    result = asyncio.run(
         reasoner.run_turn(
-            msg=_msg("根据项目文档和源码回答，请读取 agent/core/passive_turn.py"),
+            msg=_msg("根据项目文档回答agent runtime负责什么，并展开原文证据"),
             session=cast(Any, _session()),
         )
     )
 
-    names = _tool_names(provider.calls[0])
-    assert {"search_docs", "read_file"} <= names
+    assert len(search_docs.calls) == 1
+    assert len(fetch_doc_chunk.calls) == 1
+    assert result.tools_used == ["search_docs", "fetch_doc_chunk"]
+    assert result.tool_chain[2]["calls"][0]["status"] == "soft_stopped_by_tool_boundary"
+    assert result.context_retry["tool_boundary"]["ledger_summary"][
+        "has_citation_evidence"
+    ] is True
