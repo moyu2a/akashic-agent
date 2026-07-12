@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 
 from agent.policies.tool_access import ToolAccessContext
 from agent.policies.tool_boundary import TurnToolBoundaryManager
@@ -127,3 +128,70 @@ def test_trace_contains_decisions_and_ledger_summary() -> None:
     assert trace["intent"] == "doc_qa_with_evidence"
     assert trace["decisions"][0]["action"] == "soft_stop"
     assert trace["ledger_summary"]["tool_calls"] == 0
+
+
+def test_recent_decisions_exposes_soft_stop_for_completion_controller(caplog) -> None:
+    manager = TurnToolBoundaryManager()
+    ctx = manager.build_context(_ctx("根据项目文档回答 agent runtime，并展开原文证据"))
+    visible = {"tool_search", "search_docs", "fetch_doc_chunk"}
+
+    search = manager.evaluate_tool_call(
+        ctx,
+        tool_name="search_docs",
+        arguments={"query": "agent runtime"},
+        visible_names=visible,
+    )
+    assert search.execute is True
+    manager.record_tool_result(
+        ctx,
+        tool_name="search_docs",
+        arguments={"query": "agent runtime"},
+        result_text=json.dumps(
+            {
+                "ok": True,
+                "hit_count": 1,
+                "hits": [{"chunk_id": "c1", "citation": "[doc.md > A]"}],
+            }
+        ),
+        visible_before_call=True,
+        decision_action=search.action,
+        decision_reason=search.reason,
+    )
+    fetch = manager.evaluate_tool_call(
+        ctx,
+        tool_name="fetch_doc_chunk",
+        arguments={"chunk_id": "c1"},
+        visible_names=visible,
+    )
+    assert fetch.execute is True
+    manager.record_tool_result(
+        ctx,
+        tool_name="fetch_doc_chunk",
+        arguments={"chunk_id": "c1"},
+        result_text=json.dumps(
+            {
+                "ok": True,
+                "chunk": {"chunk_id": "c1", "citation": "[doc.md > A]"},
+            }
+        ),
+        visible_before_call=True,
+        decision_action=fetch.action,
+        decision_reason=fetch.reason,
+    )
+
+    with caplog.at_level(logging.INFO, logger="agent.policies.tool_boundary"):
+        stopped = manager.evaluate_tool_call(
+            ctx,
+            tool_name="fetch_doc_chunk",
+            arguments={"chunk_id": "c2"},
+            visible_names=visible,
+        )
+
+    assert stopped.execute is False
+    decisions = manager.recent_decisions(ctx)
+    assert decisions[-1]["action"] == "soft_stop"
+    assert decisions[-1]["reason"] == "document_rag_evidence_complete"
+    assert (
+        "[tool_boundary] soft_stop tool=fetch_doc_chunk "
+        "reason=document_rag_evidence_complete"
+    ) in caplog.text

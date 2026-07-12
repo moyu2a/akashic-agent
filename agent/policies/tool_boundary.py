@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any
@@ -25,6 +26,8 @@ from agent.policies.tool_ledger import (
     stable_args_hash,
     summarize_args,
 )
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -97,6 +100,12 @@ class TurnToolBoundaryManager:
             plan=context.access_plan,
         )
 
+    def recent_decisions(
+        self,
+        context: ToolBoundaryContext,
+    ) -> tuple[Mapping[str, object], ...]:
+        return tuple(context.decisions)
+
     def observe_access_tool_result(
         self,
         context: ToolBoundaryContext,
@@ -160,6 +169,11 @@ class TurnToolBoundaryManager:
             payload = _soft_stop_payload(final)
             if final.model_hint:
                 context.pending_hints.append(final.model_hint)
+            logger.info(
+                "[tool_boundary] soft_stop tool=%s reason=%s",
+                tool_name,
+                final.reason,
+            )
             decision = BoundaryExecutionDecision(
                 action="soft_stop",
                 reason=final.reason,
