@@ -8,6 +8,55 @@
 
 **Tech Stack:** Python 3.12, dataclasses, existing `pytest` / `pytest-asyncio`, existing `DefaultReasoner`, existing `ToolCallLedger`, existing observe metadata.
 
+## Implementation Status
+
+- Automated implementation: completed on 2026-07-12.
+- Added `agent/policies/turn_completion.py` with `TurnCompletionController`.
+- `DefaultReasoner` now consumes `document_rag_evidence_complete` soft-stop
+  decisions and switches the next LLM call to final-only with `tools=[]`.
+- `run_turn()` propagates completion metadata through
+  `TurnRunResult.context_retry["turn_completion"]`.
+- Negative regressions cover no-hit retrieval, citation-free chunks, explicit
+  local-source prompts, and providers that still return tool calls after
+  final-only begins.
+- Verification:
+  - Targeted P10a.3/P10a.2 suite:
+    `24 passed in 0.19s`.
+  - Broader relevant suite:
+    `55 passed in 0.30s`.
+  - Full pytest:
+    `1373 passed, 3 warnings in 31.89s`.
+  - Compile check:
+    `python3 -m compileall agent/policies agent/core/passive_turn.py tests/test_turn_completion_policy.py tests/test_turn_completion_reasoner.py`
+    exited 0.
+- Real CLI/LLM smoke remains required.
+
+## Manual Live Smoke
+
+Prompt:
+
+`请重新从文档知识库检索，不要复用上轮内容：根据项目文档回答agent runtime负责什么，并调用原文chunk展开证据，回答必须带引用`
+
+Expected logs:
+
+- `[tool_boundary] soft_stop tool=fetch_doc_chunk reason=document_rag_evidence_complete`
+- `[turn_completion] final_only reason=document_rag_evidence_complete`
+- no `shell/read_file/list_dir`
+- no real execution after final-only begins
+
+Expected observe metadata:
+
+- `tool_boundary.ledger_summary.has_successful_retrieval=true`
+- `tool_boundary.ledger_summary.has_citation_evidence=true`
+- `turn_completion.action=final_only`
+- `turn_completion.reason=document_rag_evidence_complete`
+
+Expected cost shape:
+
+- successful target-tool executions: `search_docs`, `fetch_doc_chunk`
+- ReAct iterations: target 3-4
+- no repeated LLM rounds after final-only
+
 ## Global Constraints
 
 - Keep all completion state turn-local.

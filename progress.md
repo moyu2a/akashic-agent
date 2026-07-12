@@ -113,3 +113,18 @@
   - no `shell/read_file/list_dir`, no CLI disconnect, and no old separator/readline payload error;
   - new issue: soft stops still consumed extra LLM rounds, ending at 5 iterations with `react_input_peak_tokens~=73267` and `prompt_tokens=419680`;
   - documented this as the transition from P10a.2 execution governance to P10a.3 Boundary-Driven Early Finalization.
+- Implemented P10a.3 turn completion automation:
+  - added `agent/policies/turn_completion.py` with `TurnCompletionController`;
+  - exposed `TurnToolBoundaryManager.recent_decisions()` and ordinary soft-stop logs;
+  - integrated `DefaultReasoner` so `document_rag_evidence_complete` soft stops switch the next call to final-only with `tools=[]`;
+  - propagated `turn_completion` metadata into `TurnRunResult.context_retry`;
+  - ignored provider tool calls returned during final-only and returned a `final_only_tool_call` summary without executing extra tools.
+- Added P10a.3 automated coverage:
+  - conservative policy tests for evidence-complete, no-hit, no citation, non-doc intent, wrong soft-stop reason, and explicit local-source allow;
+  - reasoner tests for final-only schema omission, ordinary log lines, metadata shape, no-hit regression, no-citation regression, explicit local-source regression, and final-only tool-call ignore.
+- P10a.3 verification:
+  - targeted P10a.3/P10a.2 suite: `24 passed in 0.19s`;
+  - broader relevant suite: `55 passed in 0.30s`;
+  - full suite: `1373 passed, 3 warnings in 31.89s`;
+  - compileall for `agent/policies`, `agent/core/passive_turn.py`, `tests/test_turn_completion_policy.py`, and `tests/test_turn_completion_reasoner.py` exited 0.
+- Updated governance/RAG/STAR docs to record P10a.3 implementation status and manual live-smoke recipe. Remaining work: run real CLI/LLM smoke for the turn `362`-style prompt and confirm ReAct iterations drop to the 3-4 target with no real tool execution after final-only begins.

@@ -370,6 +370,8 @@ STAR 复盘：
 - Gateway 的定位是 access control plane，插件仍作为 behavior extension plane。未来插件可以贡献 `ToolAccessPolicy`，但不得绕过 `disabled_tools`、不得直接改 LRU、不得直接改 LLM message list 或替换 `ToolRegistry.execute`。
 - 2026-07-11 第一版 Tool Access Gateway 已实现：新增 `agent/policies/tool_access.py`，把 P10a turn-local preload 和 P10a.1 本地文件工具治理统一为 `ToolAccessPlan`；`DefaultReasoner` 只在工具 schema 计算、`tool_search` 结果过滤/解锁合并、执行前 gate、工具结果观察四个窄点接入。意图预加载仍不写入 `ToolDiscoveryState` / LRU，always-on 策略不变。
 - turn `361` 证明 Tool Access Gateway 已解决强文档证据请求误用本地文件工具的问题，但也暴露出下一层边界：access control 只能回答“能不能用这个工具”，不能回答“还要不要继续调用工具”。因此 RAG-006 的下一步应命名为 P10a.2 成本治理，聚焦预算、重复调用和 evidence-complete 早停。
+- P10a.2 Turn Tool Boundary Manager 进一步把“是否应该继续真实执行工具”收束到 current-turn execution boundary：冗余 `tool_search`、重复 `search_docs/fetch_doc_chunk` 和 evidence-complete 后的额外展开会变成非执行型 `soft_stop`。turn `362` 证明真实目标工具执行已收敛到 `search_docs + fetch_doc_chunk`，但也暴露出新的边界：`soft_stop` 作为工具结果仍会回到 LLM，继续消耗轮次和 prompt tokens。
+- 因此 P10a.3 再把边界从“工具执行”推进到“ReAct 继续/收尾”：新增 `TurnCompletionController`，读取同一份 ledger 和 boundary decisions，在 `document_rag_evidence_complete` 后让下一次 LLM 调用进入 final-only，省略工具 schema，只允许基于已有 Document RAG evidence 回答。这是 completion control plane，不写入 LRU，不替代 Tool Access Gateway，也不改变 always-on。
 
 排查路径：
 
@@ -383,6 +385,7 @@ STAR 复盘：
 | 6 | 结论是否被证据直接支撑 | 对比回答 claim 和 chunk 正文 | “负责管理运行过程”有直接证据，“下辖 Tool Calling”是结构推断 | 需要 faithfulness 约束 | 增加 evidence alignment |
 | 7 | P10a 预加载是否解决工具链过长 | 查看 14:26 live smoke 日志和 observe turn 349 | 预加载生效，但链路转向 `shell/read_file` | 单纯可见性治理不足 | 设计强文档非 RAG 工具约束 |
 | 8 | 工具约束应放在哪里 | 对比 prompt visibility、tool_search unlock、执行前 hook、terminal result | 单点 hook 无法覆盖所有绕路 | 需要统一工具访问边界 | 设计 Tool Access Gateway |
+| 9 | 工具执行边界是否足够 | 查看 turn 362 P10a.2 smoke | 冗余工具已被 soft_stop，但 LLM 仍跑 5 轮 | 执行边界不足以控制 reasoning 成本 | 增加 final-only turn completion |
 
 处理方案：
 
@@ -391,6 +394,7 @@ STAR 复盘：
 - RAG-006 P10a.1：从“只控制工具可见性”升级为 Tool Access Gateway，统一治理 prompt 可见性、`tool_search` 解锁、执行前拦截和 terminal 结果后的 fallback 阻断。
 - RAG-006 P10a.1 第一版实现：强文档证据请求未显式要求源码/本地文件时，`shell/read_file/list_dir` 会从 prompt schema 中被压制，`tool_search` 返回给模型前会过滤这些工具，模型绕过 schema 直接调用时会被执行前 gate 阻断；显式源码/路径请求保留本地文件工具。
 - RAG-006 P10a.2：在 P10a.1 已验证不跑偏到本地文件工具后，继续治理 Document RAG 工具链成本；目标是减少已可见工具下的多余 `tool_search`，限制重复 `search_docs/fetch_doc_chunk`，并在证据足够时早停。
+- RAG-006 P10a.3：在 P10a.2 已能阻止冗余工具真实执行后，继续治理 `soft_stop` 后的 LLM 轮次/token 成本；当 `document_rag_evidence_complete` 已成立时，下一次 LLM 调用进入 final-only，不再暴露工具 schema。
 - RAG-007：回答约束中区分“文档明确写明”和“基于标题结构推断”；评估中增加 `claim_evidence_alignment`。
 - RAG-005 第一阶段已执行：`doc_rag_disabled` 返回 `terminal_scope=document_rag`、`fallback_allowed=false`、`recommended_action=answer_doc_rag_disabled`、`instructions` 和 `user_message`；工具描述明确不要用本地文件读取替代 Document RAG。
 
@@ -424,6 +428,7 @@ STAR 复盘：
 - 2026-07-12 已调用审阅 skill 审阅 P10a.2 设计并完成修订：补齐 `soft_stop` 执行语义、决策合并优先级、ledger 结构化字段和负向/优先级测试要求。修订后实现计划可以基于“soft_stop 不执行目标工具、core block 不可被放宽、ledger 是共享事实源”这三个控制面约束展开。
 - 2026-07-12 P10a.2 自动化实现已完成：新增 `ToolCallLedger`、`ToolBudgetPolicy`、`EvidenceCompletionPolicy`、`TurnToolBoundaryManager` 并接入 `DefaultReasoner`。验证结果：targeted suite `100 passed, 2 warnings`，full pytest `1361 passed, 3 warnings`，compileall exited 0。
 - 2026-07-12 P10a.2 真实 CLI/LLM smoke 已执行：turn `362` 中 `tool_boundary` 成功把冗余 `tool_search`、额外 `fetch_doc_chunk`、额外 `search_docs` 转为 `tool_boundary_soft_stop`，真实成功执行工具只有 `search_docs` 和 1 次 `fetch_doc_chunk`，且未调用 `shell/read_file/list_dir`。新暴露的问题是 `soft_stop` 仍需要回到 LLM 继续推理，导致 5 轮 LLM、`react_input_peak_tokens~=73267`、`prompt_tokens=419680`。演进结论：P10a.2 解决了“不要重复执行工具”，但没有完全解决“不要重复消耗 LLM 轮次/token”。
+- 2026-07-12 P10a.3 自动化实现已完成：新增 `agent/policies/turn_completion.py` 并接入 `DefaultReasoner`；evidence-complete soft stop 后下一轮 LLM 使用 `tools=[]`，`context_retry.turn_completion` 记录 action/reason/metadata，普通日志输出 `[turn_completion] final_only ...`。验证结果：targeted suite `24 passed`，broader relevant suite `55 passed`，full pytest `1373 passed, 3 warnings`，compileall exited 0。真实 CLI/LLM smoke 仍需重跑 turn `362` 同类 prompt。
 
 验证方式：
 
@@ -436,6 +441,7 @@ STAR 复盘：
   - `76 passed in 0.50s`
   - RAG-006 P10a 相关回归：`43 passed in 0.48s`
   - RAG-006 P10a.1 Tool Access Gateway 回归：`92 passed, 2 warnings in 0.26s`
+  - RAG-006 P10a.3 Turn Completion 回归：`24 passed in 0.19s`
   - 运行时/通道 smoke 集合：`81 passed in 5.13s`
 
 遗留问题：
@@ -444,7 +450,8 @@ STAR 复盘：
 - `fetch_doc_chunk` 的预加载条件已按 P10a 保守实现，仍需真实 CLI/LLM smoke 观察是否过宽或过窄。
 - RAG-006 memory-after-doc-LRU 自动化测试已新增；仍需真实 CLI/LLM smoke 验证同 session 行为。
 - RAG-006 P10a.1：Tool Access Gateway 自动化实现和真实 CLI/LLM smoke 已验证强文档证据 case 不再跑偏到本地文件工具；memory-after-doc-LRU 同 session smoke 也未误走 Document RAG。
-- RAG-006 P10a.2：自动化和真实 CLI/LLM smoke 已确认边界能阻止冗余工具真实执行；当前遗留问题转为 P10a.3：`soft_stop` 后仍会产生额外 LLM 轮次和大额 prompt token，应设计 Boundary-Driven Early Finalization，把 evidence-complete 后的下一轮切为 final-only。
+- RAG-006 P10a.2：自动化和真实 CLI/LLM smoke 已确认边界能阻止冗余工具真实执行。
+- RAG-006 P10a.3：自动化已确认 evidence-complete 后下一轮会切为 final-only；遗留任务是真实 CLI/LLM smoke，确认 turn `362` 同类 prompt 的 ReAct 轮次和 prompt token 是否按预期下降。
 - CLI-001：transport/session 侧已由自动化和真实 CLI 重连 smoke 验证；继续常规观察即可。
 - 如果 disabled live smoke 仍 fallback 到 `read_file/list_dir/shell`，需要第二阶段让工具执行器或 AgentLoop 消费 `fallback_allowed=false`。
 - 如果后续只剩“是否能主动开启配置”的话术问题，优先补充工具返回字段和 `user_message`，明确 `restart_required=true`、`can_self_enable=false`，再做一次 disabled live smoke。
@@ -455,7 +462,7 @@ STAR 复盘：
 - Situation：Document RAG P9 citation 自动化测试已经通过，但真实 CLI/LLM smoke 暴露出配置、工具链成本和引用忠实度问题。
 - Task：确认问题到底是索引失败、citation validator 失败、配置问题，还是工具治理问题，并形成后续修复路线。
 - Action：查看 `observe.db` 中多轮真实 turn，分别分析 `search_docs` 返回、工具链、ReAct 轮次、最终 citation 和 chunk 正文证据；先把问题拆成 disabled fallback、工具可见性成本、claim/evidence 对齐三类，再根据 P10a live smoke 继续识别出“工具可见性”和“工具可用性”不是同一个层面。
-- Result：确认 RAG 检索和 citation 来源校验本身可用；第一步通过 turn-local preload 降低明确文档问题的工具发现成本，后续 smoke 显示还需要 Tool Access Gateway 把 prompt 可见性、tool_search 解锁、执行前拦截和 terminal fallback 阻断收束到同一工具访问边界。Tool Access Gateway 的真实 smoke 已证明强文档证据问题不再跑偏到本地文件工具；P10a.2 Turn Tool Boundary Manager 又证明冗余工具可以被 `soft_stop` 阻止真实执行。最新剩余重点进一步收窄为：soft stop 之后还要减少 LLM 循环本身的 token/延迟成本。
+- Result：确认 RAG 检索和 citation 来源校验本身可用；第一步通过 turn-local preload 降低明确文档问题的工具发现成本，后续 smoke 显示还需要 Tool Access Gateway 把 prompt 可见性、tool_search 解锁、执行前拦截和 terminal fallback 阻断收束到同一工具访问边界。Tool Access Gateway 的真实 smoke 已证明强文档证据问题不再跑偏到本地文件工具；P10a.2 Turn Tool Boundary Manager 又证明冗余工具可以被 `soft_stop` 阻止真实执行；P10a.3 自动化实现则把 evidence-complete 后的下一轮切成 final-only。最新剩余重点是用真实 CLI/LLM smoke 验证 token/轮次是否实际下降。
 
 面试表达：
 

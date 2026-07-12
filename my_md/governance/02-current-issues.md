@@ -218,11 +218,28 @@ P10a.2 当前剩余问题：Document RAG 工具链成本治理。
   - 冗余 `tool_search(select:search_docs,fetch_doc_chunk)`、后续 2 次 `fetch_doc_chunk`、后续 1 次 `search_docs` 均返回 `tool_boundary_soft_stop`，没有执行目标工具、没有写入成功 `tools_used`。
   - 但模型仍经历 5 轮 LLM 调用，`react_input_peak_tokens~=73267`，`prompt_tokens=419680`；说明 `soft_stop` 能避免工具副作用和真实工具成本，却不能直接避免多轮 LLM reasoning 成本。
   - 普通 agent log 中只显示模型“尝试调用”与最终“成功工具 2 次”，soft stop 细节主要在 observe DB 的 `tool_calls/tool_chain_json`；后续需要增强普通日志可观测性。
-- 新增 P10a.3 候选问题：Boundary-Driven Early Finalization。目标是在 evidence-complete 或连续 `soft_stop` 后，让 reasoner 进入 final-only 模式，下一轮不给工具 schema，只要求基于已有证据回答，避免继续消耗工具循环和大额 prompt tokens。
+- 2026-07-12 P10a.3 自动化实现已完成：新增 `TurnCompletionController`，当 P10a.2 产生 `document_rag_evidence_complete` soft stop 且 ledger 已有成功检索和 citation evidence 时，`DefaultReasoner` 将下一次 LLM 调用切换为 final-only。
+- P10a.3 final-only 语义：
+  - 只在当前 turn 生效，不写入 `ToolDiscoveryState` / LRU。
+  - 不替代 P10a.2 `soft_stop`，而是消费该边界信号。
+  - final-only 调用通过 `tools=[]` 省略工具 schema，并插入 `turn_completion` context hint，要求基于已有 Document RAG evidence 回答。
+  - 如果 provider 在 final-only 下仍返回 tool call，reasoner 会忽略该工具调用并返回 `final_only_tool_call` 收尾摘要，不执行额外工具。
+  - 显式源码/本地文件请求、no-hit retrieval、无 citation chunk、非文档证据意图不会过早 final-only。
+- P10a.3 自动化验证：
+  - Targeted P10a.3/P10a.2 suite：`24 passed in 0.19s`。
+  - Broader relevant suite：`55 passed in 0.30s`。
+  - Full pytest suite：`1373 passed, 3 warnings in 31.89s`。
+  - Compile check：`python3 -m compileall agent/policies agent/core/passive_turn.py tests/test_turn_completion_policy.py tests/test_turn_completion_reasoner.py` exited 0。
+- P10a.3 仍需真实 CLI/LLM smoke：
+  - 重跑 turn `362` 同类 prompt。
+  - 预期成功目标工具执行为 `search_docs`、`fetch_doc_chunk`。
+  - 预期普通日志出现 `[tool_boundary] soft_stop tool=fetch_doc_chunk reason=document_rag_evidence_complete` 和 `[turn_completion] final_only reason=document_rag_evidence_complete`。
+  - 预期 final-only 后不再真实执行工具，目标 ReAct 轮次回到 3-4。
 - 增加回归测试：文档问答 happy path 不应先出现“工具未加载”失败。
 - 在评估集中增加 `max_react_iterations`、`max_tool_calls`、`expected_tools`、`forbidden_tools` 指标；强文档证据 case 应把 `shell/read_file/list_dir` 列为 forbidden，除非用户显式要求源码。
 - 计划详见：`my_md/rag/19-document-rag-p10-intent-preload-plan.md`。
 - P10a.2 设计详见：`my_md/rag/20-document-rag-p10a2-tool-boundary-design.md`。
+- P10a.3 执行计划详见：`my_md/rag/22-document-rag-p10a3-turn-completion-plan.md`。
 
 验证方式：
 

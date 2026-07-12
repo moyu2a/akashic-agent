@@ -57,6 +57,8 @@
 - 已完成 P10a：不改 `doc_rag` toolset 的 always-on 策略，不向 `ToolDiscoveryState` 写入意图预加载结果。
 - 已完成 P10a.1 自动化实现：强文档意图 turn 中，如果用户未显式要求源码/本地文件/仓库文件，通过 Tool Access Gateway 临时压制并执行前拦截 `shell`、`read_file`、`list_dir` 等本地文件工具，避免 Document RAG 跑偏。
 - 已完成 P10a.1 自动化实现：强文档 + 原文/证据展开意图中，`search_docs` 与 `fetch_doc_chunk` 由同一个 current-turn access plan 暴露，`tool_search` 结果会在进入模型上下文前过滤被压制工具，不能重新解锁通用文件读取。
+- 已完成 P10a.2 自动化实现：Turn Tool Boundary Manager 统一执行 access、budget、evidence-complete、ledger 和 trace，冗余 `tool_search/search_docs/fetch_doc_chunk` 会转为非执行型 `soft_stop`。
+- 已完成 P10a.3 自动化实现：Boundary-Driven Early Finalization 在 `document_rag_evidence_complete` soft stop 后切换下一次 LLM 调用为 final-only，省略工具 schema，只允许基于已有 evidence 回答。
 - 为文档问答增加早停策略：简单事实问题如果 `search_docs` snippet 已足够回答，不强制展开 chunk。
 - 在工具描述或回答约束中加入：如果结论只是从标题层级推断，必须用“从章节结构看 / 可以理解为”等弱断言表达。
 - 修复 CLI/IPC live smoke 稳定性：
@@ -186,6 +188,7 @@
 - 设计已完成审阅并修订：`soft_stop` 明确为不执行目标工具的非致命边界结果；决策合并优先级明确 core access block 高于 budget/evidence/plugin；ledger 和负向测试要求已补齐。
 - 自动化实现已完成：`TurnToolBoundaryManager` 已接入 `DefaultReasoner`，targeted suite `100 passed, 2 warnings`，full pytest `1361 passed, 3 warnings`。
 - 2026-07-12 真实 CLI/LLM smoke 已执行：P10a.2 成功把真实工具执行收敛到 `search_docs + fetch_doc_chunk`，并把冗余 `tool_search`、额外 `fetch_doc_chunk`、额外 `search_docs` 转为 `tool_boundary_soft_stop`；但仍消耗 5 轮 LLM、`react_input_peak_tokens~=73267`、`prompt_tokens=419680`，说明剩余瓶颈已从“工具执行成本”转为“soft stop 后的 LLM 轮次/token 成本”。
+- 2026-07-12 P10a.3 自动化实现已完成：`TurnCompletionController` 消费 P10a.2 的 `document_rag_evidence_complete` soft stop；`DefaultReasoner` 下一轮使用 `tools=[]`，并通过 `context_retry.turn_completion` 暴露 `action/reason/metadata`。验证：targeted suite `24 passed`，broader relevant suite `55 passed`，full pytest `1373 passed, 3 warnings`，compileall exited 0。真实 CLI/LLM smoke 待执行。
 
 候选方案：
 
@@ -194,8 +197,9 @@
 - 增加 evidence-complete 早停提示：当已取得可引用 chunk 且能回答用户问题时，优先生成最终回答，不继续展开相邻 chunk。
 - 对连续同类工具调用增加 loop guard 或成本提示，重点覆盖重复 `search_docs`、重复 `fetch_doc_chunk` 和工具已可见后的 `tool_search`。
 - 保持第一版 soft governance：重复/超预算时优先 `soft_stop`，不执行目标工具但给模型结构化提示；本地文件工具误用仍由 access policy hard block。
-- 下一步 P10a.3 候选：Boundary-Driven Early Finalization。`document_rag_evidence_complete` 或连续 `soft_stop` 后，reasoner 应进入 final-only 模式，不再提供工具 schema，只允许模型基于 ledger 中已有证据生成最终回答。
+- P10a.3 已实现第一版 Boundary-Driven Early Finalization：当前仅对 `doc_qa_with_evidence` + `document_rag_evidence_complete` 启用 final-only；no-hit、无 citation chunk、显式源码/本地文件请求不会触发。
 - 增强普通日志：`soft_stop` 应以 `[tool_boundary] soft_stop tool=... reason=...` 形式进入 agent log，避免只能通过 observe DB 判断拦截是否发生。
+- 增强普通日志已覆盖自动化：`[tool_boundary] soft_stop ...` 和 `[turn_completion] final_only ...` 均有测试断言。
 - 在 observe/e2e eval 中落地成本指标：`max_react_iterations`、`max_tool_calls`、`max_doc_rag_search_calls`、`max_doc_chunk_fetch_calls`。
 
 验证：
@@ -207,7 +211,7 @@
 - P10a.2 强文档证据展开：预期 `search_docs -> fetch_doc_chunk -> final`，目标 3-4 轮，通常不超过 4 次工具调用。
 - 回归 turn `361` 同类 prompt：不调用 `shell/read_file/list_dir` 的 P10a.1 结论保持不变，同时工具链从 6 轮/7 次工具调用下降。
 - 负向回归：no-hit、无 citation chunk、显式 broader exploration 不应被过早 evidence-complete；插件规则不能绕过 disabled/no-tool/core access block。
-- P10a.2 自动化和真实 smoke 均已验证“目标工具不会重复执行”；P10a.3 需要验证“目标工具不重复执行后，LLM 循环也能及时停止”。
+- P10a.2 自动化和真实 smoke 均已验证“目标工具不会重复执行”；P10a.3 自动化已验证 evidence-complete 后的下一轮 final-only。下一步需要真实 CLI/LLM smoke 验证“LLM 循环也能及时停止”，目标 3-4 轮。
 
 ## 暂不处理
 

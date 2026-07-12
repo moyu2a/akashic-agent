@@ -18,6 +18,13 @@
 - Real CLI/LLM smoke: completed on 2026-07-12. P10a.2 prevented redundant
   target-tool execution, but exposed the next cost layer: soft-stopped calls
   still consume extra LLM iterations and prompt tokens.
+- Follow-up P10a.3 automated implementation: completed on 2026-07-12.
+  `TurnCompletionController` now consumes `document_rag_evidence_complete`
+  soft-stop decisions and switches the next `DefaultReasoner` LLM call to
+  final-only by passing `tools=[]`. Automated verification: targeted
+  P10a.3/P10a.2 suite `24 passed in 0.19s`, broader relevant suite
+  `55 passed in 0.30s`, full pytest `1373 passed, 3 warnings in 31.89s`,
+  compileall exited 0.
 
 ## Live Smoke Follow-up
 
@@ -45,11 +52,18 @@ used 5 LLM iterations, `react_input_peak_tokens~=73267`, and
 `prompt_tokens=419680`. Therefore P10a.2 should be considered an execution
 governance success, not a complete reasoning-cost solution.
 
-Next candidate: P10a.3 Boundary-Driven Early Finalization. Once
-`document_rag_evidence_complete` is reached, or after repeated current-turn
-`soft_stop` decisions, the reasoner should switch to a final-only mode: do not
-offer tool schemas in the next call, and instruct the model to answer from the
-ledger evidence already gathered.
+P10a.3 now implements the first conservative form of Boundary-Driven Early
+Finalization. Once `document_rag_evidence_complete` is reached for
+`doc_qa_with_evidence`, the reasoner switches the next call to final-only: no
+tool schemas are offered, and the model is instructed to answer from the ledger
+evidence already gathered. This remains turn-local and does not write completion
+state into `ToolDiscoveryState` or LRU.
+
+Real CLI/LLM smoke is still required to confirm the cost shape in live provider
+behavior: expected successful target-tool executions are `search_docs` and
+`fetch_doc_chunk`, expected logs include both `[tool_boundary] soft_stop ...` and
+`[turn_completion] final_only ...`, and the target ReAct iteration count is
+3-4 rather than the P10a.2 smoke's 5 rounds.
 
 ## Background
 
@@ -77,7 +91,8 @@ boundary management after tools are already available:
 
 P10a.2 addresses this at the tool-execution boundary. It does not yet fully
 address the LLM-loop boundary: a stopped tool call still costs another model
-round-trip. That later concern belongs to P10a.3 rather than broadening P10a.2.
+round-trip. That concern is now carried by P10a.3 turn completion rather than
+broadening P10a.2.
 
 ## Design Goal
 
