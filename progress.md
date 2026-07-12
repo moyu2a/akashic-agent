@@ -98,3 +98,6 @@
   - expand `ToolCallLedger` structured fields;
   - add negative and precedence verification cases.
 - Revised the design accordingly and added the new document to `my_md/rag/README.md`; also removed stale wording that said P10a.1 real CLI smoke was still pending.
+- Created the executable P10a.2 implementation plan in `my_md/rag/21-document-rag-p10a2-implementation-plan.md`.
+  - Plan tasks: ToolCallLedger, ToolBudgetPolicy/EvidenceCompletionPolicy, TurnToolBoundaryManager facade, DefaultReasoner integration, final docs/verification/live-smoke instructions.
+  - The plan is TDD-oriented and preserves the reviewed constraints: `soft_stop` does not execute the target tool, core access blocks win, and ledger is the shared current-turn fact source.
