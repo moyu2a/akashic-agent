@@ -142,7 +142,7 @@ Document RAG 可用 + 有评估 + 有 trace
 
 下一步：
 
-- 执行下一轮成本治理：减少已可见工具下的多余 `tool_search`，并限制强文档证据场景重复 `search_docs/fetch_doc_chunk`，目标从 turn `361` 的 6 轮/7 次工具调用收敛到约 3-4 轮。
+- 执行 P10a.2 Document RAG 工具链成本治理：减少已可见工具下的多余 `tool_search`，并限制强文档证据场景重复 `search_docs/fetch_doc_chunk`，目标从 turn `361` 的 6 轮/7 次工具调用收敛到约 3-4 轮；设计见 `my_md/rag/20-document-rag-p10a2-tool-boundary-design.md`。
 - CLI/IPC smoke 稳定性已完成自动化和真实 CLI 重连验证：稳定 CLI session id、发送给 CLI/TUI 的 `tool_chain` metadata 投影为 `tool_summary`、`AKIP2` frame、payload 治理和 workspace 文件日志均已落地；默认 CLI 重启会继承之前 session。
 - 继续执行 P10a 验收：用真实 CLI/LLM smoke 验证简单文档问题、原文证据问题和 memory-after-doc-LRU 场景的实际工具链。
 - 推进 P10b：构建 retrieval-only 和 agent e2e 评估，覆盖 Recall@k、工具路径、引用是否存在、答案是否忠实、无证据问题是否拒答、`tool_search` 避免率和 ReAct 轮次。

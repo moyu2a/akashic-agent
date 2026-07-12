@@ -87,3 +87,8 @@
   - no `shell/read_file/list_dir`, `error=NULL`, CLI stayed connected.
   - conclusion: P10a.1 gateway live smoke passed for the local-file-tool drift problem; remaining issue is cost, with an extra `tool_search` confirmation and repeated `search_docs/fetch_doc_chunk` (`react_iteration_count=6`, `react_input_peak_tokens~=68857`).
 - Updated governance/RAG/STAR docs to reflect that P10a.1 is live-smoke verified for tool drift, and that the next item is tool-chain cost governance.
+- Continued documentation cleanup for the current remaining issue:
+  - recorded RAG-006 P10a.2 as the active Document RAG tool-chain cost governance problem.
+  - clarified that turn `361` proves P10a.1 access control worked, while P10a.2 must handle redundant `tool_search`, repeated `search_docs/fetch_doc_chunk`, and evidence-complete early stop.
+  - updated STAR CASE-003 because the evolution now has a new boundary: from `tool_search` discovery, to P10a preload, to P10a.1 Tool Access Gateway, then to P10a.2 budget/termination governance.
+- Wrote the formal P10a.2 design in `my_md/rag/20-document-rag-p10a2-tool-boundary-design.md`: Turn Tool Boundary Manager with access, budget, evidence completion, ledger, and trace responsibilities.

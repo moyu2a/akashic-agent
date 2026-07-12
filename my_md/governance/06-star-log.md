@@ -369,6 +369,7 @@ STAR 复盘：
 - 因此后续演进方向调整为 Tool Access Gateway：把“当前 turn 哪些工具可见、哪些工具可被 tool_search 解锁、哪些工具即使被调用也不得执行、工具结果如何改变后续访问”收束到一个 core policy boundary。它不是普通插件，也不重写 AgentLoop；第一版只窄接入 `DefaultReasoner` 的 prompt schema、`tool_search` unlock 和工具执行前后。
 - Gateway 的定位是 access control plane，插件仍作为 behavior extension plane。未来插件可以贡献 `ToolAccessPolicy`，但不得绕过 `disabled_tools`、不得直接改 LRU、不得直接改 LLM message list 或替换 `ToolRegistry.execute`。
 - 2026-07-11 第一版 Tool Access Gateway 已实现：新增 `agent/policies/tool_access.py`，把 P10a turn-local preload 和 P10a.1 本地文件工具治理统一为 `ToolAccessPlan`；`DefaultReasoner` 只在工具 schema 计算、`tool_search` 结果过滤/解锁合并、执行前 gate、工具结果观察四个窄点接入。意图预加载仍不写入 `ToolDiscoveryState` / LRU，always-on 策略不变。
+- turn `361` 证明 Tool Access Gateway 已解决强文档证据请求误用本地文件工具的问题，但也暴露出下一层边界：access control 只能回答“能不能用这个工具”，不能回答“还要不要继续调用工具”。因此 RAG-006 的下一步应命名为 P10a.2 成本治理，聚焦预算、重复调用和 evidence-complete 早停。
 
 排查路径：
 
@@ -389,6 +390,7 @@ STAR 复盘：
 - RAG-006：采用强文档意图的 turn-local preload，而不是把 `search_docs` 改成 always-on；强文档意图当前 turn 预加载 `search_docs`，强文档意图且需要原文/证据展开时再预加载 `fetch_doc_chunk`；强记忆/session 意图且无强文档意图时，在当前 turn 临时压制 `search_docs` / `fetch_doc_chunk` 的 LRU 残留。
 - RAG-006 P10a.1：从“只控制工具可见性”升级为 Tool Access Gateway，统一治理 prompt 可见性、`tool_search` 解锁、执行前拦截和 terminal 结果后的 fallback 阻断。
 - RAG-006 P10a.1 第一版实现：强文档证据请求未显式要求源码/本地文件时，`shell/read_file/list_dir` 会从 prompt schema 中被压制，`tool_search` 返回给模型前会过滤这些工具，模型绕过 schema 直接调用时会被执行前 gate 阻断；显式源码/路径请求保留本地文件工具。
+- RAG-006 P10a.2：在 P10a.1 已验证不跑偏到本地文件工具后，继续治理 Document RAG 工具链成本；目标是减少已可见工具下的多余 `tool_search`，限制重复 `search_docs/fetch_doc_chunk`，并在证据足够时早停。
 - RAG-007：回答约束中区分“文档明确写明”和“基于标题结构推断”；评估中增加 `claim_evidence_alignment`。
 - RAG-005 第一阶段已执行：`doc_rag_disabled` 返回 `terminal_scope=document_rag`、`fallback_allowed=false`、`recommended_action=answer_doc_rag_disabled`、`instructions` 和 `user_message`；工具描述明确不要用本地文件读取替代 Document RAG。
 
@@ -417,6 +419,8 @@ STAR 复盘：
 - 2026-07-11 已形成 Tool Access Gateway 设计：将散落的工具可用性判断收束为 current-turn `ToolAccessPlan`，统一输出 `visible_add`、`visible_suppress`、`tool_search_block` 和 `execution_block`；第一阶段服务 RAG-006 P10a.1，不引入持久 RBAC，不替代插件系统，不重写 AgentLoop。
 - 2026-07-11 Tool Access Gateway 第一版代码已完成并通过自动化回归：纯策略测试覆盖强文档压制、显式源码放行、memory-after-doc-LRU、`tool_search` 过滤、执行前拦截和 terminal fallback 阻断；reasoner 集成测试覆盖 schema 压制、过滤后 payload、blocked call 不执行/不计入 `tools_used`、显式源码放行。
 - 2026-07-11 21:01 真实 CLI/LLM smoke 验证 Tool Access Gateway 的关键目标：turn `361` 强文档 + 原文 chunk 展开 prompt 未再调用 `shell/read_file/list_dir`，实际链路为 `tool_search -> search_docs -> fetch_doc_chunk -> fetch_doc_chunk -> fetch_doc_chunk -> search_docs -> fetch_doc_chunk`，`error=NULL`，CLI 未断连。问题从“工具可用性判断错误”收敛为“工具链成本偏高”。
+- 2026-07-11 P10a.2 已登记为下一阶段：turn `361` 的剩余问题不是 access 错误，而是预算和终止条件不足；后续应把目标从“不用错工具”提升为“少用且及时停止”。
+- 2026-07-12 P10a.2 正式设计已形成：`my_md/rag/20-document-rag-p10a2-tool-boundary-design.md`，命名为 Turn Tool Boundary Manager，将 access、budget、evidence completion、ledger 和 trace 收束到 current-turn core policy boundary。
 
 验证方式：
 
@@ -436,7 +440,8 @@ STAR 复盘：
 - 是否需要在 citation 插件中做 claim/evidence 自动校验，还是先放在评估层处理。
 - `fetch_doc_chunk` 的预加载条件已按 P10a 保守实现，仍需真实 CLI/LLM smoke 观察是否过宽或过窄。
 - RAG-006 memory-after-doc-LRU 自动化测试已新增；仍需真实 CLI/LLM smoke 验证同 session 行为。
-- RAG-006 P10a.1：Tool Access Gateway 自动化实现和真实 CLI/LLM smoke 已验证强文档证据 case 不再跑偏到本地文件工具；memory-after-doc-LRU 同 session smoke 也未误走 Document RAG。下一步是成本治理：减少多余 `tool_search` 和重复 `search_docs/fetch_doc_chunk`。
+- RAG-006 P10a.1：Tool Access Gateway 自动化实现和真实 CLI/LLM smoke 已验证强文档证据 case 不再跑偏到本地文件工具；memory-after-doc-LRU 同 session smoke 也未误走 Document RAG。
+- RAG-006 P10a.2：当前主要遗留问题是成本治理。turn `361` 仍有多余 `tool_search` 和重复 `search_docs/fetch_doc_chunk`，需要用 turn-local 预算、loop guard 和 evidence-complete 早停收敛到约 3-4 轮。
 - CLI-001：transport/session 侧已由自动化和真实 CLI 重连 smoke 验证；继续常规观察即可。
 - 如果 disabled live smoke 仍 fallback 到 `read_file/list_dir/shell`，需要第二阶段让工具执行器或 AgentLoop 消费 `fallback_allowed=false`。
 - 如果后续只剩“是否能主动开启配置”的话术问题，优先补充工具返回字段和 `user_message`，明确 `restart_required=true`、`can_self_enable=false`，再做一次 disabled live smoke。

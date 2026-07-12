@@ -86,6 +86,7 @@ uv run --with pytest --with pytest-asyncio pytest \
 - 2026-07-11 16:32 用户真实 CLI 测试确认：默认重启 CLI 会继承之前 session。CLI-001 的稳定 session 路径已完成真实界面验证；P10a/P10a.1 后续不再把 CLI session 断连作为主阻塞项。
 - 2026-07-11 P10a.1 Tool Access Gateway 已完成自动化实现：`agent/policies/tool_access.py` 统一输出 current-turn `visible_add`、`visible_suppress`、`tool_search_block`、`execution_block`；`DefaultReasoner` 接入初始 schema 可见性、`tool_search` 结果过滤与解锁合并、执行前 gate、工具结果观察。强文档证据请求未显式要求源码/本地文件时会压制并阻断 `shell/read_file/list_dir`；显式源码/路径请求仍放行。真实 CLI/LLM smoke 待执行。
 - 2026-07-11 21:01 真实 CLI/LLM smoke 已验证 P10a.1 关键目标：turn `361` 对强文档 + 原文 chunk 展开 prompt 走 `tool_search -> search_docs -> fetch_doc_chunk -> fetch_doc_chunk -> fetch_doc_chunk -> search_docs -> fetch_doc_chunk`，未调用 `shell/read_file/list_dir`，`error=NULL`，CLI 未断连。该结果证明 Tool Access Gateway 已阻断本地文件工具跑偏。剩余问题转为成本治理：仍存在多余 `tool_search` 确认和重复 `search_docs/fetch_doc_chunk`，`react_iteration_count=6`，`react_input_peak_tokens~=68857`。
+- P10a.2 已登记为下一步：治理 Document RAG 工具链成本，不再把本地文件工具跑偏作为当前主问题。目标是减少已可见工具下的 `tool_search` 确认，限制重复 `search_docs/fetch_doc_chunk`，并在 evidence complete 时早停；强文档证据场景目标收敛到约 3-4 轮、通常不超过 4 次工具调用。正式设计见 `my_md/rag/20-document-rag-p10a2-tool-boundary-design.md`。
 
 ## 审阅结论
 

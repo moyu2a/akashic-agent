@@ -173,6 +173,24 @@ P10a live smoke 新证据：
   - 未调用 `shell/read_file/list_dir`，`error=NULL`，CLI 未断连。
   - 结论：P10a.1 的“强文档证据 turn 不跑偏到本地文件工具”已由真实 CLI smoke 证明；剩余问题转为成本治理：仍有一次多余 `tool_search` 确认可用工具，以及多次 `search_docs/fetch_doc_chunk`，`react_iteration_count=6`，`react_input_peak_tokens~=68857`。
 
+P10a.2 当前剩余问题：Document RAG 工具链成本治理。
+
+- 问题定义：Tool Access Gateway 已把“错误工具可用性”收束住，但还没有治理“已可用工具是否还需要继续搜索、继续展开、继续确认”的成本边界。
+- 直接证据：turn `361` 已无 `shell/read_file/list_dir`，但仍出现 `tool_search -> search_docs -> fetch_doc_chunk -> fetch_doc_chunk -> fetch_doc_chunk -> search_docs -> fetch_doc_chunk`，共 6 轮 ReAct、7 次工具调用，`react_input_peak_tokens~=68857`。
+- 目标链路：
+  - 简单文档事实：`search_docs -> final`，目标 2-3 轮。
+  - 强文档 + 原文/证据展开：`search_docs -> fetch_doc_chunk -> final`，目标 3-4 轮，通常不超过 4 次工具调用。
+- 非目标：
+  - 不把 `search_docs` / `fetch_doc_chunk` 改成 always-on。
+  - 不取消 Tool Access Gateway。
+  - 不阻断用户显式要求源码、路径、本地文件时的本地文件工具。
+  - 不把成本治理状态写入 `ToolDiscoveryState` / LRU。
+- 候选修复方向：
+  - 当 `search_docs` / `fetch_doc_chunk` 已在当前 turn 可见时，减少或提示避免 `tool_search(select:...)` 确认轮次。
+  - 增加 turn-local Document RAG 工具预算，限制重复 `search_docs` 和重复 `fetch_doc_chunk`。
+  - 在已取得足够 citation/chunk 证据后给模型早停提示，避免继续展开相邻 chunk。
+  - 在 e2e 指标中记录并断言 `max_react_iterations`、`max_tool_calls`、`max_doc_rag_search_calls`、`max_doc_chunk_fetch_calls`。
+
 修复方向：
 
 - 已完成：新增 `agent/policies/doc_rag_intent.py`，实现纯规则 `decide_doc_rag_preload(text)`。
@@ -182,11 +200,12 @@ P10a live smoke 新证据：
 - 已完成：强记忆/session 意图且无强文档意图时，当前 turn 临时从 effective preloaded 中移除 `search_docs` / `fetch_doc_chunk`，避免 LRU 残留污染。
 - 已完成 P10a.1 自动化实现：强文档意图 turn 中，若用户没有明确要求“源码/本地文件/仓库文件”，通过 Tool Access Gateway 临时压制并执行前拦截 `shell`、`read_file`、`list_dir`，避免 Document RAG 任务跑偏。
 - 已完成 P10a.1 自动化实现：强文档 + 原文/证据展开意图时，`search_docs` 与 `fetch_doc_chunk` 进入当前 turn 可见工具；`tool_search` 不再能重新解锁被压制的本地文件工具。
-- 待补成本治理：对文档问答链路增加工具预算或早停规则；如果 `search_docs` snippet 已足够回答简单事实问题，则不强制 `fetch_doc_chunk`；强文档证据场景应限制重复 `search_docs/fetch_doc_chunk`。
-- 待补成本治理：减少当前工具已可见时的多余 `tool_search(select:search_docs,fetch_doc_chunk)` 确认轮次。
+- 待补 P10a.2 成本治理：对文档问答链路增加工具预算或早停规则；如果 `search_docs` snippet 已足够回答简单事实问题，则不强制 `fetch_doc_chunk`；强文档证据场景应限制重复 `search_docs/fetch_doc_chunk`。
+- 待补 P10a.2 成本治理：减少当前工具已可见时的多余 `tool_search(select:search_docs,fetch_doc_chunk)` 确认轮次。
 - 增加回归测试：文档问答 happy path 不应先出现“工具未加载”失败。
 - 在评估集中增加 `max_react_iterations`、`max_tool_calls`、`expected_tools`、`forbidden_tools` 指标；强文档证据 case 应把 `shell/read_file/list_dir` 列为 forbidden，除非用户显式要求源码。
 - 计划详见：`my_md/rag/19-document-rag-p10-intent-preload-plan.md`。
+- P10a.2 设计详见：`my_md/rag/20-document-rag-p10a2-tool-boundary-design.md`。
 
 验证方式：
 
