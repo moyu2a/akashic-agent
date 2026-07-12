@@ -11,6 +11,10 @@ from typing import TYPE_CHECKING, Any, Awaitable, Callable, cast
 import agent.core.passive_support as support
 from agent.policies.tool_access import ToolAccessContext
 from agent.policies.tool_boundary import ToolBoundaryContext, TurnToolBoundaryManager
+from agent.policies.turn_completion import (
+    TurnCompletionController,
+    TurnCompletionDecision,
+)
 from agent.core.runtime_support import ToolDiscoveryState
 from agent.core.types import (
     ContextBundle,
@@ -125,6 +129,18 @@ def _is_tool_loop_guard_denial(exec_result: object) -> bool:
         and str(getattr(item, "reason", "")).startswith("tool_loop_guard:")
         for item in traces
     )
+
+
+def _completion_trace(
+    decision: TurnCompletionDecision | None,
+) -> dict[str, object] | None:
+    if decision is None:
+        return None
+    return {
+        "action": decision.action,
+        "reason": decision.reason,
+        "metadata": dict(decision.metadata),
+    }
 
 
 def _disabled_tools_from_msg(msg: object) -> set[str]:
@@ -641,6 +657,7 @@ class DefaultReasoner(Reasoner):
         )
         self._tool_executor = ToolExecutor([])
         self._tool_boundary = TurnToolBoundaryManager()
+        self._turn_completion = TurnCompletionController()
         self._stream_sink_factory: Callable[
             [object], Callable[[dict[str, str] | str], Awaitable[None]] | None
         ] | None = None
@@ -904,6 +921,8 @@ class DefaultReasoner(Reasoner):
                         "tool_access",
                         retry_trace.get("tool_access", {}),
                     )
+                if result.metadata.get("turn_completion"):
+                    retry_trace["turn_completion"] = result.metadata["turn_completion"]
                 return TurnRunResult(
                     reply=result.reply,
                     tools_used=tools_used,
@@ -979,6 +998,8 @@ class DefaultReasoner(Reasoner):
         react_cache_hit_tokens = 0
         react_cache_seen = False
         disabled = set(disabled_tools or set())
+        turn_completion_decision: TurnCompletionDecision | None = None
+        final_only_next_call = False
         if self._tool_search_enabled:
             always_on = self._tools.get_always_on_names()
             if initial_visible_names is not None:
@@ -1045,6 +1066,17 @@ class DefaultReasoner(Reasoner):
                             boundary_hint,
                         )
                     )
+            if final_only_next_call and turn_completion_decision is not None:
+                messages.append(
+                    support.build_context_hint_message(
+                        "turn_completion",
+                        turn_completion_decision.model_hint,
+                    )
+                )
+                logger.info(
+                    "[turn_completion] final_only reason=%s",
+                    turn_completion_decision.reason,
+                )
             # 4. 调用 LLM，带上当前可见工具 schema。
             react_input_samples.append(step_ctx.input_tokens_estimate)
             logger.info(
@@ -1058,9 +1090,14 @@ class DefaultReasoner(Reasoner):
                 schema_names = self._tools.get_registered_names() - disabled
             elif schema_names is not None:
                 schema_names -= disabled
+            tools_for_call = (
+                []
+                if final_only_next_call
+                else self._tools.get_schemas(names=schema_names)
+            )
             response = await self._llm.provider.chat(
                 messages=messages,
-                tools=self._tools.get_schemas(names=schema_names),
+                tools=tools_for_call,
                 model=self._llm_config.model,
                 max_tokens=self._llm_config.max_tokens,
                 tool_choice="auto",
@@ -1072,6 +1109,36 @@ class DefaultReasoner(Reasoner):
                 react_cache_seen = True
                 react_cache_prompt_tokens += response.cache_prompt_tokens
                 react_cache_hit_tokens += response.cache_hit_tokens or 0
+
+            if final_only_next_call and response.tool_calls:
+                logger.info(
+                    "[turn_completion] final_only ignored tool calls: %s",
+                    [tc.name for tc in response.tool_calls],
+                )
+                summary = await self._summarize_incomplete_progress(
+                    messages,
+                    reason="final_only_tool_call",
+                    iteration=iteration + 1,
+                    tools_used=tools_used,
+                )
+                return self._build_result(
+                    reply=f"final_only_tool_call: {summary}",
+                    tools_used=tools_used,
+                    tool_chain=tool_chain,
+                    visible_names=visible_names,
+                    thinking=None,
+                    streamed=streamed,
+                    react_input_samples=react_input_samples,
+                    cache_prompt_tokens=react_cache_prompt_tokens,
+                    cache_hit_tokens=react_cache_hit_tokens,
+                    cache_seen=react_cache_seen,
+                    tool_boundary_trace=(
+                        self._tool_boundary.trace(tool_boundary_context)
+                        if tool_boundary_context is not None
+                        else None
+                    ),
+                    turn_completion_trace=_completion_trace(turn_completion_decision),
+                )
 
             # 5. 模型返回 tool_calls 时，进入工具执行分支。
             if response.tool_calls:
@@ -1184,6 +1251,22 @@ class DefaultReasoner(Reasoner):
                                     "result": result,
                                 }
                             )
+                            if boundary_decision.action == "soft_stop":
+                                turn_completion_decision = (
+                                    self._turn_completion.evaluate(
+                                        intent=tool_boundary_context.intent,
+                                        ledger=tool_boundary_context.ledger,
+                                        boundary_decisions=self._tool_boundary.recent_decisions(
+                                            tool_boundary_context
+                                        ),
+                                        local_source_allowed=(
+                                            tool_boundary_context.access_plan.reason
+                                            == "doc_rag_allows_explicit_local_files"
+                                        ),
+                                    )
+                                )
+                                if turn_completion_decision.action == "final_only":
+                                    final_only_next_call = True
                             continue
                     # 6.1 deferred 工具未解锁时，先回填 select: 引导错误。
                     if visible_names is not None and tool_call.name not in visible_names:
@@ -1690,6 +1773,7 @@ class DefaultReasoner(Reasoner):
                     if tool_boundary_context is not None
                     else None
                 ),
+                turn_completion_trace=_completion_trace(turn_completion_decision),
             )
 
         # 9. 达到最大迭代次数后，生成不完整进展总结。
@@ -1720,6 +1804,7 @@ class DefaultReasoner(Reasoner):
                 if tool_boundary_context is not None
                 else None
             ),
+            turn_completion_trace=_completion_trace(turn_completion_decision),
         )
 
     async def _observe_tool_call_started(
@@ -1836,6 +1921,7 @@ class DefaultReasoner(Reasoner):
         cache_hit_tokens: int,
         cache_seen: bool,
         tool_boundary_trace: dict[str, object] | None = None,
+        turn_completion_trace: dict[str, object] | None = None,
     ) -> ReasonerResult:
         # 1. 先把 tool_chain 扁平化成 invocations。
         invocations: list[LLMToolCall] = []
@@ -1879,6 +1965,8 @@ class DefaultReasoner(Reasoner):
         }
         if tool_boundary_trace is not None:
             metadata["tool_boundary"] = tool_boundary_trace
+        if turn_completion_trace is not None:
+            metadata["turn_completion"] = turn_completion_trace
 
         # 3. 最后返回标准 ReasonerResult。
         return ReasonerResult(
