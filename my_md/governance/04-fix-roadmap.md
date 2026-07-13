@@ -216,6 +216,10 @@
   - 计划文档：`docs/superpowers/plans/2026-07-13-turn-trace-query.md`。
   - 推荐实现顺序：core trace query service -> observe slim trace 元数据保真与非 LRU 合同 -> `inspect_turn_trace` 工具适配器 -> ToolAccessGateway 可见性与 protected `_session_key` 上下文 -> turn `370` 风格 E2E 回归。
   - 验收重点：工具历史问题必须通过当前 session 的 `observe.turns.tool_chain_json` / `tool_calls` 回源；被 boundary block/soft-stop/batch-skip 的调用不能算真实执行；混合 doc+tool-history prompt 不能重新暴露 stale `search_docs/fetch_doc_chunk`。
+- 2026-07-13 结构化 Turn Trace Query 已完成自动化实现：
+  - 已落地 core service、deferred `inspect_turn_trace`、observe slim metadata preservation、protected `_session_key` 绑定和非 LRU 合同。
+  - 已新增 turn `370` 风格 E2E 回归：真实 `InspectTurnTraceTool` 读取临时 observe DB，第二个问题真实工具链为 `read_file x3` 时，最终回答不再从上下文误报 Document RAG 工具。
+  - 下一步只剩真实 CLI/LLM smoke：按 `turn 367-370` 同类四轮流程重跑，确认第四轮工具链为 `inspect_turn_trace -> final`，且不会调用 `search_docs/fetch_doc_chunk`。
 - 增强普通日志：`soft_stop` 应以 `[tool_boundary] soft_stop tool=... reason=...` 形式进入 agent log，避免只能通过 observe DB 判断拦截是否发生。
 - 增强普通日志已覆盖自动化：`[tool_boundary] soft_stop ...` 和 `[turn_completion] final_only ...` 均有测试断言。
 - 在 observe/e2e eval 中落地成本指标：`max_react_iterations`、`max_tool_calls`、`max_doc_rag_search_calls`、`max_doc_chunk_fetch_calls`。

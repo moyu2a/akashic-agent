@@ -273,7 +273,13 @@ P10a.2 当前剩余问题：Document RAG 工具链成本治理。
   - 计划文档：`docs/superpowers/plans/2026-07-13-turn-trace-query.md`（`docs/` 被 `.gitignore` 忽略，提交时需 `git add -f`）。
   - 方案边界：新增 core read-only `TurnTraceQueryService`，通过 deferred `inspect_turn_trace` 工具暴露给 session/meta/tool-history turn；不改 AgentLoop，不 always-on，不写入 `ToolDiscoveryState` / LRU。
   - 审阅后补齐的关键约束：真实 runtime 阻断状态 `blocked_by_tool_boundary` / `soft_stopped_by_tool_boundary` 必须视为 skipped；`tool_blocked_by_doc_rag_policy` 不能计入真实执行工具；混合提示“刚才项目文档那个问题用了哪些工具？”中 tool-history/session-meta intent 必须优先于 doc intent。
-  - 下一步：按计划实现 Task 1-5，并用 turn `370` 同类 CLI smoke 验证回答是否改为读取结构化 trace，而不是从自然语言上下文推断。
+- 2026-07-13 结构化 turn trace 查询已完成自动化实现：
+  - 新增 `agent/tracing/turn_trace_query.py` 和 deferred `agent/tools/turn_trace.py::InspectTurnTraceTool`；bootstrap 注册为非 always-on 工具。
+  - `ToolAccessGateway` 已在 session/meta/tool-history turn 暴露 `inspect_turn_trace`，并压制 stale `search_docs/fetch_doc_chunk`；混合 doc+tool-history prompt 优先 trace 查询。
+  - protected `_session_key` 已由工具上下文注入并在 `ToolRegistry.execute()` 中覆盖模型参数；`inspect_turn_trace` 不暴露 `session_key/_session_key` schema，不写入 LRU。
+  - Observe slim trace 保留 `status`、`boundary_reason`、`boundary_action`、`error_code`，以便区分真实执行与 skipped/blocked 调用。
+  - 自动化验证：Turn Trace 相关 suite `71 passed`；full pytest `1411 passed, 3 warnings`；compileall 通过。
+  - 待真实 CLI/LLM smoke：重跑 turn `370` 同类问题，确认回答改为读取结构化 trace，并且不调用 `search_docs/fetch_doc_chunk`。
 - 增加回归测试：文档问答 happy path 不应先出现“工具未加载”失败。
 - 在评估集中增加 `max_react_iterations`、`max_tool_calls`、`expected_tools`、`forbidden_tools` 指标；强文档证据 case 应把 `shell/read_file/list_dir` 列为 forbidden，除非用户显式要求源码。
 - 计划详见：`my_md/rag/19-document-rag-p10-intent-preload-plan.md`。

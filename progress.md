@@ -188,3 +188,18 @@
   - non-goals/constraints: no AgentLoop rewrite, not always-on, no LRU writes, no model-controlled `session_key`, protected `_session_key` only from registry context;
   - review fixes added: real runtime blocked statuses (`blocked_by_tool_boundary`, `soft_stopped_by_tool_boundary`, `tool_blocked_by_doc_rag_policy`) are skipped rather than counted as executed tools; mixed doc+tool-history prompt prioritizes trace lookup and suppresses stale Document RAG tools;
   - next implementation order: query service, observe trace metadata preservation, trace tool adapter, context/gateway integration, E2E regression for turn `370`-style tool-history answers.
+- Implemented Turn Trace Query automated path:
+  - added `agent/tracing/turn_trace_query.py` with current-session selectors, real/skipped tool normalization, and candidate returns for ambiguous selectors;
+  - added `agent/tools/turn_trace.py::InspectTurnTraceTool` and registered it in `bootstrap/tools.py` as deferred read-only, non always-on;
+  - preserved observe slim trace metadata (`status`, `boundary_reason`, `boundary_action`, `error_code`) and excluded `inspect_turn_trace` from ToolDiscoveryState LRU;
+  - added protected `_session_key` context propagation through lifecycle/direct handler paths and made protected registry context override model arguments;
+  - extended ToolAccessGateway so session/meta/tool-history turns expose `inspect_turn_trace`, suppress stale Document RAG tools, and make tool-history intent win over mixed doc intent;
+  - added E2E regression for turn `370` style failure using a real temp observe DB and real `InspectTurnTraceTool`.
+- Turn Trace Query verification:
+  - relevant suite: `71 passed in 1.81s`;
+  - full pytest: `1411 passed, 3 warnings in 35.71s`;
+  - compileall passed for `agent/tracing`, `agent/tools/turn_trace.py`, `agent/tools/registry.py`, `agent/core/runtime_support.py`, `agent/policies/tool_access.py`, `plugins/observe/plugin.py`, and new trace tests.
+- Remaining manual smoke:
+  - restart/run CLI and replay the four-turn pattern ending with `刚才第二个问题你用了哪些工具？`;
+  - expected fourth-turn tool chain: `inspect_turn_trace -> final`;
+  - forbidden in fourth turn: `search_docs`, `fetch_doc_chunk`, and natural-language-only `search_messages` inference for tool facts.

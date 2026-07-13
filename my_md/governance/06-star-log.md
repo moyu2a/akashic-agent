@@ -484,6 +484,7 @@ STAR 复盘：
   - turn `370` “刚才第二个问题用了哪些工具”只执行 `search_messages`，没有被 `search_docs/fetch_doc_chunk` 的 LRU 残留污染；但最终回答把 turn `369` 的工具链说成 `search_docs + fetch_doc_chunk + read_file x3`，与 observe/session 记录的 `read_file x3` 不一致。
 - 2026-07-13 新暴露的 session/meta 边界：当用户问“上一轮/第二个问题用了哪些工具”时，普通 `search_messages` 和模型上下文只能提供自然语言历史，不能保证工具链事实准确。这个问题不属于 Document RAG 成本边界，而属于结构化 turn/tool trace 回源边界。后续应提供或扩展一个只读 trace 查询能力，按当前 session、turn id/相对轮次返回真实 `tool_chain_json` / `tools_used`，并要求模型在回答工具历史时以结构化 trace 为准。
 - 2026-07-13 已完成 Turn Trace Query 实现计划审阅：计划采用 core service + deferred tool adapter + ToolAccessGateway visibility，而不是纯插件或 AgentLoop 改造。核心约束包括：`inspect_turn_trace` 不 always-on、不进 LRU、不暴露 model-controllable `session_key`；protected `_session_key` 由 registry context 注入；`blocked_by_tool_boundary`、`soft_stopped_by_tool_boundary`、`react_boundary_batch_skip` 等非真实执行调用必须从真实工具统计中排除；session/meta/tool-history intent 在混合 doc prompt 中优先，避免“刚才项目文档那个问题用了哪些工具？”重新误走 Document RAG。
+- 2026-07-13 Turn Trace Query 自动化实现已完成：新增 `TurnTraceQueryService`、`InspectTurnTraceTool`、protected `_session_key` registry merge、observe slim metadata preservation、ToolAccessGateway trace visibility 和 turn `370` 风格 E2E 回归。验证结果：相关 Turn Trace suite `71 passed`，full pytest `1411 passed, 3 warnings`，compileall 通过。真实 CLI/LLM smoke 仍待重跑，用于确认真实模型会在第四轮选择 `inspect_turn_trace -> final`。
 
 可提炼成果：
 
@@ -496,7 +497,7 @@ STAR 复盘：
 | soft stop 后仍继续消耗 LLM 轮次/token | execution boundary 只能阻止工具执行，不能终止 ReAct 循环 | P10a.3 Turn Completion：`document_rag_evidence_complete` 后下一轮 final-only，`tools=[]`，不写 LRU | turn `364` ReAct 从 turn `362` 的 5 轮降到 3 轮；`prompt_tokens` 从 `419680` 降到 `265562`，约下降 36.7% |
 | citation 来源真实但回答可能说过头 | citation validator 只校验来源，不校验 claim/evidence 对齐；final-only 未区分 fetched chunk 和 search snippet | P10a.4a Evidence Contract：区分 fetched original text、retrieval snippet 和 soft-stopped candidate，并注入 final-only 回答约束 | turn `365/366` 最终回答不再把未真实 fetch 的证据称为“原文展开”；full pytest `1376 passed` |
 | 同一 batch 仍生成多余 `fetch_doc_chunk` | boundary 是执行时拦截，不能阻止模型在同一 assistant message 中生成多个 tool call | P10a.4b Bounded ReAct / Batch Boundary：after-result proactive final-only + same-batch `batch_skipped_by_react_boundary`，并保持 provider tool-result 协议合法 | 自动化验证 `48 passed`；full pytest `1391 passed`；真实 smoke turn `367/368` 验证链路收敛为 `search_docs -> final` 和 `search_docs -> fetch_doc_chunk -> final` |
-| 工具历史自报不准确 | session/meta 问题依赖普通消息检索和模型上下文推断，未读取结构化 turn/tool trace | 新增结构化 trace 查询能力：core `TurnTraceQueryService` 读取当前 session observe trace，经 deferred `inspect_turn_trace` 暴露；ToolAccessGateway 只在 tool-history/session-meta turn 显示它，并压制 stale RAG LRU | turn `370` 暴露：真实 turn `369` 为 `read_file x3`，但回答误报 `search_docs + fetch_doc_chunk + read_file x3`；实现计划 `docs/superpowers/plans/2026-07-13-turn-trace-query.md` 已审阅到可执行状态 |
+| 工具历史自报不准确 | session/meta 问题依赖普通消息检索和模型上下文推断，未读取结构化 turn/tool trace | 新增结构化 trace 查询能力：core `TurnTraceQueryService` 读取当前 session observe trace，经 deferred `inspect_turn_trace` 暴露；ToolAccessGateway 只在 tool-history/session-meta turn 显示它，并压制 stale RAG LRU | 自动化实现完成；turn `370` 风格 E2E 回归覆盖真实 trace 回源，full pytest `1411 passed`；真实 CLI smoke 待重跑 |
 
 可复用结构：
 
