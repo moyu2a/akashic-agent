@@ -164,11 +164,7 @@ def _to_memory_write_trace(event: MemoryWritten):
 
 def _slim_tool_calls(tool_chain: list[dict[str, object]]) -> list[dict[str, str]]:
     return [
-        {
-            "name": str(call.get("name", "")),
-            "args": str(call.get("arguments", ""))[:300],
-            "result": str(call.get("result", ""))[:500],
-        }
+        _slim_call(call, args_limit=300, result_limit=500)
         for group in tool_chain
         for call in _group_calls(group)
     ]
@@ -179,16 +175,44 @@ def _slim_tool_chain(tool_chain: list[dict[str, object]]) -> list[dict[str, obje
         {
             "text": str(group.get("text") or ""),
             "calls": [
-                {
-                    "name": str(call.get("name", "")),
-                    "args": str(call.get("arguments", ""))[:800],
-                    "result": str(call.get("result", ""))[:1200],
-                }
+                _slim_call(call, args_limit=800, result_limit=1200)
                 for call in _group_calls(group)
             ],
         }
         for group in tool_chain
     ]
+
+
+def _tool_error_code(call: dict[str, object]) -> str:
+    direct = call.get("error_code")
+    if isinstance(direct, str) and direct:
+        return direct
+    try:
+        payload = json.loads(str(call.get("result", "") or ""))
+    except (TypeError, ValueError):
+        return ""
+    if isinstance(payload, dict):
+        value = payload.get("error_code")
+        return value if isinstance(value, str) else ""
+    return ""
+
+
+def _slim_call(
+    call: dict[str, object], *, args_limit: int, result_limit: int
+) -> dict[str, str]:
+    out = {
+        "name": str(call.get("name", "")),
+        "args": str(call.get("arguments", ""))[:args_limit],
+        "result": str(call.get("result", ""))[:result_limit],
+    }
+    for key in ("status", "boundary_reason", "boundary_action"):
+        value = call.get(key)
+        if isinstance(value, str) and value:
+            out[key] = value
+    error_code = _tool_error_code(call)
+    if error_code:
+        out["error_code"] = error_code
+    return out
 
 
 def _group_calls(group: dict[str, object]) -> list[dict[str, object]]:

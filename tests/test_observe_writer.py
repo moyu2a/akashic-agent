@@ -14,6 +14,7 @@ _observe_events = importlib.import_module("plugins.observe.events")
 _observe_migration = importlib.import_module("plugins.observe.migrate_legacy_rag")
 _observe_retention = importlib.import_module("plugins.observe.retention")
 _observe_writer = importlib.import_module("plugins.observe.writer")
+_observe_plugin = importlib.import_module("plugins.observe.plugin")
 
 open_db = cast(Callable[[Path], sqlite3.Connection], getattr(_observe_db, "open_db"))
 RagHitLog = getattr(_observe_events, "RagHitLog")
@@ -23,6 +24,37 @@ migrate_legacy_rag_tables = getattr(_observe_migration, "migrate_legacy_rag_tabl
 _run_cleanup = cast(Callable[[Path], None], getattr(_observe_retention, "_run_cleanup"))
 _write_turn = getattr(_observe_writer, "_write_turn")
 TraceWriter = getattr(_observe_writer, "TraceWriter")
+_slim_tool_calls = getattr(_observe_plugin, "_slim_tool_calls")
+_slim_tool_chain = getattr(_observe_plugin, "_slim_tool_chain")
+
+
+def test_observe_slim_trace_preserves_boundary_metadata() -> None:
+    tool_chain = [
+        {
+            "text": "",
+            "calls": [
+                {
+                    "name": "fetch_doc_chunk",
+                    "arguments": {"chunk_id": "abc"},
+                    "status": "batch_skipped_by_react_boundary",
+                    "boundary_reason": "document_rag_batch_evidence_complete",
+                    "boundary_action": "answer_from_existing_evidence",
+                    "result": '{"ok": false, "error_code": "react_boundary_batch_skip"}',
+                }
+            ],
+        }
+    ]
+
+    slim_chain = _slim_tool_chain(tool_chain)
+    slim_calls = _slim_tool_calls(tool_chain)
+
+    call = slim_chain[0]["calls"][0]
+    flat_call = slim_calls[0]
+    assert call["status"] == "batch_skipped_by_react_boundary"
+    assert call["boundary_reason"] == "document_rag_batch_evidence_complete"
+    assert call["boundary_action"] == "answer_from_existing_evidence"
+    assert call["error_code"] == "react_boundary_batch_skip"
+    assert flat_call["error_code"] == "react_boundary_batch_skip"
 
 
 def test_write_turn_persists_raw_output_and_meme_fields(tmp_path):

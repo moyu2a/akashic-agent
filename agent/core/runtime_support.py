@@ -13,6 +13,8 @@ logger = logging.getLogger("agent.tool_discovery")
 
 from bus.events import InboundMessage
 
+NON_LRU_TOOL_NAMES = frozenset({"tool_search", "inspect_turn_trace"})
+
 
 @dataclass
 class MemoryConfig:
@@ -56,7 +58,7 @@ class ToolDiscoveryState:
             return set()
 
     def update(self, session_key: str, tools_used: list[str], always_on: set[str]) -> None:
-        skip = always_on | {"tool_search"}
+        skip = always_on | NON_LRU_TOOL_NAMES
         lru: OrderedDict[str, None] = self._unlocked.setdefault(
             session_key,
             OrderedDict(),

@@ -4,6 +4,7 @@ import json
 import sqlite3
 from pathlib import Path
 
+from agent.core.runtime_support import ToolDiscoveryState
 from agent.tracing.turn_trace_query import TurnTraceQueryService
 from plugins.observe.db import open_db
 
@@ -223,3 +224,15 @@ def test_runtime_boundary_blocked_tool_is_not_real_executed(tmp_path: Path) -> N
     tool = result.turn.tools[0]
     assert tool.status == "blocked_by_tool_boundary"
     assert tool.error_code == "tool_blocked_by_doc_rag_policy"
+
+
+def test_inspect_turn_trace_is_not_added_to_lru() -> None:
+    state = ToolDiscoveryState()
+
+    state.update(
+        "cli:s1",
+        ["inspect_turn_trace", "read_file"],
+        always_on=set(),
+    )
+
+    assert state.get_preloaded("cli:s1") == {"read_file"}
