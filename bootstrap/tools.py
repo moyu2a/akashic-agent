@@ -31,6 +31,8 @@ from agent.retrieval.default_pipeline import DefaultMemoryRetrievalPipeline
 from agent.scheduler import SchedulerService
 from agent.tools.message_push import MessagePushTool
 from agent.tools.registry import ToolRegistry
+from agent.tools.turn_trace import InspectTurnTraceTool
+from agent.tracing.turn_trace_query import TurnTraceQueryService
 from agent.turns.outbound import BusOutboundPort
 from bootstrap.toolsets.mcp import McpToolsetProvider
 from bootstrap.toolsets.memory import MemoryToolsetProvider
@@ -302,6 +304,13 @@ def build_registered_tools(
         ),
     )
     memory_runtime = memory_result.extras["memory_runtime"]
+    turn_trace_service = TurnTraceQueryService(workspace / "observe" / "observe.db")
+    tools.register(
+        InspectTurnTraceTool(turn_trace_service),
+        always_on=False,
+        risk="read-only",
+        search_hint="工具历史 tool chain 上一轮 刚才 用了哪些工具",
+    )
     scheduler = build_scheduler(
         workspace,
         push_tool,

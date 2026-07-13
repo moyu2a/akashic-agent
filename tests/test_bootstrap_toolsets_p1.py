@@ -126,6 +126,8 @@ def test_build_registered_tools_uses_toolset_providers(monkeypatch, tmp_path: Pa
     assert memory_runtime.engine is not None
     assert peer_pm is None
     assert peer_poller is None
+    assert tools.has_tool("inspect_turn_trace")
+    assert "inspect_turn_trace" not in tools.get_always_on_names()
 
 
 def test_build_registration_result_uses_public_registry_names():
