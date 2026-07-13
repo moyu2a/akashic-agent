@@ -80,6 +80,20 @@ class _ExistingDescriptionTool(Tool):
         return description
 
 
+class _EchoPrivateSessionTool(Tool):
+    name = "echo_private_session"
+    description = "echo private session"
+    parameters = {
+        "type": "object",
+        "properties": {
+            "_session_key": {"type": "string"},
+        },
+    }
+
+    async def execute(self, _session_key: str = "", **_: object) -> str:
+        return _session_key
+
+
 def _make_registry() -> ToolRegistry:
     """构建测试用 registry。
 
@@ -150,6 +164,18 @@ def _make_registry() -> ToolRegistry:
         always_on=True,
     )
     return reg
+
+
+def test_registry_protected_context_overrides_model_arguments() -> None:
+    registry = ToolRegistry()
+    registry.register(_EchoPrivateSessionTool())
+    registry.set_context(_session_key="cli:current")
+
+    result = asyncio.run(
+        registry.execute("echo_private_session", {"_session_key": "cli:other"})
+    )
+
+    assert result == "cli:current"
 
 
 def test_registry_adds_model_description_for_progress() -> None:

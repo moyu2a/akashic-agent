@@ -88,6 +88,45 @@ def test_session_meta_suppresses_doc_rag_lru_without_mutating_lru() -> None:
     )
 
 
+def test_session_meta_tool_history_exposes_trace_tool_and_suppresses_doc_rag() -> None:
+    context = ToolAccessContext(
+        session_key="cli:s1",
+        user_text="刚才第二个问题你用了哪些工具？",
+        always_on_tools=frozenset({"tool_search"}),
+        lru_preloaded_tools=frozenset({"search_docs", "fetch_doc_chunk"}),
+        disabled_tools=frozenset(),
+    )
+
+    plan = ToolAccessGateway().build_plan(context)
+    visible = ToolAccessGateway().compute_visible_names(context, plan)
+
+    assert "inspect_turn_trace" in plan.visible_add
+    assert "inspect_turn_trace" in visible
+    assert "search_docs" not in visible
+    assert "fetch_doc_chunk" not in visible
+    assert "SessionMetaAccessPolicy" in plan.policies
+
+
+def test_tool_history_intent_wins_over_mixed_doc_intent() -> None:
+    context = ToolAccessContext(
+        session_key="cli:s1",
+        user_text="刚才项目文档那个问题用了哪些工具？",
+        always_on_tools=frozenset({"tool_search"}),
+        lru_preloaded_tools=frozenset({"search_docs", "fetch_doc_chunk"}),
+        disabled_tools=frozenset(),
+    )
+
+    plan = ToolAccessGateway().build_plan(context)
+    visible = ToolAccessGateway().compute_visible_names(context, plan)
+
+    assert "inspect_turn_trace" in plan.visible_add
+    assert "inspect_turn_trace" in visible
+    assert "search_docs" not in visible
+    assert "fetch_doc_chunk" not in visible
+    assert plan.execution_block.issuperset({"search_docs", "fetch_doc_chunk"})
+    assert "SessionMetaAccessPolicy" in plan.policies
+
+
 def test_tool_search_filter_removes_blocked_matches_from_model_payload() -> None:
     gateway = ToolAccessGateway()
     ctx = _ctx("根据项目文档回答agent runtime负责什么，并展开原文证据")

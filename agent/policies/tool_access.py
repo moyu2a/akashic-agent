@@ -9,6 +9,7 @@ from typing import Any, Protocol
 from agent.policies.doc_rag_intent import DOC_RAG_TOOL_NAMES, decide_doc_rag_preload
 
 LOCAL_FILE_TOOL_NAMES = frozenset({"shell", "read_file", "list_dir"})
+TRACE_TOOL_NAMES = frozenset({"inspect_turn_trace"})
 
 _EXPLICIT_LOCAL_SOURCE_TERMS = (
     "源码",
@@ -143,14 +144,14 @@ class SessionMetaAccessPolicy:
     name = "SessionMetaAccessPolicy"
 
     def build_plan(self, context: ToolAccessContext) -> ToolAccessPlan:
-        doc_decision = decide_doc_rag_preload(context.user_text)
-        if doc_decision.preload_search_docs:
-            return ToolAccessPlan()
         matched = _matched_terms(context.user_text, _SESSION_META_TERMS)
         if not matched:
             return ToolAccessPlan()
         return ToolAccessPlan(
+            visible_add=TRACE_TOOL_NAMES,
             visible_suppress=DOC_RAG_TOOL_NAMES,
+            tool_search_block=DOC_RAG_TOOL_NAMES,
+            execution_block=DOC_RAG_TOOL_NAMES,
             reason="session_meta_suppress_doc_rag_lru",
             matched_terms=matched,
             policies=(self.name,),

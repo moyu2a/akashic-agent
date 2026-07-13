@@ -127,6 +127,8 @@ async def test_agent_core_process_runs_prepare_prompt_run_commit_in_order():
     tools.set_context.assert_called_once_with(
         channel="telegram",
         chat_id="123",
+        session_key="telegram:123",
+        _session_key="telegram:123",
         current_user_source_ref="telegram:123:0",
     )
     assert reasoner.run_turn.await_args.kwargs["skill_names"] == ["refactor"]

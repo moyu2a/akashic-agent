@@ -54,6 +54,8 @@ class _SyncToolContextModule:
         self._tools.set_context(
             channel=before_turn.channel,
             chat_id=before_turn.chat_id,
+            session_key=before_turn.session_key,
+            _session_key=before_turn.session_key,
             current_user_source_ref=predict_current_user_source_ref(
                 session_manager=self._session_manager,
                 session=state.session,

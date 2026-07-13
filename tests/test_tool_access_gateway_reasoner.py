@@ -6,6 +6,8 @@ from datetime import datetime, timezone
 from types import SimpleNamespace
 from typing import Any, cast
 
+import pytest
+
 from agent.core.passive_turn import DefaultReasoner
 from agent.core.runtime_support import LLMServices, ToolDiscoveryState
 from agent.core.types import ContextRenderResult, ContextRequest
@@ -75,6 +77,8 @@ def _make_reasoner(
     provider: _Provider,
     *,
     read_file: _RecordingTool | None = None,
+    extra_tools: list[Tool] | None = None,
+    discovery: ToolDiscoveryState | None = None,
 ) -> DefaultReasoner:
     tools = ToolRegistry()
     tools.register(ToolSearchTool(tools), always_on=True, risk="read-only")
@@ -84,6 +88,8 @@ def _make_reasoner(
     tools.register(_RecordingTool("shell"), always_on=True)
     tools.register(_RecordingTool("list_dir"), always_on=True)
     tools.register(_RecordingTool("recall_memory"))
+    for tool in extra_tools or []:
+        tools.register(tool)
 
     def _render(request: ContextRequest, **_kwargs: object) -> ContextRenderResult:
         return ContextRenderResult(
@@ -102,7 +108,7 @@ def _make_reasoner(
         ),
         llm_config=LLMConfig(model="m", max_iterations=4, max_tokens=256),
         tools=tools,
-        discovery=ToolDiscoveryState(),
+        discovery=discovery or ToolDiscoveryState(),
         tool_search_enabled=True,
         memory_window=10,
         context=cast(Any, SimpleNamespace(render=_render)),
@@ -112,6 +118,75 @@ def _make_reasoner(
 
 def _tool_names(call: dict[str, Any]) -> set[str]:
     return {schema["function"]["name"] for schema in call["tools"]}
+
+
+async def _run_reasoner_visibility_case(
+    prompt: str,
+    *,
+    discovery: ToolDiscoveryState | None = None,
+) -> tuple[Any, _Provider]:
+    provider = _Provider(
+        [
+            LLMResponse(
+                content="",
+                tool_calls=[
+                    ToolCall(
+                        "trace1",
+                        "inspect_turn_trace",
+                        {"selector": "previous_completed"},
+                    )
+                ],
+            ),
+            LLMResponse(content="final", tool_calls=[]),
+        ]
+    )
+    reasoner = _make_reasoner(
+        provider,
+        extra_tools=[
+            _RecordingTool(
+                "inspect_turn_trace",
+                result='{"ok": true, "summary": {"real_tools": {"read_file": 3}}}',
+            )
+        ],
+        discovery=discovery,
+    )
+
+    result = await reasoner.run_turn(
+        msg=_msg(prompt),
+        session=cast(Any, _session()),
+    )
+    return result, provider
+
+
+@pytest.mark.parametrize(
+    "prompt",
+    [
+        "刚才第二个问题你用了哪些工具？",
+        "刚才项目文档那个问题用了哪些工具？",
+    ],
+)
+@pytest.mark.asyncio
+async def test_reasoner_exposes_trace_tool_for_tool_history_prompts(prompt: str) -> None:
+    result, provider = await _run_reasoner_visibility_case(prompt)
+
+    names = _tool_names(provider.calls[0])
+    assert "inspect_turn_trace" in names
+    assert "search_docs" not in names
+    assert "fetch_doc_chunk" not in names
+    assert "inspect_turn_trace" in result.tools_used
+
+
+@pytest.mark.asyncio
+async def test_reasoner_does_not_add_trace_tool_to_lru() -> None:
+    discovery = ToolDiscoveryState()
+
+    result, _provider = await _run_reasoner_visibility_case(
+        "刚才第二个问题你用了哪些工具？",
+        discovery=discovery,
+    )
+
+    assert "inspect_turn_trace" in result.tools_used
+    assert "inspect_turn_trace" not in discovery.get_preloaded("cli:1")
 
 
 def test_strong_doc_prompt_suppresses_local_file_schemas_even_if_always_on() -> None:
