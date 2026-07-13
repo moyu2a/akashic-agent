@@ -141,10 +141,6 @@ def test_doc_rag_evidence_complete_switches_next_call_to_final_only(caplog) -> N
                 content="",
                 tool_calls=[ToolCall("f1", "fetch_doc_chunk", {"chunk_id": "c1"})],
             ),
-            LLMResponse(
-                content="",
-                tool_calls=[ToolCall("f2", "fetch_doc_chunk", {"chunk_id": "c2"})],
-            ),
             LLMResponse(content="final answer with citation", tool_calls=[]),
         ]
     )
@@ -176,15 +172,95 @@ def test_doc_rag_evidence_complete_switches_next_call_to_final_only(caplog) -> N
     assert result.context_retry["tool_boundary"]["ledger_summary"][
         "has_citation_evidence"
     ] is True
-    assert result.context_retry["turn_completion"]["metadata"]["soft_stop_count"] >= 1
+    assert result.context_retry["turn_completion"]["metadata"]["react_boundary"] is True
+    assert result.context_retry["turn_completion"]["metadata"]["batch_skip_count"] == 0
     assert provider.calls[-1]["tools"] == []
-    assert (
-        "[tool_boundary] soft_stop tool=fetch_doc_chunk "
-        "reason=document_rag_evidence_complete"
-    ) in caplog.text
+    assert "[react_boundary] final_only reason=document_rag_evidence_complete" in caplog.text
     assert (
         "[turn_completion] final_only reason=document_rag_evidence_complete"
     ) in caplog.text
+
+
+def test_final_only_call_includes_evidence_contract_constraints() -> None:
+    search_docs = _RecordingTool(
+        "search_docs",
+        json.dumps(
+            {
+                "ok": True,
+                "hit_count": 2,
+                "hits": [
+                    {
+                        "chunk_id": "c1",
+                        "citation": "my_md/doc.md > Agent Runtime",
+                        "snippet": "Agent runtime 负责管理 agent 的一次运行过程。",
+                    },
+                    {
+                        "chunk_id": "c2",
+                        "citation": "my_md/doc.md > Tool Calling",
+                        "snippet": "工具调用用于让 agent 访问外部能力。",
+                    },
+                ],
+            }
+        ),
+    )
+    fetch_doc_chunk = _RecordingTool(
+        "fetch_doc_chunk",
+        json.dumps(
+            {
+                "ok": True,
+                "chunk": {
+                    "chunk_id": "c1",
+                    "citation": "my_md/doc.md > Agent Runtime",
+                    "content": "Agent runtime 负责管理 agent 的一次运行过程。",
+                },
+            }
+        ),
+    )
+    provider = _Provider(
+        [
+            LLMResponse(
+                content="",
+                tool_calls=[ToolCall("q1", "search_docs", {"query": "agent runtime"})],
+            ),
+            LLMResponse(
+                content="",
+                tool_calls=[ToolCall("f1", "fetch_doc_chunk", {"chunk_id": "c1"})],
+            ),
+            LLMResponse(
+                content="",
+                tool_calls=[ToolCall("f2", "fetch_doc_chunk", {"chunk_id": "c2"})],
+            ),
+            LLMResponse(content="final answer with constrained evidence", tool_calls=[]),
+        ]
+    )
+    reasoner = _make_reasoner(
+        provider,
+        search_docs=search_docs,
+        fetch_doc_chunk=fetch_doc_chunk,
+    )
+
+    result = asyncio.run(
+        reasoner.run_turn(
+            msg=_msg("根据项目文档回答agent runtime负责什么，并展开原文证据"),
+            session=cast(Any, _session()),
+        )
+    )
+
+    final_messages = provider.calls[-1]["messages"]
+    evidence_hints = [
+        str(message.get("content", ""))
+        for message in final_messages
+        if "Evidence contract for this answer" in str(message.get("content", ""))
+    ]
+    assert evidence_hints
+    hint = evidence_hints[-1]
+    assert "Only successful fetch_doc_chunk results may be described" in hint
+    assert "search_docs hits are retrieval summaries" in hint
+    assert "Do not describe soft-stopped chunks as expanded original text" in hint
+    assert "c2" in hint
+    assert result.context_retry["evidence_contract"]["sufficiency"][
+        "tool_stop_allowed"
+    ] is True
 
 
 def test_no_hit_retrieval_does_not_switch_to_final_only() -> None:
@@ -282,6 +358,50 @@ def test_chunk_without_citation_does_not_switch_to_final_only() -> None:
     assert len(fetch_doc_chunk.calls) == 2
     assert result.context_retry.get("turn_completion", {}).get("action") != "final_only"
     assert provider.calls[-1]["tools"] != []
+
+
+def test_proactive_boundary_does_not_final_only_without_citation() -> None:
+    search_docs = _RecordingTool(
+        "search_docs",
+        json.dumps(
+            {
+                "ok": True,
+                "hit_count": 1,
+                "hits": [{"chunk_id": "c1", "snippet": "Agent runtime text"}],
+            }
+        ),
+    )
+    fetch_doc_chunk = _RecordingTool("fetch_doc_chunk")
+    provider = _Provider(
+        [
+            LLMResponse(
+                content="",
+                tool_calls=[ToolCall("q1", "search_docs", {"query": "agent runtime"})],
+            ),
+            LLMResponse(
+                content="",
+                tool_calls=[ToolCall("f1", "fetch_doc_chunk", {"chunk_id": "c1"})],
+            ),
+            LLMResponse(content="best effort answer", tool_calls=[]),
+        ]
+    )
+    reasoner = _make_reasoner(
+        provider,
+        search_docs=search_docs,
+        fetch_doc_chunk=fetch_doc_chunk,
+    )
+
+    result = asyncio.run(
+        reasoner.run_turn(
+            msg=_msg("根据项目文档回答agent runtime负责什么，并展开原文证据"),
+            session=cast(Any, _session()),
+        )
+    )
+
+    assert result.reply == "best effort answer"
+    assert len(provider.calls) == 3
+    assert provider.calls[1]["tools"] != []
+    assert result.context_retry.get("turn_completion", {}).get("action") != "final_only"
 
 
 def test_explicit_local_source_request_does_not_switch_to_final_only() -> None:
@@ -422,5 +542,283 @@ def test_final_only_ignores_tool_calls_returned_by_provider() -> None:
     assert len(fetch_doc_chunk.calls) == 1
     assert result.context_retry["turn_completion"]["action"] == "final_only"
     assert "final_only_tool_call" in result.reply
+    assert provider.calls[2]["tools"] == []
     assert provider.calls[3]["tools"] == []
-    assert provider.calls[4]["tools"] == []
+
+
+def test_same_batch_redundant_fetches_are_batch_skipped_and_final_only() -> None:
+    search_docs = _RecordingTool(
+        "search_docs",
+        json.dumps(
+            {
+                "ok": True,
+                "hit_count": 3,
+                "hits": [
+                    {
+                        "chunk_id": "c1",
+                        "citation": "my_md/doc.md > Agent Runtime",
+                        "snippet": "Agent runtime 负责管理 agent 的一次运行过程。",
+                    },
+                    {
+                        "chunk_id": "c2",
+                        "citation": "my_md/doc.md > Tool Calling",
+                        "snippet": "工具调用用于让 agent 访问外部能力。",
+                    },
+                    {
+                        "chunk_id": "c3",
+                        "citation": "my_md/doc.md > System Overview",
+                        "snippet": "系统全景描述 agent 运行边界。",
+                    },
+                ],
+            }
+        ),
+    )
+    fetch_doc_chunk = _RecordingTool(
+        "fetch_doc_chunk",
+        json.dumps(
+            {
+                "ok": True,
+                "chunk": {
+                    "chunk_id": "c1",
+                    "citation": "my_md/doc.md > Agent Runtime",
+                    "content": "Agent runtime 负责管理 agent 的一次运行过程。",
+                },
+            }
+        ),
+    )
+    provider = _Provider(
+        [
+            LLMResponse(
+                content="",
+                tool_calls=[ToolCall("q1", "search_docs", {"query": "agent runtime"})],
+            ),
+            LLMResponse(
+                content="",
+                tool_calls=[
+                    ToolCall("f1", "fetch_doc_chunk", {"chunk_id": "c1"}),
+                    ToolCall("f2", "fetch_doc_chunk", {"chunk_id": "c2"}),
+                    ToolCall("f3", "fetch_doc_chunk", {"chunk_id": "c3"}),
+                ],
+            ),
+            LLMResponse(content="final answer with citation", tool_calls=[]),
+        ]
+    )
+    reasoner = _make_reasoner(
+        provider,
+        search_docs=search_docs,
+        fetch_doc_chunk=fetch_doc_chunk,
+    )
+
+    result = asyncio.run(
+        reasoner.run_turn(
+            msg=_msg("根据项目文档回答agent runtime负责什么，并展开原文证据"),
+            session=cast(Any, _session()),
+        )
+    )
+
+    assert result.reply == "final answer with citation"
+    assert result.tools_used == ["search_docs", "fetch_doc_chunk"]
+    assert len(fetch_doc_chunk.calls) == 1
+    assert provider.calls[-1]["tools"] == []
+    assert result.context_retry["turn_completion"]["action"] == "final_only"
+    assert result.context_retry["turn_completion"]["metadata"]["react_boundary"] is True
+    statuses = [
+        call.get("status")
+        for group in result.tool_chain
+        for call in group.get("calls", [])
+        if call.get("name") == "fetch_doc_chunk"
+    ]
+    assert statuses == [
+        "success",
+        "batch_skipped_by_react_boundary",
+        "batch_skipped_by_react_boundary",
+    ]
+    assert result.context_retry["turn_completion"]["metadata"]["batch_skip_count"] == 2
+    assert result.context_retry["evidence_contract"]["metadata"]["fetched_text_count"] == 1
+    assert result.context_retry["evidence_contract"]["metadata"][
+        "soft_stopped_candidate_count"
+    ] == 0
+    assert result.context_retry["tool_boundary"]["ledger_summary"]["class_counts"][
+        "evidence_expand"
+    ] == 1
+
+    final_messages = provider.calls[-1]["messages"]
+    tool_results = {
+        message.get("tool_call_id"): message
+        for message in final_messages
+        if message.get("role") == "tool"
+    }
+    assert {"f1", "f2", "f3"} <= set(tool_results)
+    assert "react_boundary_batch_skip" in str(tool_results["f2"].get("content", ""))
+    assert "react_boundary_batch_skip" in str(tool_results["f3"].get("content", ""))
+
+
+def test_simple_doc_same_batch_fetch_is_skipped_after_search_evidence() -> None:
+    search_docs = _RecordingTool(
+        "search_docs",
+        json.dumps(
+            {
+                "ok": True,
+                "hit_count": 1,
+                "hits": [
+                    {
+                        "chunk_id": "c1",
+                        "citation": "my_md/doc.md > Agent Runtime",
+                        "snippet": "Agent runtime 负责管理 agent 的一次运行过程。",
+                    }
+                ],
+            }
+        ),
+    )
+    fetch_doc_chunk = _RecordingTool("fetch_doc_chunk")
+    provider = _Provider(
+        [
+            LLMResponse(
+                content="",
+                tool_calls=[
+                    ToolCall("q1", "search_docs", {"query": "agent runtime"}),
+                    ToolCall("f1", "fetch_doc_chunk", {"chunk_id": "c1"}),
+                ],
+            ),
+            LLMResponse(content="simple final with citation", tool_calls=[]),
+        ]
+    )
+    reasoner = _make_reasoner(
+        provider,
+        search_docs=search_docs,
+        fetch_doc_chunk=fetch_doc_chunk,
+    )
+
+    result = asyncio.run(
+        reasoner.run_turn(
+            msg=_msg("请从文档知识库中检索agent runtime负责什么？回答必须带文档引用"),
+            session=cast(Any, _session()),
+        )
+    )
+
+    assert result.reply == "simple final with citation"
+    assert result.tools_used == ["search_docs"]
+    assert len(fetch_doc_chunk.calls) == 0
+    assert provider.calls[-1]["tools"] == []
+    statuses = [
+        call.get("status")
+        for group in result.tool_chain
+        for call in group.get("calls", [])
+        if call.get("name") == "fetch_doc_chunk"
+    ]
+    assert statuses == ["batch_skipped_by_react_boundary"]
+
+
+def test_simple_doc_retrieval_enters_final_only_without_fetch() -> None:
+    search_docs = _RecordingTool(
+        "search_docs",
+        json.dumps(
+            {
+                "ok": True,
+                "hit_count": 1,
+                "hits": [
+                    {
+                        "chunk_id": "c1",
+                        "citation": "my_md/doc.md > Agent Runtime",
+                        "snippet": "Agent runtime 负责管理 agent 的一次运行过程。",
+                    }
+                ],
+            }
+        ),
+    )
+    fetch_doc_chunk = _RecordingTool("fetch_doc_chunk")
+    provider = _Provider(
+        [
+            LLMResponse(
+                content="",
+                tool_calls=[ToolCall("q1", "search_docs", {"query": "agent runtime"})],
+            ),
+            LLMResponse(content="simple final with citation", tool_calls=[]),
+        ]
+    )
+    reasoner = _make_reasoner(
+        provider,
+        search_docs=search_docs,
+        fetch_doc_chunk=fetch_doc_chunk,
+    )
+
+    result = asyncio.run(
+        reasoner.run_turn(
+            msg=_msg("请从文档知识库中检索agent runtime负责什么？回答必须带文档引用"),
+            session=cast(Any, _session()),
+        )
+    )
+
+    assert result.reply == "simple final with citation"
+    assert result.tools_used == ["search_docs"]
+    assert len(fetch_doc_chunk.calls) == 0
+    assert provider.calls[-1]["tools"] == []
+    assert result.context_retry["turn_completion"]["reason"] == (
+        "document_rag_retrieval_complete"
+    )
+
+
+def test_proactive_final_only_includes_evidence_contract_hint() -> None:
+    search_docs = _RecordingTool(
+        "search_docs",
+        json.dumps(
+            {
+                "ok": True,
+                "hit_count": 1,
+                "hits": [
+                    {
+                        "chunk_id": "c1",
+                        "citation": "my_md/doc.md > Agent Runtime",
+                        "snippet": "Agent runtime 负责管理 agent 的一次运行过程。",
+                    }
+                ],
+            }
+        ),
+    )
+    fetch_doc_chunk = _RecordingTool(
+        "fetch_doc_chunk",
+        json.dumps(
+            {
+                "ok": True,
+                "chunk": {
+                    "chunk_id": "c1",
+                    "citation": "my_md/doc.md > Agent Runtime",
+                    "content": "Agent runtime 负责管理 agent 的一次运行过程。",
+                },
+            }
+        ),
+    )
+    provider = _Provider(
+        [
+            LLMResponse(
+                content="",
+                tool_calls=[ToolCall("q1", "search_docs", {"query": "agent runtime"})],
+            ),
+            LLMResponse(
+                content="",
+                tool_calls=[ToolCall("f1", "fetch_doc_chunk", {"chunk_id": "c1"})],
+            ),
+            LLMResponse(content="final answer", tool_calls=[]),
+        ]
+    )
+    reasoner = _make_reasoner(
+        provider,
+        search_docs=search_docs,
+        fetch_doc_chunk=fetch_doc_chunk,
+    )
+
+    result = asyncio.run(
+        reasoner.run_turn(
+            msg=_msg("根据项目文档回答agent runtime负责什么，并展开原文证据"),
+            session=cast(Any, _session()),
+        )
+    )
+
+    final_messages = provider.calls[-1]["messages"]
+    hint_text = "\n".join(str(message.get("content", "")) for message in final_messages)
+
+    assert "Evidence contract for this answer" in hint_text
+    assert "Only successful fetch_doc_chunk results may be described" in hint_text
+    assert result.context_retry["evidence_contract"]["sufficiency"][
+        "tool_stop_allowed"
+    ] is True

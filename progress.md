@@ -128,3 +128,63 @@
   - full suite: `1373 passed, 3 warnings in 31.89s`;
   - compileall for `agent/policies`, `agent/core/passive_turn.py`, `tests/test_turn_completion_policy.py`, and `tests/test_turn_completion_reasoner.py` exited 0.
 - Updated governance/RAG/STAR docs to record P10a.3 implementation status and manual live-smoke recipe. Remaining work: run real CLI/LLM smoke for the turn `362`-style prompt and confirm ReAct iterations drop to the 3-4 target with no real tool execution after final-only begins.
+- Reviewed P10a.3 real CLI/LLM smoke after user reran the planned prompt:
+  - latest turn `364` matched the Document RAG smoke prompt;
+  - expected logs appeared: `[tool_boundary] soft_stop tool=fetch_doc_chunk reason=document_rag_evidence_complete` and `[turn_completion] final_only reason=document_rag_evidence_complete`;
+  - successful real tool executions were `search_docs` and one `fetch_doc_chunk`;
+  - two additional `fetch_doc_chunk` attempts were soft-stopped, and no `shell/read_file/list_dir` calls occurred;
+  - `react_iteration_count=3`, compared with turn `362` at 5 and turn `361` at 6;
+  - `prompt_tokens=265562`, compared with turn `362` at `419680`;
+  - `error=NULL`, CLI stayed connected.
+- Updated governance/RAG/STAR docs again: P10a.3 live smoke is now marked successful for tool boundary, final-only activation, and ReAct loop reduction. New remaining issue is final-only answer evidence labeling: turn `364` presented soft-stopped candidate chunks as "original chunk expansion"; future work should distinguish successful fetched chunk content from `search_docs` snippets and soft-stopped candidate chunks.
+- Implemented P10a.4a Evidence Contract bugfix:
+  - added `agent/policies/evidence_contract.py`;
+  - integrated evidence-contract hints into `DefaultReasoner` final-only calls;
+  - propagated `evidence_contract` metadata into `TurnRunResult.context_retry`;
+  - added full `ToolCallRecord.result_text` so evidence extraction is not limited to truncated `result_summary`;
+  - verified with `tests/test_evidence_contract.py`, the relevant P10a/P10a.2/P10a.3/P10a.4a suite (`27 passed`), full pytest (`1376 passed, 3 warnings`), compileall, and `git diff --check`.
+- Reviewed latest real CLI/LLM turns after P10a.4a:
+  - turn `365`: `根据项目文档回答agent runtime负责什么，并展开原文证据`;
+  - turn `366`: `请从文档知识库中检索agent runtime负责什么？回答必须带文档引用`;
+  - both turns used only Document RAG tools, with no `shell/read_file/list_dir` and no observe error;
+  - both turns executed `search_docs` and one real `fetch_doc_chunk`;
+  - later `fetch_doc_chunk` calls in the same assistant tool-call batch were soft-stopped;
+  - final answer labeling is now correct: successful fetched chunk is original/full text, other hits are retrieval summaries.
+- New remaining issue after P10a.4a: cost is now narrowed to same-batch redundant tool-call generation. Boundary prevents real execution, but the model can still emit multiple `fetch_doc_chunk` calls before after-result completion has a chance to run.
+- Designed P10a.4b React Boundary Cost Optimization plan:
+  - saved plan to `docs/superpowers/plans/2026-07-13-react-boundary-cost-optimization.md` (ignored by `.gitignore`; needs `git add -f` if committed);
+  - proposed bounded ReAct for Document RAG: proactive final-only after evidence is sufficient, dynamic next-turn tool visibility, batch-level tool budget, and optional provider-level parallel tool-call control only after provider-specific tests.
+- Updated governance/RAG/STAR docs to record the full evolution from P10a.3 -> P10a.4a -> P10a.4b:
+  - solved: final-only evidence labeling / answer-permission bug;
+  - discovered: same-batch redundant `fetch_doc_chunk` generation;
+  - next plan: bounded ReAct / React Boundary Cost Optimization.
+- Implemented P10a.4b Bounded ReAct / Batch Boundary:
+  - added `agent/policies/react_boundary.py`;
+  - added stable `ToolAccessPlan.local_source_allowed` and preserved it across access-plan merges;
+  - extended `TurnCompletionController.evaluate()` to accept `EvidenceAssessment` and proactive completion;
+  - integrated same-batch `batch_skipped_by_react_boundary` handling in `DefaultReasoner`;
+  - ensured skipped same-batch calls append legal tool result messages but do not count as successful `tools_used` or evidence ledger entries;
+  - tightened Evidence Contract so original-evidence tasks require fetched-text citation when citations are required.
+- P10a.4b verification:
+  - targeted P10a suite: `48 passed`;
+  - full pytest: `1391 passed, 3 warnings`;
+  - compileall passed for `agent/policies`, `agent/core/passive_turn.py`, `tests/test_react_boundary.py`, and `tests/test_turn_completion_reasoner.py`.
+- Ran and reviewed P10a.4b real CLI/LLM smoke:
+  - turn `367`: `请从文档知识库中检索agent runtime负责什么？回答必须带文档引用`
+    - result: `search_docs -> final`, `react_iteration_count=2`, `[react_boundary] final_only reason=document_rag_retrieval_complete`, no local-file tools.
+  - turn `368`: `根据项目文档回答agent runtime负责什么，并展开原文证据`
+    - result: `search_docs -> fetch_doc_chunk -> final`, `react_iteration_count=3`, two extra same-batch `fetch_doc_chunk` calls skipped with `react_boundary_batch_skip`.
+  - turn `369`: `根据项目文档和源码回答 agent runtime 负责什么，请读取 agent/core/passive_turn.py`
+    - result: `read_file x3 -> final`, `react_iteration_count=4`; explicit source request was not prematurely closed by Document RAG final-only. It reused earlier doc context rather than doing fresh RAG in that turn.
+  - turn `370`: `刚才第二个问题你用了哪些工具？`
+    - result: `search_messages -> final`, `react_iteration_count=2`; session/meta policy suppressed stale Document RAG LRU.
+- New issue from turn `370`:
+  - final answer claimed turn `369` used `search_docs + fetch_doc_chunk + read_file x3`, but observe/session trace shows turn `369` only used `read_file x3`.
+  - Root cause: tool-history/session-meta questions still rely on message search and model inference instead of structured observe/session tool trace.
+  - Next direction: add or expose a read-only structured trace lookup for current-session tool history, and make "which tools did you use" answers use that source of truth.
+- Designed and reviewed the Turn Trace Query implementation plan:
+  - saved plan to `docs/superpowers/plans/2026-07-13-turn-trace-query.md` (ignored by `.gitignore`; use `git add -f` when committing);
+  - architecture: core read-only `TurnTraceQueryService` under `agent/tracing/`, deferred `inspect_turn_trace` tool adapter, and ToolAccessGateway visibility for session/meta/tool-history turns;
+  - non-goals/constraints: no AgentLoop rewrite, not always-on, no LRU writes, no model-controlled `session_key`, protected `_session_key` only from registry context;
+  - review fixes added: real runtime blocked statuses (`blocked_by_tool_boundary`, `soft_stopped_by_tool_boundary`, `tool_blocked_by_doc_rag_policy`) are skipped rather than counted as executed tools; mixed doc+tool-history prompt prioritizes trace lookup and suppresses stale Document RAG tools;
+  - next implementation order: query service, observe trace metadata preservation, trace tool adapter, context/gateway integration, E2E regression for turn `370`-style tool-history answers.

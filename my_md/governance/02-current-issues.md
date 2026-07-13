@@ -230,11 +230,50 @@ P10a.2 当前剩余问题：Document RAG 工具链成本治理。
   - Broader relevant suite：`55 passed in 0.30s`。
   - Full pytest suite：`1373 passed, 3 warnings in 31.89s`。
   - Compile check：`python3 -m compileall agent/policies agent/core/passive_turn.py tests/test_turn_completion_policy.py tests/test_turn_completion_reasoner.py` exited 0。
-- P10a.3 仍需真实 CLI/LLM smoke：
-  - 重跑 turn `362` 同类 prompt。
-  - 预期成功目标工具执行为 `search_docs`、`fetch_doc_chunk`。
-  - 预期普通日志出现 `[tool_boundary] soft_stop tool=fetch_doc_chunk reason=document_rag_evidence_complete` 和 `[turn_completion] final_only reason=document_rag_evidence_complete`。
-  - 预期 final-only 后不再真实执行工具，目标 ReAct 轮次回到 3-4。
+- 2026-07-12 P10a.3 真实 CLI/LLM smoke 已执行，工具链和轮次目标通过：
+  - turn `364` prompt：`请重新从文档知识库检索，不要复用上轮内容：根据项目文档回答agent runtime负责什么，并调用原文chunk展开证据，回答必须带引用`。
+  - `tool_boundary` 正确识别 `intent=doc_qa_with_evidence`，继续压制 `shell/read_file/list_dir`。
+  - 普通日志出现 `[tool_boundary] soft_stop tool=fetch_doc_chunk reason=document_rag_evidence_complete` 和 `[turn_completion] final_only reason=document_rag_evidence_complete`。
+  - 真实成功执行工具只有 `search_docs` 和 1 次 `fetch_doc_chunk`；两个后续 `fetch_doc_chunk` 被 `document_rag_evidence_complete` soft stop 拦截。
+  - ReAct 轮次降为 `3`，对比 turn `362` 的 `5` 轮和 turn `361` 的 `6` 轮已达成目标；`prompt_tokens` 从 turn `362` 的 `419680` 降至 turn `364` 的 `265562`。
+  - `error=NULL`，CLI 未断连。
+- P10a.3 live smoke 新暴露的剩余问题：final-only 确实停止了工具循环，但最终回答把 soft-stopped 的候选 chunk 表述成“已展开原文”。实际只有第一个 `fetch_doc_chunk` 成功执行，后续 Tool Calling / 系统全景 chunk 来自 `search_docs` hit/snippet 或被 soft stop 的工具消息。下一步应收紧 final-only 证据表述：已实际 `fetch_doc_chunk` 的内容才能称为“原文展开”，`search_docs` hit/snippet 只能称为“检索摘要/命中摘要”。
+- 2026-07-13 P10a.4a Evidence Contract 已完成代码侧修复：
+  - 新增 `agent/policies/evidence_contract.py`，将当前 turn 的证据区分为 `fetched_text`、`retrieval_snippet`、`soft_stopped_candidate`，并生成 final-only 回答约束。
+  - `DefaultReasoner` 在 final-only 前注入 `evidence_contract` context hint，并把 `evidence_contract` trace 写入 `TurnRunResult.context_retry`。
+  - `ToolCallLedger` 新增完整 `result_text`，Evidence Contract 优先解析完整结果，避免 `result_summary[:240]` 截断 JSON 后误判证据。
+  - 自动化验证：`tests/test_evidence_contract.py` 通过；相关 P10a/P10a.2/P10a.3/P10a.4a 回归 `27 passed`；全量 pytest `1376 passed, 3 warnings`；compileall 通过；`git diff --check` 通过。
+- 2026-07-13 最新真实 CLI/LLM smoke 验证 P10a.4a 目标：
+  - turn `365` prompt：`根据项目文档回答agent runtime负责什么，并展开原文证据`。
+  - turn `366` prompt：`请从文档知识库中检索agent runtime负责什么？回答必须带文档引用`。
+  - 两轮均未调用 `shell/read_file/list_dir`，`error` 为空，CLI 未断连。
+  - 两轮均只真实成功执行 `search_docs` 和第一个 `fetch_doc_chunk`；后续两个 `fetch_doc_chunk` 请求被 boundary soft-stop。
+  - final answer 已正确区分：成功 `fetch_doc_chunk` 的 chunk 可称为“原文/完整原文”，后续未真实 fetch 的 Tool Calling / 系统全景证据被称为“检索命中/检索摘要”，不再把 soft-stopped 候选 chunk 写成已展开原文。
+  - turn `365` `react_iteration_count=3`、`react_input_peak_tokens=45878`；turn `366` `react_iteration_count=3`、`react_input_peak_tokens=49355`。
+- P10a.4a 后新暴露的剩余问题：证据标注已正确，但模型在第二轮 LLM 响应中仍会一次性生成多个 `fetch_doc_chunk` tool calls；boundary 只执行第一个，后两个 soft-stop。也就是说，问题已从“真实工具重复执行/回答证据夸大”进一步收敛为“同一 assistant tool-call batch 中仍生成多余工具调用，浪费 tool-call tokens 和少量推理预算”。
+- 2026-07-13 P10a.4b Bounded ReAct / Batch Boundary 已完成自动化实现：
+  - 新增 `agent/policies/react_boundary.py`，只负责 Document RAG cost/profile recommendation 和 same-batch skip，不重新定义证据充分性。
+  - `EvidenceContractManager` 仍是唯一证据充分性来源；`TurnCompletionController` 仍是唯一 final-only 决策产出方；`ReactBoundaryDecision` 使用 `recommend_final_only` 避免职责漂移。
+  - `ToolAccessPlan.local_source_allowed` 成为显式源码/本地文件请求的稳定能力位，并在 `_merge_plans()` 中保留，替代 reason 字符串判断。
+  - 同一 assistant tool-call batch 中，预算外的 Document RAG 工具调用追加合法 tool result，状态为 `batch_skipped_by_react_boundary`；它们不计入成功 `tools_used`，不写入 evidence ledger，也不伪装成普通 `tool_boundary_soft_stop`。
+  - 自动化验证：P10a targeted suite `48 passed`；full pytest `1391 passed, 3 warnings`；compileall 通过。
+  - 真实 CLI/LLM smoke 已于 2026-07-13 执行，turn `367-370` 均 `error=NULL`，CLI 未断连。
+- 2026-07-13 P10a.4b 真实 CLI/LLM smoke 结果：
+  - turn `367` 简单文档引用问题：工具链为 `search_docs -> final`，`react_iteration_count=2`，日志出现 `[react_boundary] final_only reason=document_rag_retrieval_complete`，未调用 `fetch_doc_chunk` 或本地文件工具。
+  - turn `368` 原文证据问题：工具链为 `search_docs -> fetch_doc_chunk -> final`，`react_iteration_count=3`；同批次额外 2 个 `fetch_doc_chunk` 被标记为 `react_boundary_batch_skip`，不真实执行、不入 evidence ledger。
+  - turn `369` 文档 + 源码问题：工具链为 `read_file x3`，`react_iteration_count=4`；`tool_boundary` 识别 `doc_rag_allows_explicit_local_files`，说明显式源码请求没有被 Document RAG final-only 过早截断。但本轮没有 fresh `search_docs/fetch_doc_chunk`，最终文档证据来自前文上下文。
+  - turn `370` 工具历史查询：工具链为 `search_messages -> final`，`react_iteration_count=2`；`SessionMetaAccessPolicy` 正确压制 `search_docs/fetch_doc_chunk` 的 LRU 残留，没有误走 Document RAG。
+  - 新暴露问题：turn `370` 最终回答声称 turn `369` 使用了 `search_docs + fetch_doc_chunk + read_file x3`，但 observe/session 结构化记录显示 turn `369` 实际只使用 `read_file x3`。说明“刚才用了哪些工具”这类 session/meta 问题不能依赖模型记忆或自然语言上下文推断，必须读取结构化 turn/tool trace。
+- P10a.4b 当前结论：
+  - Bounded ReAct / Batch Boundary 已达成主目标：简单文档问题收敛为 `search_docs -> final`，原文证据问题收敛为 `search_docs -> fetch_doc_chunk -> final`，多余 same-batch `fetch_doc_chunk` 不再真实执行。
+  - 显式源码请求的本地文件工具放行路径正常，未被 evidence-complete 误截断。
+  - 剩余问题从 Document RAG 工具成本转移到“历史工具使用/turn trace 查询”的结构化回源能力，以及“项目文档+源码”是否要求当前 turn fresh RAG 的产品语义。
+  - 计划文档：`docs/superpowers/plans/2026-07-13-react-boundary-cost-optimization.md`（`docs/` 被 `.gitignore` 忽略，提交时需 `git add -f`）。
+- 2026-07-13 已完成结构化 turn trace 查询计划审阅：
+  - 计划文档：`docs/superpowers/plans/2026-07-13-turn-trace-query.md`（`docs/` 被 `.gitignore` 忽略，提交时需 `git add -f`）。
+  - 方案边界：新增 core read-only `TurnTraceQueryService`，通过 deferred `inspect_turn_trace` 工具暴露给 session/meta/tool-history turn；不改 AgentLoop，不 always-on，不写入 `ToolDiscoveryState` / LRU。
+  - 审阅后补齐的关键约束：真实 runtime 阻断状态 `blocked_by_tool_boundary` / `soft_stopped_by_tool_boundary` 必须视为 skipped；`tool_blocked_by_doc_rag_policy` 不能计入真实执行工具；混合提示“刚才项目文档那个问题用了哪些工具？”中 tool-history/session-meta intent 必须优先于 doc intent。
+  - 下一步：按计划实现 Task 1-5，并用 turn `370` 同类 CLI smoke 验证回答是否改为读取结构化 trace，而不是从自然语言上下文推断。
 - 增加回归测试：文档问答 happy path 不应先出现“工具未加载”失败。
 - 在评估集中增加 `max_react_iterations`、`max_tool_calls`、`expected_tools`、`forbidden_tools` 指标；强文档证据 case 应把 `shell/read_file/list_dir` 列为 forbidden，除非用户显式要求源码。
 - 计划详见：`my_md/rag/19-document-rag-p10-intent-preload-plan.md`。

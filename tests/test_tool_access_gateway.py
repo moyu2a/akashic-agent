@@ -36,6 +36,7 @@ def test_strong_doc_evidence_prefers_rag_and_blocks_local_tools() -> None:
     assert LOCAL_TOOLS <= plan.visible_suppress
     assert LOCAL_TOOLS <= plan.tool_search_block
     assert LOCAL_TOOLS <= plan.execution_block
+    assert plan.local_source_allowed is False
     assert DOC_RAG_TOOLS <= visible
     assert visible.isdisjoint(LOCAL_TOOLS)
 
@@ -50,7 +51,23 @@ def test_explicit_source_request_allows_local_tools() -> None:
     assert "search_docs" in plan.visible_add
     assert "read_file" not in plan.visible_suppress
     assert "read_file" not in plan.execution_block
+    assert plan.local_source_allowed is True
     assert "read_file" in visible
+
+
+def test_explicit_source_flag_survives_observe_tool_result_merge() -> None:
+    gateway = ToolAccessGateway()
+    ctx = _ctx("根据项目文档和源码回答，请读取 agent/core/passive_turn.py")
+    plan = gateway.build_plan(ctx)
+
+    updated = gateway.observe_tool_result(
+        plan,
+        "search_docs",
+        json.dumps({"terminal_scope": "document_rag", "fallback_allowed": False}),
+    )
+
+    assert plan.local_source_allowed is True
+    assert updated.local_source_allowed is True
 
 
 def test_session_meta_suppresses_doc_rag_lru_without_mutating_lru() -> None:

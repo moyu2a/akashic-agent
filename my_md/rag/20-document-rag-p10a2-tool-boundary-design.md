@@ -25,6 +25,12 @@
   P10a.3/P10a.2 suite `24 passed in 0.19s`, broader relevant suite
   `55 passed in 0.30s`, full pytest `1373 passed, 3 warnings in 31.89s`,
   compileall exited 0.
+- Follow-up P10a.3 real CLI/LLM smoke: completed on 2026-07-12. Turn `364`
+  reduced the same prompt to 3 ReAct iterations, successful target-tool
+  execution was `search_docs + fetch_doc_chunk`, and the expected
+  `tool_boundary` / `turn_completion` logs appeared. Remaining issue: the final
+  answer labeled soft-stopped candidate chunks as if they were fetched original
+  chunks, so evidence labeling must be tightened after final-only.
 
 ## Live Smoke Follow-up
 
@@ -59,11 +65,12 @@ tool schemas are offered, and the model is instructed to answer from the ledger
 evidence already gathered. This remains turn-local and does not write completion
 state into `ToolDiscoveryState` or LRU.
 
-Real CLI/LLM smoke is still required to confirm the cost shape in live provider
-behavior: expected successful target-tool executions are `search_docs` and
-`fetch_doc_chunk`, expected logs include both `[tool_boundary] soft_stop ...` and
-`[turn_completion] final_only ...`, and the target ReAct iteration count is
-3-4 rather than the P10a.2 smoke's 5 rounds.
+Real CLI/LLM smoke has confirmed the cost shape in live provider behavior. Turn
+`364` used 3 ReAct iterations rather than the P10a.2 smoke's 5 rounds, with
+successful target-tool execution limited to `search_docs` and `fetch_doc_chunk`.
+The next concern is not execution cost but evidence labeling: final-only answers
+must distinguish fetched chunk content from search hit snippets and soft-stopped
+candidate chunks.
 
 ## Background
 

@@ -2690,6 +2690,38 @@ HookOutcome(decision="deny", reason="...")
 
 ```text
 插件通过 PluginManager 引入。启动时 PluginManager 扫描 plugin_dirs，找到包含 plugin.py 的插件目录，用 importlib 加载模块，实例化 Plugin 子类，注入 PluginContext，然后绑定插件声明的 tools、lifecycle modules、event handlers 和 tool hooks。对于工具调用，插件通过 @on_tool_pre 声明 pre-tool hook；装饰器会把方法注册成 TOOL_HOOK metadata，PluginManager 加载时把它适配成 ToolExecutor 的 hook。运行时 LLM 返回 tool_call 后，Reasoner 不直接执行工具，而是先交给 ToolExecutor；ToolExecutor 会运行匹配的插件 hook，插件可以放行、改写参数或 deny，之后才进入 ToolRegistry.execute 执行真实工具。
+
+• 可以，面试里可以这样说：
+
+  这个项目的插件系统是通过插件管理器接入的。程序启动时，插件管理器会扫描配置里的插件目录，找到包含 plugin.py 的插件文件夹，然后通过动态导入的方式加载插件模块。插件类被加载
+  后，会自动注册到插件注册表中，插件管理器再创建插件实例，并把运行时上下文对象交给插件使用。这个上下文里包含事件总线、工具注册表、插件配置、工作目录、会话管理器和记忆引擎等
+  能力。
+
+  插件加载完成后，插件管理器会把插件声明的能力统一挂到主系统里，包括插件工具、生命周期模块、事件处理函数和工具调用钩子。
+
+  在工具调用流程里，插件可以声明“工具执行前钩子”，用来拦截某些工具调用。比如 shell 安全插件可以在真正执行 shell 命令前检查命令内容。插件管理器加载插件时，会把这些钩子转换成
+  工具执行器可以识别的形式。
+
+  运行时，大模型返回工具调用请求后，推理模块不会直接执行工具，而是先把请求交给工具执行器。工具执行器会先运行所有匹配的插件钩子。插件可以选择直接放行，也可以改写工具参数，或
+  者拒绝这次调用。只有通过这些检查后，请求才会进入工具注册表，执行真正的工具。
+
+  更简洁一点的面试版可以说：
+
+  这个项目没有让大模型直接调用工具，而是在中间加了一层工具执行器。插件系统启动时由插件管理器统一加载插件，并把插件声明的工具、生命周期模块、事件监听器和工具钩子注册到运行
+  时。工具调用发生时，插件的前置钩子会先于真实工具执行，可以做安全检查、参数改写、审计或阻断。这样工具执行链路既可扩展，也更容易做安全治理。
+
+
+注：“注入 PluginContext”在这个项目里更准确地说是：插件管理器创建插件实例后，给它设置 instance.context = PluginContext(...)。这不是通过构造函数传参，而是把一个上下文对象挂到插
+  件实例上。
+
+  这个上下文里实际包含：
+
+  - event_bus：事件总线
+  - kv_store：插件自己的简单键值存储
+  - config：插件配置
+  - app_config：应用配置
+  - workspace：工作目录
+  所以“注入”就是“由插件管理器把运行时能力交给插件使用”。插件不用自己到处 import 或查找全局对象，而是通过 self.context 访问系统提供给它的能力。
 ```
 
 ### 为什么这样设计
@@ -2823,6 +2855,8 @@ LLM 调用 tool_x
 
 ```text
 这个项目没有每轮暴露所有工具，而是做了工具可见性和按需发现。工具分为 always_on 和 deferred：always_on 每轮默认可见，deferred 默认隐藏，需要通过 tool_search 搜索或 select 后解锁。开启 tool_search_enabled 后，Reasoner 只把 visible_names 对应的 tool schema 传给 LLM；如果模型直接调用不可见工具，系统会拦截并引导先用 tool_search。ToolDiscoveryState 还会按 session 用 LRU 记住最近解锁的工具，作为下一轮 preloaded tools。这样能降低 prompt 成本，减少误选工具，并控制工具暴露面。
+
+
 ```
 
 ### 为什么这样设计

@@ -4,11 +4,18 @@ import asyncio
 import json
 import logging
 from abc import ABC, abstractmethod
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, Awaitable, Callable, cast
 
 import agent.core.passive_support as support
+from agent.policies.evidence_contract import (
+    EvidenceAssessment,
+    EvidenceContractManager,
+    assessment_trace,
+)
+from agent.policies.react_boundary import ReactBoundaryManager
 from agent.policies.tool_access import ToolAccessContext
 from agent.policies.tool_boundary import ToolBoundaryContext, TurnToolBoundaryManager
 from agent.policies.turn_completion import (
@@ -141,6 +148,54 @@ def _completion_trace(
         "reason": decision.reason,
         "metadata": dict(decision.metadata),
     }
+
+
+def _local_source_allowed(context: ToolBoundaryContext | None) -> bool:
+    if context is None:
+        return False
+    return bool(getattr(context.access_plan, "local_source_allowed", False))
+
+
+def _react_completion_metadata(
+    *,
+    reason: str,
+    decision_metadata: Mapping[str, object],
+    recommended_suppress: frozenset[str],
+    batch_skip_count: int,
+) -> dict[str, object]:
+    return {
+        **dict(decision_metadata),
+        "react_boundary": True,
+        "react_boundary_reason": reason,
+        "recommended_suppress": sorted(recommended_suppress),
+        "batch_skip_count": batch_skip_count,
+    }
+
+
+def _with_batch_skip_count(
+    decision: TurnCompletionDecision | None,
+    batch_skip_count: int,
+) -> TurnCompletionDecision | None:
+    if decision is None:
+        return None
+    if not bool(decision.metadata.get("react_boundary")):
+        return decision
+    return TurnCompletionDecision(
+        action=decision.action,
+        reason=decision.reason,
+        model_hint=decision.model_hint,
+        metadata={**dict(decision.metadata), "batch_skip_count": batch_skip_count},
+    )
+
+
+def _latest_user_text(messages: list[dict]) -> str:
+    for message in reversed(messages):
+        if message.get("role") != "user":
+            continue
+        content = message.get("content")
+        if isinstance(content, str):
+            return content
+    return ""
 
 
 def _disabled_tools_from_msg(msg: object) -> set[str]:
@@ -658,6 +713,8 @@ class DefaultReasoner(Reasoner):
         self._tool_executor = ToolExecutor([])
         self._tool_boundary = TurnToolBoundaryManager()
         self._turn_completion = TurnCompletionController()
+        self._evidence_contract = EvidenceContractManager()
+        self._react_boundary = ReactBoundaryManager()
         self._stream_sink_factory: Callable[
             [object], Callable[[dict[str, str] | str], Awaitable[None]] | None
         ] | None = None
@@ -923,6 +980,10 @@ class DefaultReasoner(Reasoner):
                     )
                 if result.metadata.get("turn_completion"):
                     retry_trace["turn_completion"] = result.metadata["turn_completion"]
+                if result.metadata.get("evidence_contract"):
+                    retry_trace["evidence_contract"] = result.metadata[
+                        "evidence_contract"
+                    ]
                 return TurnRunResult(
                     reply=result.reply,
                     tools_used=tools_used,
@@ -988,6 +1049,7 @@ class DefaultReasoner(Reasoner):
     ) -> ReasonerResult:
         # 1. 初始化消息上下文、本轮工具轨迹。
         messages = initial_messages
+        user_text = _latest_user_text(messages)
         tools_used: list[str] = []
         tool_chain: list[dict[str, Any]] = []
         # 2. 初始化本轮可见工具集合。
@@ -999,7 +1061,9 @@ class DefaultReasoner(Reasoner):
         react_cache_seen = False
         disabled = set(disabled_tools or set())
         turn_completion_decision: TurnCompletionDecision | None = None
+        evidence_assessment: EvidenceAssessment | None = None
         final_only_next_call = False
+        react_boundary_batch_skip_count = 0
         if self._tool_search_enabled:
             always_on = self._tools.get_always_on_names()
             if initial_visible_names is not None:
@@ -1073,6 +1137,13 @@ class DefaultReasoner(Reasoner):
                         turn_completion_decision.model_hint,
                     )
                 )
+                if evidence_assessment is not None and evidence_assessment.model_hint:
+                    messages.append(
+                        support.build_context_hint_message(
+                            "evidence_contract",
+                            evidence_assessment.model_hint,
+                        )
+                    )
                 logger.info(
                     "[turn_completion] final_only reason=%s",
                     turn_completion_decision.reason,
@@ -1138,6 +1209,7 @@ class DefaultReasoner(Reasoner):
                         else None
                     ),
                     turn_completion_trace=_completion_trace(turn_completion_decision),
+                    evidence_contract_trace=assessment_trace(evidence_assessment),
                 )
 
             # 5. 模型返回 tool_calls 时，进入工具执行分支。
@@ -1205,6 +1277,67 @@ class DefaultReasoner(Reasoner):
                     )
                     boundary_decision = None
                     if tool_boundary_context is not None:
+                        batch_decision = self._react_boundary.evaluate_batch_tool_call(
+                            intent=tool_boundary_context.intent,
+                            tool_name=tool_call.name,
+                            tool_batch_index=tool_batch_index,
+                            ledger=tool_boundary_context.ledger,
+                            evidence_assessment=evidence_assessment,
+                            local_source_allowed=_local_source_allowed(
+                                tool_boundary_context
+                            ),
+                        )
+                        if batch_decision.action == "skip":
+                            react_boundary_batch_skip_count += 1
+                            turn_completion_decision = _with_batch_skip_count(
+                                turn_completion_decision,
+                                react_boundary_batch_skip_count,
+                            )
+                            result = batch_decision.result_payload
+                            await self._observe_tool_call_started(
+                                session_key=tool_event_session_key,
+                                channel=tool_event_channel,
+                                chat_id=tool_event_chat_id,
+                                iteration=iteration + 1,
+                                call_id=tool_call.id,
+                                tool_name=tool_call.name,
+                                arguments=tool_call.arguments,
+                            )
+                            append_tool_result(
+                                messages,
+                                tool_call_id=tool_call.id,
+                                content=result,
+                                tool_name=tool_call.name,
+                            )
+                            await self._observe_tool_call_completed(
+                                session_key=tool_event_session_key,
+                                channel=tool_event_channel,
+                                chat_id=tool_event_chat_id,
+                                iteration=iteration + 1,
+                                call_id=tool_call.id,
+                                tool_name=tool_call.name,
+                                arguments=tool_call.arguments,
+                                final_arguments=tool_call.arguments,
+                                status=batch_decision.status,
+                                result_preview=support.log_preview(result),
+                            )
+                            iter_calls.append(
+                                {
+                                    "call_id": tool_call.id,
+                                    "name": tool_call.name,
+                                    "status": batch_decision.status,
+                                    "arguments": tool_call.arguments,
+                                    "boundary_action": "skip",
+                                    "boundary_reason": batch_decision.reason,
+                                    "result": result,
+                                }
+                            )
+                            logger.info(
+                                "[react_boundary] batch_skip tool=%s reason=%s",
+                                tool_call.name,
+                                batch_decision.reason,
+                            )
+                            continue
                         boundary_decision = self._tool_boundary.evaluate_tool_call(
                             tool_boundary_context,
                             tool_name=tool_call.name,
@@ -1252,6 +1385,14 @@ class DefaultReasoner(Reasoner):
                                 }
                             )
                             if boundary_decision.action == "soft_stop":
+                                evidence_assessment = self._evidence_contract.assess(
+                                    user_text=user_text,
+                                    intent=tool_boundary_context.intent,
+                                    ledger=tool_boundary_context.ledger,
+                                    boundary_decisions=self._tool_boundary.recent_decisions(
+                                        tool_boundary_context
+                                    ),
+                                )
                                 turn_completion_decision = (
                                     self._turn_completion.evaluate(
                                         intent=tool_boundary_context.intent,
@@ -1259,9 +1400,9 @@ class DefaultReasoner(Reasoner):
                                         boundary_decisions=self._tool_boundary.recent_decisions(
                                             tool_boundary_context
                                         ),
-                                        local_source_allowed=(
-                                            tool_boundary_context.access_plan.reason
-                                            == "doc_rag_allows_explicit_local_files"
+                                        evidence_assessment=evidence_assessment,
+                                        local_source_allowed=_local_source_allowed(
+                                            tool_boundary_context
                                         ),
                                     )
                                 )
@@ -1517,6 +1658,59 @@ class DefaultReasoner(Reasoner):
                             ),
                             blocked_tools=tool_search_blocked,
                         )
+                        evidence_assessment = self._evidence_contract.assess(
+                            user_text=user_text,
+                            intent=tool_boundary_context.intent,
+                            ledger=tool_boundary_context.ledger,
+                            boundary_decisions=self._tool_boundary.recent_decisions(
+                                tool_boundary_context
+                            ),
+                        )
+                        react_decision = (
+                            self._react_boundary.evaluate_after_tool_result(
+                                intent=tool_boundary_context.intent,
+                                ledger=tool_boundary_context.ledger,
+                                evidence_assessment=evidence_assessment,
+                                local_source_allowed=_local_source_allowed(
+                                    tool_boundary_context
+                                ),
+                            )
+                        )
+                        completion_decision = self._turn_completion.evaluate(
+                            intent=tool_boundary_context.intent,
+                            ledger=tool_boundary_context.ledger,
+                            boundary_decisions=self._tool_boundary.recent_decisions(
+                                tool_boundary_context
+                            ),
+                            evidence_assessment=evidence_assessment,
+                            local_source_allowed=_local_source_allowed(
+                                tool_boundary_context
+                            ),
+                            proactive_allowed=react_decision.recommend_final_only,
+                        )
+                        if completion_decision.action == "final_only":
+                            metadata = _react_completion_metadata(
+                                reason=react_decision.reason,
+                                decision_metadata=react_decision.metadata,
+                                recommended_suppress=(
+                                    react_decision.recommended_suppress
+                                ),
+                                batch_skip_count=react_boundary_batch_skip_count,
+                            )
+                            turn_completion_decision = TurnCompletionDecision(
+                                action="final_only",
+                                reason=completion_decision.reason,
+                                model_hint=completion_decision.model_hint,
+                                metadata={
+                                    **dict(completion_decision.metadata),
+                                    **metadata,
+                                },
+                            )
+                            final_only_next_call = True
+                            logger.info(
+                                "[react_boundary] final_only reason=%s",
+                                react_decision.reason,
+                            )
 
                     # 6.3 tool_search 的结果会扩展下一轮可见工具。
                     if (
@@ -1774,6 +1968,7 @@ class DefaultReasoner(Reasoner):
                     else None
                 ),
                 turn_completion_trace=_completion_trace(turn_completion_decision),
+                evidence_contract_trace=assessment_trace(evidence_assessment),
             )
 
         # 9. 达到最大迭代次数后，生成不完整进展总结。
@@ -1805,6 +2000,7 @@ class DefaultReasoner(Reasoner):
                 else None
             ),
             turn_completion_trace=_completion_trace(turn_completion_decision),
+            evidence_contract_trace=assessment_trace(evidence_assessment),
         )
 
     async def _observe_tool_call_started(
@@ -1922,6 +2118,7 @@ class DefaultReasoner(Reasoner):
         cache_seen: bool,
         tool_boundary_trace: dict[str, object] | None = None,
         turn_completion_trace: dict[str, object] | None = None,
+        evidence_contract_trace: dict[str, object] | None = None,
     ) -> ReasonerResult:
         # 1. 先把 tool_chain 扁平化成 invocations。
         invocations: list[LLMToolCall] = []
@@ -1967,6 +2164,8 @@ class DefaultReasoner(Reasoner):
             metadata["tool_boundary"] = tool_boundary_trace
         if turn_completion_trace is not None:
             metadata["turn_completion"] = turn_completion_trace
+        if evidence_contract_trace is not None:
+            metadata["evidence_contract"] = evidence_contract_trace
 
         # 3. 最后返回标准 ReasonerResult。
         return ReasonerResult(

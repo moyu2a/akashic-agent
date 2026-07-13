@@ -140,7 +140,7 @@ def test_redundant_visible_tool_search_soft_stop_does_not_execute_tool_search() 
     )
 
 
-def test_repeated_fetch_soft_stop_after_citation_evidence() -> None:
+def test_repeated_fetch_round_prevented_after_citation_evidence() -> None:
     search_docs = _RecordingTool(
         "search_docs",
         json.dumps(
@@ -174,10 +174,6 @@ def test_repeated_fetch_soft_stop_after_citation_evidence() -> None:
                 content="",
                 tool_calls=[ToolCall("f1", "fetch_doc_chunk", {"chunk_id": "c1"})],
             ),
-            LLMResponse(
-                content="",
-                tool_calls=[ToolCall("f2", "fetch_doc_chunk", {"chunk_id": "c2"})],
-            ),
             LLMResponse(content="final", tool_calls=[]),
         ]
     )
@@ -197,7 +193,8 @@ def test_repeated_fetch_soft_stop_after_citation_evidence() -> None:
     assert len(search_docs.calls) == 1
     assert len(fetch_doc_chunk.calls) == 1
     assert result.tools_used == ["search_docs", "fetch_doc_chunk"]
-    assert result.tool_chain[2]["calls"][0]["status"] == "soft_stopped_by_tool_boundary"
+    assert result.context_retry["turn_completion"]["action"] == "final_only"
+    assert result.context_retry["turn_completion"]["metadata"]["react_boundary"] is True
     assert result.context_retry["tool_boundary"]["ledger_summary"][
         "has_citation_evidence"
     ] is True

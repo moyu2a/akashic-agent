@@ -63,6 +63,7 @@ class ToolCallRecord:
     chunk_keys: tuple[str, ...] = ()
     terminal_scope: str = ""
     result_summary: str = ""
+    result_text: str = ""
     result_has_evidence: bool = False
     result_has_citation: bool = False
     result_error_code: str = ""

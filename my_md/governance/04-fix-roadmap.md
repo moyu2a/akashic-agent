@@ -82,7 +82,7 @@
 - 2026-07-11 CLI IPC v2 自动化修复已完成：`AKIP2` frame、稳定 session id、`tool_summary` 投影、payload 治理和 workspace 文件日志均已覆盖测试；随后用户真实 CLI 重连测试确认默认继承之前 session。
 - 2026-07-11 16:17 live smoke 复测：CLI IPC v2 未断连且 session 稳定，但强文档长证据 prompt 再次跑偏到 `read_file/shell`，turn `354` 工具链为 `read_file -> read_file -> shell -> search_docs -> shell -> shell -> read_file -> search_docs -> read_file`，`react_iteration_count=7`，`react_input_peak_tokens~=37978`。P10a.1 不能标记为未复现或跳过。
 - 2026-07-11 16:32 用户真实 CLI 重连测试确认：默认 CLI 会继承之前 session，CLI-001 从 transport/session 角度关闭；下一步回到 RAG-006 P10a.1，治理强文档证据 turn 跑偏到 `shell/read_file/list_dir` 的问题。
-- 2026-07-11 P10a.1 Tool Access Gateway 已完成自动化实现并通过回归：新增纯网关策略测试、reasoner 集成测试、P10a preload 合同迁移测试；`uv run --with pytest --with pytest-asyncio pytest tests/test_doc_rag_intent.py tests/test_doc_rag_intent_preload.py tests/test_agent_core_p2_reasoner.py tests/test_tool_search.py tests/test_tool_access_gateway.py tests/test_tool_access_gateway_reasoner.py -q` 为 `92 passed, 2 warnings`，运行时/通道 smoke 集合为 `81 passed`。真实 CLI/LLM smoke 待执行。
+- 2026-07-11 P10a.1 Tool Access Gateway 已完成自动化实现并通过回归：新增纯网关策略测试、reasoner 集成测试、P10a preload 合同迁移测试；`uv run --with pytest --with pytest-asyncio pytest tests/test_doc_rag_intent.py tests/test_doc_rag_intent_preload.py tests/test_agent_core_p2_reasoner.py tests/test_tool_search.py tests/test_tool_access_gateway.py tests/test_tool_access_gateway_reasoner.py -q` 为 `92 passed, 2 warnings`，运行时/通道 smoke 集合为 `81 passed`。随后已执行真实 CLI/LLM smoke。
 - 2026-07-11 21:01 P10a.1 真实 CLI/LLM smoke 已通过关键目标：turn `361` 在强文档 + 原文 chunk 展开 prompt 下走 `tool_search -> search_docs -> fetch_doc_chunk -> fetch_doc_chunk -> fetch_doc_chunk -> search_docs -> fetch_doc_chunk`，未调用 `shell/read_file/list_dir`，`error=NULL`，CLI 未断连。gateway 日志显示本地文件工具已被 `visible_suppress` 和 `execution_block` 压制。
 - 剩余成本问题：turn `361` 仍有一次多余 `tool_search` 确认可见工具，且重复检索/展开导致 `react_iteration_count=6`、`react_input_peak_tokens~=68857`；后续应进入“第五阶段：工具链成本控制”，而不是继续处理本地文件工具跑偏。
 - 启用场景简单问题：
@@ -188,7 +188,18 @@
 - 设计已完成审阅并修订：`soft_stop` 明确为不执行目标工具的非致命边界结果；决策合并优先级明确 core access block 高于 budget/evidence/plugin；ledger 和负向测试要求已补齐。
 - 自动化实现已完成：`TurnToolBoundaryManager` 已接入 `DefaultReasoner`，targeted suite `100 passed, 2 warnings`，full pytest `1361 passed, 3 warnings`。
 - 2026-07-12 真实 CLI/LLM smoke 已执行：P10a.2 成功把真实工具执行收敛到 `search_docs + fetch_doc_chunk`，并把冗余 `tool_search`、额外 `fetch_doc_chunk`、额外 `search_docs` 转为 `tool_boundary_soft_stop`；但仍消耗 5 轮 LLM、`react_input_peak_tokens~=73267`、`prompt_tokens=419680`，说明剩余瓶颈已从“工具执行成本”转为“soft stop 后的 LLM 轮次/token 成本”。
-- 2026-07-12 P10a.3 自动化实现已完成：`TurnCompletionController` 消费 P10a.2 的 `document_rag_evidence_complete` soft stop；`DefaultReasoner` 下一轮使用 `tools=[]`，并通过 `context_retry.turn_completion` 暴露 `action/reason/metadata`。验证：targeted suite `24 passed`，broader relevant suite `55 passed`，full pytest `1373 passed, 3 warnings`，compileall exited 0。真实 CLI/LLM smoke 待执行。
+- 2026-07-12 P10a.3 自动化实现已完成：`TurnCompletionController` 消费 P10a.2 的 `document_rag_evidence_complete` soft stop；`DefaultReasoner` 下一轮使用 `tools=[]`，并通过 `context_retry.turn_completion` 暴露 `action/reason/metadata`。验证：targeted suite `24 passed`，broader relevant suite `55 passed`，full pytest `1373 passed, 3 warnings`，compileall exited 0。随后已执行真实 CLI/LLM smoke。
+- 2026-07-12 P10a.3 真实 CLI/LLM smoke 已执行：turn `364` 出现预期 `[tool_boundary] soft_stop ... document_rag_evidence_complete` 与 `[turn_completion] final_only ...` 日志；真实成功执行工具为 `search_docs + fetch_doc_chunk`，未调用 `shell/read_file/list_dir`，`react_iteration_count=3`，`prompt_tokens=265562`，对比 turn `362` 的 5 轮/`419680` prompt tokens 明显下降。
+- P10a.3 后续剩余问题：final-only 回答忠实度。turn `364` 最终回答把两个被 soft stop 的候选 chunk 写成“原文 chunk 展开”，但这些 chunk 没有真实 `fetch_doc_chunk` 成功结果；后续应让 final-only 阶段区分 fetched chunk 原文和 `search_docs` hit/snippet 摘要。
+- 2026-07-13 P10a.4a Evidence Contract 已完成：新增证据合同模块，将证据分成 `fetched_text`、`retrieval_snippet`、`soft_stopped_candidate`，final-only 前注入回答约束，保证只有真实成功 `fetch_doc_chunk` 的内容才能被称为“原文展开”。自动化验证：相关 suite `27 passed`，full pytest `1376 passed, 3 warnings`，compileall 和 `git diff --check` 通过。
+- 2026-07-13 P10a.4a 最新真实 CLI/LLM smoke 已验证：turn `365/366` 均未调用 `shell/read_file/list_dir`，均只真实成功执行 `search_docs + fetch_doc_chunk`，final answer 已正确把未真实 fetch 的后续证据称为“检索命中/检索摘要”，不再夸大为原文展开。
+- 2026-07-13 P10a.4b Bounded ReAct / Batch Boundary 自动化实现已完成：新增 `ReactBoundaryManager`，在真实工具结果入账后触发 proactive final-only recommendation，并在同一 assistant tool-call batch 中把预算外 Document RAG 调用标记为 `batch_skipped_by_react_boundary`。同批次 skipped calls 仍追加合法 tool result，但不计入成功 `tools_used`，不写入 evidence ledger，不再表现为普通 `tool_boundary_soft_stop`。验证：targeted P10a suite `48 passed`，full pytest `1391 passed, 3 warnings`，compileall 通过。随后已执行真实 CLI/LLM smoke。
+- 2026-07-13 P10a.4b 真实 CLI/LLM smoke 已执行：
+  - turn `367` 简单文档问题：`search_docs -> final`，`react_iteration_count=2`，`[react_boundary] final_only reason=document_rag_retrieval_complete`。
+  - turn `368` 原文证据问题：`search_docs -> fetch_doc_chunk -> final`，`react_iteration_count=3`，同批次额外两个 `fetch_doc_chunk` 被 `react_boundary_batch_skip` 跳过。
+  - turn `369` 文档 + 源码问题：`read_file x3 -> final`，显式源码读取未被 RAG final-only 截断；但没有当前 turn fresh RAG。
+  - turn `370` 历史工具查询：`search_messages -> final`，未被 `search_docs/fetch_doc_chunk` LRU 残留污染。
+  - 新问题：turn `370` 对 turn `369` 的工具使用自报不准确，说明 session/meta 的“用了哪些工具”应改走结构化 observe/session tool trace，而不是让模型从自然语言上下文推断。
 
 候选方案：
 
@@ -198,6 +209,13 @@
 - 对连续同类工具调用增加 loop guard 或成本提示，重点覆盖重复 `search_docs`、重复 `fetch_doc_chunk` 和工具已可见后的 `tool_search`。
 - 保持第一版 soft governance：重复/超预算时优先 `soft_stop`，不执行目标工具但给模型结构化提示；本地文件工具误用仍由 access policy hard block。
 - P10a.3 已实现第一版 Boundary-Driven Early Finalization：当前仅对 `doc_qa_with_evidence` + `document_rag_evidence_complete` 启用 final-only；no-hit、无 citation chunk、显式源码/本地文件请求不会触发。
+- P10a.4a 已实现 Evidence Contract：final-only 阶段区分 fetched original text、retrieval snippets 和 soft-stopped candidates，防止回答证据标签失真。
+- P10a.4b 已实现受控 ReAct 边界：工具结果入账后由 Evidence Contract 判断证据是否足够，再交给 Turn Completion 产出 final-only；React Boundary 只提供 `recommend_final_only` 和 same-batch skip。必要时后续再评估 provider 层 `parallel_tool_calls=false`，但当前第一版不依赖 provider 特性。
+- P10a.4b 后续不再优先处理 Document RAG 长工具链：真实 smoke 已证明主路径收敛。下一步优先设计结构化 turn/tool trace 查询能力，让 session/meta 问题能够准确回答“上一轮/第 N 个问题用了哪些工具”，并明确“项目文档 + 源码”场景是否必须 fresh RAG。
+- 2026-07-13 已完成结构化 Turn Trace Query 实现计划并审阅到可执行状态：
+  - 计划文档：`docs/superpowers/plans/2026-07-13-turn-trace-query.md`。
+  - 推荐实现顺序：core trace query service -> observe slim trace 元数据保真与非 LRU 合同 -> `inspect_turn_trace` 工具适配器 -> ToolAccessGateway 可见性与 protected `_session_key` 上下文 -> turn `370` 风格 E2E 回归。
+  - 验收重点：工具历史问题必须通过当前 session 的 `observe.turns.tool_chain_json` / `tool_calls` 回源；被 boundary block/soft-stop/batch-skip 的调用不能算真实执行；混合 doc+tool-history prompt 不能重新暴露 stale `search_docs/fetch_doc_chunk`。
 - 增强普通日志：`soft_stop` 应以 `[tool_boundary] soft_stop tool=... reason=...` 形式进入 agent log，避免只能通过 observe DB 判断拦截是否发生。
 - 增强普通日志已覆盖自动化：`[tool_boundary] soft_stop ...` 和 `[turn_completion] final_only ...` 均有测试断言。
 - 在 observe/e2e eval 中落地成本指标：`max_react_iterations`、`max_tool_calls`、`max_doc_rag_search_calls`、`max_doc_chunk_fetch_calls`。
@@ -211,7 +229,8 @@
 - P10a.2 强文档证据展开：预期 `search_docs -> fetch_doc_chunk -> final`，目标 3-4 轮，通常不超过 4 次工具调用。
 - 回归 turn `361` 同类 prompt：不调用 `shell/read_file/list_dir` 的 P10a.1 结论保持不变，同时工具链从 6 轮/7 次工具调用下降。
 - 负向回归：no-hit、无 citation chunk、显式 broader exploration 不应被过早 evidence-complete；插件规则不能绕过 disabled/no-tool/core access block。
-- P10a.2 自动化和真实 smoke 均已验证“目标工具不会重复执行”；P10a.3 自动化已验证 evidence-complete 后的下一轮 final-only。下一步需要真实 CLI/LLM smoke 验证“LLM 循环也能及时停止”，目标 3-4 轮。
+- P10a.2 自动化和真实 smoke 均已验证“目标工具不会重复执行”；P10a.3 自动化和真实 smoke 已验证 evidence-complete 后的下一轮 final-only，真实 ReAct 轮次已降到 3；P10a.4a 自动化和真实 smoke 已验证 final-only 证据标签不再夸大；P10a.4b 自动化和真实 smoke 已验证 same-batch 多余 `fetch_doc_chunk` 会被 batch boundary skip，且 happy path 收敛为 `search_docs -> fetch_doc_chunk -> final`。
+- 新验证项：session/meta 工具历史查询应能从结构化 trace 中准确返回上一轮工具链；当前 turn `370` 暴露了自然语言推断不可靠。
 
 ## 暂不处理
 

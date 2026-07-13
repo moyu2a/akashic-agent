@@ -1,5 +1,10 @@
 from __future__ import annotations
 
+from agent.policies.evidence_contract import (
+    EvidenceAssessment,
+    EvidenceSufficiency,
+    TaskEvidenceRequirement,
+)
 from agent.policies.tool_ledger import ToolCallLedger, ToolCallRecord
 from agent.policies.turn_completion import TurnCompletionController
 
@@ -44,6 +49,20 @@ def _ledger_with_doc_evidence() -> ToolCallLedger:
         )
     )
     return ledger
+
+
+def _assessment_ready(task_type: str) -> EvidenceAssessment:
+    return EvidenceAssessment(
+        requirement=TaskEvidenceRequirement(task_type=task_type),
+        items=(),
+        sufficiency=EvidenceSufficiency(
+            tool_stop_allowed=True,
+            answer_ready=True,
+            reason="requirements_satisfied",
+        ),
+        constraints=(),
+        model_hint="Evidence contract for this answer:",
+    )
 
 
 def test_doc_evidence_complete_soft_stop_switches_to_final_only() -> None:
@@ -175,6 +194,48 @@ def test_local_source_allowed_does_not_final_only() -> None:
                 "execute": False,
             }
         ],
+    )
+
+    assert decision.action == "continue_react"
+    assert decision.reason == "local_source_allowed"
+
+
+def test_proactive_simple_doc_completion_uses_evidence_assessment() -> None:
+    decision = TurnCompletionController().evaluate(
+        intent="doc_qa_simple",
+        ledger=ToolCallLedger(),
+        boundary_decisions=(),
+        evidence_assessment=_assessment_ready("doc_qa_simple"),
+        proactive_allowed=True,
+    )
+
+    assert decision.action == "final_only"
+    assert decision.reason == "document_rag_retrieval_complete"
+    assert decision.metadata["proactive"] is True
+
+
+def test_proactive_doc_evidence_completion_uses_evidence_assessment() -> None:
+    decision = TurnCompletionController().evaluate(
+        intent="doc_qa_with_evidence",
+        ledger=ToolCallLedger(),
+        boundary_decisions=(),
+        evidence_assessment=_assessment_ready("doc_qa_with_evidence"),
+        proactive_allowed=True,
+    )
+
+    assert decision.action == "final_only"
+    assert decision.reason == "document_rag_evidence_complete"
+    assert decision.metadata["proactive"] is True
+
+
+def test_local_source_allowed_blocks_proactive_completion() -> None:
+    decision = TurnCompletionController().evaluate(
+        intent="doc_qa_with_evidence",
+        ledger=ToolCallLedger(),
+        boundary_decisions=(),
+        evidence_assessment=_assessment_ready("doc_qa_with_evidence"),
+        proactive_allowed=True,
+        local_source_allowed=True,
     )
 
     assert decision.action == "continue_react"

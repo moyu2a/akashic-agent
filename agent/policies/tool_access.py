@@ -66,6 +66,7 @@ class ToolAccessPlan:
     matched_terms: tuple[str, ...] = ()
     policies: tuple[str, ...] = ()
     filter_error: bool = False
+    local_source_allowed: bool = False
 
 
 @dataclass(frozen=True)
@@ -111,6 +112,7 @@ class DocRagAccessPolicy:
                 reason="doc_rag_allows_explicit_local_files",
                 matched_terms=matched_terms,
                 policies=(self.name,),
+                local_source_allowed=True,
             )
 
         reason = (
@@ -321,6 +323,9 @@ def _merge_plans(left: ToolAccessPlan, right: ToolAccessPlan) -> ToolAccessPlan:
         matched_terms=matched,
         policies=policies,
         filter_error=left.filter_error or right.filter_error,
+        local_source_allowed=(
+            left.local_source_allowed or right.local_source_allowed
+        ),
     )
 
 

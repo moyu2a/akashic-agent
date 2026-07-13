@@ -70,6 +70,24 @@ EV-001
 请按 my_md/governance 的问题映射规则处理：原始事实保留在对应业务目录；需要治理的问题同步到 my_md/governance/01-issue-index.md 或 02-current-issues.md；领域演进写入 03-domain-evolution.md；如果该问题具备明确现象、原因分析、处理方案或处理结果，并且适合沉淀为 STAR 案例，请同步更新 my_md/governance/06-star-log.md，并保留来源编号或关联文档路径。
 ```
 
+复盘提炼提示词：
+
+```text
+请基于当前问题的日志、observe 记录、测试结果和相关文档，按 06-star-log.md 的结构做一次可复用复盘：
+
+1. 先保留事实：问题现象、证据、影响范围、原因分析、排查路径。
+2. 再做问题分层：把问题拆成配置/工具可见性/工具访问边界/执行边界/收尾边界/证据忠实度/可观测性/性能成本等层面。
+3. 然后提炼方案：每一层写清楚根因、采用的模块化边界或策略、为什么不用更简单但不可扩展的修补。
+4. 最后量化成果：记录修复前后 ReAct 轮次、工具调用次数、prompt tokens、是否断连、是否仍有 forbidden tools、自动化测试结果和真实 smoke 结果。
+
+输出时请同时补充：
+- `可提炼成果`：用表格总结“问题 -> 根因 -> 方案 -> 成果指标”。
+- `可复用结构`：总结这次问题暴露出的通用工程模式，例如 access control plane、execution boundary、completion boundary、evidence labeling。
+- `后续可复用提示词`：给出下一次遇到类似问题时可以直接复制使用的诊断/复盘 prompt。
+
+不要只写“已修复”；必须写清楚指标改善和仍未解决的边界。
+```
+
 ## 记录模板
 
 ### CASE-xxx: 问题标题
@@ -126,6 +144,18 @@ EV-001
 
 -
 
+可提炼成果：
+
+| 问题 | 根因 | 方案 | 成果指标 |
+| --- | --- | --- | --- |
+|  |  |  |  |
+
+可复用结构：
+
+- 这个问题可以抽象成什么工程边界问题？
+- 哪些模块边界被重新划清？
+- 哪些指标可以作为以后同类问题的验收标准？
+
 验证方式：
 
 -
@@ -144,6 +174,19 @@ STAR 复盘：
 面试表达：
 
 -
+
+后续可复用提示词：
+
+```text
+请把这个问题整理成 STAR 复盘，重点不要只写现象和修复，而要提炼工程模式：
+
+- 问题分层：配置、访问权限、工具可见性、执行边界、终止条件、证据忠实度、可观测性、性能成本。
+- 边界设计：哪些判断应该在 core policy，哪些可以交给插件，哪些不能写入跨 turn 状态。
+- 指标结果：修复前后 ReAct 轮次、工具调用次数、prompt tokens、错误工具调用、CLI/服务稳定性、测试通过情况。
+- 复用价值：以后遇到类似问题，可以复用哪些模块、规则、测试和 smoke 方法。
+
+请更新 `my_md/governance/06-star-log.md`，并在相关 `02-current-issues.md`、`04-fix-roadmap.md` 或领域文档中同步当前状态。
+```
 
 ## 当前案例
 
@@ -429,6 +472,49 @@ STAR 复盘：
 - 2026-07-12 P10a.2 自动化实现已完成：新增 `ToolCallLedger`、`ToolBudgetPolicy`、`EvidenceCompletionPolicy`、`TurnToolBoundaryManager` 并接入 `DefaultReasoner`。验证结果：targeted suite `100 passed, 2 warnings`，full pytest `1361 passed, 3 warnings`，compileall exited 0。
 - 2026-07-12 P10a.2 真实 CLI/LLM smoke 已执行：turn `362` 中 `tool_boundary` 成功把冗余 `tool_search`、额外 `fetch_doc_chunk`、额外 `search_docs` 转为 `tool_boundary_soft_stop`，真实成功执行工具只有 `search_docs` 和 1 次 `fetch_doc_chunk`，且未调用 `shell/read_file/list_dir`。新暴露的问题是 `soft_stop` 仍需要回到 LLM 继续推理，导致 5 轮 LLM、`react_input_peak_tokens~=73267`、`prompt_tokens=419680`。演进结论：P10a.2 解决了“不要重复执行工具”，但没有完全解决“不要重复消耗 LLM 轮次/token”。
 - 2026-07-12 P10a.3 自动化实现已完成：新增 `agent/policies/turn_completion.py` 并接入 `DefaultReasoner`；evidence-complete soft stop 后下一轮 LLM 使用 `tools=[]`，`context_retry.turn_completion` 记录 action/reason/metadata，普通日志输出 `[turn_completion] final_only ...`。验证结果：targeted suite `24 passed`，broader relevant suite `55 passed`，full pytest `1373 passed, 3 warnings`，compileall exited 0。真实 CLI/LLM smoke 仍需重跑 turn `362` 同类 prompt。
+- 2026-07-12 P10a.3 真实 CLI/LLM smoke 已执行：turn `364` 中普通日志出现 `[tool_boundary] soft_stop tool=fetch_doc_chunk reason=document_rag_evidence_complete` 和 `[turn_completion] final_only reason=document_rag_evidence_complete`；成功工具执行为 `search_docs + fetch_doc_chunk`，未调用 `shell/read_file/list_dir`，`react_iteration_count=3`，`prompt_tokens=265562`，相较 turn `362` 的 5 轮/`419680` prompt tokens 达成轮次和 token 降本目标。新暴露的问题是 final-only 回答把 soft-stopped 的候选 chunk 写成“原文展开”，说明工具边界已收束，但回答 evidence labeling 仍需收紧。
+- 2026-07-13 P10a.4a Evidence Contract 已完成：新增 `agent/policies/evidence_contract.py`，从同一份 ledger 和 boundary decisions 中抽取 `fetched_text`、`retrieval_snippet`、`soft_stopped_candidate`，并在 final-only 前注入回答约束。为避免真实 `search_docs` 结果被 `result_summary[:240]` 截断后无法解析，`ToolCallRecord` 新增完整 `result_text`。验证结果：新增 evidence contract 测试通过，相关 P10a 回归 `27 passed`，full pytest `1376 passed, 3 warnings`，compileall 和 `git diff --check` 通过。
+- 2026-07-13 P10a.4a 真实 CLI/LLM smoke 已检查：turn `365` 和 `366` 均未调用 `shell/read_file/list_dir`，均只真实成功执行 `search_docs + fetch_doc_chunk`，两个后续 `fetch_doc_chunk` 请求被 soft-stop。最终回答已把成功 fetched chunk 称为“完整原文/原文”，把未真实 fetch 的 Tool Calling / 系统全景证据称为“检索命中/检索摘要”，不再把 soft-stopped candidate 写成已展开原文。
+- 2026-07-13 新暴露的成本边界：P10a.4a 修复了证据忠实度，但 turn `365/366` 显示同一 assistant tool-call batch 中仍会生成多个 `fetch_doc_chunk` 请求；boundary 可以避免真实重复执行，却无法阻止模型先生成多余 tool calls。下一步 P10a.4b 应采用 bounded ReAct / React Boundary Cost Optimization：工具结果入账后 proactive final-only，下一轮动态隐藏已不需要的 Document RAG 工具，并用 batch-level budget 限制同一 LLM 响应里的多工具调用。
+- 2026-07-13 P10a.4b Bounded ReAct / Batch Boundary 自动化实现已完成：新增 `ReactBoundaryManager`，把 after-result proactive completion 和 same-batch skip 分开治理。Evidence Contract 仍负责证据充分性，Turn Completion 仍负责 final-only 决策，React Boundary 只返回 `recommend_final_only` 和 `batch_skipped_by_react_boundary`。同批次 skipped calls 仍追加合法 tool result，但不计入成功 `tools_used`，不写入 evidence ledger，不成为 `soft_stopped_candidate`。验证结果：P10a targeted suite `48 passed`，full pytest `1391 passed, 3 warnings`，compileall 通过。随后已执行真实 CLI/LLM smoke。
+- 2026-07-13 P10a.4b 真实 CLI/LLM smoke 已执行并检查 observe/session/log：
+  - turn `367` 简单文档引用问题收敛为 `search_docs -> final`，`react_iteration_count=2`，日志出现 `[react_boundary] final_only reason=document_rag_retrieval_complete`。
+  - turn `368` 原文证据问题收敛为 `search_docs -> fetch_doc_chunk -> final`，`react_iteration_count=3`；同一 assistant tool-call batch 中额外两个 `fetch_doc_chunk` 被 `react_boundary_batch_skip` 跳过，保持 provider tool-result 协议合法但不真实执行。
+  - turn `369` 文档 + 源码问题只执行 `read_file x3`，说明显式源码读取的 local-source exemption 生效，没有被 Document RAG final-only 过早截断；但本轮文档证据来自前文上下文，不是 fresh RAG。
+  - turn `370` “刚才第二个问题用了哪些工具”只执行 `search_messages`，没有被 `search_docs/fetch_doc_chunk` 的 LRU 残留污染；但最终回答把 turn `369` 的工具链说成 `search_docs + fetch_doc_chunk + read_file x3`，与 observe/session 记录的 `read_file x3` 不一致。
+- 2026-07-13 新暴露的 session/meta 边界：当用户问“上一轮/第二个问题用了哪些工具”时，普通 `search_messages` 和模型上下文只能提供自然语言历史，不能保证工具链事实准确。这个问题不属于 Document RAG 成本边界，而属于结构化 turn/tool trace 回源边界。后续应提供或扩展一个只读 trace 查询能力，按当前 session、turn id/相对轮次返回真实 `tool_chain_json` / `tools_used`，并要求模型在回答工具历史时以结构化 trace 为准。
+- 2026-07-13 已完成 Turn Trace Query 实现计划审阅：计划采用 core service + deferred tool adapter + ToolAccessGateway visibility，而不是纯插件或 AgentLoop 改造。核心约束包括：`inspect_turn_trace` 不 always-on、不进 LRU、不暴露 model-controllable `session_key`；protected `_session_key` 由 registry context 注入；`blocked_by_tool_boundary`、`soft_stopped_by_tool_boundary`、`react_boundary_batch_skip` 等非真实执行调用必须从真实工具统计中排除；session/meta/tool-history intent 在混合 doc prompt 中优先，避免“刚才项目文档那个问题用了哪些工具？”重新误走 Document RAG。
+
+可提炼成果：
+
+| 问题 | 根因 | 方案 | 成果指标 |
+| --- | --- | --- | --- |
+| disabled RAG fallback 到本地文件工具 | `doc_rag_disabled` 缺少强 terminal 语义，模型尝试用 `read_file/list_dir` 替代文档检索 | RAG-005 增强 disabled payload：`terminal_scope=document_rag`、`fallback_allowed=false`、`recommended_action`、用户可读 restart 信息 | disabled live smoke 不再 fallback 到 `read_file/list_dir/shell`；仍保留“是否可主动开启配置”的话术复测 |
+| 明确文档问题需要多轮 `tool_search` 解锁 | `search_docs/fetch_doc_chunk` 不是 always-on，工具不可见导致额外 ReAct 轮次 | P10a turn-local intent preload：强文档意图当前 turn 暴露 `search_docs`，证据展开意图再暴露 `fetch_doc_chunk`；不写 LRU | P10a 自动化回归 `43 passed`；解决初始工具不可见问题，但暴露工具使用边界问题 |
+| 强文档证据请求跑偏到 `shell/read_file/list_dir` | 工具“可见”不等于工具“应该使用”，访问判断散落在 prompt、tool_search、hook 和执行器之间 | P10a.1 Tool Access Gateway：统一 current-turn `ToolAccessPlan`，控制 schema 可见性、tool_search 解锁、执行前 gate 和工具结果观察 | turn `361` 起真实 smoke 未再调用 `shell/read_file/list_dir`；错误工具访问边界收敛 |
+| RAG 工具重复执行，成本偏高 | 缺少 turn-local ledger、预算和 evidence-complete 判断 | P10a.2 Turn Tool Boundary Manager：新增 `ToolCallLedger`、`ToolBudgetPolicy`、`EvidenceCompletionPolicy`，冗余工具转为非执行型 `soft_stop` | turn `362` 真实成功执行工具收敛到 `search_docs + fetch_doc_chunk`；额外工具被 soft stop，不再真实执行 |
+| soft stop 后仍继续消耗 LLM 轮次/token | execution boundary 只能阻止工具执行，不能终止 ReAct 循环 | P10a.3 Turn Completion：`document_rag_evidence_complete` 后下一轮 final-only，`tools=[]`，不写 LRU | turn `364` ReAct 从 turn `362` 的 5 轮降到 3 轮；`prompt_tokens` 从 `419680` 降到 `265562`，约下降 36.7% |
+| citation 来源真实但回答可能说过头 | citation validator 只校验来源，不校验 claim/evidence 对齐；final-only 未区分 fetched chunk 和 search snippet | P10a.4a Evidence Contract：区分 fetched original text、retrieval snippet 和 soft-stopped candidate，并注入 final-only 回答约束 | turn `365/366` 最终回答不再把未真实 fetch 的证据称为“原文展开”；full pytest `1376 passed` |
+| 同一 batch 仍生成多余 `fetch_doc_chunk` | boundary 是执行时拦截，不能阻止模型在同一 assistant message 中生成多个 tool call | P10a.4b Bounded ReAct / Batch Boundary：after-result proactive final-only + same-batch `batch_skipped_by_react_boundary`，并保持 provider tool-result 协议合法 | 自动化验证 `48 passed`；full pytest `1391 passed`；真实 smoke turn `367/368` 验证链路收敛为 `search_docs -> final` 和 `search_docs -> fetch_doc_chunk -> final` |
+| 工具历史自报不准确 | session/meta 问题依赖普通消息检索和模型上下文推断，未读取结构化 turn/tool trace | 新增结构化 trace 查询能力：core `TurnTraceQueryService` 读取当前 session observe trace，经 deferred `inspect_turn_trace` 暴露；ToolAccessGateway 只在 tool-history/session-meta turn 显示它，并压制 stale RAG LRU | turn `370` 暴露：真实 turn `369` 为 `read_file x3`，但回答误报 `search_docs + fetch_doc_chunk + read_file x3`；实现计划 `docs/superpowers/plans/2026-07-13-turn-trace-query.md` 已审阅到可执行状态 |
+
+可复用结构：
+
+- **Access control plane**：回答“这个 turn 哪些工具可见、哪些工具允许被发现、哪些工具即使被调用也不能执行”。适合放在 core policy boundary，不适合只靠插件 hook。
+- **Execution boundary**：回答“这个工具调用是否还应该真实执行”。需要 turn-local ledger、预算、重复检测和 evidence-complete 判断。
+- **Completion boundary**：回答“工具循环是否应该结束”。当 evidence-complete 后，应从 ReAct 工具循环切到 final-only，而不是继续把 soft stop 当作普通工具结果喂回模型。
+- **Evidence labeling boundary**：回答“最终回答能如何称呼证据”。只有成功 `fetch_doc_chunk` 的内容才能叫原文展开；`search_docs` 命中只能叫检索摘要；被 soft stop 的候选 chunk 不能被写成已展开原文。
+- **React boundary / cost boundary**：回答“模型是否还有必要继续看到工具、继续生成工具调用”。当任务是固定路径的 Document RAG 时，应采用 bounded ReAct；开放研究或源码调查才保留更自由的 ReAct。
+- **Trace/source-of-truth boundary**：回答“系统历史事实应从哪里来”。用户问工具使用、turn 轮次、上一轮执行链路时，不能让模型从聊天文本猜测，应读取 observe/session 的结构化 trace。
+- **Cross-turn state boundary**：P10a/P10a.1/P10a.3 的意图、访问和完成状态都保持 turn-local，不写入 `ToolDiscoveryState` / LRU，避免污染后续记忆/session 问题。
+
+可复用验收指标：
+
+- 工具链：成功工具是否只包含目标工具，forbidden tools 是否为 0。
+- ReAct 轮次：简单文档问题目标 2-3 轮，证据展开问题目标 3-4 轮。
+- 成本：记录 `prompt_tokens`、`react_input_peak_tokens` 和 cache hit，比较修复前后。
+- 稳定性：CLI 是否断连，observe turn 是否 `error=NULL`。
+- 证据忠实度：最终回答中的“原文”“摘要”“推断”是否与真实工具结果类型一致。
 
 验证方式：
 
@@ -451,7 +537,10 @@ STAR 复盘：
 - RAG-006 memory-after-doc-LRU 自动化测试已新增；仍需真实 CLI/LLM smoke 验证同 session 行为。
 - RAG-006 P10a.1：Tool Access Gateway 自动化实现和真实 CLI/LLM smoke 已验证强文档证据 case 不再跑偏到本地文件工具；memory-after-doc-LRU 同 session smoke 也未误走 Document RAG。
 - RAG-006 P10a.2：自动化和真实 CLI/LLM smoke 已确认边界能阻止冗余工具真实执行。
-- RAG-006 P10a.3：自动化已确认 evidence-complete 后下一轮会切为 final-only；遗留任务是真实 CLI/LLM smoke，确认 turn `362` 同类 prompt 的 ReAct 轮次和 prompt token 是否按预期下降。
+- RAG-006 P10a.3：自动化和真实 CLI/LLM smoke 已确认 evidence-complete 后下一轮会切为 final-only，turn `364` 的 ReAct 轮次已降到 3；遗留任务转为 final-only 证据表述忠实度，避免把未真实 fetch 的 soft-stopped chunk 说成“原文展开”。
+- RAG-006 P10a.4a：Evidence Contract 自动化和真实 CLI/LLM smoke 已确认 final-only 证据标签正确；遗留任务转为 P10a.4b 成本优化，避免同一 batch 生成多余 `fetch_doc_chunk` 请求。
+- RAG-006 P10a.4b：Bounded ReAct / Batch Boundary 自动化和真实 CLI/LLM smoke 已确认主路径成本边界生效；简单文档问题为 `search_docs -> final`，原文证据问题为 `search_docs -> fetch_doc_chunk -> final`，same-batch 多余 fetch 被 `react_boundary_batch_skip` 跳过。
+- 新遗留问题：turn `370` 暴露工具历史查询缺少结构化 trace 回源。后续应把“刚才用了哪些工具/第 N 个问题用了哪些工具”归入 session/meta trace 查询，而不是 Document RAG 工具链治理。
 - CLI-001：transport/session 侧已由自动化和真实 CLI 重连 smoke 验证；继续常规观察即可。
 - 如果 disabled live smoke 仍 fallback 到 `read_file/list_dir/shell`，需要第二阶段让工具执行器或 AgentLoop 消费 `fallback_allowed=false`。
 - 如果后续只剩“是否能主动开启配置”的话术问题，优先补充工具返回字段和 `user_message`，明确 `restart_required=true`、`can_self_enable=false`，再做一次 disabled live smoke。
@@ -462,8 +551,26 @@ STAR 复盘：
 - Situation：Document RAG P9 citation 自动化测试已经通过，但真实 CLI/LLM smoke 暴露出配置、工具链成本和引用忠实度问题。
 - Task：确认问题到底是索引失败、citation validator 失败、配置问题，还是工具治理问题，并形成后续修复路线。
 - Action：查看 `observe.db` 中多轮真实 turn，分别分析 `search_docs` 返回、工具链、ReAct 轮次、最终 citation 和 chunk 正文证据；先把问题拆成 disabled fallback、工具可见性成本、claim/evidence 对齐三类，再根据 P10a live smoke 继续识别出“工具可见性”和“工具可用性”不是同一个层面。
-- Result：确认 RAG 检索和 citation 来源校验本身可用；第一步通过 turn-local preload 降低明确文档问题的工具发现成本，后续 smoke 显示还需要 Tool Access Gateway 把 prompt 可见性、tool_search 解锁、执行前拦截和 terminal fallback 阻断收束到同一工具访问边界。Tool Access Gateway 的真实 smoke 已证明强文档证据问题不再跑偏到本地文件工具；P10a.2 Turn Tool Boundary Manager 又证明冗余工具可以被 `soft_stop` 阻止真实执行；P10a.3 自动化实现则把 evidence-complete 后的下一轮切成 final-only。最新剩余重点是用真实 CLI/LLM smoke 验证 token/轮次是否实际下降。
+- Result：确认 RAG 检索和 citation 来源校验本身可用；第一步通过 turn-local preload 降低明确文档问题的工具发现成本，后续 smoke 显示还需要 Tool Access Gateway 把 prompt 可见性、tool_search 解锁、执行前拦截和 terminal fallback 阻断收束到同一工具访问边界。Tool Access Gateway 的真实 smoke 已证明强文档证据问题不再跑偏到本地文件工具；P10a.2 Turn Tool Boundary Manager 又证明冗余工具可以被 `soft_stop` 阻止真实执行；P10a.3 把 evidence-complete 后的下一轮切成 final-only，并已在真实 smoke 中把 ReAct 轮次降到 3；P10a.4a Evidence Contract 进一步修正 final-only 的证据标签，避免把摘要或 soft-stopped chunk 说成原文展开；P10a.4b Bounded ReAct / Batch Boundary 在真实 smoke 中把简单文档链路收敛到 `search_docs -> final`，把原文证据链路收敛到 `search_docs -> fetch_doc_chunk -> final`。最新剩余重点已从 Document RAG 工具链成本转向 session/meta trace 事实回源：工具历史查询必须读取结构化 trace，不能靠模型从上下文猜测。
 
 面试表达：
 
-我在做 Document RAG live smoke 时没有只看“答案是否有引用”，而是继续追踪了真实工具链和证据支撑关系。第一轮发现配置未启用导致模型 fallback 到文件工具；第二轮启用后虽然 citation 来源真实，但工具链跑了 7 轮，而且部分结论是从标题结构推断出来的。于是我把问题拆成配置治理、工具成本治理和答案忠实度治理三层。这体现了我对 RAG 系统的理解：RAG 不是只要能召回和引用就结束，还要关注配置可用性、路径效率、证据是否真正支撑结论。
+我在做 Document RAG live smoke 时没有只看“答案是否有引用”，而是继续追踪了真实工具链、ReAct 轮次、prompt token 和证据支撑关系。第一轮发现配置未启用导致模型 fallback 到文件工具；启用后虽然 citation 来源真实，但工具链跑了 7 轮，而且部分结论是从标题结构推断出来的。
+
+我把这个问题拆成几层边界来治理：先用 turn-local preload 降低工具发现成本，再用 Tool Access Gateway 收束“哪些工具能用”，接着用 Turn Tool Boundary Manager 控制“哪些工具还要真实执行”，最后用 Turn Completion 在 evidence-complete 后切到 final-only，停止 ReAct 工具循环。这个拆分避免了在 prompt 或 `run_turn()` 里继续堆 if，也避免把临时意图写入 LRU 污染后续会话。
+
+结果上，强文档证据问题不再跑偏到 `shell/read_file/list_dir`；真实成功执行工具收敛到 `search_docs + fetch_doc_chunk`；同类 prompt 的 ReAct 轮次从 6/5 降到 3；`prompt_tokens` 从 turn `362` 的 `419680` 降到 turn `364` 的 `265562`，约下降 36.7%；P10a.4a 后 turn `365/366` 的回答也能正确区分“原文展开”和“检索摘要”；P10a.4b 后 turn `367/368` 进一步验证 bounded ReAct 主路径，简单文档问题只需 `search_docs`，原文证据问题只真实执行一次 `fetch_doc_chunk`。新暴露的问题是工具历史查询会把上下文证据误当作当前 turn 工具使用事实，因此下一步应补结构化 trace 查询边界。这体现了我对 RAG/agent 系统的理解：RAG 不只是能召回和引用，还要同时治理配置可用性、工具边界、路径效率、成本、证据忠实度和系统事实回源。
+
+后续可复用提示词：
+
+```text
+请按 CASE-003 的结构复盘这次 agent/RAG/tool 问题：
+
+1. 先从真实日志和 observe 记录提取事实：prompt、turn id、工具链、ReAct 轮次、prompt_tokens、error、最终回答证据。
+2. 把问题分层：配置语义、工具可见性、工具访问边界、工具执行边界、ReAct 终止边界、证据标注/faithfulness、CLI/observe 可观测性。
+3. 对每一层写清楚：根因是什么、为什么现有机制不够、采用了哪个模块化边界、为什么不写入跨 turn 状态。
+4. 量化结果：修复前后 ReAct 轮次、真实执行工具数、forbidden tools、prompt_tokens、CLI 是否断连、自动化测试结果和真实 smoke 结果。
+5. 最后提炼成“问题 -> 根因 -> 方案 -> 成果指标”表格，并写一段可以用于面试/项目汇报的 STAR 表达。
+
+如果发现新问题，不要把它写成当前问题未修复；要明确说明当前边界已解决什么，新暴露的问题属于哪一层新边界。
+```

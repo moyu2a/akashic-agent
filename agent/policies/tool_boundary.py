@@ -148,7 +148,7 @@ class TurnToolBoundaryManager:
                 ),
                 metadata={"recommended_tools": list(gate.recommended_tools)},
             )
-            self._record_decision(context, tool_name, decision)
+            self._record_decision(context, tool_name, decision, arguments)
             return decision
 
         evidence_decision = self._evidence.evaluate_call(
@@ -182,7 +182,7 @@ class TurnToolBoundaryManager:
                 model_hint=final.model_hint,
                 metadata=dict(final.metadata),
             )
-            self._record_decision(context, tool_name, decision)
+            self._record_decision(context, tool_name, decision, arguments)
             return decision
 
         decision = BoundaryExecutionDecision(
@@ -192,7 +192,7 @@ class TurnToolBoundaryManager:
             model_hint=final.model_hint,
             metadata=dict(final.metadata),
         )
-        self._record_decision(context, tool_name, decision)
+        self._record_decision(context, tool_name, decision, arguments)
         return decision
 
     def record_tool_result(
@@ -229,6 +229,7 @@ class TurnToolBoundaryManager:
                 chunk_keys=facts.chunk_keys,
                 terminal_scope=facts.terminal_scope,
                 result_summary=result_text[:240],
+                result_text=result_text,
                 result_has_evidence=facts.result_has_evidence,
                 result_has_citation=facts.result_has_citation,
                 result_error_code=facts.result_error_code,
@@ -262,6 +263,7 @@ class TurnToolBoundaryManager:
         context: ToolBoundaryContext,
         tool_name: str,
         decision: BoundaryExecutionDecision,
+        arguments: Mapping[str, Any],
     ) -> None:
         context.decisions.append(
             {
@@ -269,6 +271,8 @@ class TurnToolBoundaryManager:
                 "action": decision.action,
                 "reason": decision.reason,
                 "execute": decision.execute,
+                "arguments": _decision_arguments(tool_name, arguments),
+                "args_summary": summarize_args(arguments),
                 "metadata": dict(decision.metadata),
             }
         )
@@ -288,6 +292,22 @@ def _soft_stop_payload(decision: ToolBoundaryDecision) -> str:
         },
         ensure_ascii=False,
     )
+
+
+def _decision_arguments(
+    tool_name: str,
+    arguments: Mapping[str, Any],
+) -> dict[str, object]:
+    if tool_name == "fetch_doc_chunk":
+        chunk_id = arguments.get("chunk_id")
+        return {"chunk_id": chunk_id} if isinstance(chunk_id, str) else {}
+    if tool_name == "search_docs":
+        query = arguments.get("query")
+        return {"query": query} if isinstance(query, str) else {}
+    if tool_name == "tool_search":
+        query = arguments.get("query")
+        return {"query": query} if isinstance(query, str) else {}
+    return {}
 
 
 _ACTION_RANK = {

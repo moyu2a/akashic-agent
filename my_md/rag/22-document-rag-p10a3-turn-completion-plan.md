@@ -29,7 +29,41 @@
   - Compile check:
     `python3 -m compileall agent/policies agent/core/passive_turn.py tests/test_turn_completion_policy.py tests/test_turn_completion_reasoner.py`
     exited 0.
-- Real CLI/LLM smoke remains required.
+- Real CLI/LLM smoke: completed on 2026-07-12.
+  - Turn `364` used the planned prompt.
+  - Expected logs appeared:
+    `[tool_boundary] soft_stop tool=fetch_doc_chunk reason=document_rag_evidence_complete`
+    and `[turn_completion] final_only reason=document_rag_evidence_complete`.
+  - Successful target-tool execution was `search_docs + fetch_doc_chunk`.
+  - `shell/read_file/list_dir` were not called.
+  - ReAct iterations dropped to `3`, compared with turn `362` at `5` and turn
+    `361` at `6`.
+  - Prompt tokens dropped from turn `362` `419680` to turn `364` `265562`.
+  - New follow-up: final-only answer wording must distinguish fetched chunk
+    original text from search hit snippets and soft-stopped candidate chunks.
+- Follow-up P10a.4a Evidence Contract: completed on 2026-07-13.
+  - Added `agent/policies/evidence_contract.py`.
+  - `DefaultReasoner` injects evidence-contract hints before final-only answers.
+  - Evidence levels now distinguish successful `fetch_doc_chunk` original text,
+    `search_docs` retrieval snippets, and soft-stopped candidate chunks.
+  - `ToolCallRecord.result_text` keeps full tool result JSON so evidence parsing
+    is not limited by the 240-character result summary.
+  - Verification: relevant P10a suite `27 passed`, full pytest
+    `1376 passed, 3 warnings`, compileall passed, `git diff --check` passed.
+- Follow-up P10a.4a real CLI/LLM smoke: checked on 2026-07-13.
+  - Turns `365` and `366` did not call `shell/read_file/list_dir`.
+  - Successful target-tool execution remained `search_docs + fetch_doc_chunk`.
+  - Final answers correctly called only the fetched chunk "original/full text";
+    other evidence was described as retrieval hit/summary.
+  - Remaining issue: both turns still generated additional `fetch_doc_chunk`
+    calls in the same assistant tool-call batch. Boundary soft-stopped those
+    calls, but the model still spent tool-call tokens producing them.
+- Follow-up P10a.4b plan: write and implement React boundary cost optimization.
+  - Proactive completion after real tool results.
+  - Dynamic next-turn tool visibility.
+  - Batch-level budget for same-response multi tool calls.
+  - Consider provider-level `parallel_tool_calls=false` only after checking
+    provider support and adding provider-specific tests.
 
 ## Manual Live Smoke
 
@@ -56,6 +90,86 @@ Expected cost shape:
 - successful target-tool executions: `search_docs`, `fetch_doc_chunk`
 - ReAct iterations: target 3-4
 - no repeated LLM rounds after final-only
+
+Observed on 2026-07-12 turn `364`:
+
+- successful target-tool executions: `search_docs`, `fetch_doc_chunk`
+- two additional `fetch_doc_chunk` attempts were soft-stopped by
+  `document_rag_evidence_complete`
+- ReAct iterations: `3`
+- no `shell/read_file/list_dir`
+- `error=NULL`
+- remaining issue: the final answer presented soft-stopped candidate chunks as
+  "original chunk expansion"; future final-only wording should only use that
+  label for chunks with successful `fetch_doc_chunk` results
+
+Observed on 2026-07-13 turns `365` and `366` after P10a.4a:
+
+- successful target-tool executions: `search_docs`, `fetch_doc_chunk`
+- additional `fetch_doc_chunk` calls were soft-stopped in the same batch
+- no `shell/read_file/list_dir`
+- `error` empty
+- final answer labeling is now correct: fetched chunk content may be called
+  original/full text; search hits are described as retrieval hits/summaries
+- remaining issue: avoid generating same-batch redundant `fetch_doc_chunk`
+  calls, not merely soft-stopping them
+
+## P10a.4a Evidence Contract Follow-up
+
+P10a.3 solved the loop termination problem but exposed an answer-permission
+problem: the model could label soft-stopped candidate chunks as if they had been
+fetched. P10a.4a adds an evidence contract layer.
+
+The contract maps current-turn facts into answer permissions:
+
+- `fetch_doc_chunk` success -> `fetched_text`
+- `search_docs` hit -> `retrieval_snippet`
+- boundary soft-stop for `fetch_doc_chunk` -> `soft_stopped_candidate`
+
+Final-only answers receive a compact hint:
+
+- only successful `fetch_doc_chunk` results may be described as original text or
+  原文展开
+- `search_docs` hits are retrieval summaries
+- soft-stopped chunks must not be described as fetched or expanded
+
+## P10a.4b React Boundary Cost Follow-up
+
+P10a.4a leaves a narrower cost issue. The boundary prevents redundant tool
+execution, but turns `365/366` show that the model may still generate multiple
+`fetch_doc_chunk` tool calls in one assistant message. Since those tool calls
+already exist before after-result completion can run, P10a.4b must combine three
+controls:
+
+- proactive final-only after real tool results show enough evidence
+- dynamic hiding of Document RAG tools before later LLM calls
+- batch-level budget so only the budgeted subset of same-response tool calls can
+  execute, with the rest converted to soft-stop results
+
+This is bounded ReAct, not a global removal of ReAct. Document RAG has a fixed
+happy path, so it should use a tighter task profile than open research or source
+investigation.
+
+Implementation status on 2026-07-13:
+
+- Added `agent/policies/react_boundary.py`.
+- Added stable `ToolAccessPlan.local_source_allowed` and preserved it through
+  `_merge_plans()`.
+- Extended `TurnCompletionController.evaluate()` so it can consume
+  `EvidenceAssessment` for proactive final-only while preserving the old
+  soft-stop fallback.
+- Integrated same-batch boundary handling in `DefaultReasoner`: skipped calls
+  receive legal tool results with status `batch_skipped_by_react_boundary`, do
+  not count as successful `tools_used`, and do not enter the evidence ledger.
+- Tightened Evidence Contract sufficiency for original-evidence requests:
+  fetched original text must carry fetched-text citation when citations are
+  required.
+- Automated verification:
+  - P10a targeted suite: `48 passed`.
+  - Full pytest: `1391 passed, 3 warnings`.
+  - Compile check passed.
+- Remaining verification: real CLI/LLM smoke for the simple doc and original
+  evidence prompts.
 
 ## Global Constraints
 
