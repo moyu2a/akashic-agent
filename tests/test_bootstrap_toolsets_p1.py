@@ -4,6 +4,7 @@ from typing import Any, cast
 from pathlib import Path
 from types import SimpleNamespace
 
+from agent.task_plan.service import TaskPlanService
 from agent.tools.registry import ToolRegistry
 from bootstrap.toolsets.protocol import (
     ToolsetRegistrationResult,
@@ -80,18 +81,30 @@ def test_build_registered_tools_uses_toolset_providers(monkeypatch, tmp_path: Pa
             calls.append("doc_rag")
             return ToolsetRegistrationResult(source_name="doc_rag")
 
+    class _TaskPlanProvider:
+        def __init__(self, service):
+            self._service = service
+
+        def register(self, registry, deps):
+            calls.append("task_plan")
+            return ToolsetRegistrationResult(
+                source_name="task_plan",
+                extras={"task_plan_service": self._service},
+            )
+
     monkeypatch.setattr(
         "bootstrap.tools.resolve_memory_toolset_provider",
         lambda name: _MemoryProvider(),
     )
     monkeypatch.setattr(
         "bootstrap.tools.resolve_toolset_provider",
-        lambda name, readonly_tools=None: {
+        lambda name, readonly_tools=None, task_plan_service=None: {
             "meta_common": _MetaProvider(readonly_tools),
             "spawn": _SpawnProvider(),
             "schedule": _ScheduleProvider(),
             "mcp": _McpProvider(),
             "doc_rag": _DocRagProvider(),
+            "task_plan": _TaskPlanProvider(task_plan_service),
         }[name],
     )
     monkeypatch.setattr("bootstrap.tools.build_readonly_tools", lambda *_, **__: {})
@@ -104,28 +117,36 @@ def test_build_registered_tools_uses_toolset_providers(monkeypatch, tmp_path: Pa
         lambda *_args, **_kwargs: (None, None),
     )
 
-    tools, push_tool, scheduler, mcp_registry, memory_runtime, peer_pm, peer_poller = (
-        build_registered_tools(
-            config=cast(Any, SimpleNamespace(spawn_enabled=False, proactive=SimpleNamespace())),
-            workspace=tmp_path,
-            http_resources=cast(Any, SimpleNamespace()),
-            bus=cast(Any, SimpleNamespace()),
-            provider=object(),
-            light_provider=object(),
-            session_store=object(),
-            tools=ToolRegistry(),
-            event_publisher=EventBus(),
-            agent_loop_provider=lambda: None,
-        )
+    (
+        tools,
+        push_tool,
+        scheduler,
+        mcp_registry,
+        memory_runtime,
+        peer_pm,
+        peer_poller,
+        task_plan_service,
+    ) = build_registered_tools(
+        config=cast(Any, SimpleNamespace(spawn_enabled=False, proactive=SimpleNamespace())),
+        workspace=tmp_path,
+        http_resources=cast(Any, SimpleNamespace()),
+        bus=cast(Any, SimpleNamespace()),
+        provider=object(),
+        light_provider=object(),
+        session_store=object(),
+        tools=ToolRegistry(),
+        event_publisher=EventBus(),
+        agent_loop_provider=lambda: None,
     )
 
-    assert calls == ["memory", "meta", "spawn", "schedule", "mcp", "doc_rag"]
+    assert calls == ["memory", "meta", "spawn", "schedule", "mcp", "doc_rag", "task_plan"]
     assert push_tool is not None
     assert scheduler is not None
     assert mcp_registry is not None
     assert memory_runtime.engine is not None
     assert peer_pm is None
     assert peer_poller is None
+    assert isinstance(task_plan_service, TaskPlanService)
     assert tools.has_tool("inspect_turn_trace")
     assert "inspect_turn_trace" not in tools.get_always_on_names()
 

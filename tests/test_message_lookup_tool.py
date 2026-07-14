@@ -338,6 +338,27 @@ async def test_search_messages_empty_query_returns_empty(tmp_path):
     }
 
 
+@pytest.mark.asyncio
+async def test_search_messages_protected_session_overrides_model_session(tmp_path):
+    store = SessionStore(tmp_path / "sessions.db")
+    _setup_session(store, "cli:current", 1)
+    _setup_session(store, "cli:other", 1)
+    tool = SearchMessagesTool(store)
+
+    payload = json.loads(
+        await tool.execute(
+            query="msg",
+            session_key="cli:other",
+            _session_key="cli:current",
+        )
+    )
+
+    assert payload["count"] == 1
+    assert {item["session_key"] for item in payload["messages"]} == {
+        "cli:current"
+    }
+
+
 def test_next_seq_after_seq_zero_should_return_one(tmp_path):
     manager = SessionManager(tmp_path)
     session = manager.get_or_create("cli:test")

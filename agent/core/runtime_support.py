@@ -57,8 +57,14 @@ class ToolDiscoveryState:
         except Exception:
             return set()
 
-    def update(self, session_key: str, tools_used: list[str], always_on: set[str]) -> None:
-        skip = always_on | NON_LRU_TOOL_NAMES
+    def update(
+        self,
+        session_key: str,
+        tools_used: list[str],
+        always_on: set[str],
+        non_lru: set[str] | None = None,
+    ) -> None:
+        skip = always_on | NON_LRU_TOOL_NAMES | set(non_lru or set())
         lru: OrderedDict[str, None] = self._unlocked.setdefault(
             session_key,
             OrderedDict(),

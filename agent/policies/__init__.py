@@ -20,9 +20,9 @@ from agent.policies.history_route import (
     RouteDecisionReasonCode,
     RouteDecisionSource,
 )
-from agent.policies.tool_access import (
+from agent.policies.tool_access import ToolAccessGateway
+from agent.policies.tool_access_types import (
     ToolAccessContext,
-    ToolAccessGateway,
     ToolAccessPlan,
     ToolExecutionGateResult,
 )

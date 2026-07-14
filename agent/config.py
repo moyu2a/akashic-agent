@@ -416,15 +416,13 @@ def _load_fitbit_config(data: dict) -> FitbitIntegrationConfig:
 def _load_wiring_config(data: dict) -> WiringConfig:
     agent_cfg = _as_dict(data.get("agent"))
     raw = _as_dict(agent_cfg.get("wiring")) or data.get("wiring", {}) or {}
-    toolsets = raw.get(
-        "toolsets",
-        ["meta_common", "spawn", "schedule", "mcp", "doc_rag"],
-    )
+    default_wiring = WiringConfig()
+    toolsets = raw.get("toolsets", default_wiring.toolsets)
     if not isinstance(toolsets, list):
-        toolsets = ["meta_common", "spawn", "schedule", "mcp", "doc_rag"]
+        toolsets = default_wiring.toolsets
     return WiringConfig(
-        context=str(raw.get("context", "default") or "default"),
-        memory=str(raw.get("memory", "default") or "default"),
+        context=str(raw.get("context", default_wiring.context) or "default"),
+        memory=str(raw.get("memory", default_wiring.memory) or "default"),
         toolsets=[str(name) for name in toolsets if str(name).strip()],
     )
 

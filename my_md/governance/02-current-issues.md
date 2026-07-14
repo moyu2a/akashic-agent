@@ -279,7 +279,19 @@ P10a.2 当前剩余问题：Document RAG 工具链成本治理。
   - protected `_session_key` 已由工具上下文注入并在 `ToolRegistry.execute()` 中覆盖模型参数；`inspect_turn_trace` 不暴露 `session_key/_session_key` schema，不写入 LRU。
   - Observe slim trace 保留 `status`、`boundary_reason`、`boundary_action`、`error_code`，以便区分真实执行与 skipped/blocked 调用。
   - 自动化验证：Turn Trace 相关 suite `71 passed`；full pytest `1411 passed, 3 warnings`；compileall 通过。
-  - 待真实 CLI/LLM smoke：重跑 turn `370` 同类问题，确认回答改为读取结构化 trace，并且不调用 `search_docs/fetch_doc_chunk`。
+- 2026-07-14 结构化 turn trace 查询真实 CLI/LLM smoke 已验证：
+  - turn `371` 简单文档引用问题：`search_docs -> final`，`react_iteration_count=2`。
+  - turn `372` 原文证据问题：真实执行 `search_docs + fetch_doc_chunk`，`react_iteration_count=3`；同批次后续 3 个 `fetch_doc_chunk` 返回 `react_boundary_batch_skip`，未真实执行、不入 evidence ledger。
+  - turn `373` 文档 + 源码问题：真实执行 `read_file x2 + search_docs + fetch_doc_chunk`，`react_iteration_count=5`；语义上符合“项目文档和源码”请求，但成本偏高。
+  - turn `374` 工具历史查询：`inspect_turn_trace -> final`，`react_iteration_count=2`，没有调用 `search_messages`、`search_docs` 或 `fetch_doc_chunk`；最终回答正确回溯 turn `373` 的真实工具链。
+  - 结论：turn `370` 暴露的“工具历史靠自然语言推断会误报”已由结构化 trace 查询修复；当前剩余问题不再是 trace 正确性，而是同批次冗余工具调用成本和“项目文档 + 源码”是否必须 fresh RAG 的产品语义。
+- 2026-07-14 产品语义暂定：当用户明确提出“项目文档 + 源码”或同时要求文档依据和源码读取时，当前 turn 应重新执行 Document RAG，不复用前文文档证据作为唯一文档来源；turn `373` 的 fresh `search_docs/fetch_doc_chunk` 因此视为语义正确，后续只优化成本。
+- 2026-07-14 同批次多 `fetch_doc_chunk` 候选的根因暂按合理判断记录，后续有必要再改：
+  - `search_docs` 返回多个候选 chunk，用户要求“展开原文证据”时，模型倾向一次性展开多个看起来相关的 chunk 来提高覆盖率。
+  - 当前工具描述强调 snippet 不足时继续 `fetch_doc_chunk`，但没有强约束“默认只 fetch 最相关的一个 chunk”。
+  - provider 允许同一 assistant message 生成多个 tool calls；这些调用生成时模型还没看到第一个 `fetch_doc_chunk` 的结果，所以 evidence-complete/final-only 来不及阻止同批次候选生成。
+  - 现有 `ReactBoundaryManager` 是执行边界，能把后续候选转为 `react_boundary_batch_skip`，避免真实执行和 evidence 污染，但不能回收模型已经生成的 tool-call token 和协议消息成本。
+  - 暂不立即修改代码；后续若成本仍值得优化，优先评估 provider-level 单工具调用限制、工具 schema/hint 收紧、`search_docs` 返回 `recommended_next_chunk_id/fetch_budget=1`，再考虑固定 Document RAG workflow。
 - 增加回归测试：文档问答 happy path 不应先出现“工具未加载”失败。
 - 在评估集中增加 `max_react_iterations`、`max_tool_calls`、`expected_tools`、`forbidden_tools` 指标；强文档证据 case 应把 `shell/read_file/list_dir` 列为 forbidden，除非用户显式要求源码。
 - 计划详见：`my_md/rag/19-document-rag-p10-intent-preload-plan.md`。
@@ -538,6 +550,98 @@ source_ref 来源排查结论：
 - 成本上升。
 - 响应变慢。
 - observe 记录膨胀，问题定位更复杂。
+
+### LA-001 TaskPlan 纯计划创建仍发生无必要的 memory/session retrieval（已修复并真实验证）
+
+现象：
+
+- 2026-07-14 使用独立 CLI session `taskplan-boundary-smoke-20260714` 重跑四条 TaskPlan smoke。
+- turn `382` 的用户输入已经明确：`为修复 Document RAG 成本问题制定一个三步计划，只创建计划，不执行任务`。
+- TaskPlan access policy 正确压制了 spawn、Document RAG 和 local file 工具，但模型仍先真实执行 `recall_memory`，随后尝试 `search_messages`；后者被 `retrieval_budget_exceeded` soft-stop，最后才执行 `create_task_plan`。
+- 实际链路为：`recall_memory -> search_messages(soft-stop) -> create_task_plan -> final`，`react_iteration_count=4`。
+
+已验证通过的边界：
+
+- turn `382` 没有真实执行 `spawn/spawn_manage/task_output`、`search_docs/fetch_doc_chunk`、`shell/read_file/list_dir`。
+- `create_task_plan` 成功后出现 `[turn_completion] final_only reason=task_plan_tool_complete`。
+- turn `383` 为 `inspect_task_plan -> final`，2 轮。
+- turn `384` 为 `update_task_step -> final`，2 轮，数据库 Step 1 为 `completed`，`result_summary=已经查看日志`。
+- turn `385` 为 `spawn_manage -> final`，2 轮，证明明确后台任务仍能进入 background-job 路径。
+
+量化结果：
+
+- 旧计划创建 turn：15 轮 ReAct，累计 `prompt_tokens=985779`。
+- 新 turn `382`：4 轮 ReAct，累计 `prompt_tokens=52205`。
+- ReAct 轮次下降约 73%，累计 prompt token 下降约 94.7%。
+- 主要功能问题已解决，剩余成本收敛到 memory/session retrieval 两个上下文工具域。
+
+原因分析：
+
+- 当前 `TaskPlanAccessPolicy` 对 `plan_create` 压制 spawn、Document RAG 和 local file，但 memory/message retrieval 仍属于可见的通用/always-on 能力。
+- 模型看到“Document RAG 成本问题”后倾向先补充历史背景，即使用户已经给出足够明确的计划目标。
+- 当前策略只有 TaskPlan 动作类型，没有表达“本次计划是否缺少历史上下文”的字段，因此无法区分纯状态创建与基于历史的计划创建。
+
+影响：
+
+- 纯计划创建没有达到严格的 `create_task_plan -> final`。
+- 被 soft-stop 的工具虽然不真实执行，仍会消耗一次模型决策和协议消息成本。
+- 如果直接全局禁止 memory，又会破坏“结合我的偏好”“按照上次方案”等合理需求。
+
+已实施方案：
+
+- 将 TaskPlan 意图扩展为 `action + context_requirement`：
+  - `none`：用户目标和约束足够，禁止额外历史召回。
+  - `long_term_memory`：用户明确要求结合偏好、记忆或长期背景，允许一次受限召回。
+  - `session_history`：用户明确引用上次、之前、刚才的讨论，允许一次当前 session 历史检索。
+- Tool Access Gateway 根据 capability scope 决定当前 turn 能力，不让 TaskPlan policy 长期维护不断扩张的工具名 blocklist。
+- 对允许的召回设置硬预算：最多一次；召回后只能创建计划、回答或询问必要澄清，不能继续扩展检索链。
+- TaskPlan 状态查看和更新默认不召回 memory，直接以 TaskPlan store 和 active task prompt 为事实来源。
+- 完整实施计划已形成：`docs/superpowers/plans/2026-07-14-task-plan-context-capability-scope.md`，包含统一 Turn Contract、工具 capability 元数据、严格 allow scope、一次性召回预算、action-aware completion、日志修正和六类 live smoke。
+
+实现结果（2026-07-14）：
+
+- 新增不可变 `TaskPlanTurnContract`，统一表达 action、context requirement、required/allowed capabilities、retrieval budget 和 completion capability。
+- 工具 capability 由 `ToolRegistry` 内部元数据声明，不进入模型 schema；严格 scope 只解析当前合同允许的 provider，required capability 缺失时 fail closed。
+- 纯 create/inspect/update 不再继承 memory、Document RAG、local、spawn 或 LRU 工具；显式偏好只允许 `memory.recall`，显式上次讨论只允许 `history.search`。
+- 一次允许的召回无论返回 `ok:false`、hook denied 还是 executor error 都消耗预算；同批第二次召回在真实执行前以 `task_plan_context_budget_exhausted` 停止。
+- 召回后 schema 动态退场，但 create provider 保持可见；history 场景明确不开放 `fetch_messages`。
+- completion 改为按 action 对应 capability 判断；update turn 中 inspect 成功不会提前 final-only，denied/error 即使 payload 为 `ok:true` 也不能完成。
+- `DefaultReasoner` 在 discovery 开关两种模式下都评估 TaskPlan access；普通 discovery-disabled turn 仍保留全工具/无边界旧行为。
+- 严格 TaskPlan scope 不再注入全局 deferred-tool 目录，避免提示模型调用本 turn 禁止的 `tool_search`。
+- TaskPlan 状态只保存在 typed turn context/ledger，不写入 `ToolDiscoveryState` 或 LRU；AgentLoop 主循环未修改。
+- 独立审阅的 Task 4/5/6 Critical/Important findings 均已修复并复审通过。
+
+自动化验证：
+
+- TaskPlan/网关聚焦回归：`192 passed`。
+- Document RAG、completion、trace、spawn、bootstrap/runtime 兼容回归：`85 passed`。
+- 最终完整 pytest：`1619 passed, 3 warnings in 38.10s`。
+- `git diff --check` 通过。
+
+隔离真实 CLI/LLM smoke（2026-07-14 23:04-23:13）：
+
+- 使用 `/tmp/akashic-la001.sock`、临时 workspace 和 dashboard `2237` 启动当前代码，没有终止或替换用户现有 `/tmp/akashic.sock` 服务。
+- 纯计划：`create_task_plan -> final`，2 轮，累计 `prompt_tokens=11605`，首轮仅 1 个 schema。
+- 偏好计划：`recall_memory -> create_task_plan -> final`，3 轮，只有一次真实 recall。
+- 历史计划：模型同批生成 3 个 `search_messages` 候选；只有第一个真实执行，后两个以 `task_plan_context_budget_exhausted` soft-stop，随后 `create_task_plan -> final`，共 3 轮。
+- inspect/update/background：分别为 `inspect_task_plan -> final`、`update_task_step -> final`、`spawn_manage -> final`，均 2 轮。
+- smoke 额外发现“不创建计划”被 `创建计划` 子串误匹配；已新增 plan/background required/negated/positive 优先级和 bounded regex。重启隔离实例复测后为 `reason=no_tool_access_policy`，没有调用 `create_task_plan`；独立对抗审阅无剩余 Critical/Important。
+
+LA-001 的代码与真实运行验收均完成。history 场景仍可能生成多个同批候选，但重复候选不真实执行；这是模型并行 tool-call 生成成本，不是一次性执行预算失效。
+
+验收方式：
+
+- 纯计划创建：`create_task_plan -> final`，目标 2 轮，不调用 memory/message retrieval。
+- 偏好计划：`recall_memory <= 1 -> create_task_plan -> final`。
+- 历史计划：`search_messages <= 1 -> create_task_plan -> final`，且默认当前 session。
+- 查看/更新计划：分别保持 `inspect_task_plan -> final`、`update_task_step -> final`。
+- 明确后台任务：保持 `spawn_manage/task_output` 可用。
+
+已修复的附带可观测性问题：
+
+- turn `382-384` 同时出现 `[react_boundary] final_only reason=evidence_incomplete/non_doc_rag_intent` 和正确的 `[turn_completion] final_only reason=task_plan_tool_complete`。
+- 实际 completion 原因是 TaskPlan 成功；前一条日志打印的是 react recommendation reason，容易误导排查，后续应统一 final-only 日志的 reason 来源。
+- 现在 TaskPlan completion 使用 `[turn_completion] scheduled final_only reason=task_plan_completion_capability_satisfied`，Document RAG 仍保留 `[react_boundary] final_only reason=...`。
 
 ## 测试误判
 

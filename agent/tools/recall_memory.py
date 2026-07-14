@@ -28,6 +28,7 @@ _RECENT_PRESETS = {
 
 class RecallMemoryTool(Tool):
     name = "recall_memory"
+    capabilities = frozenset({"memory.recall"})
     description = (
         "检索长期记忆中的提炼事实、偏好、流程与历史事件线索（L1 记忆线索层）。\n"
         "用户问'你还记得吗''以前做过吗''偏好是什么''通常怎么做'时，默认先调用此工具。\n"

@@ -44,6 +44,71 @@ def test_core_access_block_wins_before_budget() -> None:
     assert decision.execute is False
 
 
+def test_task_plan_create_blocks_spawn_at_boundary_manager() -> None:
+    context = ToolAccessContext(
+        session_key="cli:1",
+        user_text="为修复 Document RAG 成本问题制定一个三步计划",
+        always_on_tools=frozenset(
+            {"tool_search", "spawn", "spawn_manage", "task_output"}
+        ),
+        lru_preloaded_tools=frozenset({"search_docs", "fetch_doc_chunk"}),
+        disabled_tools=frozenset(),
+        registered_tools=frozenset(
+            {
+                "tool_search",
+                "create_task_plan",
+                "inspect_task_plan",
+                "update_task_step",
+                "spawn",
+                "spawn_manage",
+                "task_output",
+                "search_docs",
+                "fetch_doc_chunk",
+            }
+        ),
+        tool_capabilities={
+            "create_task_plan": frozenset({"task_plan.create"}),
+            "inspect_task_plan": frozenset({"task_plan.inspect"}),
+            "update_task_step": frozenset({"task_plan.update"}),
+        },
+    )
+    manager = TurnToolBoundaryManager()
+    boundary_context = manager.build_context(context)
+
+    decision = manager.evaluate_tool_call(
+        boundary_context,
+        tool_name="spawn",
+        arguments={"task": "分析 RAG 成本"},
+        visible_names=manager.compute_visible_names(boundary_context),
+    )
+
+    assert decision.action == "block"
+    assert decision.execute is False
+    assert decision.reason == "tool_blocked_by_task_plan_policy"
+
+
+def test_task_plan_mixed_topic_uses_task_plan_state_boundary_intent() -> None:
+    context = ToolAccessContext(
+        session_key="cli:1",
+        user_text="为修复 Document RAG 成本问题制定一个三步计划",
+        always_on_tools=frozenset({"tool_search", "search_docs"}),
+        lru_preloaded_tools=frozenset({"search_docs", "fetch_doc_chunk"}),
+        disabled_tools=frozenset(),
+        registered_tools=frozenset(
+            {"tool_search", "search_docs", "fetch_doc_chunk", "create_task_plan"}
+        ),
+        tool_capabilities={
+            "create_task_plan": frozenset({"task_plan.create"}),
+        },
+    )
+
+    boundary_context = TurnToolBoundaryManager().build_context(context)
+
+    assert boundary_context.intent == "task_plan_state"
+    assert boundary_context.task_plan_contract is not None
+    assert boundary_context.task_plan_contract.action == "plan_create"
+
+
 def test_redundant_visible_tool_search_soft_stops_without_execution() -> None:
     manager = TurnToolBoundaryManager()
     ctx = manager.build_context(_ctx("根据项目文档回答agent runtime负责什么，并展开原文证据"))

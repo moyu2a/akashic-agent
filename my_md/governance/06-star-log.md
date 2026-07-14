@@ -22,6 +22,12 @@
 - `05-design-decisions.md` 记录重要设计取舍。
 - 本文档记录可以长期复盘、可以沉淀为 STAR 面试案例的完整闭环。
 
+项目方向沉淀：
+
+- Document RAG、工具边界治理、运行观测和 CLI 稳定性问题的复盘，已经沉淀出更大的产品/架构方向：本地个人数字员工 / 本地开发工作台 Agent。
+- 该方向的长期路线记录在 `../local_agent/01-local-dev-workbench-agent-roadmap.md`。
+- 本文档只记录已经发生的问题闭环和可复用 STAR 案例，不承载未来路线细节，也不把尚未实现的本地 Agent 能力写成已完成成果。
+
 使用规则：
 
 - 只要一个问题有复盘价值，就可以记录到这里，不限于测试问题。
@@ -484,7 +490,11 @@ STAR 复盘：
   - turn `370` “刚才第二个问题用了哪些工具”只执行 `search_messages`，没有被 `search_docs/fetch_doc_chunk` 的 LRU 残留污染；但最终回答把 turn `369` 的工具链说成 `search_docs + fetch_doc_chunk + read_file x3`，与 observe/session 记录的 `read_file x3` 不一致。
 - 2026-07-13 新暴露的 session/meta 边界：当用户问“上一轮/第二个问题用了哪些工具”时，普通 `search_messages` 和模型上下文只能提供自然语言历史，不能保证工具链事实准确。这个问题不属于 Document RAG 成本边界，而属于结构化 turn/tool trace 回源边界。后续应提供或扩展一个只读 trace 查询能力，按当前 session、turn id/相对轮次返回真实 `tool_chain_json` / `tools_used`，并要求模型在回答工具历史时以结构化 trace 为准。
 - 2026-07-13 已完成 Turn Trace Query 实现计划审阅：计划采用 core service + deferred tool adapter + ToolAccessGateway visibility，而不是纯插件或 AgentLoop 改造。核心约束包括：`inspect_turn_trace` 不 always-on、不进 LRU、不暴露 model-controllable `session_key`；protected `_session_key` 由 registry context 注入；`blocked_by_tool_boundary`、`soft_stopped_by_tool_boundary`、`react_boundary_batch_skip` 等非真实执行调用必须从真实工具统计中排除；session/meta/tool-history intent 在混合 doc prompt 中优先，避免“刚才项目文档那个问题用了哪些工具？”重新误走 Document RAG。
-- 2026-07-13 Turn Trace Query 自动化实现已完成：新增 `TurnTraceQueryService`、`InspectTurnTraceTool`、protected `_session_key` registry merge、observe slim metadata preservation、ToolAccessGateway trace visibility 和 turn `370` 风格 E2E 回归。验证结果：相关 Turn Trace suite `71 passed`，full pytest `1411 passed, 3 warnings`，compileall 通过。真实 CLI/LLM smoke 仍待重跑，用于确认真实模型会在第四轮选择 `inspect_turn_trace -> final`。
+- 2026-07-13 Turn Trace Query 自动化实现已完成：新增 `TurnTraceQueryService`、`InspectTurnTraceTool`、protected `_session_key` registry merge、observe slim metadata preservation、ToolAccessGateway trace visibility 和 turn `370` 风格 E2E 回归。验证结果：相关 Turn Trace suite `71 passed`，full pytest `1411 passed, 3 warnings`，compileall 通过。
+- 2026-07-14 Turn Trace Query 真实 CLI/LLM smoke 已验证：turn `371` 为 `search_docs -> final`，turn `372` 为真实 `search_docs + fetch_doc_chunk` 且后续 3 个同批次 `fetch_doc_chunk` 被 `react_boundary_batch_skip`，turn `373` 为 `read_file x2 + search_docs + fetch_doc_chunk`，turn `374` 为 `inspect_turn_trace -> final`。第四轮没有调用 `search_messages` 或 stale Document RAG 工具，回答正确报告 turn `373` 的真实工具链。该结果把 turn `370` 的“工具历史自报不准确”从 open 关闭为 verified。
+- 2026-07-14 对剩余两个问题形成暂定结论：
+  - `项目文档 + 源码` 混合请求应默认在当前 turn 重新 RAG，因此 turn `373` 的 fresh Document RAG 是正确语义，不应为了降成本改成只复用前文文档证据。
+  - 同批次多个 `fetch_doc_chunk` 候选的主要原因是模型在看到第一个 fetch 结果前，基于多个 search hit 一次性规划多个证据展开。现有 batch boundary 已解决真实重复执行和证据污染，但无法取消已经生成的 tool-call token。该问题暂作为成本优化观察项记录，后续再按 provider 单工具调用限制、schema/hint 收紧、检索层推荐 next chunk、固定 RAG workflow 的顺序评估。
 
 可提炼成果：
 
@@ -497,7 +507,7 @@ STAR 复盘：
 | soft stop 后仍继续消耗 LLM 轮次/token | execution boundary 只能阻止工具执行，不能终止 ReAct 循环 | P10a.3 Turn Completion：`document_rag_evidence_complete` 后下一轮 final-only，`tools=[]`，不写 LRU | turn `364` ReAct 从 turn `362` 的 5 轮降到 3 轮；`prompt_tokens` 从 `419680` 降到 `265562`，约下降 36.7% |
 | citation 来源真实但回答可能说过头 | citation validator 只校验来源，不校验 claim/evidence 对齐；final-only 未区分 fetched chunk 和 search snippet | P10a.4a Evidence Contract：区分 fetched original text、retrieval snippet 和 soft-stopped candidate，并注入 final-only 回答约束 | turn `365/366` 最终回答不再把未真实 fetch 的证据称为“原文展开”；full pytest `1376 passed` |
 | 同一 batch 仍生成多余 `fetch_doc_chunk` | boundary 是执行时拦截，不能阻止模型在同一 assistant message 中生成多个 tool call | P10a.4b Bounded ReAct / Batch Boundary：after-result proactive final-only + same-batch `batch_skipped_by_react_boundary`，并保持 provider tool-result 协议合法 | 自动化验证 `48 passed`；full pytest `1391 passed`；真实 smoke turn `367/368` 验证链路收敛为 `search_docs -> final` 和 `search_docs -> fetch_doc_chunk -> final` |
-| 工具历史自报不准确 | session/meta 问题依赖普通消息检索和模型上下文推断，未读取结构化 turn/tool trace | 新增结构化 trace 查询能力：core `TurnTraceQueryService` 读取当前 session observe trace，经 deferred `inspect_turn_trace` 暴露；ToolAccessGateway 只在 tool-history/session-meta turn 显示它，并压制 stale RAG LRU | 自动化实现完成；turn `370` 风格 E2E 回归覆盖真实 trace 回源，full pytest `1411 passed`；真实 CLI smoke 待重跑 |
+| 工具历史自报不准确 | session/meta 问题依赖普通消息检索和模型上下文推断，未读取结构化 turn/tool trace | 新增结构化 trace 查询能力：core `TurnTraceQueryService` 读取当前 session observe trace，经 deferred `inspect_turn_trace` 暴露；ToolAccessGateway 只在 tool-history/session-meta turn 显示它，并压制 stale RAG LRU | 自动化实现完成；turn `370` 风格 E2E 回归覆盖真实 trace 回源，full pytest `1411 passed`；真实 CLI smoke turn `374` 验证 `inspect_turn_trace -> final`，回答正确报告 turn `373` 工具链 |
 
 可复用结构：
 
@@ -541,7 +551,9 @@ STAR 复盘：
 - RAG-006 P10a.3：自动化和真实 CLI/LLM smoke 已确认 evidence-complete 后下一轮会切为 final-only，turn `364` 的 ReAct 轮次已降到 3；遗留任务转为 final-only 证据表述忠实度，避免把未真实 fetch 的 soft-stopped chunk 说成“原文展开”。
 - RAG-006 P10a.4a：Evidence Contract 自动化和真实 CLI/LLM smoke 已确认 final-only 证据标签正确；遗留任务转为 P10a.4b 成本优化，避免同一 batch 生成多余 `fetch_doc_chunk` 请求。
 - RAG-006 P10a.4b：Bounded ReAct / Batch Boundary 自动化和真实 CLI/LLM smoke 已确认主路径成本边界生效；简单文档问题为 `search_docs -> final`，原文证据问题为 `search_docs -> fetch_doc_chunk -> final`，same-batch 多余 fetch 被 `react_boundary_batch_skip` 跳过。
-- 新遗留问题：turn `370` 暴露工具历史查询缺少结构化 trace 回源。后续应把“刚才用了哪些工具/第 N 个问题用了哪些工具”归入 session/meta trace 查询，而不是 Document RAG 工具链治理。
+- 已关闭：turn `370` 暴露的工具历史查询缺少结构化 trace 回源，已由 turn `374` 真实 CLI smoke 验证修复；后续“刚才用了哪些工具/第 N 个问题用了哪些工具”应继续归入 session/meta trace 查询，而不是 Document RAG 工具链治理。
+- 新遗留问题：turn `372` 仍会在同一 assistant tool-call batch 中生成多个 `fetch_doc_chunk` 候选，虽然后 3 个被 `react_boundary_batch_skip` 跳过且不真实执行，但仍有 tool-call token 和协议消息成本；暂不立即修改，后续按成本优先级评估 provider 单工具调用限制和 schema/hint 收紧。
+- 已明确：turn `373` 的“项目文档 + 源码”请求应当前 turn fresh RAG，不复用前文文档证据作为唯一来源；该项不再作为语义缺口，只保留 `react_iteration_count=5` 的成本观察。
 - CLI-001：transport/session 侧已由自动化和真实 CLI 重连 smoke 验证；继续常规观察即可。
 - 如果 disabled live smoke 仍 fallback 到 `read_file/list_dir/shell`，需要第二阶段让工具执行器或 AgentLoop 消费 `fallback_allowed=false`。
 - 如果后续只剩“是否能主动开启配置”的话术问题，优先补充工具返回字段和 `user_message`，明确 `restart_required=true`、`can_self_enable=false`，再做一次 disabled live smoke。
@@ -575,3 +587,137 @@ STAR 复盘：
 
 如果发现新问题，不要把它写成当前问题未修复；要明确说明当前边界已解决什么，新暴露的问题属于哪一层新边界。
 ```
+
+### CASE-004: TaskPlan 从工具可用性演进到上下文召回授权边界
+
+分类：Local Agent / TaskPlan / tool governance / cost / memory
+
+问题摘要：
+
+TaskPlan 第一阶段先完成了持久化任务状态和工具适配，但真实 CLI smoke 连续暴露三层不同问题：运行配置遗漏 task toolset、模型把计划状态误解为后台执行、纯计划创建在主边界收敛后仍自动召回 memory/session history。这个演进说明 Agent 工程不能只解决“工具存在”，还要依次治理工具访问、执行、完成和上下文授权。
+
+发现方式：
+
+- 通过真实 CLI smoke、workspace 文件日志、observe turn、TaskPlan SQLite 状态和完整 pytest 交叉验证。
+- 不以最终自然语言回答作为唯一判断，而是检查真实工具链、被拦截调用、ReAct 轮次、prompt tokens 和持久化状态。
+
+问题现象与演进：
+
+| 阶段 | 现象 | 根因 | 处理 |
+| --- | --- | --- | --- |
+| 第一轮 smoke | policy 暴露 task tool，但执行返回工具不存在 | `load_config()` 旧默认 toolset 列表遗漏 `task_plan`；网关未过滤未注册工具 | 复用 `WiringConfig()` 默认值，增加 `registered_tools` 过滤 |
+| 第二轮 smoke | `create_task_plan` 可用，但计划创建跑 15 轮并启动 spawn；“当前任务”误走 `spawn_manage` | TaskPlan 与 background-job 语义未形成确定性边界；成功后没有 TaskPlan completion | 新增 TaskPlan intent/access/execution/completion policy，强化 prompt/tool description |
+| 第三轮 smoke | spawn/RAG/local 已压制，create 成功后 final-only；但先调用 memory/message retrieval | TaskPlan intent 只有动作，没有上下文需求；通用召回能力仍可见 | 登记 `LA-001`，设计按 context requirement 临时授权召回 |
+
+关键证据：
+
+- 第二轮计划创建：15 轮 ReAct，累计 `prompt_tokens=985779`，混入 `inspect_task_plan`、`spawn_manage`、`tool_search`、`update_task_step`、`spawn`。
+- 第三轮 turn `382`：`recall_memory -> search_messages(soft-stop) -> create_task_plan -> final`，4 轮，累计 `prompt_tokens=52205`。
+- turn `383`：`inspect_task_plan -> final`，2 轮。
+- turn `384`：`update_task_step -> final`，2 轮。
+- turn `385`：`spawn_manage -> final`，2 轮。
+- TaskPlan DB：最新任务有 3 个步骤，Step 1 为 `completed`，`result_summary=已经查看日志`。
+- 完整自动化回归：`1481 passed, 3 warnings in 36.10s`。
+
+影响范围：
+
+- 产品语义：制定计划、查看计划、更新计划和后台 job 必须是不同工作流。
+- 成本：不必要的工具 schema、召回和模型轮次会显著增加 token 与延迟。
+- 安全与可控性：计划创建不能自动启动后台任务或访问本地文件。
+- 架构：如果把每个新问题继续写成 `run_turn()` 条件分支，会让 AgentLoop 变成策略集合，难以扩展和测试。
+
+原因分析：
+
+1. 工具注册、工具可见和工具执行是三层不同事实；policy 产生工具名不代表 runtime 已注册该工具。
+2. Prompt 只能改善模型选择，不能保证 spawn/RAG/local 一定不执行，必须有 access 和 execution gate。
+3. Execution block 只能阻止工具副作用，不能减少 soft-stop 后继续产生的模型轮次，必须有 completion policy。
+4. “允许 memory”不是全局布尔值；纯计划、偏好计划和历史计划对上下文的需求不同。
+5. 工具名 blocklist 能解决当下误路由，但长期扩展应转向 capability scope。
+
+处理方案：
+
+- 数据和服务层：TaskPlanStore 保持私有持久化，TaskPlanService 为唯一业务边界。
+- Tool adapter：`create_task_plan`、`inspect_task_plan`、`update_task_step` 保持 deferred、non-LRU。
+- Access：`TaskPlanAccessPolicy` 区分 create/inspect/update/background-job，控制 schema、tool search 和 execution block。
+- Execution：模型硬调用被压制工具时返回 `tool_blocked_by_task_plan_policy`，不执行真实工具。
+- Completion：三类 TaskPlan 工具返回 `ok=true` 后，下一轮 `tools=[]`，进入 final-only。
+- 类型边界：拆出 `tool_access_types.py` 和 `turn_completion_types.py`，避免具体 policy 与组合 controller 循环导入。
+- Prompt：明确 TaskPlan 是状态管理，不等于 spawn job，不因存在计划自动执行步骤。
+- 下一阶段候选：`TaskPlanIntent.action + context_requirement + capability scope + one-shot retrieval budget`。
+
+处理结果：
+
+- 计划创建不再执行 spawn、Document RAG 或 local file 工具。
+- “当前任务”稳定回到 TaskPlan store，不再解释为后台 job。
+- 明确后台任务仍保留 `spawn_manage/task_output`，没有全局破坏后台能力。
+- create/inspect/update 成功后 final-only 在真实 CLI 中生效。
+- 计划创建 ReAct 从 15 降到 4，下降约 73%。
+- 累计 prompt token 从 `985779` 降到 `52205`，下降约 94.7%。
+
+验证方式：
+
+- 自动化：intent、default gateway composition、registered tool filtering、execution block、completion、reasoner final-only、prompt context、bootstrap/config 和完整 pytest。
+- 真实 smoke：使用独立 `AKASHIC_CLI_SESSION`，避免旧 active task 和历史 session 干扰。
+- 日志：检查 `[tool_boundary] reason`、`[工具执行→]`、`[turn_completion] final_only`。
+- Observe：检查 `react_iteration_count`、累计 prompt token、tool_calls 和 `error`。
+- SQLite：检查 active task、步骤数量、状态和 result summary。
+
+遗留问题：
+
+- `LA-001`：纯计划创建仍真实调用 `recall_memory`，并生成一次被 soft-stop 的 `search_messages`。
+- 不应简单全禁 memory；显式偏好和历史依赖计划需要保留一次受限召回。
+- final-only 普通日志存在 reason 表述不一致：react recommendation reason 与实际 TaskPlan completion reason 同时出现。
+- 在正式实现 LA-001 前，需要评审 capability mapping、召回预算和当前 session 默认边界。
+
+STAR 复盘：
+
+- Situation：Local Agent 需要一个可持久化、可跨 turn 更新的 TaskPlan，但初版真实运行中先出现工具未注册，修复后又出现 15 轮 ReAct 和 spawn 误路由。
+- Task：在不改 AgentLoop 主循环、不把 task tools 设为 always-on、不污染 LRU 的前提下，让计划创建、查看、更新和后台 job 形成确定性、低成本路径。
+- Action：先修 config/runtime 注册和 registered-tool 过滤；随后抽出 TaskPlan intent/access policy、execution gate 和 completion policy，并通过中立 types 模块避免循环依赖；补充 reasoner E2E 和真实 CLI smoke，以 observe/log/SQLite 验证真实行为。
+- Result：查看、更新和后台查询均收敛到 2 轮；计划创建从 15 轮降到 4 轮，prompt token 下降约 94.7%，且不再执行 spawn/RAG/local。新的剩余问题被准确收敛为上下文召回授权，而不是笼统地说 TaskPlan 仍未修好。
+
+面试表达：
+
+我实现 TaskPlan 时没有停在“新增三个工具和一张任务表”。真实 smoke 先暴露了配置默认值双源导致的工具未注册，修复后又发现模型把“制定计划”理解成后台执行，单轮跑了 15 次 ReAct。于是我把问题拆成 access、execution 和 completion 三层：网关控制当前 turn 哪些工具能出现，执行边界阻止模型硬调 spawn/RAG/local，TaskPlan 工具成功后 completion controller 强制下一轮 final-only。
+
+最终查看和更新任务都稳定在 2 轮，计划创建从 15 轮降到 4 轮，累计 prompt token 下降约 94.7%。进一步的 smoke 又发现纯计划创建仍会先召回 memory。这个新问题不是继续加一个工具黑名单，而是需要把“是否需要历史上下文”建模为 context requirement，再映射为一次性的 capability scope。这个过程体现了我在 Agent 系统里对工具可用性、工具边界、循环终止、上下文授权和可观测性的分层治理能力。
+
+后续可复用提示词：
+
+```text
+请按 CASE-004 的结构复盘 TaskPlan / Local Agent 工具链问题：
+
+1. 按“工具注册 -> 工具可见 -> 工具可执行 -> 是否应该继续 ReAct -> 是否需要额外上下文”分层定位。
+2. 从 agent.log、observe turn、状态数据库提取真实工具链、soft-stop、ReAct、token 和持久化结果。
+3. 明确上一层修复已经解决什么，以及新问题属于哪个新边界，不要把演进结果写成原问题仍未修复。
+4. 比较 blocklist、allowlist、capability scope 和固定 workflow 的适用边界。
+5. 量化修复前后轮次、token、真实工具执行数、forbidden tools 和状态正确性。
+6. 输出当前结论、遗留问题、下一阶段设计约束和可用于面试的 STAR 表达。
+```
+
+### CASE-004 实施补记：TaskPlan context capability scope
+
+2026-07-14，CASE-004 中记录的 `LA-001` 已完成自动化实现和独立审阅。原先的候选方向 `action + context_requirement + capability scope + one-shot retrieval budget` 已落成 typed runtime contract，而不是继续增加工具名黑名单。
+
+新增 Action：
+
+- 将动作、上下文需求、required/allowed capability、召回预算和 completion capability 合并为不可变 `TaskPlanTurnContract`。
+- capability 由 registry 内部元数据解析；strict scope 下未授权工具不出现、不可发现、不可执行，required provider 缺失时 fail closed。
+- context retrieval 在 access gate 后使用一次性预算；成功、`ok:false`、hook denied、executor error 都会在真实尝试后消费预算。
+- 召回完成后动态退休 recall/search schema，但保留 create；session history 不继续开放 `fetch_messages`。
+- completion 从“任一 TaskPlan 工具 ok”修正为“当前 action 的 completion capability 且 executor/result 均成功”。
+- discovery disabled 也执行严格 TaskPlan contract；普通非 TaskPlan turn 保持原有全工具/无边界行为。
+- 修正 final-only reason 和 strict-scope deferred-tool prompt，避免日志和提示与授权范围冲突。
+
+新增 Result：
+
+- TaskPlan/网关聚焦回归 `192 passed`，相关兼容回归 `85 passed`。
+- 最终完整 pytest `1619 passed, 3 warnings in 38.10s`。
+- Task 4/5/6 独立审阅所有 Critical/Important findings 均已修复并复审通过。
+- AgentLoop、always-on、LRU/ToolDiscoveryState、Document RAG 和 Turn Trace 行为保持兼容。
+- 隔离真实 smoke：纯计划 2 轮/`11605` prompt tokens；偏好和历史计划各 3 轮且各只有一次真实对应召回；inspect/update/background 均 2 轮。
+- live smoke 发现“不创建计划”的动作否定误匹配，并在 TDD 修复后复测确认不再调用 `create_task_plan`。
+
+更新后的面试结论：
+
+我没有通过全禁 memory 来压低 TaskPlan 成本，而是把“是否需要上下文”建模为 typed turn contract，再由 capability scope、一次性预算和 action-aware completion 分层执行。这样纯计划与显式偏好/历史计划共享同一套模块，但权限和成本不同；工具失败或 hook 拒绝也不会获得额外预算。完整回归从实施前 `1481` 增长到 `1619` 个通过用例，且独立审阅确认没有剩余高优先级问题。隔离真实 smoke 进一步证明纯计划从 4 轮降到 2 轮，同时保留偏好/历史各一次合理召回；smoke 新发现的否定动作误匹配也通过 required/negated/positive 优先级在本轮完成 TDD 修复。

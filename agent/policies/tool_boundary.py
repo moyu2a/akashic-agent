@@ -7,9 +7,11 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from agent.policies.evidence_completion import EvidenceCompletionPolicy
-from agent.policies.tool_access import (
+from agent.policies.task_plan_context_budget import TaskPlanContextBudgetPolicy
+from agent.policies.task_plan_contract import TaskPlanTurnContract
+from agent.policies.tool_access import ToolAccessGateway
+from agent.policies.tool_access_types import (
     ToolAccessContext,
-    ToolAccessGateway,
     ToolAccessPlan,
 )
 from agent.policies.tool_budget import (
@@ -35,6 +37,7 @@ class ToolBoundaryContext:
     access_context: ToolAccessContext
     access_plan: ToolAccessPlan
     intent: TaskIntent
+    task_plan_contract: TaskPlanTurnContract | None = None
     ledger: ToolCallLedger = field(default_factory=ToolCallLedger)
     pending_hints: list[str] = field(default_factory=list)
     decisions: list[dict[str, object]] = field(default_factory=list)
@@ -57,17 +60,28 @@ class TurnToolBoundaryManager:
         access_gateway: ToolAccessGateway | None = None,
         budget_policy: ToolBudgetPolicy | None = None,
         evidence_policy: EvidenceCompletionPolicy | None = None,
+        task_plan_context_budget_policy: TaskPlanContextBudgetPolicy | None = None,
     ) -> None:
         self._access = access_gateway or ToolAccessGateway()
         self._budget = budget_policy or ToolBudgetPolicy()
         self._evidence = evidence_policy or EvidenceCompletionPolicy()
+        self._task_plan_context_budget = (
+            task_plan_context_budget_policy or TaskPlanContextBudgetPolicy()
+        )
 
     def build_context(self, access_context: ToolAccessContext) -> ToolBoundaryContext:
         access_plan = self._access.build_plan(access_context)
+        contract = access_plan.task_plan_contract
         return ToolBoundaryContext(
             access_context=access_context,
             access_plan=access_plan,
-            intent=infer_task_intent(access_context.user_text),
+            intent=(
+                "task_plan_state"
+                if contract is not None and contract.active
+                else infer_task_intent(access_context.user_text)
+            ),
+            task_plan_contract=contract,
+            pending_hints=list(access_plan.model_hints),
         )
 
     def compute_visible_names(self, context: ToolBoundaryContext) -> set[str]:
@@ -111,11 +125,20 @@ class TurnToolBoundaryManager:
         context: ToolBoundaryContext,
         tool_name: str,
         result_text: str,
+        *,
+        execution_status: str = "success",
     ) -> None:
-        context.access_plan = self._access.observe_tool_result(
-            context.access_plan,
+        previous_plan = context.access_plan
+        updated_plan = self._access.observe_tool_result(
+            previous_plan,
             tool_name,
             result_text,
+            execution_status=execution_status,
+        )
+        context.access_plan = updated_plan
+        previous_hints = set(previous_plan.model_hints)
+        context.pending_hints.extend(
+            hint for hint in updated_plan.model_hints if hint not in previous_hints
         )
 
     def evaluate_tool_call(
@@ -151,6 +174,30 @@ class TurnToolBoundaryManager:
             self._record_decision(context, tool_name, decision, arguments)
             return decision
 
+        task_plan_budget_decision = self._task_plan_context_budget.evaluate_call(
+            contract=context.task_plan_contract,
+            ledger=context.ledger,
+            tool_name=tool_name,
+            tool_capabilities=context.access_context.tool_capabilities,
+        )
+        if task_plan_budget_decision is not None:
+            if task_plan_budget_decision.action == "soft_stop":
+                return self._soft_stop(
+                    context,
+                    tool_name,
+                    arguments,
+                    task_plan_budget_decision,
+                )
+            decision = BoundaryExecutionDecision(
+                action=task_plan_budget_decision.action,
+                reason=task_plan_budget_decision.reason,
+                execute=True,
+                model_hint=task_plan_budget_decision.model_hint,
+                metadata=dict(task_plan_budget_decision.metadata),
+            )
+            self._record_decision(context, tool_name, decision, arguments)
+            return decision
+
         evidence_decision = self._evidence.evaluate_call(
             intent=context.intent,
             ledger=context.ledger,
@@ -166,24 +213,7 @@ class TurnToolBoundaryManager:
         )
         final = _more_restrictive(evidence_decision, budget_decision)
         if final.action == "soft_stop":
-            payload = _soft_stop_payload(final)
-            if final.model_hint:
-                context.pending_hints.append(final.model_hint)
-            logger.info(
-                "[tool_boundary] soft_stop tool=%s reason=%s",
-                tool_name,
-                final.reason,
-            )
-            decision = BoundaryExecutionDecision(
-                action="soft_stop",
-                reason=final.reason,
-                execute=False,
-                result_payload=payload,
-                model_hint=final.model_hint,
-                metadata=dict(final.metadata),
-            )
-            self._record_decision(context, tool_name, decision, arguments)
-            return decision
+            return self._soft_stop(context, tool_name, arguments, final)
 
         decision = BoundaryExecutionDecision(
             action=final.action,
@@ -205,6 +235,7 @@ class TurnToolBoundaryManager:
         visible_before_call: bool,
         decision_action: str,
         decision_reason: str,
+        execution_status: str = "",
         requested_unlocks: tuple[str, ...] = (),
         unlocked_tools: tuple[str, ...] = (),
         blocked_tools: tuple[str, ...] = (),
@@ -223,6 +254,7 @@ class TurnToolBoundaryManager:
                 requested_unlocks=requested_unlocks,
                 unlocked_tools=unlocked_tools,
                 blocked_tools=blocked_tools,
+                execution_status=execution_status,
                 result_ok=facts.result_ok,
                 hit_count=facts.hit_count,
                 citation_refs=facts.citation_refs,
@@ -242,8 +274,65 @@ class TurnToolBoundaryManager:
         return context.pending_hints.pop(0)
 
     def trace(self, context: ToolBoundaryContext) -> dict[str, object]:
+        contract = context.task_plan_contract
+        context_consumed_count = 0
+        if contract is not None and contract.context_requirement != "none":
+            capability = (
+                "memory.recall"
+                if contract.context_requirement == "long_term_memory"
+                else "history.search"
+            )
+            context_consumed_count = sum(
+                1
+                for record in context.ledger.records
+                if capability
+                in context.access_context.tool_capabilities.get(
+                    record.tool_name, frozenset()
+                )
+            )
+        budget_decision_reason = next(
+            (
+                str(decision.get("reason") or "")
+                for decision in reversed(context.decisions)
+                if str(decision.get("reason") or "").startswith(
+                    "task_plan_context_"
+                )
+            ),
+            "",
+        )
+        task_plan_metadata = context.access_plan.policy_metadata.get(
+            "task_plan", {}
+        )
+        last_execution_status = (
+            str(task_plan_metadata.get("context_retrieval_execution_status") or "")
+            if isinstance(task_plan_metadata, Mapping)
+            else ""
+        )
+        completion_capability = contract.completion_capability if contract else None
+        completion_providers = sorted(
+            tool_name
+            for tool_name, capabilities in context.access_context.tool_capabilities.items()
+            if completion_capability is not None
+            and completion_capability in capabilities
+            and tool_name in context.access_context.registered_tools
+            and tool_name not in context.access_context.disabled_tools
+        )
         return {
             "intent": context.intent,
+            "task_plan_contract": (
+                contract.to_trace_metadata() if contract is not None else None
+            ),
+            "task_plan_context_budget": {
+                "retrieval_budget": contract.retrieval_budget if contract else 0,
+                "consumed_count": context_consumed_count,
+                "consumed": context.access_plan.context_retrieval_consumed,
+                "decision_reason": budget_decision_reason,
+                "last_execution_status": last_execution_status,
+            },
+            "task_plan_completion": {
+                "completion_capability": completion_capability,
+                "resolved_provider_tools": completion_providers,
+            },
             "tool_access": {
                 "reason": context.access_plan.reason,
                 "policies": list(context.access_plan.policies),
@@ -253,10 +342,36 @@ class TurnToolBoundaryManager:
                 "execution_block": sorted(context.access_plan.execution_block),
                 "matched_terms": list(context.access_plan.matched_terms),
                 "filter_error": context.access_plan.filter_error,
+                "policy_metadata": dict(context.access_plan.policy_metadata),
             },
             "decisions": list(context.decisions),
             "ledger_summary": context.ledger.summary(),
         }
+
+    def _soft_stop(
+        self,
+        context: ToolBoundaryContext,
+        tool_name: str,
+        arguments: Mapping[str, Any],
+        policy_decision: ToolBoundaryDecision,
+    ) -> BoundaryExecutionDecision:
+        if policy_decision.model_hint:
+            context.pending_hints.append(policy_decision.model_hint)
+        logger.info(
+            "[tool_boundary] soft_stop tool=%s reason=%s",
+            tool_name,
+            policy_decision.reason,
+        )
+        decision = BoundaryExecutionDecision(
+            action="soft_stop",
+            reason=policy_decision.reason,
+            execute=False,
+            result_payload=_soft_stop_payload(policy_decision),
+            model_hint=policy_decision.model_hint,
+            metadata=dict(policy_decision.metadata),
+        )
+        self._record_decision(context, tool_name, decision, arguments)
+        return decision
 
     def _record_decision(
         self,

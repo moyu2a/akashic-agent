@@ -69,6 +69,8 @@ class ToolMeta:
     # 可选：3–10 词短语，补充工具名和描述中没有的别名或口语化表达。
     # 不需要重复名称或描述里已有的词——搜索后端自动索引 name + description。
     search_hint: str | None = None
+    non_lru: bool = False
+    capabilities: frozenset[str] = frozenset()
 
 
 # ── ToolDocument ──────────────────────────────────────────────────────────────
@@ -87,6 +89,7 @@ class ToolDocument:
     risk: str
     always_on: bool
     search_hint: str | None
+    non_lru: bool
     source_type: str  # "builtin" | "mcp"
     source_name: str  # mcp server 名，builtin 为空字符串
 
@@ -104,6 +107,7 @@ class ToolDocument:
             risk=meta.risk,
             always_on=meta.always_on,
             search_hint=meta.search_hint,
+            non_lru=meta.non_lru,
             source_type=source_type,
             source_name=source_name,
         )
@@ -136,21 +140,44 @@ class ToolRegistry:
         risk: str = "read-only",
         always_on: bool = False,
         search_hint: str | None = None,
+        non_lru: bool = False,
+        capabilities: AbstractSet[str] | None = None,
         source_type: str = "builtin",
         source_name: str = "",
     ) -> None:
-        self._tools[tool.name] = tool
+        resolved_capabilities = frozenset(
+            capabilities
+            if capabilities is not None
+            else getattr(tool, "capabilities", frozenset())
+        )
+        if not all(isinstance(item, str) and item for item in resolved_capabilities):
+            raise ValueError("tool capabilities must be non-empty strings")
         meta = ToolMeta(
             risk=risk,
             always_on=always_on,
             search_hint=search_hint,
+            non_lru=non_lru,
+            capabilities=resolved_capabilities,
         )
-        self._metadata[tool.name] = meta
         doc = ToolDocument.from_tool_and_meta(
             tool, meta, source_type=source_type, source_name=source_name
         )
+        previous_doc = self._documents.get(tool.name)
+        try:
+            self._backend.add(doc)
+        except Exception:
+            try:
+                if previous_doc is None:
+                    self._backend.remove(tool.name)
+                else:
+                    self._backend.add(previous_doc)
+            except Exception:
+                logger.exception("工具索引注册失败后的回滚也失败: %s", tool.name)
+            raise
+
+        self._tools[tool.name] = tool
+        self._metadata[tool.name] = meta
         self._documents[tool.name] = doc
-        self._backend.add(doc)
         logger.debug(f"注册工具: {tool.name}")
 
     def unregister(self, name: str) -> None:
@@ -189,6 +216,17 @@ class ToolRegistry:
     def get_always_on_names(self) -> set[str]:
         """返回标记为 always_on 的工具名称集合。"""
         return {name for name, meta in self._metadata.items() if meta.always_on}
+
+    def get_non_lru_names(self) -> set[str]:
+        """返回不应写入工具发现 LRU 的工具名称集合。"""
+        return {name for name, meta in self._metadata.items() if meta.non_lru}
+
+    def get_capabilities_by_name(self) -> dict[str, frozenset[str]]:
+        """返回注册工具的内部 capability 元数据副本。"""
+        return {
+            name: frozenset(meta.capabilities)
+            for name, meta in self._metadata.items()
+        }
 
     def get_documents(self) -> list[ToolDocument]:
         """返回所有已注册工具的索引文档列表。"""

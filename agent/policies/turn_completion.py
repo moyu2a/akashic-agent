@@ -1,25 +1,26 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, field
-from typing import Literal
 
 from agent.policies.evidence_contract import EvidenceAssessment
+from agent.policies.task_plan_completion import TaskPlanCompletionPolicy
+from agent.policies.task_plan_contract import TaskPlanTurnContract
 from agent.policies.tool_budget import TaskIntent
 from agent.policies.tool_ledger import ToolCallLedger
-
-TurnCompletionAction = Literal["continue_react", "final_only"]
-
-
-@dataclass(frozen=True)
-class TurnCompletionDecision:
-    action: TurnCompletionAction
-    reason: str
-    model_hint: str = ""
-    metadata: Mapping[str, object] = field(default_factory=dict)
+from agent.policies.turn_completion_types import (
+    TurnCompletionAction,
+    TurnCompletionDecision,
+)
 
 
 class TurnCompletionController:
+    def __init__(
+        self,
+        *,
+        task_plan_policy: TaskPlanCompletionPolicy | None = None,
+    ) -> None:
+        self._task_plan = task_plan_policy or TaskPlanCompletionPolicy()
+
     def evaluate(
         self,
         *,
@@ -29,7 +30,25 @@ class TurnCompletionController:
         evidence_assessment: EvidenceAssessment | None = None,
         local_source_allowed: bool = False,
         proactive_allowed: bool = False,
+        task_plan_contract: TaskPlanTurnContract | None = None,
+        tool_capabilities: Mapping[str, frozenset[str]] | None = None,
     ) -> TurnCompletionDecision:
+        task_plan_decision = self._task_plan.evaluate(
+            contract=task_plan_contract,
+            ledger=ledger,
+            tool_capabilities=tool_capabilities or {},
+        )
+        if task_plan_decision is not None:
+            return TurnCompletionDecision(
+                action=task_plan_decision.action,
+                reason=task_plan_decision.reason,
+                model_hint=task_plan_decision.model_hint,
+                metadata={
+                    **self._metadata(ledger, boundary_decisions),
+                    **dict(task_plan_decision.metadata),
+                },
+            )
+
         if local_source_allowed:
             return TurnCompletionDecision(
                 action="continue_react",

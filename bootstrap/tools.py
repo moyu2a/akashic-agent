@@ -29,6 +29,9 @@ from agent.mcp.registry import McpServerRegistry
 from agent.provider import LLMProvider
 from agent.retrieval.default_pipeline import DefaultMemoryRetrievalPipeline
 from agent.scheduler import SchedulerService
+from agent.task_plan.context import TaskPlanPromptRenderModule
+from agent.task_plan.service import TaskPlanService
+from agent.task_plan.store import TaskPlanStore
 from agent.tools.message_push import MessagePushTool
 from agent.tools.registry import ToolRegistry
 from agent.tools.turn_trace import InspectTurnTraceTool
@@ -84,10 +87,15 @@ class CoreRuntime:
     peer_process_manager: PeerProcessManager | None
     peer_poller: PeerAgentPoller | None
     agent_provider: LLMProvider | None = None
+    task_plan_service: TaskPlanService | None = None
     plugin_manager: "PluginManager | None" = None
 
     async def start(self) -> None:
         self.mcp_registry.start_connect_all_background()
+        if self.task_plan_service is not None:
+            self.loop.add_prompt_render_plugin_modules(
+                [TaskPlanPromptRenderModule(self.task_plan_service)]
+            )
 
         if (
             self.peer_poller is not None
@@ -199,7 +207,17 @@ class CoreRuntime:
                 default_prompt_render_modules(
                     self.event_bus,
                     cast(Any, context),
-                    plugin_modules=cast(Any, prompt_render_modules),
+                    plugin_modules=cast(
+                        Any,
+                        [
+                            *(
+                                [TaskPlanPromptRenderModule(self.task_plan_service)]
+                                if self.task_plan_service is not None
+                                else []
+                            ),
+                            *prompt_render_modules,
+                        ],
+                    ),
                 ),
             ),
             (
@@ -279,12 +297,14 @@ def build_registered_tools(
     MemoryRuntime,
     PeerProcessManager | None,
     PeerAgentPoller | None,
+    TaskPlanService,
 ]:
     from session.store import SessionStore
 
     # ── 第一阶段：建服务（依赖无顺序陷阱）────────────────────────────────────
     wiring = getattr(config, "wiring", WiringConfig())
     tools = tools or ToolRegistry()
+    task_plan_service = TaskPlanService(TaskPlanStore(workspace / "task_plans.db"))
     multimodal = getattr(config, "multimodal", True)
     vl_available = (not multimodal) and bool(getattr(config, "vl_model", ""))
     readonly_tools = build_readonly_tools(
@@ -326,6 +346,7 @@ def build_registered_tools(
         provider_obj = resolve_toolset_provider(
             name,
             readonly_tools=readonly_tools if name == "meta_common" else None,
+            task_plan_service=task_plan_service if name == "task_plan" else None,
         )
         result = provider_obj.register(
             tools,
@@ -348,6 +369,9 @@ def build_registered_tools(
         maybe_mcp = result.extras.get("mcp_registry")
         if maybe_mcp is not None:
             mcp_registry = maybe_mcp
+        maybe_task_plan_service = result.extras.get("task_plan_service")
+        if isinstance(maybe_task_plan_service, TaskPlanService):
+            task_plan_service = maybe_task_plan_service
     if mcp_registry is None:
         from agent.mcp.registry import McpServerRegistry
 
@@ -364,6 +388,7 @@ def build_registered_tools(
         memory_runtime,
         peer_process_manager,
         peer_poller,
+        task_plan_service,
     )
 
 
@@ -380,6 +405,7 @@ def _build_loop_deps(
     processing_state: ProcessingState,
     event_bus: EventBus,
     memory_runtime: MemoryRuntime,
+    task_plan_service: TaskPlanService | None = None,
 ) -> AgentLoopDeps:
     wiring = getattr(config, "wiring", WiringConfig())
     context = resolve_context_factory(wiring.context)(
@@ -422,6 +448,7 @@ def _build_loop_deps(
         llm_services=llm_services,
         memory_services=memory_services,
         session_services=session_services,
+        task_plan_service=task_plan_service,
     )
 
 
@@ -456,19 +483,26 @@ def build_core_runtime(
     loop_model = config.agent_model or config.model
     session_manager = SessionManager(workspace)
     loop_ref: dict[str, AgentLoop] = {}
-    tools, push_tool, scheduler, mcp_registry, memory_runtime, peer_pm, peer_poller = (
-        build_registered_tools(
-            config,
-            workspace,
-            http_resources,
-            bus=bus,
-            provider=provider,
-            light_provider=light_provider,
-            vl_provider=vl_provider,
-            session_store=session_manager._store,
-            event_publisher=event_bus,
-            agent_loop_provider=lambda: loop_ref.get("loop"),
-        )
+    (
+        tools,
+        push_tool,
+        scheduler,
+        mcp_registry,
+        memory_runtime,
+        peer_pm,
+        peer_poller,
+        task_plan_service,
+    ) = build_registered_tools(
+        config,
+        workspace,
+        http_resources,
+        bus=bus,
+        provider=provider,
+        light_provider=light_provider,
+        vl_provider=vl_provider,
+        session_store=session_manager._store,
+        event_publisher=event_bus,
+        agent_loop_provider=lambda: loop_ref.get("loop"),
     )
     presence = PresenceStore(session_manager._store)
     processing_state = ProcessingState()
@@ -484,6 +518,7 @@ def build_core_runtime(
         processing_state=processing_state,
         event_bus=event_bus,
         memory_runtime=memory_runtime,
+        task_plan_service=task_plan_service,
     )
     loop = AgentLoop(
         loop_deps,
@@ -533,6 +568,7 @@ def build_core_runtime(
         provider=provider,
         light_provider=light_provider,
         agent_provider=agent_provider,
+        task_plan_service=task_plan_service,
         mcp_registry=mcp_registry,
         memory_runtime=memory_runtime,
         presence=presence,

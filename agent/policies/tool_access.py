@@ -3,10 +3,17 @@ from __future__ import annotations
 import json
 import re
 from collections.abc import Mapping
-from dataclasses import dataclass, field, replace
-from typing import Any, Protocol
+from dataclasses import replace
+from typing import Any
 
 from agent.policies.doc_rag_intent import DOC_RAG_TOOL_NAMES, decide_doc_rag_preload
+from agent.policies.task_plan_boundary import TaskPlanAccessPolicy
+from agent.policies.tool_access_types import (
+    ToolAccessContext,
+    ToolAccessPlan,
+    ToolAccessPolicy,
+    ToolExecutionGateResult,
+)
 
 LOCAL_FILE_TOOL_NAMES = frozenset({"shell", "read_file", "list_dir"})
 TRACE_TOOL_NAMES = frozenset({"inspect_turn_trace"})
@@ -45,53 +52,6 @@ _PATH_RE = re.compile(
     r"(^|\s)(/[^ \n\t]+|[A-Za-z0-9_.-]+/[A-Za-z0-9_./-]+"
     r"\.(?:py|md|toml|yaml|yml|json|txt|sh))"
 )
-
-
-@dataclass(frozen=True)
-class ToolAccessContext:
-    session_key: str
-    user_text: str
-    always_on_tools: frozenset[str]
-    lru_preloaded_tools: frozenset[str]
-    disabled_tools: frozenset[str]
-    turn_metadata: Mapping[str, Any] = field(default_factory=dict)
-
-
-@dataclass(frozen=True)
-class ToolAccessPlan:
-    visible_add: frozenset[str] = frozenset()
-    visible_suppress: frozenset[str] = frozenset()
-    tool_search_block: frozenset[str] = frozenset()
-    execution_block: frozenset[str] = frozenset()
-    reason: str = "no_tool_access_policy"
-    matched_terms: tuple[str, ...] = ()
-    policies: tuple[str, ...] = ()
-    filter_error: bool = False
-    local_source_allowed: bool = False
-
-
-@dataclass(frozen=True)
-class ToolExecutionGateResult:
-    allowed: bool
-    error_code: str = ""
-    message: str = ""
-    recommended_tools: tuple[str, ...] = ()
-    reason: str = ""
-
-
-class ToolAccessPolicy(Protocol):
-    name: str
-
-    def build_plan(self, context: ToolAccessContext) -> ToolAccessPlan:
-        ...
-
-    def observe_tool_result(
-        self,
-        plan: ToolAccessPlan,
-        tool_name: str,
-        result_text: str,
-    ) -> ToolAccessPlan:
-        ...
 
 
 class DocRagAccessPolicy:
@@ -136,6 +96,8 @@ class DocRagAccessPolicy:
         plan: ToolAccessPlan,
         tool_name: str,
         result_text: str,
+        *,
+        execution_status: str = "success",
     ) -> ToolAccessPlan:
         return plan
 
@@ -162,6 +124,8 @@ class SessionMetaAccessPolicy:
         plan: ToolAccessPlan,
         tool_name: str,
         result_text: str,
+        *,
+        execution_status: str = "success",
     ) -> ToolAccessPlan:
         return plan
 
@@ -177,6 +141,8 @@ class TerminalResultAccessPolicy:
         plan: ToolAccessPlan,
         tool_name: str,
         result_text: str,
+        *,
+        execution_status: str = "success",
     ) -> ToolAccessPlan:
         try:
             payload = json.loads(result_text)
@@ -206,6 +172,7 @@ class ToolAccessGateway:
         self._policies = policies or (
             DocRagAccessPolicy(),
             SessionMetaAccessPolicy(),
+            TaskPlanAccessPolicy(),
             TerminalResultAccessPolicy(),
         )
 
@@ -222,13 +189,24 @@ class ToolAccessGateway:
         context: ToolAccessContext,
         plan: ToolAccessPlan,
     ) -> set[str]:
-        visible = (
-            set(context.always_on_tools)
-            | set(context.lru_preloaded_tools)
-            | set(plan.visible_add)
-        )
+        if not context.tool_discovery_enabled and not plan.strict_capability_scope:
+            visible = set(context.registered_tools) or (
+                set(context.always_on_tools)
+                | set(context.lru_preloaded_tools)
+                | set(plan.visible_add)
+            )
+        elif not context.tool_discovery_enabled:
+            visible = set(context.registered_tools) | set(plan.visible_add)
+        else:
+            visible = (
+                set(context.always_on_tools)
+                | set(context.lru_preloaded_tools)
+                | set(plan.visible_add)
+            )
         visible -= set(context.disabled_tools)
         visible -= set(plan.visible_suppress)
+        if context.registered_tools:
+            visible &= set(context.registered_tools)
         return visible
 
     def merge_tool_search_unlocks(
@@ -243,6 +221,8 @@ class ToolAccessGateway:
         allowed_unlocks -= set(context.disabled_tools)
         allowed_unlocks -= set(plan.visible_suppress)
         allowed_unlocks -= set(plan.tool_search_block)
+        if context.registered_tools:
+            allowed_unlocks &= set(context.registered_tools)
         visible.update(allowed_unlocks)
         return visible
 
@@ -282,6 +262,43 @@ class ToolAccessGateway:
     ) -> ToolExecutionGateResult:
         if tool_name not in plan.execution_block:
             return ToolExecutionGateResult(allowed=True)
+        if plan.strict_capability_scope:
+            if plan.reason == "conflicting_task_plan_contracts":
+                return ToolExecutionGateResult(
+                    allowed=False,
+                    error_code="conflicting_task_plan_contracts",
+                    message=(
+                        "Conflicting TaskPlan contracts were produced. No tool "
+                        "execution is allowed for this turn."
+                    ),
+                    reason=plan.reason,
+                )
+            if plan.reason == "task_plan_required_capability_missing":
+                hint = plan.model_hints[0] if plan.model_hints else ""
+                return ToolExecutionGateResult(
+                    allowed=False,
+                    error_code="task_plan_required_capability_missing",
+                    message=hint or "The required TaskPlan service is unavailable.",
+                    reason=plan.reason,
+                )
+            recommended = tuple(
+                sorted(
+                    set(plan.visible_add)
+                    - set(plan.visible_suppress)
+                    - set(plan.execution_block)
+                )
+            )
+            return ToolExecutionGateResult(
+                allowed=False,
+                error_code="tool_blocked_by_task_plan_policy",
+                message=(
+                    "Current TaskPlan scope allows only: "
+                    + (", ".join(recommended) if recommended else "no tools")
+                    + ". Use only tools in this scope."
+                ),
+                recommended_tools=recommended,
+                reason="task_plan_policy_block",
+            )
         recommended: tuple[str, ...] = ()
         if {"search_docs", "fetch_doc_chunk"} & set(plan.visible_add):
             recommended = tuple(
@@ -302,10 +319,17 @@ class ToolAccessGateway:
         plan: ToolAccessPlan,
         tool_name: str,
         result_text: str,
+        *,
+        execution_status: str = "success",
     ) -> ToolAccessPlan:
         updated = plan
         for policy in self._policies:
-            updated = policy.observe_tool_result(updated, tool_name, result_text)
+            updated = policy.observe_tool_result(
+                updated,
+                tool_name,
+                result_text,
+                execution_status=execution_status,
+            )
         return updated
 
 
@@ -315,18 +339,73 @@ def _merge_plans(left: ToolAccessPlan, right: ToolAccessPlan) -> ToolAccessPlan:
     policies = _dedupe_tuple((*left.policies, *right.policies))
     matched = _dedupe_tuple((*left.matched_terms, *right.matched_terms))
     reason = right.reason if right.reason != "no_tool_access_policy" else left.reason
+    strict = left.strict_capability_scope or right.strict_capability_scope
+    contract = left.task_plan_contract or right.task_plan_contract
+    conflict = (
+        left.task_plan_contract is not None
+        and right.task_plan_contract is not None
+        and left.task_plan_contract != right.task_plan_contract
+    )
+    model_hints = _dedupe_tuple((*left.model_hints, *right.model_hints))
+    filter_error = left.filter_error or right.filter_error
+    visible_add = left.visible_add | right.visible_add
+    visible_suppress = left.visible_suppress | right.visible_suppress
+    tool_search_block = left.tool_search_block | right.tool_search_block
+    execution_block = left.execution_block | right.execution_block
+    context_retrieval_tools = (
+        left.context_retrieval_tools | right.context_retrieval_tools
+    )
+    policy_metadata = {**dict(left.policy_metadata), **dict(right.policy_metadata)}
+    if conflict:
+        conflict_universe = frozenset(
+            set(visible_add)
+            | set(visible_suppress)
+            | set(tool_search_block)
+            | set(execution_block)
+            | set(context_retrieval_tools)
+        )
+        contract = None
+        reason = "conflicting_task_plan_contracts"
+        filter_error = True
+        visible_add = frozenset()
+        visible_suppress = conflict_universe
+        tool_search_block = conflict_universe
+        execution_block = conflict_universe
+        context_retrieval_tools = frozenset()
+        policy_metadata["task_plan_contract_conflict"] = {
+            "left": left.task_plan_contract.to_trace_metadata(),
+            "right": right.task_plan_contract.to_trace_metadata(),
+        }
+        model_hints = _dedupe_tuple(
+            (
+                *model_hints,
+                "Conflicting TaskPlan contracts were produced; no tool fallback "
+                "is allowed for this turn.",
+            )
+        )
     return ToolAccessPlan(
-        visible_add=left.visible_add | right.visible_add,
-        visible_suppress=left.visible_suppress | right.visible_suppress,
-        tool_search_block=left.tool_search_block | right.tool_search_block,
-        execution_block=left.execution_block | right.execution_block,
+        visible_add=visible_add,
+        visible_suppress=visible_suppress,
+        tool_search_block=tool_search_block,
+        execution_block=execution_block,
         reason=reason,
         matched_terms=matched,
         policies=policies,
-        filter_error=left.filter_error or right.filter_error,
+        filter_error=filter_error,
         local_source_allowed=(
-            left.local_source_allowed or right.local_source_allowed
+            False
+            if strict
+            else left.local_source_allowed or right.local_source_allowed
         ),
+        policy_metadata=policy_metadata,
+        task_plan_contract=contract,
+        strict_capability_scope=strict,
+        context_retrieval_tools=context_retrieval_tools,
+        context_retrieval_consumed=(
+            left.context_retrieval_consumed
+            or right.context_retrieval_consumed
+        ),
+        model_hints=model_hints,
     )
 
 

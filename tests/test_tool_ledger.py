@@ -128,3 +128,30 @@ def test_ledger_counts_and_summary() -> None:
         "has_successful_retrieval": True,
         "has_citation_evidence": True,
     }
+
+
+def test_ledger_preserves_execution_status_independently_of_result_ok() -> None:
+    ledger = ToolCallLedger()
+    for index, (status, result_ok) in enumerate(
+        (("success", True), ("denied", True), ("error", False)),
+        start=1,
+    ):
+        ledger.add_record(
+            ToolCallRecord(
+                tool_name="recall_memory",
+                tool_class="retrieval",
+                args_hash=str(index),
+                args_summary="{}",
+                call_index=index,
+                visible_before_call=True,
+                result_ok=result_ok,
+                execution_status=status,
+            )
+        )
+
+    assert [record.execution_status for record in ledger.records] == [
+        "success",
+        "denied",
+        "error",
+    ]
+    assert [record.result_ok for record in ledger.records] == [True, True, False]

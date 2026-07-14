@@ -219,7 +219,18 @@
 - 2026-07-13 结构化 Turn Trace Query 已完成自动化实现：
   - 已落地 core service、deferred `inspect_turn_trace`、observe slim metadata preservation、protected `_session_key` 绑定和非 LRU 合同。
   - 已新增 turn `370` 风格 E2E 回归：真实 `InspectTurnTraceTool` 读取临时 observe DB，第二个问题真实工具链为 `read_file x3` 时，最终回答不再从上下文误报 Document RAG 工具。
-  - 下一步只剩真实 CLI/LLM smoke：按 `turn 367-370` 同类四轮流程重跑，确认第四轮工具链为 `inspect_turn_trace -> final`，且不会调用 `search_docs/fetch_doc_chunk`。
+- 2026-07-14 结构化 Turn Trace Query 真实 CLI/LLM smoke 已通过：
+  - turn `371`：简单文档引用链路为 `search_docs -> final`，`react_iteration_count=2`。
+  - turn `372`：原文证据链路为真实 `search_docs + fetch_doc_chunk`，同批次后续 3 个 `fetch_doc_chunk` 被 `react_boundary_batch_skip` 跳过，`react_iteration_count=3`。
+  - turn `373`：文档 + 源码请求真实执行 `read_file x2 + search_docs + fetch_doc_chunk`，`react_iteration_count=5`；显式源码读取和 fresh RAG 均被允许。
+  - turn `374`：工具历史查询链路为 `inspect_turn_trace -> final`，`react_iteration_count=2`，没有调用 `search_messages`、`search_docs/fetch_doc_chunk`；回答以 observe trace 为准，正确报告 turn `373` 的工具链。
+  - 结论：turn `370` 的 trace-source-of-truth 问题已通过真实 CLI smoke 验证修复。下一步不再优先处理工具历史正确性，而是评估两个优化项：减少 same-batch 冗余 tool-call 生成，以及明确“项目文档 + 源码”是否总是要求当前 turn fresh RAG。
+- 2026-07-14 已明确混合问题产品规则：`项目文档 + 源码` 默认必须在当前 turn 重新 RAG。turn `373` 的 fresh `search_docs/fetch_doc_chunk` 不再作为语义问题处理，只保留为成本优化观察项。
+- 2026-07-14 same-batch 冗余 `fetch_doc_chunk` 暂不进入立即实现：当前接受其根因是模型在同一 assistant message 中基于多个 `search_docs` 候选并行规划多个证据展开，而 boundary 只能拦截执行、不能阻止已生成的 tool-call token。后续若继续优化，路线按优先级为：
+  - 先评估 provider 是否支持对 Document RAG turn 设置 `parallel_tool_calls=false` 或等价单工具调用限制。
+  - 再收紧 `search_docs/fetch_doc_chunk` schema 和 context hint：默认只展开最相关一个 chunk，除非用户要求多章节/多条证据。
+  - 再考虑让 `search_docs` 返回 `recommended_next_chunk_id` / `fetch_budget=1`，把下一步展开建议前移到检索层。
+  - 最后才考虑固定编排式 Document RAG workflow，避免过早限制开放式 ReAct 能力。
 - 增强普通日志：`soft_stop` 应以 `[tool_boundary] soft_stop tool=... reason=...` 形式进入 agent log，避免只能通过 observe DB 判断拦截是否发生。
 - 增强普通日志已覆盖自动化：`[tool_boundary] soft_stop ...` 和 `[turn_completion] final_only ...` 均有测试断言。
 - 在 observe/e2e eval 中落地成本指标：`max_react_iterations`、`max_tool_calls`、`max_doc_rag_search_calls`、`max_doc_chunk_fetch_calls`。
@@ -234,7 +245,55 @@
 - 回归 turn `361` 同类 prompt：不调用 `shell/read_file/list_dir` 的 P10a.1 结论保持不变，同时工具链从 6 轮/7 次工具调用下降。
 - 负向回归：no-hit、无 citation chunk、显式 broader exploration 不应被过早 evidence-complete；插件规则不能绕过 disabled/no-tool/core access block。
 - P10a.2 自动化和真实 smoke 均已验证“目标工具不会重复执行”；P10a.3 自动化和真实 smoke 已验证 evidence-complete 后的下一轮 final-only，真实 ReAct 轮次已降到 3；P10a.4a 自动化和真实 smoke 已验证 final-only 证据标签不再夸大；P10a.4b 自动化和真实 smoke 已验证 same-batch 多余 `fetch_doc_chunk` 会被 batch boundary skip，且 happy path 收敛为 `search_docs -> fetch_doc_chunk -> final`。
-- 新验证项：session/meta 工具历史查询应能从结构化 trace 中准确返回上一轮工具链；当前 turn `370` 暴露了自然语言推断不可靠。
+- session/meta 工具历史查询已在 turn `374` 真实 CLI smoke 中验证：应使用 `inspect_turn_trace -> final`，不再依赖 `search_messages` 或自然语言上下文推断。
+
+### 第六阶段：TaskPlan 上下文召回授权与成本控制
+
+状态：自动化、独立代码审阅和隔离真实 CLI/LLM smoke 均已完成，问题编号 `LA-001`。
+
+计划文档：`docs/superpowers/plans/2026-07-14-task-plan-context-capability-scope.md`。
+
+目标：
+
+- 纯计划状态创建默认不调用 memory/message retrieval，收敛为 `create_task_plan -> final`。
+- 保留“结合我的偏好/记忆”和“按照上次讨论”这两类合理召回能力。
+- 不把 memory 工具全局禁用，也不继续在 TaskPlan policy 中堆叠零散工具名特判。
+
+当前证据：
+
+- turn `382`：`recall_memory -> search_messages(soft-stop) -> create_task_plan -> final`，4 轮，累计 `prompt_tokens=52205`。
+- turn `383`：`inspect_task_plan -> final`，2 轮。
+- turn `384`：`update_task_step -> final`，2 轮。
+- turn `385`：`spawn_manage -> final`，2 轮。
+- 对比旧 smoke 的 15 轮/`985779` prompt tokens，主问题已解决，剩余成本集中在上下文召回。
+
+已完成实现顺序：
+
+1. 在 `TaskPlanIntent` 中增加 `context_requirement = none | long_term_memory | session_history`。
+2. 定义 capability scope，将 `task_state_read/write`、`memory_retrieval`、`session_history` 映射到已注册工具。
+3. plan-create/none 使用严格 turn-local allow scope；显式 memory/history 意图只临时增加对应 capability。
+4. 对上下文召回设 turn budget：最多一次，召回后只能进入 create/final/clarification。
+5. completion 继续复用 `TaskPlanCompletionPolicy`，不修改 AgentLoop 主循环，不写 ToolDiscoveryState/LRU。
+6. 修正 final-only 普通日志，让日志 reason 与最终 `TurnCompletionDecision.reason` 一致。
+
+自动化结果：
+
+- capability metadata、严格 scope、one-shot budget、动态 schema 退场和 action-aware completion 均已接入。
+- discovery disabled 的普通 turn 保持原有全工具行为，严格 TaskPlan turn 仍受合同约束。
+- 同批重复召回、`ok:false`、hook denied/error、跨 context family、inspect-before-update 和 completion denied/error 均有 reasoner 回归。
+- 严格 scope 已关闭全局 deferred-tool 提示，避免 schema 与 prompt 授权矛盾。
+- 最终完整 pytest：`1619 passed, 3 warnings in 38.10s`；独立审阅无剩余 Critical/Important。
+- 真实 pure/preference/history/inspect/update/background smoke 均通过；纯计划从 turn `382` 的 4 轮收敛到 2 轮，偏好/历史各只有一次真实上下文召回。
+- live smoke 发现并修复 no-create 动作否定误匹配，避免“不创建计划”错误激活 strict create scope。
+
+验证矩阵：
+
+- 纯计划：`create_task_plan -> final`，2 轮，memory/message/spawn/RAG/local 均为 0。
+- 偏好计划：`recall_memory <= 1 -> create_task_plan -> final`。
+- 历史计划：`search_messages <= 1 -> create_task_plan -> final`，默认限定当前 session。
+- 召回无结果：不升级到更多检索工具；创建计划或询问必要澄清。
+- inspect/update/background-job：保持 turn `383-385` 已验证行为。
+- 完整回归保持 Document RAG、Turn Trace、memory-after-doc-LRU 和 CLI session 行为不变。
 
 ## 暂不处理
 

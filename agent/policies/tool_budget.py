@@ -13,6 +13,7 @@ from agent.policies.tool_ledger import (
 )
 
 TaskIntent = Literal[
+    "task_plan_state",
     "doc_qa_simple",
     "doc_qa_with_evidence",
     "memory_qa",

@@ -203,3 +203,118 @@
   - restart/run CLI and replay the four-turn pattern ending with `刚才第二个问题你用了哪些工具？`;
   - expected fourth-turn tool chain: `inspect_turn_trace -> final`;
   - forbidden in fourth turn: `search_docs`, `fetch_doc_chunk`, and natural-language-only `search_messages` inference for tool facts.
+- 2026-07-14 reviewed the latest real CLI/LLM smoke in observe DB:
+  - turn `371`: simple Document RAG citation prompt used `search_docs -> final`, `react_iteration_count=2`.
+  - turn `372`: original-evidence prompt real-executed `search_docs + fetch_doc_chunk`, `react_iteration_count=3`; three extra same-batch `fetch_doc_chunk` calls were returned as `react_boundary_batch_skip`.
+  - turn `373`: mixed document + source prompt real-executed `read_file x2 + search_docs + fetch_doc_chunk`, `react_iteration_count=5`.
+  - turn `374`: tool-history prompt used `inspect_turn_trace -> final`, `react_iteration_count=2`; it did not call `search_messages`, `search_docs`, or `fetch_doc_chunk`, and it correctly reported turn `373`'s real tool chain.
+- Updated governance docs to mark Turn Trace Query real CLI smoke as verified. Current remaining issues are cost/product semantics rather than trace correctness:
+  - same-batch redundant `fetch_doc_chunk` generation still costs tokens even when skipped by `react_boundary_batch_skip`;
+  - mixed “project docs + source” prompts need a product rule for whether fresh RAG is mandatory in the same turn or previous evidence may be reused.
+- 2026-07-14 recorded follow-up decisions without code changes:
+  - Mixed “project docs + source” prompts should fresh-RAG in the current turn; turn `373` is semantically correct, with only cost left to observe.
+  - Same-batch multiple `fetch_doc_chunk` candidates are accepted as a current reasonable root-cause explanation: the model sees multiple `search_docs` hits and parallel-plans evidence expansion before any fetch result is available. Boundary skipping prevents real duplicate execution but cannot avoid already-generated tool-call tokens.
+  - Future optimization, if needed: provider-level single tool call for Document RAG turns, tighter tool schema/context hints, `search_docs` recommended next chunk plus `fetch_budget=1`, then fixed Document RAG workflow only if the lighter controls are insufficient.
+- 2026-07-14 added local Agent roadmap docs without code changes:
+  - created `my_md/local_agent/README.md`;
+  - created `my_md/local_agent/01-local-dev-workbench-agent-roadmap.md`;
+  - updated `my_md/README.md`, `my_md/governance/README.md`, `my_md/rag/README.md`, and `my_md/governance/06-star-log.md` to link the new document domain into the existing documentation system;
+  - the new roadmap separates current Agent Runtime capabilities from future desktop/personal-agent capabilities, so resume and interview wording stays accurate.
+- 2026-07-14 implemented TaskPlan first phase for the Local Agent direction:
+  - added `agent/task_plan/` models, SQLite store, service boundary, and prompt context renderer;
+  - added deferred task tools: `create_task_plan`, `update_task_step`, and `inspect_task_plan`;
+  - added `bootstrap/toolsets/task_plan.py` and default toolset wiring;
+  - added shared `TaskPlanService` runtime wiring so tool adapters, prompt context, and reasoner metadata use the same service instance;
+  - added `TaskPlanAccessPolicy` so task planning/progress prompts expose task tools without relying on stale LRU;
+  - added tool metadata `non_lru` and excluded task tools from ToolDiscoveryState / LRU;
+  - kept AgentLoop main control flow unchanged; integration uses toolset wiring, prompt render lifecycle, and reasoner tool-access metadata only.
+- TaskPlan first phase verification:
+  - targeted implementation suites passed during TDD: models `5 passed`, store `7 passed`, store+service `16 passed`, tools `5 passed`, LRU/trace `7 passed`, toolset `3 passed`, gateway `14 passed`, context `3 passed`;
+  - broader affected suite passed: `83 passed in 1.67s` for task_plan, tool access, bootstrap, and turn trace tests;
+  - full pytest passed: `1452 passed, 3 warnings in 36.22s`;
+  - remaining manual work: restart the CLI agent and smoke-test create/inspect/update/continue task prompts against a real session.
+- 2026-07-14 reviewed first TaskPlan CLI smoke and fixed a real runtime wiring bug:
+  - observed in `~/.akashic/workspace/logs/agent.log`: `TaskPlanAccessPolicy` exposed `create_task_plan` / `inspect_task_plan`, but execution returned `工具 'create_task_plan' 不存在` and `工具 'inspect_task_plan' 不存在`;
+  - confirmed `~/.akashic/workspace/task_plans.db` had `0` task plans and `0` steps, so no plan was actually created;
+  - root cause: `agent.config._load_wiring_config()` still used a stale hard-coded default toolset list that omitted `task_plan`, while `WiringConfig()` had already been updated;
+  - secondary robustness gap: ToolAccessGateway could expose policy-added tool names even when the tool was not actually registered;
+  - fixed config loading to reuse `WiringConfig()` defaults and added registered-tool filtering via `ToolAccessContext.registered_tools`;
+  - verified `load_config("config.toml")` now includes `task_plan`, runtime registers all three task tools, and task tools remain non-LRU;
+  - related suite passed: `60 passed in 1.33s`;
+  - full pytest passed: `1454 passed, 3 warnings in 35.83s`;
+  - remaining external blocker for further CLI smoke: DeepSeek API returned `402 Insufficient Balance`, so the model account/billing must be fixed or switched before continuing live tests.
+- 2026-07-14 reviewed the second TaskPlan CLI smoke after restart:
+  - the previous missing-tool bug is fixed; no new `工具 'create_task_plan' 不存在` / `工具 'inspect_task_plan' 不存在` entries appeared after restart;
+  - `create_task_plan` succeeded and wrote active task `task_a611447042714bb291976bf3e1591ac4`;
+  - `update_task_step` succeeded in later turns, moving Step 1 to `completed` and Step 2 to `in_progress`;
+  - `task_plans.db` confirms persistent state: one active task, Step 1 completed, Step 2 in progress, remaining steps pending;
+  - current issue shifted from tool availability to tool-boundary semantics and cost:
+    - first plan-creation turn ran `15` ReAct iterations and `985779` prompt tokens;
+    - model treated "制定一个三步计划" as "start executing / spawn background analysis";
+    - "当前任务做到哪一步了？" used `spawn_manage` instead of `inspect_task_plan`;
+    - TaskPlan turns still mix in `spawn_manage`, `task_output`, and `list_dir`;
+  - next direction: tighten TaskPlan access policy so pure task planning is `create_task_plan -> final`, progress queries prefer `inspect_task_plan`, and spawn tools are exposed only for explicit background-job intent.
+- 2026-07-14 implemented TaskPlan boundary governance:
+  - split neutral access contracts into `agent/policies/tool_access_types.py`, preserving compatibility re-exports from `tool_access.py`;
+  - added `agent/policies/task_plan_boundary.py` for create/inspect/update/background-job intent routing and turn-local spawn/RAG/local suppression;
+  - added `tool_blocked_by_task_plan_policy` execution gating through the existing `TurnToolBoundaryManager` path;
+  - split neutral completion contracts into `agent/policies/turn_completion_types.py` after implementation review found the original plan still allowed a completion import cycle;
+  - added `agent/policies/task_plan_completion.py`; successful create/inspect/update ledger results now switch the next model call to final-only with `tools=[]`;
+  - strengthened TaskPlan tool descriptions and active task prompt rules so TaskPlan state is not treated as a spawn job;
+  - preserved AgentLoop, always-on policy, non-LRU behavior, Document RAG completion, and Turn Trace behavior.
+- TaskPlan boundary verification:
+  - TaskPlan focused suite: `63 passed`;
+  - boundary/RAG/trace suite: `66 passed`;
+  - bootstrap/config suite: `33 passed`;
+  - reasoner boundary suite: `26 passed`;
+  - full pytest: `1481 passed, 3 warnings in 36.10s`;
+  - `git diff --check` and related `compileall` checks passed.
+- Remaining live verification:
+  - `/tmp/akashic.sock` belongs to a service started before this implementation, and the current sandbox cannot safely restart the host process;
+  - restart with `uv run python main.py`, connect with `uv run python main.py cli`, then replay create/inspect/update/background-job prompts and record real tool chains and ReAct counts.
+- 2026-07-14 reviewed TaskPlan boundary live smoke after restart using isolated CLI session `taskplan-boundary-smoke-20260714`:
+  - turn `382`: `recall_memory -> search_messages(soft-stop) -> create_task_plan -> final`, `react_iteration_count=4`, cumulative log `prompt_tokens=52205`;
+  - turn `383`: `inspect_task_plan -> final`, 2 iterations;
+  - turn `384`: `update_task_step -> final`, 2 iterations;
+  - turn `385`: explicit background job used `spawn_manage -> final`, 2 iterations;
+  - create/inspect/update turns emitted `[turn_completion] final_only reason=task_plan_tool_complete`;
+  - create turn did not execute spawn, Document RAG, shell, read_file, or list_dir;
+  - SQLite confirms a three-step active plan and Step 1 `completed` with `result_summary=已经查看日志`.
+- TaskPlan live result:
+  - compared with the old 15-iteration/`985779` prompt-token creation turn, the new creation turn used 4 iterations/`52205` cumulative prompt tokens, approximately 73% fewer iterations and 94.7% fewer prompt tokens;
+  - the remaining problem is narrowed to context retrieval authorization: pure plan creation still real-executed `recall_memory`, and an attempted `search_messages` consumed an LLM round despite being soft-stopped;
+  - recorded as `LA-001`; recommended direction is `TaskPlan action + context_requirement + capability scope + one-shot retrieval budget`, not a global memory ban;
+  - also recorded a logging mismatch where the react-boundary final-only log reason differs from the actual TaskPlan completion reason.
+- 2026-07-14 completed and independently reviewed the LA-001 implementation plan:
+  - plan: `docs/superpowers/plans/2026-07-14-task-plan-context-capability-scope.md`;
+  - introduces one immutable `TaskPlanTurnContract` containing action, context requirement, required/allowed capabilities, retrieval budget, and completion capability;
+  - uses a canonical inactive contract shape enforced by `__post_init__` and keeps explicit background start/observe/output/cancel outside TaskPlan strict scope;
+  - adds tool capability metadata and a typed `ToolAccessPlan.task_plan_contract`; `policy_metadata` remains trace-only and is never deserialized into runtime authorization state;
+  - keeps TaskPlan access planning active when `tool_search_enabled=False` without changing ordinary discovery-disabled turns from their existing all-tools/no-boundary behavior;
+  - allows at most one optional long-term-memory or current-session-history retrieval, then dynamically retires retrieval tools;
+  - adds same-batch repeated/failed retrieval tests so the one-shot budget is validated independently from access blocking;
+  - preserves executor status in `ToolCallLedger`; TaskPlan completion requires executor success, parsed `{ok:true}`, and the expected action capability, so update turns do not stop after inspect or denied/error calls;
+  - requires protected `_session_key` precedence for `search_messages` and keeps passive memory prompt injection out of scope;
+  - adds `task_plan_state` generic intent to prevent Document RAG topic words from contaminating evidence/react policy;
+  - live smoke now seeds unique long-term-memory and same-session-history markers and requires exactly one real contextual retrieval before plan creation;
+  - the revised plan has no remaining Critical/Important review findings and is ready for implementation; no business code was changed during plan review.
+- 2026-07-14 implemented LA-001 TaskPlan context capability scope with TDD:
+  - added immutable `TaskPlanTurnContract`, conservative action/context precedence, canonical inactive state, and JSON-safe trace serialization;
+  - added internal registry capability metadata for create/inspect/update, memory recall, and session-history search without exposing capabilities in model schemas or tool search;
+  - added strict TaskPlan capability scope with required-capability fail-closed behavior and optional-context degradation;
+  - added one-shot context retrieval budget; successful, `ok:false`, hook-denied, and executor-error attempts all consume the budget after access authorization, while cross-family calls remain access-blocked;
+  - dynamically retires retrieval schemas after one attempt, keeps the create provider visible, and delivers a model-consumable transition hint; history context does not expose `fetch_messages`;
+  - made TaskPlan completion action-aware and capability-based, requiring executor success plus parsed/result success; inspect does not complete update turns;
+  - integrated protected capability mappings and typed contracts into `DefaultReasoner` for discovery-enabled and discovery-disabled modes without changing ordinary discovery-disabled behavior;
+  - recomputes visibility through `ToolAccessGateway`, records executor status, fixes TaskPlan final-only logs, and omits global deferred-tool hints in strict scope;
+  - preserved AgentLoop, always-on declarations, LRU/ToolDiscoveryState, Document RAG, Turn Trace, and protected current-session behavior.
+- LA-001 verification:
+  - TaskPlan/gateway focused regression: `192 passed`;
+  - Document RAG/completion/trace/spawn/bootstrap/runtime compatibility: `85 passed`;
+  - final full pytest after live-smoke negation/precedence regressions: `1619 passed, 3 warnings in 38.10s`;
+  - `git diff --check` passed;
+  - independent Task 4/5/6 reviews have no remaining Critical/Important findings;
+  - isolated real CLI/LLM smoke passed without disturbing the existing service: pure create `2` iterations/`11605` prompt tokens; preference and history `3` iterations with one real context retrieval each; inspect/update/background `2` iterations each;
+  - history generated three same-batch search candidates, but only one executed and the other two were soft-stopped by `task_plan_context_budget_exhausted`;
+  - live smoke exposed a no-create substring false positive; added bounded required/negated action parsing for plan creation and background start, then restarted the isolated instance and confirmed “不创建计划” no longer invokes `create_task_plan` while explicit update remains available;
+  - independent adversarial review added coverage for common negations, double negatives, mixed no-create/update, background create/observe, runtime-status wording, negated background start, and later positive start; final review has no remaining Critical/Important findings.

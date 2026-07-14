@@ -57,6 +57,7 @@ class ToolCallRecord:
     requested_unlocks: tuple[str, ...] = ()
     unlocked_tools: tuple[str, ...] = ()
     blocked_tools: tuple[str, ...] = ()
+    execution_status: str = ""
     result_ok: bool = False
     hit_count: int | None = None
     citation_refs: tuple[str, ...] = ()

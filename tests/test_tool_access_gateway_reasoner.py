@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 from datetime import datetime, timezone
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast
 
@@ -13,15 +15,31 @@ from agent.core.runtime_support import LLMServices, ToolDiscoveryState
 from agent.core.types import ContextRenderResult, ContextRequest
 from agent.looping.ports import LLMConfig
 from agent.provider import LLMResponse, ToolCall
+from agent.task_plan.service import TaskPlanService
+from agent.task_plan.store import TaskPlanStore
+from agent.tool_hooks.base import ToolHook
+from agent.tool_hooks.types import HookContext, HookOutcome
 from agent.tools.base import Tool
 from agent.tools.registry import ToolRegistry
+from agent.tools.task_plan import (
+    CreateTaskPlanTool,
+    InspectTaskPlanTool,
+    UpdateTaskStepTool,
+)
 from agent.tools.tool_search import ToolSearchTool
 
 
 class _RecordingTool(Tool):
-    def __init__(self, name: str, result: str | None = None) -> None:
+    def __init__(
+        self,
+        name: str,
+        result: str | None = None,
+        *,
+        capabilities: frozenset[str] = frozenset(),
+    ) -> None:
         self._name = name
         self._result = result or f"{name}-ok"
+        self.capabilities = capabilities
         self.calls: list[dict[str, Any]] = []
 
     @property
@@ -53,6 +71,28 @@ class _Provider:
         return self._responses.pop(0)
 
 
+class _DenyToolHook(ToolHook):
+    name = "deny_tool_for_test"
+    event = "pre_tool_use"
+
+    def __init__(self, tool_name: str, reason: str = "denied") -> None:
+        self._tool_name = tool_name
+        self._reason = reason
+
+    def matches(self, ctx: HookContext) -> bool:
+        return ctx.request.tool_name == self._tool_name
+
+    async def run(self, ctx: HookContext) -> HookOutcome:
+        return HookOutcome(decision="deny", reason=self._reason)
+
+
+class _ErrorToolHook(_DenyToolHook):
+    name = "error_tool_for_test"
+
+    async def run(self, ctx: HookContext) -> HookOutcome:
+        raise RuntimeError("hook failed")
+
+
 def _msg(content: str) -> SimpleNamespace:
     return SimpleNamespace(
         content=content,
@@ -79,19 +119,46 @@ def _make_reasoner(
     read_file: _RecordingTool | None = None,
     extra_tools: list[Tool] | None = None,
     discovery: ToolDiscoveryState | None = None,
+    task_plan_service: TaskPlanService | None = None,
+    recall_memory: _RecordingTool | None = None,
+    search_messages: _RecordingTool | None = None,
+    tool_search_enabled: bool = True,
+    render_requests: list[ContextRequest] | None = None,
 ) -> DefaultReasoner:
     tools = ToolRegistry()
+    tools.set_context(_session_key="cli:1")
     tools.register(ToolSearchTool(tools), always_on=True, risk="read-only")
     tools.register(_RecordingTool("search_docs"))
     tools.register(_RecordingTool("fetch_doc_chunk"))
     tools.register(read_file or _RecordingTool("read_file"), always_on=True)
     tools.register(_RecordingTool("shell"), always_on=True)
     tools.register(_RecordingTool("list_dir"), always_on=True)
-    tools.register(_RecordingTool("recall_memory"))
+    tools.register(
+        recall_memory
+        or _RecordingTool(
+            "recall_memory",
+            '{"ok": true, "memories": []}',
+            capabilities=frozenset({"memory.recall"}),
+        )
+    )
+    tools.register(
+        search_messages
+        or _RecordingTool(
+            "search_messages",
+            '{"ok": true, "messages": []}',
+            capabilities=frozenset({"history.search"}),
+        )
+    )
+    if task_plan_service is not None:
+        tools.register(CreateTaskPlanTool(task_plan_service))
+        tools.register(UpdateTaskStepTool(task_plan_service))
+        tools.register(InspectTaskPlanTool(task_plan_service))
     for tool in extra_tools or []:
         tools.register(tool)
 
     def _render(request: ContextRequest, **_kwargs: object) -> ContextRenderResult:
+        if render_requests is not None:
+            render_requests.append(request)
         return ContextRenderResult(
             system_prompt="",
             turn_injection_context={
@@ -109,10 +176,11 @@ def _make_reasoner(
         llm_config=LLMConfig(model="m", max_iterations=4, max_tokens=256),
         tools=tools,
         discovery=discovery or ToolDiscoveryState(),
-        tool_search_enabled=True,
+        tool_search_enabled=tool_search_enabled,
         memory_window=10,
         context=cast(Any, SimpleNamespace(render=_render)),
         session_manager=cast(Any, SimpleNamespace(save_async=lambda *_args, **_kw: None)),
+        task_plan_service=task_plan_service,
     )
 
 
@@ -281,3 +349,723 @@ def test_explicit_source_request_keeps_local_file_schemas_available() -> None:
 
     names = _tool_names(provider.calls[0])
     assert {"search_docs", "read_file"} <= names
+
+
+def test_active_task_prompt_exposes_progress_task_tools(tmp_path: Path) -> None:
+    service = TaskPlanService(TaskPlanStore(tmp_path / "task_plans.db"))
+    service.create_task_plan(
+        session_key="cli:1",
+        title="Fix RAG tool cost",
+        steps=["Inspect logs", "Patch boundary", "Run tests"],
+    )
+    provider = _Provider([LLMResponse(content="final", tool_calls=[])])
+    reasoner = _make_reasoner(provider, task_plan_service=service)
+
+    asyncio.run(
+        reasoner.run_turn(
+            msg=_msg("继续执行当前任务，更新下一步"),
+            session=cast(Any, _session()),
+        )
+    )
+
+    names = _tool_names(provider.calls[0])
+    assert "inspect_task_plan" in names
+    assert "update_task_step" in names
+    assert "create_task_plan" not in names
+
+
+def test_task_plan_create_success_switches_to_final_only(
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    service = TaskPlanService(TaskPlanStore(tmp_path / "task_plans.db"))
+    provider = _Provider(
+        [
+            LLMResponse(
+                content="",
+                tool_calls=[
+                    ToolCall(
+                        "c1",
+                        "create_task_plan",
+                        {
+                            "title": "Document RAG 成本分析",
+                            "steps": [
+                                "分析证据合同",
+                                "分析边界策略",
+                                "提出优化方案",
+                            ],
+                        },
+                    )
+                ],
+            ),
+            LLMResponse(content="计划已创建。", tool_calls=[]),
+        ]
+    )
+    reasoner = _make_reasoner(provider, task_plan_service=service)
+    caplog.set_level(logging.INFO, logger="agent.core.passive_turn")
+
+    result = asyncio.run(
+        reasoner.run_turn(
+            msg=_msg("为修复 Document RAG 成本问题制定一个三步计划"),
+            session=cast(Any, _session()),
+        )
+    )
+
+    assert result.tools_used == ["create_task_plan"]
+    assert provider.calls[1]["tools"] == []
+    assert result.context_retry["turn_completion"]["reason"] == (
+        "task_plan_completion_capability_satisfied"
+    )
+    plan = service.get_active_task_plan(session_key="cli:1")
+    assert plan is not None
+    assert len(plan.steps) == 3
+    assert (
+        "[turn_completion] scheduled final_only "
+        "reason=task_plan_completion_capability_satisfied"
+    ) in caplog.text
+
+
+def test_task_plan_inspect_success_switches_to_final_only(tmp_path: Path) -> None:
+    service = TaskPlanService(TaskPlanStore(tmp_path / "task_plans.db"))
+    service.create_task_plan(
+        session_key="cli:1",
+        title="Document RAG 成本分析",
+        steps=["分析证据合同", "分析边界策略", "提出优化方案"],
+    )
+    provider = _Provider(
+        [
+            LLMResponse(
+                content="",
+                tool_calls=[ToolCall("i1", "inspect_task_plan", {})],
+            ),
+            LLMResponse(content="当前任务在第 1 步。", tool_calls=[]),
+        ]
+    )
+    reasoner = _make_reasoner(provider, task_plan_service=service)
+
+    result = asyncio.run(
+        reasoner.run_turn(
+            msg=_msg("当前任务做到哪一步了？"),
+            session=cast(Any, _session()),
+        )
+    )
+
+    assert result.tools_used == ["inspect_task_plan"]
+    assert provider.calls[1]["tools"] == []
+    assert result.context_retry["turn_completion"]["reason"] == (
+        "task_plan_completion_capability_satisfied"
+    )
+
+
+def test_task_plan_update_success_switches_to_final_only(tmp_path: Path) -> None:
+    service = TaskPlanService(TaskPlanStore(tmp_path / "task_plans.db"))
+    plan = service.create_task_plan(
+        session_key="cli:1",
+        title="Document RAG 成本分析",
+        steps=["分析证据合同", "分析边界策略", "提出优化方案"],
+    )
+    provider = _Provider(
+        [
+            LLMResponse(
+                content="",
+                tool_calls=[
+                    ToolCall(
+                        "u1",
+                        "update_task_step",
+                        {
+                            "task_id": plan.task_id,
+                            "step_index": 1,
+                            "status": "completed",
+                            "result_summary": "已查看日志",
+                        },
+                    )
+                ],
+            ),
+            LLMResponse(content="第一步已完成。", tool_calls=[]),
+        ]
+    )
+    reasoner = _make_reasoner(provider, task_plan_service=service)
+
+    result = asyncio.run(
+        reasoner.run_turn(
+            msg=_msg("把第一步标记为完成，说明已经查看日志"),
+            session=cast(Any, _session()),
+        )
+    )
+
+    assert result.tools_used == ["update_task_step"]
+    assert provider.calls[1]["tools"] == []
+    assert result.context_retry["turn_completion"]["reason"] == (
+        "task_plan_completion_capability_satisfied"
+    )
+
+
+def test_task_plan_create_blocks_spawn_even_if_model_calls_it(
+    tmp_path: Path,
+) -> None:
+    service = TaskPlanService(TaskPlanStore(tmp_path / "task_plans.db"))
+    spawn = _RecordingTool("spawn")
+    provider = _Provider(
+        [
+            LLMResponse(
+                content="",
+                tool_calls=[ToolCall("s1", "spawn", {"task": "run analysis"})],
+            ),
+            LLMResponse(content="我会先创建计划。", tool_calls=[]),
+        ]
+    )
+    reasoner = _make_reasoner(
+        provider,
+        task_plan_service=service,
+        extra_tools=[spawn],
+    )
+
+    result = asyncio.run(
+        reasoner.run_turn(
+            msg=_msg("为修复 Document RAG 成本问题制定一个三步计划"),
+            session=cast(Any, _session()),
+        )
+    )
+
+    assert spawn.calls == []
+    assert result.tools_used == []
+    assert result.tool_chain[0]["calls"][0]["status"] == "blocked_by_tool_boundary"
+    assert result.tool_chain[0]["calls"][0]["boundary_reason"] == (
+        "tool_blocked_by_task_plan_policy"
+    )
+
+
+def test_background_job_prompt_keeps_spawn_manage_available(tmp_path: Path) -> None:
+    service = TaskPlanService(TaskPlanStore(tmp_path / "task_plans.db"))
+    service.create_task_plan(
+        session_key="cli:1",
+        title="Fix RAG",
+        steps=["Read logs"],
+    )
+    provider = _Provider([LLMResponse(content="final", tool_calls=[])])
+    reasoner = _make_reasoner(
+        provider,
+        task_plan_service=service,
+        extra_tools=[_RecordingTool("spawn_manage"), _RecordingTool("task_output")],
+    )
+
+    asyncio.run(
+        reasoner.run_turn(
+            msg=_msg("查看后台任务状态"),
+            session=cast(Any, _session()),
+        )
+    )
+
+    names = _tool_names(provider.calls[0])
+    assert "spawn_manage" in names
+    assert "task_output" not in names
+    assert "inspect_task_plan" not in names
+
+
+def test_pure_create_exposes_only_create_and_blocks_memory_hard_call(
+    tmp_path: Path,
+) -> None:
+    service = TaskPlanService(TaskPlanStore(tmp_path / "task_plans.db"))
+    recall = _RecordingTool(
+        "recall_memory",
+        '{"ok": true}',
+        capabilities=frozenset({"memory.recall"}),
+    )
+    provider = _Provider(
+        [
+            LLMResponse(
+                content="",
+                tool_calls=[ToolCall("m1", "recall_memory", {"query": "prefs"})],
+            ),
+            LLMResponse(content="final", tool_calls=[]),
+        ]
+    )
+    reasoner = _make_reasoner(
+        provider,
+        task_plan_service=service,
+        recall_memory=recall,
+    )
+
+    result = asyncio.run(
+        reasoner.run_turn(
+            msg=_msg("制定一个三步计划"),
+            session=cast(Any, _session()),
+        )
+    )
+
+    assert _tool_names(provider.calls[0]) == {"create_task_plan"}
+    assert recall.calls == []
+    assert result.tool_chain[0]["calls"][0]["boundary_reason"] == (
+        "tool_blocked_by_task_plan_policy"
+    )
+    trace = result.context_retry["tool_boundary"]
+    assert trace["task_plan_contract"]["completion_capability"] == (
+        "task_plan.create"
+    )
+    assert trace["task_plan_completion"]["resolved_provider_tools"] == [
+        "create_task_plan"
+    ]
+    assert trace["tool_access"]["policy_metadata"]["task_plan"][
+        "resolved_capabilities"
+    ]["task_plan.create"] == ["create_task_plan"]
+
+
+def test_strict_task_plan_scope_omits_global_deferred_tool_hint(
+    tmp_path: Path,
+) -> None:
+    service = TaskPlanService(TaskPlanStore(tmp_path / "task_plans.db"))
+    requests: list[ContextRequest] = []
+    provider = _Provider([LLMResponse(content="final", tool_calls=[])])
+    reasoner = _make_reasoner(
+        provider,
+        task_plan_service=service,
+        render_requests=requests,
+    )
+
+    asyncio.run(
+        reasoner.run_turn(
+            msg=_msg("制定一个三步计划"),
+            session=cast(Any, _session()),
+        )
+    )
+
+    assert requests
+    assert requests[0].turn_injection_prompt == ""
+
+
+def test_memory_context_retires_after_one_call_then_create_finishes(
+    tmp_path: Path,
+) -> None:
+    service = TaskPlanService(TaskPlanStore(tmp_path / "task_plans.db"))
+    recall = _RecordingTool(
+        "recall_memory",
+        '{"ok": true, "memories": [{"content": "prefer concise plans"}]}',
+        capabilities=frozenset({"memory.recall"}),
+    )
+    provider = _Provider(
+        [
+            LLMResponse(
+                content="",
+                tool_calls=[ToolCall("m1", "recall_memory", {"query": "prefs"})],
+            ),
+            LLMResponse(
+                content="",
+                tool_calls=[
+                    ToolCall(
+                        "c1",
+                        "create_task_plan",
+                        {"title": "Preference plan", "steps": ["A", "B", "C"]},
+                    )
+                ],
+            ),
+            LLMResponse(content="created", tool_calls=[]),
+        ]
+    )
+    reasoner = _make_reasoner(
+        provider,
+        task_plan_service=service,
+        recall_memory=recall,
+    )
+
+    result = asyncio.run(
+        reasoner.run_turn(
+            msg=_msg("结合我的偏好制定计划"),
+            session=cast(Any, _session()),
+        )
+    )
+
+    assert _tool_names(provider.calls[0]) == {"recall_memory", "create_task_plan"}
+    assert _tool_names(provider.calls[1]) == {"create_task_plan"}
+    assert provider.calls[2]["tools"] == []
+    assert len(recall.calls) == 1
+    assert result.tools_used == ["recall_memory", "create_task_plan"]
+
+
+def test_same_batch_memory_repeat_executes_only_once(tmp_path: Path) -> None:
+    service = TaskPlanService(TaskPlanStore(tmp_path / "task_plans.db"))
+    recall = _RecordingTool(
+        "recall_memory",
+        '{"ok": false, "error_code": "unavailable"}',
+        capabilities=frozenset({"memory.recall"}),
+    )
+    provider = _Provider(
+        [
+            LLMResponse(
+                content="",
+                tool_calls=[
+                    ToolCall("m1", "recall_memory", {"query": "prefs"}),
+                    ToolCall("m2", "recall_memory", {"query": "prefs again"}),
+                ],
+            ),
+            LLMResponse(
+                content="",
+                tool_calls=[
+                    ToolCall(
+                        "c1",
+                        "create_task_plan",
+                        {"title": "Plan", "steps": ["A"]},
+                    )
+                ],
+            ),
+            LLMResponse(content="created", tool_calls=[]),
+        ]
+    )
+    reasoner = _make_reasoner(
+        provider,
+        task_plan_service=service,
+        recall_memory=recall,
+    )
+
+    result = asyncio.run(
+        reasoner.run_turn(
+            msg=_msg("结合我的偏好制定计划"),
+            session=cast(Any, _session()),
+        )
+    )
+
+    assert len(recall.calls) == 1
+    calls = result.tool_chain[0]["calls"]
+    assert calls[1]["status"] == "soft_stopped_by_tool_boundary"
+    assert calls[1]["boundary_reason"] == "task_plan_context_budget_exhausted"
+
+
+def test_denied_context_attempt_consumes_same_batch_budget(tmp_path: Path) -> None:
+    service = TaskPlanService(TaskPlanStore(tmp_path / "task_plans.db"))
+    recall = _RecordingTool(
+        "recall_memory",
+        '{"ok": true}',
+        capabilities=frozenset({"memory.recall"}),
+    )
+    provider = _Provider(
+        [
+            LLMResponse(
+                content="",
+                tool_calls=[
+                    ToolCall("m1", "recall_memory", {"query": "prefs"}),
+                    ToolCall("m2", "recall_memory", {"query": "again"}),
+                ],
+            ),
+            LLMResponse(
+                content="",
+                tool_calls=[
+                    ToolCall(
+                        "c1",
+                        "create_task_plan",
+                        {"title": "Plan", "steps": ["A"]},
+                    )
+                ],
+            ),
+            LLMResponse(content="created", tool_calls=[]),
+        ]
+    )
+    reasoner = _make_reasoner(
+        provider,
+        task_plan_service=service,
+        recall_memory=recall,
+    )
+    reasoner.add_tool_hooks([_DenyToolHook("recall_memory", '{"ok": true}')])
+
+    result = asyncio.run(
+        reasoner.run_turn(
+            msg=_msg("结合我的偏好制定计划"),
+            session=cast(Any, _session()),
+        )
+    )
+
+    assert recall.calls == []
+    calls = result.tool_chain[0]["calls"]
+    assert calls[0]["status"] == "denied"
+    assert calls[1]["status"] == "soft_stopped_by_tool_boundary"
+    assert calls[1]["boundary_reason"] == "task_plan_context_budget_exhausted"
+    assert result.context_retry["tool_boundary"]["task_plan_context_budget"][
+        "last_execution_status"
+    ] == "denied"
+
+
+def test_executor_error_context_attempt_consumes_same_batch_budget(
+    tmp_path: Path,
+) -> None:
+    service = TaskPlanService(TaskPlanStore(tmp_path / "task_plans.db"))
+    recall = _RecordingTool(
+        "recall_memory",
+        '{"ok": true}',
+        capabilities=frozenset({"memory.recall"}),
+    )
+    provider = _Provider(
+        [
+            LLMResponse(
+                content="",
+                tool_calls=[
+                    ToolCall("m1", "recall_memory", {"query": "prefs"}),
+                    ToolCall("m2", "recall_memory", {"query": "again"}),
+                ],
+            ),
+            LLMResponse(content="final", tool_calls=[]),
+        ]
+    )
+    reasoner = _make_reasoner(
+        provider,
+        task_plan_service=service,
+        recall_memory=recall,
+    )
+    reasoner.add_tool_hooks([_ErrorToolHook("recall_memory")])
+
+    result = asyncio.run(
+        reasoner.run_turn(
+            msg=_msg("结合我的偏好制定计划"),
+            session=cast(Any, _session()),
+        )
+    )
+
+    assert recall.calls == []
+    calls = result.tool_chain[0]["calls"]
+    assert calls[0]["status"] == "error"
+    assert calls[1]["status"] == "soft_stopped_by_tool_boundary"
+    assert calls[1]["boundary_reason"] == "task_plan_context_budget_exhausted"
+
+
+def test_cross_family_context_call_is_blocked_before_execution(tmp_path: Path) -> None:
+    service = TaskPlanService(TaskPlanStore(tmp_path / "task_plans.db"))
+    recall = _RecordingTool(
+        "recall_memory",
+        '{"ok": true}',
+        capabilities=frozenset({"memory.recall"}),
+    )
+    search = _RecordingTool(
+        "search_messages",
+        '{"ok": true}',
+        capabilities=frozenset({"history.search"}),
+    )
+    provider = _Provider(
+        [
+            LLMResponse(
+                content="",
+                tool_calls=[
+                    ToolCall("m1", "recall_memory", {"query": "prefs"}),
+                    ToolCall("s1", "search_messages", {"query": "history"}),
+                ],
+            ),
+            LLMResponse(content="final", tool_calls=[]),
+        ]
+    )
+    reasoner = _make_reasoner(
+        provider,
+        task_plan_service=service,
+        recall_memory=recall,
+        search_messages=search,
+    )
+
+    result = asyncio.run(
+        reasoner.run_turn(
+            msg=_msg("结合我的偏好制定计划"),
+            session=cast(Any, _session()),
+        )
+    )
+
+    assert len(recall.calls) == 1
+    assert search.calls == []
+    assert result.tool_chain[0]["calls"][1]["boundary_reason"] == (
+        "tool_blocked_by_task_plan_policy"
+    )
+
+
+def test_session_history_context_uses_search_once_without_fetch(
+    tmp_path: Path,
+) -> None:
+    service = TaskPlanService(TaskPlanStore(tmp_path / "task_plans.db"))
+    search = _RecordingTool(
+        "search_messages",
+        '{"ok": true, "messages": [{"content": "last discussion"}]}',
+        capabilities=frozenset({"history.search"}),
+    )
+    provider = _Provider(
+        [
+            LLMResponse(
+                content="",
+                tool_calls=[ToolCall("s1", "search_messages", {"query": "last"})],
+            ),
+            LLMResponse(
+                content="",
+                tool_calls=[
+                    ToolCall(
+                        "c1",
+                        "create_task_plan",
+                        {"title": "History plan", "steps": ["A"]},
+                    )
+                ],
+            ),
+            LLMResponse(content="created", tool_calls=[]),
+        ]
+    )
+    reasoner = _make_reasoner(
+        provider,
+        task_plan_service=service,
+        search_messages=search,
+    )
+
+    asyncio.run(
+        reasoner.run_turn(
+            msg=_msg("按照我们上次讨论制定计划"),
+            session=cast(Any, _session()),
+        )
+    )
+
+    assert _tool_names(provider.calls[0]) == {"search_messages", "create_task_plan"}
+    assert _tool_names(provider.calls[1]) == {"create_task_plan"}
+    assert len(search.calls) == 1
+
+
+def test_same_batch_history_repeat_executes_only_once(tmp_path: Path) -> None:
+    service = TaskPlanService(TaskPlanStore(tmp_path / "task_plans.db"))
+    search = _RecordingTool(
+        "search_messages",
+        '{"ok": true, "messages": []}',
+        capabilities=frozenset({"history.search"}),
+    )
+    provider = _Provider(
+        [
+            LLMResponse(
+                content="",
+                tool_calls=[
+                    ToolCall("s1", "search_messages", {"query": "last"}),
+                    ToolCall("s2", "search_messages", {"query": "again"}),
+                ],
+            ),
+            LLMResponse(content="final", tool_calls=[]),
+        ]
+    )
+    reasoner = _make_reasoner(
+        provider,
+        task_plan_service=service,
+        search_messages=search,
+    )
+
+    result = asyncio.run(
+        reasoner.run_turn(
+            msg=_msg("按照我们上次讨论制定计划"),
+            session=cast(Any, _session()),
+        )
+    )
+
+    assert len(search.calls) == 1
+    assert result.tool_chain[0]["calls"][1]["boundary_reason"] == (
+        "task_plan_context_budget_exhausted"
+    )
+
+
+def test_denied_completion_payload_does_not_schedule_final_only() -> None:
+    create = _RecordingTool(
+        "create_task_plan",
+        '{"ok": true}',
+        capabilities=frozenset({"task_plan.create"}),
+    )
+    provider = _Provider(
+        [
+            LLMResponse(
+                content="",
+                tool_calls=[
+                    ToolCall(
+                        "c1",
+                        "create_task_plan",
+                        {"title": "Plan", "steps": ["A"]},
+                    )
+                ],
+            ),
+            LLMResponse(content="could not create", tool_calls=[]),
+        ]
+    )
+    reasoner = _make_reasoner(provider, extra_tools=[create])
+    reasoner.add_tool_hooks([_DenyToolHook("create_task_plan", '{"ok": true}')])
+
+    result = asyncio.run(
+        reasoner.run_turn(
+            msg=_msg("制定一个三步计划"),
+            session=cast(Any, _session()),
+        )
+    )
+
+    assert create.calls == []
+    assert result.tool_chain[0]["calls"][0]["status"] == "denied"
+    assert _tool_names(provider.calls[1]) == {"create_task_plan"}
+    assert "turn_completion" not in result.context_retry
+
+
+def test_update_inspect_first_finishes_only_after_update(tmp_path: Path) -> None:
+    service = TaskPlanService(TaskPlanStore(tmp_path / "task_plans.db"))
+    plan = service.create_task_plan(
+        session_key="cli:1", title="Plan", steps=["A", "B"]
+    )
+    provider = _Provider(
+        [
+            LLMResponse(
+                content="",
+                tool_calls=[ToolCall("i1", "inspect_task_plan", {})],
+            ),
+            LLMResponse(
+                content="",
+                tool_calls=[
+                    ToolCall(
+                        "u1",
+                        "update_task_step",
+                        {
+                            "task_id": plan.task_id,
+                            "step_index": 1,
+                            "status": "completed",
+                        },
+                    )
+                ],
+            ),
+            LLMResponse(content="updated", tool_calls=[]),
+        ]
+    )
+    reasoner = _make_reasoner(provider, task_plan_service=service)
+
+    result = asyncio.run(
+        reasoner.run_turn(
+            msg=_msg("把第一步标记完成"),
+            session=cast(Any, _session()),
+        )
+    )
+
+    assert _tool_names(provider.calls[0]) == {
+        "inspect_task_plan",
+        "update_task_step",
+    }
+    assert provider.calls[1]["tools"]
+    assert provider.calls[2]["tools"] == []
+    assert result.tools_used == ["inspect_task_plan", "update_task_step"]
+
+
+def test_discovery_disabled_still_enforces_strict_task_plan_scope(
+    tmp_path: Path,
+) -> None:
+    service = TaskPlanService(TaskPlanStore(tmp_path / "task_plans.db"))
+    provider = _Provider([LLMResponse(content="final", tool_calls=[])])
+    reasoner = _make_reasoner(
+        provider,
+        task_plan_service=service,
+        tool_search_enabled=False,
+    )
+
+    asyncio.run(
+        reasoner.run_turn(
+            msg=_msg("制定一个三步计划"),
+            session=cast(Any, _session()),
+        )
+    )
+
+    assert _tool_names(provider.calls[0]) == {"create_task_plan"}
+
+
+def test_discovery_disabled_non_task_turn_keeps_all_registered_tools() -> None:
+    provider = _Provider([LLMResponse(content="final", tool_calls=[])])
+    reasoner = _make_reasoner(provider, tool_search_enabled=False)
+
+    asyncio.run(
+        reasoner.run_turn(
+            msg=_msg("今天杭州天气如何？"),
+            session=cast(Any, _session()),
+        )
+    )
+
+    assert _tool_names(provider.calls[0]) == reasoner._tools.get_registered_names()

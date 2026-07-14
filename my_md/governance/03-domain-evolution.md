@@ -737,6 +737,101 @@
 - `my_md/rag/12-document-rag-params-experiments.md`
 - `my_md/rag/13-document-rag-evaluation.md`
 
+## Local Agent
+
+### LA-001: TaskPlan 边界治理后进一步暴露上下文召回授权问题
+
+场景：
+
+- TaskPlan 第一阶段完成工具注册、SQLite 状态、active task prompt 和 non-LRU 合同后，第二轮 CLI smoke 曾出现 15 轮 ReAct、spawn 误路由和“当前任务”语义混淆。
+- 2026-07-14 实现 TaskPlan access/execution/completion 边界后，使用独立 CLI session 重跑四条真实 smoke。
+
+发现：
+
+- 创建、查看、更新 TaskPlan 与明确后台 job 的语义边界已经成立。
+- turn `383/384/385` 分别稳定为 `inspect_task_plan -> final`、`update_task_step -> final`、`spawn_manage -> final`，均为 2 轮。
+- turn `382` 成功阻止 spawn、Document RAG 和 local file 工具，但仍真实执行 `recall_memory`，并生成一次被 budget soft-stop 的 `search_messages`。
+- 这说明问题已经从“TaskPlan 与后台执行混淆”收敛为“计划创建是否需要历史上下文”的能力授权问题。
+
+处理：
+
+- 已完成自动化边界模块：`task_plan_boundary.py`、`task_plan_completion.py`、中立 access/completion types，以及 prompt/tool description 约束。
+- 已通过 final-only 保证三类 TaskPlan 工具成功后停止后续工具循环。
+- 对新问题暂不直接全禁 memory；记录候选模型 `TaskPlanIntent.action + ContextRequirement + CapabilityScope + TurnBudget`。
+
+结果：
+
+- 计划创建从旧 smoke 的 15 轮降到 4 轮，累计 prompt token 从 `985779` 降到 `52205`。
+- SQLite 中新任务有 3 个步骤，Step 1 更新为 `completed`，状态链路正确。
+- 新问题边界明确：纯状态创建不应召回；只有显式偏好/历史依赖的计划才临时授权一次召回。
+
+证据：
+
+- observe turn `382-385`。
+- `/home/jjh/.akashic/workspace/logs/agent.log` 16:31:04 - 16:32:25。
+- `/home/jjh/.akashic/workspace/task_plans.db` 中任务 `task_87eb3d1b8d944efd9bf566a8ae7e7b30`。
+- 自动化完整回归：`1481 passed, 3 warnings in 36.10s`。
+
+影响：
+
+- TaskPlan 已从工具可用性骨架演进为具备 access、execution、completion 边界的状态管理模块。
+- 下一步不应继续追加零散工具名判断，而应把“上下文需求”提升为可复用策略维度。
+
+下一步：
+
+- 先形成 LA-001 的正式设计和测试矩阵。
+- 验证纯计划、偏好计划、历史计划、查看、更新、后台 job 六类场景。
+- 单独修正 final-only 日志 reason 的可观测性不一致。
+
+关联文档：
+
+- `my_md/local_agent/02-task-plan-first-phase-design.md`
+- `my_md/governance/02-current-issues.md`
+- `my_md/governance/04-fix-roadmap.md`
+- `my_md/governance/05-design-decisions.md`
+
+### LA-001 实施：从工具名边界演进到上下文 capability contract
+
+场景：
+
+- turn `382` 已证明 TaskPlan 可以阻止 spawn/RAG/local，但纯计划仍先调用 memory/session retrieval。
+- 直接全禁 memory 会破坏“结合偏好”和“按照上次讨论”这两类合理需求。
+
+发现：
+
+- TaskPlan 动作和上下文需求必须分开建模；topic words 不能隐式授权历史召回。
+- schema 可见、tool search 可发现、执行可授权、调用是否值得继续、action 是否完成是不同边界。
+- 一次工具尝试的成本在返回失败或 hook 拒绝时已经发生，因此预算不能只统计成功结果。
+
+处理：
+
+- 引入 typed `TaskPlanTurnContract` 和 registry capability metadata。
+- `TaskPlanAccessPolicy` 构建严格 allow scope；required provider 缺失时 fail closed，optional context provider 缺失时退化为 task state scope。
+- `TaskPlanContextBudgetPolicy` 在 access gate 后执行一次性预算；召回后通过网关重新计算 visibility。
+- `TaskPlanCompletionPolicy` 按 action 对应 capability、executor status 和 result success 判定 final-only。
+- `DefaultReasoner` 只做窄接线，不修改 AgentLoop；严格 scope 同时关闭全局 deferred-tool hint。
+
+结果：
+
+- 纯计划自动化路径只暴露 create capability。
+- 偏好/历史计划各最多一次对应召回，不能跨 family 或扩展到 `fetch_messages`。
+- 同批重复、`ok:false`、denied/error、inspect-before-update 和 discovery-disabled 均有 E2E 回归。
+- 最终完整 pytest：`1619 passed, 3 warnings in 38.10s`；独立审阅无剩余 Critical/Important。
+- 隔离真实 smoke 验证 pure=2 轮、preference=3 轮、history=3 轮，inspect/update/background 均保持 2 轮。
+- live smoke 发现并修复 no-create 动作否定的子串误匹配；进一步用 bounded regex 和明确优先级覆盖 plan/background 的 required、negated、positive 与 observe fallback，显式 update 仍优先。
+
+影响：
+
+- TaskPlan 的边界从工具名 blocklist 演进为可复用的 typed capability contract。
+- runtime authorization 与 trace metadata 分离，降低模型输出或 trace 篡改改变权限的风险。
+- LA-001 已完成自动化和真实模型验收；后续只把同批重复候选作为跨工具域的模型生成成本问题观察，不重新打开本次执行授权问题。
+
+关联文档：
+
+- `docs/superpowers/plans/2026-07-14-task-plan-context-capability-scope.md`
+- `my_md/local_agent/02-task-plan-first-phase-design.md`
+- `my_md/governance/06-star-log.md` CASE-004
+
 ## System
 
 ### SYS-001: 建立集中式治理文档体系

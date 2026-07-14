@@ -14,10 +14,12 @@ from bootstrap.toolsets.memory import MemoryToolsetProvider
 from bootstrap.toolsets.meta import CommonMetaToolsetProvider, SpawnToolsetProvider
 from bootstrap.toolsets.protocol import ToolsetProvider
 from bootstrap.toolsets.schedule import SchedulerToolsetProvider
+from bootstrap.toolsets.task_plan import TaskPlanToolsetProvider
 from core.memory.plugin import MemoryPlugin
 
 if TYPE_CHECKING:
     from agent.looping.interrupt import TurnInterruptState
+    from agent.task_plan.service import TaskPlanService
 
 
 ContextFactory = Callable[[Path, Any], Any]
@@ -47,6 +49,7 @@ _TOOLSET_WIRING: dict[str, ToolsetProviderFactory] = {
     "spawn": SpawnToolsetProvider,
     "schedule": SchedulerToolsetProvider,
     "mcp": McpToolsetProvider,
+    "task_plan": TaskPlanToolsetProvider,
 }
 
 
@@ -131,10 +134,15 @@ def resolve_context_factory(name: str) -> ContextFactory:
 
 
 def resolve_toolset_provider(
-    name: str, *, readonly_tools: dict[str, Tool] | None = None
+    name: str,
+    *,
+    readonly_tools: dict[str, Tool] | None = None,
+    task_plan_service: "TaskPlanService | None" = None,
 ) -> ToolsetProvider:
     if name == "meta_common":
         return CommonMetaToolsetProvider(readonly_tools or {})
+    if name == "task_plan":
+        return TaskPlanToolsetProvider(task_plan_service)
     if name not in _TOOLSET_WIRING:
         choices = ", ".join(sorted(["meta_common", *_TOOLSET_WIRING.keys()]))
         raise ValueError(f"未知 toolset wiring: {name}；可选值: {choices}")

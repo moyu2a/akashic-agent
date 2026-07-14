@@ -23,6 +23,7 @@
 - 讨论 RAG 路线、设计、实验参数和评估结果时，更新对应专题文档。
 - 发现 RAG 方向的阶段性问题或改进结果时，统一更新 `../governance/03-domain-evolution.md` 的 RAG 分节。
 - 形成完整问题闭环时，再同步沉淀到 `../governance/06-star-log.md`。
+- 如果讨论 Document RAG 在本地个人数字员工 / 本地开发工作台 Agent 中的上层定位，路线记录放在 `../local_agent/`；本目录只保留 RAG 专项设计和实现。
 
 ## 后续更新提示词
 

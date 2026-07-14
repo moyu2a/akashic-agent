@@ -130,6 +130,7 @@ def _to_public_message(message: dict[str, Any]) -> dict[str, Any]:
 
 class SearchMessagesTool(Tool):
     name = "search_messages"
+    capabilities = frozenset({"history.search"})
     description = (
         "对原始历史消息做 grep 式搜索，返回命中候选消息的预览和 source_ref。\n"
         "适合查找某个词、句子、文件名、报错、命令、配置项曾出现在哪些消息里——它是文本定位工具。\n"
@@ -189,9 +190,11 @@ class SearchMessagesTool(Tool):
         limit = max(1, min(int(kwargs.get("limit", 10)), 50))
         offset = max(0, int(kwargs.get("offset", 0)))
 
+        protected_session = str(kwargs.get("_session_key") or "").strip()
+        public_session = str(kwargs.get("session_key") or "").strip()
         matched, total = self._store.search_messages(
             term,
-            session_key=(kwargs.get("session_key") or "").strip() or None,
+            session_key=protected_session or public_session or None,
             role=(kwargs.get("role") or "").strip() or None,
             limit=limit,
             offset=offset,

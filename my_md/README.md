@@ -8,6 +8,7 @@
 - [architecture/](./architecture/): 项目架构、被动链路、记忆/工具/插件、主动链路。
 - [interview/](./interview/): 求职表达、模块设计模拟面试问答。
 - [rag/](./rag/): Document RAG、GraphRAG、LLM Wiki、LoRA/RAG 延伸计划。
+- [local_agent/](./local_agent/): 本地个人数字员工 / 本地开发工作台 Agent 的产品和架构演进路线。
 - [test_docs/](./test_docs/): 项目分链路测试方案、自动评估集、测试记录和回归清单。
 - [governance/](./governance/): 统一管理问题、演进、修复路线、设计决策和 STAR 复盘。
 
@@ -32,6 +33,8 @@
 - [rag/17-document-rag-p7-tools-plan.md](./rag/17-document-rag-p7-tools-plan.md): Document RAG 工具接入计划。
 - [rag/18-document-rag-p9-citation-plan.md](./rag/18-document-rag-p9-citation-plan.md): Document RAG 回答引用规则实现计划。
 - [rag/19-document-rag-p10-intent-preload-plan.md](./rag/19-document-rag-p10-intent-preload-plan.md): Document RAG 强文档意图 turn-local 工具预加载计划。
+- [local_agent/01-local-dev-workbench-agent-roadmap.md](./local_agent/01-local-dev-workbench-agent-roadmap.md): 本地开发工作台 Agent 演进路线，记录当前底座能力、能力缺口、建设优先级和面试表达。
+- [local_agent/02-task-plan-first-phase-design.md](./local_agent/02-task-plan-first-phase-design.md): TaskPlan 第一阶段、工具边界、completion 和真实 CLI smoke 记录。
 - [governance/01-issue-index.md](./governance/01-issue-index.md): 全局问题总表。
 - [governance/02-current-issues.md](./governance/02-current-issues.md): 当前待解决问题。
 - [governance/03-domain-evolution.md](./governance/03-domain-evolution.md): 领域演进记录。

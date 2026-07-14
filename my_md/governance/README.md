@@ -7,6 +7,7 @@
 - `architecture/`：架构与模块理解。
 - `test_docs/`：测试方案、测试日志、自动评估报告。
 - `rag/`：RAG 设计、实验、评估和面试表达。
+- `local_agent/`：本地个人数字员工 / 本地开发工作台 Agent 的产品和架构演进路线。
 - `interview/`：通用面试表达。
 - `learning/`：学习路线和运行手册。
 
@@ -29,6 +30,7 @@
 | 测试体系变化 | `test_docs/` | `03-domain-evolution.md` 的 Test 分节 |
 | 架构问题 | `architecture/` | `03-domain-evolution.md` 的 Architecture 分节 |
 | RAG 实验问题 | `rag/` | `03-domain-evolution.md` 的 RAG 分节 |
+| 本地 Agent 产品/架构路线 | `local_agent/` | 如形成问题或取舍，再进入 `03-domain-evolution.md`、`05-design-decisions.md` 或 `06-star-log.md` |
 | 跨模块系统问题 | 相关领域目录 | `02-current-issues.md` 和 `03-domain-evolution.md` 的 System 分节 |
 | 修复计划 | 相关领域目录和问题文档 | `04-fix-roadmap.md` |
 | 设计取舍 | 相关领域目录和问题文档 | `05-design-decisions.md` |

@@ -478,7 +478,7 @@ def test_build_registered_tools_respects_toolset_order_and_subset(monkeypatch, t
     )
     monkeypatch.setattr(
         "bootstrap.tools.resolve_toolset_provider",
-        lambda name, readonly_tools=None: _ToolsetProvider(name),
+        lambda name, readonly_tools=None, task_plan_service=None: _ToolsetProvider(name),
     )
     monkeypatch.setattr("bootstrap.tools.build_readonly_tools", lambda *_, **__: {})
     monkeypatch.setattr(
@@ -692,7 +692,7 @@ def test_build_registered_tools_without_mcp_toolset_still_returns_empty_registry
     )
     monkeypatch.setattr(
         "bootstrap.tools.resolve_toolset_provider",
-        lambda name, readonly_tools=None: SimpleNamespace(
+        lambda name, readonly_tools=None, task_plan_service=None: SimpleNamespace(
             register=lambda registry, deps: SimpleNamespace(extras={})
         ),
     )
@@ -713,7 +713,7 @@ def test_build_registered_tools_without_mcp_toolset_still_returns_empty_registry
         system_prompt="s",
         wiring=WiringConfig(toolsets=["schedule"]),
     )
-    _, _, _, mcp_registry, _, _, _ = build_registered_tools(
+    _, _, _, mcp_registry, _, _, _, _ = build_registered_tools(
         config=config,
         workspace=tmp_path,
         http_resources=cast(Any, SimpleNamespace()),

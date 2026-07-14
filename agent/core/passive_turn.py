@@ -85,6 +85,7 @@ if TYPE_CHECKING:
     from agent.core.runtime_support import SessionLike, TurnRunResult
     from agent.looping.ports import LLMConfig, LLMServices, SessionServices
     from agent.retrieval.protocol import MemoryRetrievalPipeline
+    from agent.task_plan.service import TaskPlanService
     from agent.tool_hooks.base import ToolHook
     from session.manager import SessionManager
     from agent.tools.registry import ToolRegistry
@@ -691,6 +692,7 @@ class DefaultReasoner(Reasoner):
         context: "ContextBuilder | None" = None,
         session_manager: "SessionManager | None" = None,
         event_bus: "EventBus | None" = None,
+        task_plan_service: "TaskPlanService | None" = None,
     ) -> None:
         self._llm = llm
         self._llm_config = llm_config
@@ -701,6 +703,7 @@ class DefaultReasoner(Reasoner):
         self._context = context
         self._session_manager = session_manager
         self._event_bus = event_bus
+        self._task_plan_service = task_plan_service
         self._prompt_render_plugin_modules: list[object] = []
         self._before_step_plugin_modules: list[object] = []
         self._after_step_plugin_modules: list[object] = []
@@ -800,6 +803,21 @@ class DefaultReasoner(Reasoner):
             self._prompt_render = self._build_prompt_render_phase(self._context)
         return await self._prompt_render.run(input)
 
+    def _build_tool_access_metadata(
+        self,
+        msg: object,
+        session_key: str,
+    ) -> dict[str, object]:
+        raw_metadata = getattr(msg, "metadata", {}) or {}
+        metadata = dict(raw_metadata) if isinstance(raw_metadata, Mapping) else {}
+        if self._task_plan_service is None:
+            return metadata
+        active_plan = self._task_plan_service.get_active_task_plan(
+            session_key=session_key,
+        )
+        metadata["has_active_task"] = active_plan is not None
+        return metadata
+
     def set_stream_sink_factory(
         self,
         factory: Callable[
@@ -840,8 +858,23 @@ class DefaultReasoner(Reasoner):
         )
         total_history = len(source_history)
         disabled_tools = _disabled_tools_from_msg(msg)
+        get_registered_names = getattr(self._tools, "get_registered_names", None)
+        registered_tools = (
+            frozenset(get_registered_names())
+            if callable(get_registered_names)
+            else frozenset()
+        )
+        get_tool_capabilities = getattr(
+            self._tools,
+            "get_capabilities_by_name",
+            None,
+        )
+        tool_capabilities = (
+            get_tool_capabilities()
+            if callable(get_tool_capabilities)
+            else {}
+        )
         preloaded: set[str] | None = None
-        tool_access_context: ToolAccessContext | None = None
         tool_boundary_context: ToolBoundaryContext | None = None
         visible_names: set[str] | None = None
         if self._tool_search_enabled:
@@ -850,17 +883,25 @@ class DefaultReasoner(Reasoner):
                 "[tool_search] LRU preloaded=%s",
                 sorted(preloaded) if preloaded else "[]",
             )
-            tool_access_context = ToolAccessContext(
-                session_key=session.key,
-                user_text=str(msg.content or ""),
-                always_on_tools=frozenset(self._tools.get_always_on_names()),
-                lru_preloaded_tools=frozenset(preloaded or set()),
-                disabled_tools=frozenset(disabled_tools),
-                turn_metadata=getattr(msg, "metadata", {}) or {},
-            )
-            tool_boundary_context = self._tool_boundary.build_context(
-                tool_access_context
-            )
+        tool_access_context = ToolAccessContext(
+            session_key=session.key,
+            user_text=str(msg.content or ""),
+            always_on_tools=frozenset(self._tools.get_always_on_names()),
+            lru_preloaded_tools=frozenset(preloaded or set()),
+            disabled_tools=frozenset(disabled_tools),
+            turn_metadata=self._build_tool_access_metadata(msg, session.key),
+            registered_tools=registered_tools,
+            tool_capabilities=tool_capabilities,
+            tool_discovery_enabled=self._tool_search_enabled,
+        )
+        candidate_boundary_context = self._tool_boundary.build_context(
+            tool_access_context
+        )
+        if (
+            self._tool_search_enabled
+            or candidate_boundary_context.access_plan.strict_capability_scope
+        ):
+            tool_boundary_context = candidate_boundary_context
             visible_names = self._tool_boundary.compute_visible_names(
                 tool_boundary_context
             )
@@ -902,8 +943,14 @@ class DefaultReasoner(Reasoner):
             )
             turn_injection_prompt = build_turn_injection_prompt(
                 tools=self._tools,
-                tool_search_enabled=self._tool_search_enabled,
-                visible_names=visible_names if self._tool_search_enabled else None,
+                tool_search_enabled=(
+                    self._tool_search_enabled
+                    and not (
+                        tool_boundary_context is not None
+                        and tool_boundary_context.access_plan.strict_capability_scope
+                    )
+                ),
+                visible_names=visible_names,
             )
             prompt_render = await self.render_prompt(
                 PromptRenderInput(
@@ -959,10 +1006,15 @@ class DefaultReasoner(Reasoner):
                     await self._session_manager.save_async(cast(Any, session))
 
                 if self._tool_search_enabled and tools_used:
+                    get_non_lru_names = getattr(self._tools, "get_non_lru_names", None)
+                    non_lru_names = (
+                        get_non_lru_names() if callable(get_non_lru_names) else set()
+                    )
                     self._discovery.update(
                         session.key,
                         tools_used,
                         self._tools.get_always_on_names(),
+                        non_lru=non_lru_names,
                     )
                 if attempt == 0:
                     retry_trace["selected_plan"] = plan["name"]
@@ -1064,12 +1116,19 @@ class DefaultReasoner(Reasoner):
         evidence_assessment: EvidenceAssessment | None = None
         final_only_next_call = False
         react_boundary_batch_skip_count = 0
-        if self._tool_search_enabled:
+        if initial_visible_names is not None:
+            visible_names = set(initial_visible_names) - disabled
             always_on = self._tools.get_always_on_names()
-            if initial_visible_names is not None:
-                visible_names = set(initial_visible_names) - disabled
-            else:
-                visible_names = (always_on | (preloaded_tools or set())) - disabled
+            logger.info(
+                "[tool_search] visible=%d 个工具 always_on=%d preloaded=%d need_search=%s",
+                len(visible_names),
+                len(always_on),
+                len(preloaded_tools or set()),
+                "yes" if len(visible_names) == len(always_on) else "maybe",
+            )
+        elif self._tool_search_enabled:
+            always_on = self._tools.get_always_on_names()
+            visible_names = (always_on | (preloaded_tools or set())) - disabled
             logger.info(
                 "[tool_search] visible=%d 个工具 always_on=%d preloaded=%d need_search=%s",
                 len(visible_names),
@@ -1404,6 +1463,12 @@ class DefaultReasoner(Reasoner):
                                         local_source_allowed=_local_source_allowed(
                                             tool_boundary_context
                                         ),
+                                        task_plan_contract=(
+                                            tool_boundary_context.task_plan_contract
+                                        ),
+                                        tool_capabilities=(
+                                            tool_boundary_context.access_context.tool_capabilities
+                                        ),
                                     )
                                 )
                                 if turn_completion_decision.action == "final_only":
@@ -1657,7 +1722,19 @@ class DefaultReasoner(Reasoner):
                                 else "within_budget"
                             ),
                             blocked_tools=tool_search_blocked,
+                            execution_status=exec_result.status,
                         )
+                        old_plan = tool_boundary_context.access_plan
+                        self._tool_boundary.observe_access_tool_result(
+                            tool_boundary_context,
+                            tool_call.name,
+                            str(result),
+                            execution_status=exec_result.status,
+                        )
+                        if tool_boundary_context.access_plan != old_plan:
+                            visible_names = self._tool_boundary.compute_visible_names(
+                                tool_boundary_context
+                            )
                         evidence_assessment = self._evidence_contract.assess(
                             user_text=user_text,
                             intent=tool_boundary_context.intent,
@@ -1687,6 +1764,12 @@ class DefaultReasoner(Reasoner):
                                 tool_boundary_context
                             ),
                             proactive_allowed=react_decision.recommend_final_only,
+                            task_plan_contract=(
+                                tool_boundary_context.task_plan_contract
+                            ),
+                            tool_capabilities=(
+                                tool_boundary_context.access_context.tool_capabilities
+                            ),
                         )
                         if completion_decision.action == "final_only":
                             metadata = _react_completion_metadata(
@@ -1707,10 +1790,16 @@ class DefaultReasoner(Reasoner):
                                 },
                             )
                             final_only_next_call = True
-                            logger.info(
-                                "[react_boundary] final_only reason=%s",
-                                react_decision.reason,
-                            )
+                            if tool_boundary_context.task_plan_contract is not None:
+                                logger.info(
+                                    "[turn_completion] scheduled final_only reason=%s",
+                                    completion_decision.reason,
+                                )
+                            else:
+                                logger.info(
+                                    "[react_boundary] final_only reason=%s",
+                                    react_decision.reason,
+                                )
 
                     # 6.3 tool_search 的结果会扩展下一轮可见工具。
                     if (
@@ -1741,27 +1830,6 @@ class DefaultReasoner(Reasoner):
                                 "[tool_boundary] tool_search blocked matches: %s",
                                 sorted(tool_search_blocked),
                             )
-                    if (
-                        exec_result.status == "success"
-                        and tool_boundary_context is not None
-                    ):
-                        old_plan = tool_boundary_context.access_plan
-                        self._tool_boundary.observe_access_tool_result(
-                            tool_boundary_context,
-                            tool_call.name,
-                            str(result),
-                        )
-                        if tool_boundary_context.access_plan != old_plan:
-                            if visible_names is not None:
-                                visible_names |= set(
-                                    tool_boundary_context.access_plan.visible_add
-                                )
-                                visible_names -= set(
-                                    tool_boundary_context.access_context.disabled_tools
-                                )
-                                visible_names -= set(
-                                    tool_boundary_context.access_plan.visible_suppress
-                                )
                     # tool_chain 持久化的是“执行后的事实”：
                     # 最终参数、hook trace、结果预览，供后续回放与 session 复原。
                     iter_calls.append(

@@ -180,6 +180,7 @@ class WiringConfig:
             "schedule",
             "mcp",
             "doc_rag",
+            "task_plan",
         ]
     )
 
