@@ -670,7 +670,7 @@ Task 10 证据：
 - finalizer 注入集成 `10 passed in 1.27s`；provider error 和 second bare-final 都没有留下 pending/running attempt。
 - 隔离 PID/socket/dashboard 清理后，用户 PID `372968`、`/tmp/akashic.sock`、`2236` 仍保持运行。
 
-范围边界：LA-002 fixed 只表示 recovery foundation + controlled read-only execution 完成，不表示 write/shell/external 的授权批准与真实执行已实现。完整命令、turn、attempt、event 和 cleanup 见 `.superpowers/sdd/task-10-report.md`。
+范围边界：LA-002 fixed 只表示 recovery foundation + controlled read-only execution 完成，不表示 write/shell/external 的授权批准与真实执行已实现。可持久追踪的自动化计数、turn、attempt、event 和 cleanup 摘要见 `my_md/local_agent/03-task-plan-recovery-execution-design.md` 第 31 节；`.superpowers/sdd/task-10-report.md` 仅作为本地 SDD 临时明细，不再作为仓库证据链接。
 
 ### LA-003 waiting authorization 请求详情与 P2 批准协议（open）
 

@@ -242,6 +242,33 @@ def test_waiting_authorization_survives_restart(recovery_fixture) -> None:
     assert snapshot.attempt.status == "waiting_authorization"
 
 
+def test_waiting_authorization_can_be_aborted_after_owner_restart_and_lease_expiry(
+    recovery_fixture,
+) -> None:
+    fixture = recovery_fixture(
+        status="waiting_authorization",
+        owner="runtime-old",
+        lease_expires_at="2026-07-15T00:00:00+00:00",
+        now="2026-07-15T00:01:00+00:00",
+    )
+
+    assert fixture.recovery.reconcile_session("cli:s1") == ()
+
+    snapshot = fixture.execution_service.abort_attempt(
+        session_key="cli:s1",
+        attempt_id=fixture.attempt_id,
+        reason="user cancelled after restart",
+    )
+
+    assert snapshot.attempt is not None
+    assert snapshot.attempt.status == "cancelled"
+    assert snapshot.events[-1].event_type == "attempt_cancelled"
+    plan = fixture.plan_service.get_task_plan(
+        session_key="cli:s1", task_id=fixture.task_id
+    )
+    assert plan.steps[0].status == "pending"
+
+
 def test_expired_current_runtime_lease_blocks_as_unknown(recovery_fixture) -> None:
     fixture = recovery_fixture(
         status="running",

@@ -5,6 +5,7 @@ import asyncio
 import json
 import runpy
 import sys
+import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
@@ -781,9 +782,10 @@ async def test_group_filter_and_cli_paths(
     hello = await read_frame(_CliFrameReaderFromBytes(writes[0]))  # type: ignore[arg-type]
     user = await read_frame(_CliFrameReaderFromBytes(writes[1]))  # type: ignore[arg-type]
     assert hello["type"] == "hello"
+    assert set(user) == {"type", "request_id", "content"}
     assert user["type"] == "user"
     assert user["content"] == "hello"
-    assert len(user["request_id"]) == 32
+    assert uuid.UUID(hex=user["request_id"]).hex == user["request_id"]
     assert "再见" in capsys.readouterr().out
 
     if sys.platform == "win32":

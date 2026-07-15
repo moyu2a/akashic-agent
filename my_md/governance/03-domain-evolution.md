@@ -864,8 +864,7 @@
 
 关联文档：
 
-- `.superpowers/sdd/task-10-report.md`
-- `my_md/local_agent/03-task-plan-recovery-execution-design.md`
+- `my_md/local_agent/03-task-plan-recovery-execution-design.md` 第 31 节（持久化验收摘要）
 - `my_md/governance/06-star-log.md` CASE-005
 
 ## System
