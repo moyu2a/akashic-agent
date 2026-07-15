@@ -112,3 +112,35 @@ CapabilityScope
 - TaskPlan turn state 不进入 LRU/ToolDiscoveryState，也未增加 AgentLoop 主循环分支。
 - 2026-07-15 主服务 turn `389-392` 复测 pure create/inspect/update/background observe 均为 2 轮且无 error，证明该决策在非隔离主服务上继续成立。
 - 下一阶段的任务恢复和 execution attempt 不改变本决策：上下文 capability contract 继续只负责当前 turn 授权，长期执行状态必须由 TaskPlan 持久化边界管理。
+
+## DD-005 TaskPlan 执行采用持久化 attempt 与只读自动执行
+
+日期：2026-07-15
+
+状态：accepted / implemented / live-verified。
+
+决策：
+
+- TaskPlan 步骤执行使用独立持久化 attempt/event，不把执行状态塞进 AgentLoop、LRU 或 ToolDiscoveryState。
+- transport request ID 是 replay identity；同 ID 返回原 attempt，不使用文本 hash 去重，新 ID 同文本是独立操作。
+- stale running outcome unknown 只转 blocked/pending，不自动 retry；恢复后必须显式 retry 才创建 attempt number + 1。
+- 第一版只自动执行 registry exact `read-only`；write/external/unknown/shell 进入 waiting authorization，destructive 保持 core deny。
+- success 必须同时有真实 read-only `counts_as_work=true` event 和显式 finish；tool search/control/synthetic result 不算工作证据。
+
+原因：
+
+- SQLite 可以保证内部状态原子性，但不能对进程外副作用承诺 exactly-once；崩溃后自动重放可能重复产生不可逆效果。
+- request identity、attempt state 和 event ledger 能把“模型想做什么”与“runtime 实际执行了什么”分开审计。
+- side-effect defer 让后续权限模型有明确接入点，又不会在批准/回滚尚未实现时提前开放写入。
+
+验证：
+
+- 同 raw request replay 只有一个 Step 1 attempt 和一组 work events；new-ID same-text 创建独立 Step 2 attempt。
+- controlled restart 得到 `runtime_restarted_outcome_unknown`，普通 continue 无新 row，显式 retry 只有 attempt 2。
+- side-effect target 未变化，write/edit/shell event 为 0，abort 后 history 保留。
+- Full pytest baseline `1835 passed, 3 warnings in 48.71s`；finalizer injected integration `10 passed`。
+
+影响与限制：
+
+- LA-002 第一版可以声明 recoverable controlled read-only execution，不能声明 side-effect execution。
+- P2 前需要填充 defer attempt 的 structured `requested_*` columns，并定义 approve/deny/expiry/audit；P3 前不开放真实文件写入。

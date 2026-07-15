@@ -967,3 +967,25 @@ LA-002 完成必须同时满足：
 `LA-002` 应作为 TaskPlan core module 的下一层，而不是普通插件或 AgentLoop 分支。Core 负责持久化事实、状态转换、幂等和恢复；Gateway/Boundary/Completion 负责当前 turn 的工具授权与收尾；插件只扩展授权和审计策略。
 
 第一版以“只读自动执行、其他副作用待授权、崩溃不自动重放”为安全边界。它不会直接完成完整本地开发 Agent，但会建立后续权限模型、文件回滚和开发任务闭环必须依赖的可靠执行底座。
+
+## 31. 2026-07-15 Task 10 验证结果
+
+自动化基线：LA-002 focused `186 passed`，compatibility `278 passed`；兼容断言更新后完整 pytest `1835 passed, 3 warnings in 48.71s`，规定的 compileall 与 `git diff --check` 均为 exit 0。注入式 finalizer 集成另有 `10 passed in 1.27s`。
+
+隔离真实模型 runtime 使用 PID `444596`，重启后 PID `445782`，socket `/tmp/akashic-task10-20260715.sock`、workspace `/tmp/akashic-task10-20260715/workspace`、SQLite `task_plans.db`、dashboard `127.0.0.1:2247`。原有 PID `372968`、`/tmp/akashic.sock` 和 `2236` 未被停止、替换或复用。
+
+验收证据：
+
+- corrected happy path turn `5` 为 `begin_task_step_execution -> list_dir -> read_file -> finish_task_step_execution -> final`，attempt `attempt_366f8c1f90d1449b83b272a0cbab50de` succeeded，Step 2 保持 pending。
+- 同一 raw IPC frame/request `5050...` 的 turn `6` 被 runtime 判定为 `runtime_request_replay`，可见工具为 0，未新增 attempt/event；新 request `6060...` 同文本创建 Step 2 attempt `attempt_86dba0dc6ac54e6581af9ce8e62378b2`。
+- controlled running attempt `attempt_6c747334d8144eb3add055b33d273923` 在重启后变为 blocked，reason=`runtime_restarted_outcome_unknown`，step 回到 pending；普通 continue 不新建 row，显式 retry 新建 attempt 2。
+- side-effect attempt `attempt_4f8eaaab198c486394fee46632bb5097` 进入 waiting authorization，目标文件 SHA-256 和内容不变，write/edit/shell event 为 0；abort 后 attempt cancelled、step pending、历史保留。
+- SQLite 成功事件中 read-only work 为 `counts_as_work=1`，`tool_search` 和 claim/start/finish/defer/abort/recovery control event 均为 0；最终不存在 active attempt。
+- 后续 turn 的普通日志持续为 `LRU preloaded=[]`，execution-created work tool 未进入 ToolDiscoveryState/LRU。
+
+证据边界与剩余项：
+
+- 真实 provider 覆盖 happy/replay/new-ID/restart/retry/defer/abort；provider failure 和 second bare-final 使用可重复的隔离 reasoner 集成注入，不伪造 live turn ID。
+- replay turn `6` 安全地没有工具执行，但 provider 在 `tools=[]` 时输出了 literal DSML tool-call 文本，属于回答格式问题，不影响 request replay 状态。
+- defer 的 bounded terminal reason/event 已持久化 tool、argument hash 和 capability；专用 `requested_*` attempt columns 当前仍为空，需要在 P2 approval UI/协议接入前规范化。
+- LA-002 不实现授权批准后的 write/shell/external 执行，也不实现 diff、snapshot 或 rollback。

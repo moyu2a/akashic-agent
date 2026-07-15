@@ -1,5 +1,43 @@
 # Document RAG P10a Progress
 
+## 2026-07-15 LA-002 Task 10 Verification
+
+- Started from `main` at `26b2b70`; branch is 22 commits ahead of `origin/main`.
+- Protected pre-existing workspace state: tracked `findings.md` is modified, and `my_md/interview/08-architecture-diagram.md` plus `my_test_py/` are untracked. Task 10 will not modify or stage them.
+- Confirmed this is the primary worktree (`.git` is both git dir and common dir); no worktree cleanup or branch integration action is needed.
+- Loaded `.superpowers/sdd/task-10-brief.md` and established a five-phase verification ledger.
+- Next: inventory isolated runtime prerequisites and documentation targets, then run the required automated suites.
+- Protected runtime inventory: PID `372968` (parent `372933`) owns `/tmp/akashic.sock` and dashboard port `2236`; connected CLI parent PID is `373030`. No protected process was signalled or reused.
+- LA-002 focused gate: `186 passed in 8.08s`; no warnings or xfails reported.
+- Compatibility gate: `278 passed in 10.28s`; no warnings or xfails reported.
+- Exact suite output is retained in `/tmp/akashic-task10-focused.log` and `/tmp/akashic-task10-compat.log` for report assembly.
+- Initial full pytest: `4 failed, 1831 passed, 3 warnings in 48.67s`. Root cause was two stale compatibility contracts outside the focused/compatibility command lists: `tests/test_more_support_modules.py` did not expect the CLI UUID `request_id` added by `4627658`, and three parametrized cases in `tests/test_subagent_spawn_task_dir.py` expected `str` after `173b904` normalized read results to `ToolResult`.
+- Focused rerun of the four compatibility cases: `4 passed in 0.59s`.
+- Clean full baseline after compatibility updates: `1835 passed, 3 warnings in 48.71s`. Warnings: one `StarletteDeprecationWarning` from `fastapi.testclient`, and two `PytestRemovedIn10Warning` instances from `tests/test_tool_search.py::TestBaseline::test_baseline_cases`.
+- Prescribed compileall target set exited `0`; initial `git diff --check` exited `0`.
+- The normal Agent hard-codes its embedded dashboard server defaults at `0.0.0.0:2236`; Task 10 will use a temporary untracked launcher that calls the real `AppRuntime` with dashboard `127.0.0.1:2247`, avoiding any production source change solely for smoke isolation.
+- Isolated launch attempt 1 exited immediately with `ModuleNotFoundError: bootstrap` because the launcher lives under `/tmp`; no socket or port was bound. Resolution: set `PYTHONPATH=/home/jjh/git_work/akashic-agent` for the isolated process.
+- Controlled recovery helper attempt 1 exited before SQLite mutation because `TaskPlanStore` received `str` instead of `Path`; corrected the temporary helper constructor.
+- Isolated live-provider Agent used PID `444596`, then PID `445782` after the controlled restart; socket `/tmp/akashic-task10-20260715.sock`, workspace `/tmp/akashic-task10-20260715/workspace`, SQLite `task_plans.db`, and dashboard `127.0.0.1:2247`. The user Agent PID `372968`, `/tmp/akashic.sock`, and port `2236` were never signalled or reused.
+- Initial prescribed session turns `1-3`: create was `create_task_plan` in 2 iterations; continue was attempt `attempt_0fe016a4eea9490b95173ec5789def4e`, 7 iterations, `begin -> list_dir -> read_file -> tool_search -> list_dir -> finish`, Step 1 completed and Step 2 pending; inspect was `inspect_task_plan` in 2 iterations. This first workspace lacked README, so the corrected replay session below seeded an exact repository README copy.
+- Corrected replay session turns `4-7`: turn `5` executed `begin -> list_dir -> read_file -> finish` and persisted attempt `attempt_366f8c1f90d1449b83b272a0cbab50de` for request `5050...`; duplicate turn `6` used the exact same raw frame/request ID, was classified `runtime_request_replay`, exposed zero tools, created no attempt/event, and left Step 2 pending. Turn `7` used new request `6060...` with the same text and created distinct Step 2 attempt `attempt_86dba0dc6ac54e6581af9ce8e62378b2`.
+- Replay live-provider concern: turn `6` safely executed no tool but the provider returned a literal DSML tool-call string as final text because replay scope had `tools=[]`. This did not mutate state but is a user-facing formatting limitation.
+- Recovery session: service-created running attempt `attempt_6c747334d8144eb3add055b33d273923` (attempt 1) was present before terminating only PID `444596`. Restart PID `445782` logged one `runtime_restarted_outcome_unknown` reconciliation, blocked attempt 1, and reset the step to pending without tool replay. Ordinary continue turn `8` created no row; explicit retry turn `9` created exactly attempt 2, `attempt_7c090ab187434bf2981269797987ae15`, then completed it through `read_file`.
+- Side-effect session turns `10-12`: turn `11` persisted attempt `attempt_4f8eaaab198c486394fee46632bb5097` as `waiting_authorization`; target SHA-256 remained `9660b3303631e95817f72c7536939f0eca9e20c0d7b86382a39e4a98a1b26151`, content remained `ORIGINAL`, and write/edit/shell event count was `0`. Turn `12` aborted it to `cancelled`, left the step pending, and preserved all seven events.
+- Final live database summary: `4 succeeded`, `1 blocked`, `1 cancelled`, `0` pending/running/waiting attempts, and `0` real write/edit/shell events. All 12 observe turns had `error=NULL`; task-execution work tools never entered LRU (`LRU preloaded=[]` on subsequent turns).
+- Injected finalizer integration: `10 passed in 1.27s`. Provider failure propagated the original error while blocking/resetting; bare final got one correction and then failed with `protocol_finish_missing`; no scenario retained a pending/running attempt.
+- Isolated cleanup verified: PID `445782` absent, isolated socket removed, port `2247` free; protected PID `372968` still owned `/tmp/akashic.sock` and `2236`.
+- Remaining persistence concern: authorization defer stores tool name, redacted argument hash, and capabilities in bounded `terminal_reason`/event preview, but the dedicated `requested_tool_name`, `requested_arguments_json`, and `requested_capabilities_json` attempt columns remain empty. Side-effect safety is intact; approval UI/state normalization remains follow-up work.
+- Wrote `.superpowers/sdd/task-10-report.md` with commands, isolated PIDs/socket/port/workspace, prompts, turn chains, attempt/event rows, restart/defer/finalizer evidence, cleanup, tests, and concerns.
+- Updated Local Agent design/readme/roadmap; governance issue index/current issues/evolution/roadmap/design decisions/STAR; and interview notes/Q97. LA-002 is fixed only for recovery + controlled read-only execution; LA-003 records structured authorization persistence/P2 approval follow-up.
+- Independent review invocation note: `codex review --uncommitted <custom prompt>` exited 2 because the CLI rejected the option/prompt combination despite its help text; fallback is ephemeral read-only `codex exec` review.
+- First fallback invocation also exited 2 because this CLI build requires approval policy before the `exec` subcommand; retry uses `codex -a never exec ...`.
+- First running read-only reviewer produced no final assessment after the bounded wait and was terminated at owned PID `447772`; no workspace mutation occurred. Retry closes stdin explicitly.
+- Second reviewer examined the Task 10 evidence and questioned whether empty defer `requested_*` columns conflict with LA-002 fixed status, but timed out before a final verdict. Task 10's accepted defer gate itself passed; LA-003 already records structured approval persistence as follow-up. A reduced patch-only review will provide the final assessment.
+- Reduced read-only review completed with no Critical or Important findings and a ready-to-merge verdict. Minor notes: semantic UUID validation would be stronger than a length-only assertion, `findings.md` must remain excluded, and staging must be path-specific.
+- Final fresh post-documentation gates: focused `186 passed in 9.44s`; compatibility `278 passed in 9.40s`; full pytest `1835 passed, 3 warnings in 48.90s`; prescribed compileall exit `0`; `git diff --check` exit `0`. The warning set is unchanged: one `StarletteDeprecationWarning` and two `PytestRemovedIn10Warning` instances.
+- Final cleanup recheck: isolated PIDs `444596`/`445782` absent, `/tmp/akashic-task10-20260715.sock` absent, port `2247` free; protected PID `372968` still owns `/tmp/akashic.sock` and `0.0.0.0:2236`. No user, unknown, or reviewer process was signalled.
+
 ## 2026-07-11
 
 - Read required planning and governance documents:

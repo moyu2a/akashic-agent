@@ -332,4 +332,24 @@ Web端自主任务编排：让Agent像人一样浏览网页、填表、提交数
 
 下一阶段表达：
 
-TaskPlan 当前解决的是计划状态、上下文授权和工具边界。下一步不会直接放开自主 shell，而是增加可持久化的 execution attempt、重启恢复和单步幂等编排；本地副作用仍需经过权限确认与回滚边界。这能把“会列计划”推进为“可恢复地执行计划”，同时避免重复执行和不可逆修改。
+TaskPlan 当前已从计划状态和上下文授权推进到可恢复的受控只读执行。系统用持久化 attempt/event 处理 request replay、重启 unknown outcome、显式 retry/abort 和完成证据；本地副作用仍只进入 waiting authorization，批准、diff 和回滚尚未实现。
+
+## TaskPlan 可恢复执行案例补充
+
+30 秒表达：
+
+我给 TaskPlan 增加了 durable execution attempt，而不是让模型自由执行。transport request ID 负责幂等 replay，stale running 重启后变 blocked/pending 且不自动重放，成功必须同时有真实 read-only work event 和 finish。隔离真实 smoke 证明同 raw request 不推进第二步、新 request 同文本是独立操作，文件修改步骤只进入待授权且 write/edit/shell 为 0。
+
+量化证据：
+
+- LA-002 focused `186 passed`，compatibility `278 passed`，full `1835 passed, 3 warnings in 48.71s`。
+- corrected read-only turn 为 5 次 ReAct：`begin -> list_dir -> read_file -> finish -> final`。
+- replay duplicate turn 为 1 次 ReAct、0 tools、0 new attempt/event。
+- controlled restart 后普通 continue 0 new attempt，explicit retry 只创建 attempt 2。
+- side-effect target SHA-256/content unchanged，write/edit/shell event count 0；abort history retained。
+- finalizer provider-error/bare-final 注入集成 `10 passed in 1.27s`。
+
+面试边界：
+
+- 可以说实现了 recoverable controlled read-only execution。
+- 不能说实现了 side-effect approval/execution；P2/P3 仍需 structured request、approve/deny、diff/snapshot/rollback。

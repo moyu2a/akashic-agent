@@ -66,9 +66,9 @@
 
 ### 本地任务规划器
 
-第一阶段已经能够把用户目标保存为持久化步骤，并记录 pending、in-progress、completed、failed、skipped 状态。尚缺的是更完整的暂停、继续、取消、重试、多任务视图、权限审批和任务执行编排，不能把当前状态骨架表述为完整自主任务规划器。
+第一阶段已经能够把用户目标保存为持久化步骤，并记录 pending、in-progress、completed、failed、skipped 状态。LA-002 又增加了 execution attempt、重启恢复、请求幂等、显式 retry/abort 和受控只读单步执行。尚缺的是完整暂停、多任务视图、权限批准/拒绝和副作用执行，不能把当前实现表述为任意本地操作的自主任务规划器。
 
-计划创建的上下文召回授权已完成：纯状态创建使用 strict capability scope，不查询 memory；显式偏好或历史各允许一次受限召回。隔离真实 smoke 中纯计划为 `create_task_plan -> final` 2 轮，偏好/历史计划各 3 轮。当前仍缺的是更完整的暂停、取消、重试、多任务视图、权限审批和任务执行编排，而不是上下文授权边界。
+计划创建的上下文召回授权已完成：纯状态创建使用 strict capability scope，不查询 memory；显式偏好或历史各允许一次受限召回。LA-002 隔离真实 smoke 又验证了 read-only `begin -> work -> finish`、request replay、restart recovery、explicit retry 和 side-effect defer/abort。当前剩余边界是权限批准后的副作用执行、变更审查和回滚。
 
 ### 本地操作权限模型
 
@@ -96,10 +96,10 @@
 
 ## 5. 推荐建设优先级
 
-P1：任务规划器第二阶段。
-第一阶段状态骨架和 `LA-001` 上下文需求授权已经完成；下一步进入任务恢复与受控单步执行编排，先保证重启可恢复、执行尝试可追踪、重复请求不重复产生副作用，再扩展暂停、取消、重试与多任务视图。
+P1：任务规划器第二阶段（LA-002 第一版已完成）。
+状态骨架、`LA-001` 上下文需求授权和 `LA-002` 可恢复受控只读执行已经完成；后续扩展暂停、多任务视图和更完整的任务操作体验。
 
-正式设计：`03-task-plan-recovery-execution-design.md`。交付拆为 recovery foundation 与 controlled read-only execution；副作用批准继续依赖后续权限和回滚阶段。
+正式设计：`03-task-plan-recovery-execution-design.md`。Recovery foundation 与 controlled read-only execution 已通过 Task 10；副作用批准、执行和回滚继续属于后续 P2/P3。
 
 P2：本地操作权限模型。
 先定义哪些目录、命令、工具和操作需要允许、拒绝或用户确认。

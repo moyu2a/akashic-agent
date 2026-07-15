@@ -781,7 +781,9 @@ async def test_group_filter_and_cli_paths(
     hello = await read_frame(_CliFrameReaderFromBytes(writes[0]))  # type: ignore[arg-type]
     user = await read_frame(_CliFrameReaderFromBytes(writes[1]))  # type: ignore[arg-type]
     assert hello["type"] == "hello"
-    assert user == {"type": "user", "content": "hello"}
+    assert user["type"] == "user"
+    assert user["content"] == "hello"
+    assert len(user["request_id"]) == 32
     assert "再见" in capsys.readouterr().out
 
     if sys.platform == "win32":

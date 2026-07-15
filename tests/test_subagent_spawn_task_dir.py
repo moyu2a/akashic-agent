@@ -6,6 +6,7 @@ import os
 import pytest
 
 from agent.background.subagent_profiles import build_spawn_spec
+from agent.tools.base import ToolResult
 from prompts.background import build_spawn_subagent_prompt
 
 
@@ -144,5 +145,7 @@ async def test_spawn_read_file_respects_non_multimodal_config(
 
     result = await read_tool.execute(path="a.png")
 
-    assert isinstance(result, str)
-    assert "当前主模型不支持多模态" in result
+    assert isinstance(result, ToolResult)
+    assert result.ok is False
+    assert result.error_code == "image_unsupported"
+    assert "当前主模型不支持多模态" in result.text

@@ -835,6 +835,39 @@
 - `my_md/local_agent/03-task-plan-recovery-execution-design.md`
 - `my_md/governance/06-star-log.md` CASE-004
 
+### LA-002 实施：从 TaskPlan 状态骨架演进到可恢复受控执行
+
+场景：
+
+- LA-001 解决了计划 turn 的上下文授权，但 TaskPlan 仍没有独立 execution attempt、重复请求幂等和重启恢复。
+- 直接让模型自由调用本地工具无法证明单步推进，也无法在进程中断时区分未执行、已执行和结果未知。
+
+处理：
+
+- 在 TaskPlan SQLite 事务边界内增加 attempt/event、request replay-first、owner/status/lease CAS 和 startup/session reconcile。
+- 通过独立 `TaskExecutionTurnContract`、arbiter、Gateway/Boundary/Completion 和 RuntimeCoordinator 约束 claim/work/finish/defer/abort。
+- 只允许 registry exact `read-only` 自动执行；write/external/unknown/shell 先持久化 waiting authorization，destructive 保持 core deny。
+- turn-exit finalizer 对 provider error、cancel、timeout、max-iteration 和 missing finish 做确定终态收口。
+
+结果：
+
+- 自动化 full baseline `1835 passed, 3 warnings in 48.71s`；finalizer 注入集成 `10 passed`。
+- 真实模型 replay 使用同 request ID 时只保留 attempt `attempt_366f8c1f90d1449b83b272a0cbab50de`，重复 turn 0 tools；新 request 同文本创建独立 Step 2 attempt。
+- controlled restart 将 running attempt 变为 `runtime_restarted_outcome_unknown` blocked/pending，不自动重放；普通 continue 不新建，显式 retry 创建 attempt 2。
+- 文件修改计划只进入 waiting authorization，目标未变且 write/edit/shell event 为 0；abort 后 step pending、历史保留。
+
+影响：
+
+- Local Agent 从“能保存计划状态”进入“能在安全边界内恢复并执行一个只读步骤”。
+- 下一边界不再是 LA-002 recovery，而是 LA-003/P2 structured authorization request、批准/拒绝和 P3 diff/rollback。
+- defer 专用 `requested_*` columns 尚未填充；provider replay final-only 还可能输出 literal tool syntax，均作为后续事实记录，不扩大本次完成声明。
+
+关联文档：
+
+- `.superpowers/sdd/task-10-report.md`
+- `my_md/local_agent/03-task-plan-recovery-execution-design.md`
+- `my_md/governance/06-star-log.md` CASE-005
+
 ## System
 
 ### SYS-001: 建立集中式治理文档体系

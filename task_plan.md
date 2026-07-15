@@ -53,3 +53,35 @@ Goal: turn the approved LA-002 design into a complete, TDD-oriented, file-level 
 3. Write `docs/superpowers/plans/2026-07-15-task-plan-recovery-execution-implementation.md` - complete
 4. Self-review spec coverage, placeholders, and type consistency - complete
 5. Run plan checks and commit the approved design plus implementation plan - complete
+
+## LA-002 Task 10 Verification and Documentation
+
+Goal: verify the reviewed LA-002 implementation end to end with an isolated Agent, preserve exact evidence, update facts-only documentation, and commit only Task 10 verification/documentation files.
+
+1. Inspect runtime/configuration/documentation surfaces and protect existing user changes - complete
+2. Run focused, compatibility, full pytest, compileall, and diff gates - complete
+3. Run isolated live CLI/replay/restart/defer/finalizer smoke and clean up only its process - complete
+4. Write `.superpowers/sdd/task-10-report.md` and update LA-002 documentation with measured facts - complete
+5. Self-review, independent review, rerun final gates, stage only Task 10 files, and commit - complete
+
+Final fresh gates: focused `186 passed in 9.44s`; compatibility `278 passed in 9.40s`; full pytest `1835 passed, 3 warnings in 48.90s`; prescribed compileall and `git diff --check` exited `0`.
+
+### Task 10 Constraints
+
+- Do not modify or stage `findings.md`, `my_md/interview/08-architecture-diagram.md`, or `my_test_py/`.
+- Do not stop, signal, replace, or reuse the existing Agent process, socket, workspace, database, or dashboard port.
+- Use a unique isolated config/workspace/SQLite/socket/dashboard port with `task_execution.enabled=true`.
+- Do not claim live-provider evidence when credentials are unavailable; preserve real turn/request/attempt identifiers only.
+- Side-effect execution remains unimplemented and must not be documented as implemented.
+
+### Task 10 Errors Encountered
+
+| Error | Attempt | Resolution |
+| --- | --- | --- |
+| Full pytest reported one stale CLI-frame assertion and three stale spawn read-result assertions | 1 | Confirmed against introducing commits `4627658` and `173b904`; updated compatibility tests to assert UUID presence and structured `ToolResult` fields, then reran focused cases/full suite. |
+| Temporary isolated launcher could not import `bootstrap` because Python used `/tmp/akashic-task10-20260715` as `sys.path[0]` | 1 | Process exited before binding any resource; relaunched with `PYTHONPATH=/home/jjh/git_work/akashic-agent`. |
+| Controlled recovery helper passed a string to `TaskPlanStore`, which requires `Path` | 1 | Helper exited before SQLite mutation; wrapped the database path with `Path(...)` and reran. |
+| `codex review --uncommitted <prompt>` rejected the documented option/prompt combination | 1 | No review ran; use an ephemeral `codex exec` reviewer with read-only sandbox and the same constrained file list. |
+| `codex exec` rejected subcommand-local `-a never` | 1 | No review ran; place the approval policy before the `exec` subcommand for this CLI build. |
+| First read-only reviewer stayed idle without producing a final assessment | 1 | Terminated only owned reviewer PID `447772` after bounded wait; rerun with stdin explicitly closed and a bounded command timeout. |
+| Second reviewer inspected the diff but timed out before writing a final verdict | 1 | Preserve its requested-column scope question; run a smaller read-only review over a generated in-scope patch plus brief/report. |

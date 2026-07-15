@@ -18,18 +18,19 @@
 
 ## 当前实现状态
 
-- TaskPlan 第一阶段、边界治理和 LA-001 上下文 capability scope 已完成代码实现、独立审阅和隔离真实 smoke；最新完整回归为 `1619 passed, 3 warnings in 38.10s`。
+- TaskPlan 第一阶段、LA-001 上下文 capability scope，以及 LA-002 可恢复受控只读执行均已完成代码实现、审阅和隔离真实 smoke；Task 10 基线完整回归为 `1835 passed, 3 warnings in 48.71s`。
 - 当前能力包括：每个 session 一个 active task、任务步骤持久化、deferred task tools、active task prompt context、TaskPlanAccessPolicy、task tools non-LRU。
 - 第三轮真实 CLI smoke turn `382-385` 已验证：计划创建不再调用 spawn/RAG/local，查看和更新分别收敛为 `inspect_task_plan -> final`、`update_task_step -> final`，明确后台任务为 `spawn_manage -> final`。
 - 计划创建从 15 轮降到 4 轮，累计 prompt token 从 `985779` 降到 `52205`；TaskPlan completion final-only 已在真实运行中生效。
 - `LA-001` 已完成：纯计划真实链路为 `create_task_plan -> final`，显式偏好/历史分别只临时授权一次真实 `recall_memory`/`search_messages`，inspect/update/background 行为保持不变。
 - 2026-07-15 主服务复测 turn `389-392` 再次验证纯创建、查看、更新和后台状态均为 2 轮且 `error=NULL`；TaskPlan SQLite 中第一步已持久化为 `completed`。今天这组主服务记录未重复执行偏好、历史和否定意图，但这些路径已由 2026-07-14 隔离真实 smoke 与自动化回归覆盖。
+- LA-002 隔离 live smoke 使用独立 PID/socket/workspace/SQLite/dashboard：同 request ID replay 只保留一个 attempt，新 request ID 同文本创建独立操作；running attempt 重启后 blocked/pending 且不自动重放；显式 retry 创建 attempt 2；文件修改步骤进入 waiting authorization，真实 write/edit/shell 为 0，abort 后 step 保持 pending。
 
 ## 当前下一步
 
 - 先把 `LA-001` 视为已关闭能力边界，继续观察同批候选生成和 session context 增长，不把它们重新定义为执行授权失败。
-- 下一项正式登记为 `LA-002 TaskPlan Recovery and Execution Orchestration`：实现重启恢复、stale step 判定、execution attempt 和受控单步推进。
-- 正式设计与 implementation plan 均已完成：`03-task-plan-recovery-execution-design.md`、`docs/superpowers/plans/2026-07-15-task-plan-recovery-execution-implementation.md`；下一步进入按任务执行和审阅。
+- `LA-002` 第一版范围已完成：重启恢复、stale step 判定、execution attempt、请求幂等和受控只读单步推进均有自动化与真实模型证据。
+- 下一步转向 P2 权限确认和请求详情规范化：waiting attempt 当前不会执行副作用；批准、拒绝、diff、回滚和写入执行尚未实现。
 - 在本地操作权限、用户确认和文件回滚完成前，执行编排不得直接放开任意 shell 或文件写入副作用。
 
 ## 后续可扩展文档

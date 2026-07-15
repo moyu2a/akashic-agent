@@ -741,3 +741,40 @@ STAR 复盘：
 - 当天没有重复跑偏好、历史和否定意图，不把“本次未重复”写成“从未验证”；这些路径已有前一天隔离 live gate 和自动化证据。
 - 下一层不是继续增加 intent 词表，而是 `LA-002 TaskPlan Recovery and Execution Orchestration`：解决重启恢复、stale step、execution attempt、幂等单步推进和副作用待授权。
 - TaskPlan 当前是可靠的状态与授权模块，还不是可以任意执行本地副作用的自主任务执行器。
+
+### CASE-005: TaskPlan 从状态管理演进到可恢复受控只读执行
+
+分类：Local Agent / recovery / idempotency / tool governance / SQLite
+
+Situation：
+
+TaskPlan 与 LA-001 已能持久化计划和授权上下文，但“继续执行下一步”仍没有独立 attempt。重复 IPC、Agent 重启、模型漏调 finish 或提出写文件时，系统缺少统一事实来回答是否执行过、能否重试、是否应该等待授权。
+
+Task：
+
+在不修改 AgentLoop 主状态机、不污染 LRU、不开放任意副作用的条件下，实现可恢复、request-ID 幂等、一次只推进一步的执行底座，并用真实 provider、raw IPC、重启和 SQLite 证据完成验收。
+
+Action：
+
+- 增加 attempt/event、request replay-first、owner/status/lease CAS、startup/session recovery 和 explicit retry/abort。
+- 将 execution contract 接入 arbiter、Tool Access Gateway、Turn Tool Boundary、Completion 和 turn-exit finalizer。
+- 只允许 exact read-only 自动执行；side effect 必须先持久化 waiting authorization，真实 executor 不运行。
+- 使用独立 PID/socket/workspace/SQLite/dashboard 运行 raw IPC smoke，交叉检查 Agent 日志、observe turn 和 task database。
+- 完整 pytest 发现两个旧兼容断言后，只更新测试对当前 CLI request ID 与 `ToolResult` 合同的期望，再重新跑全量。
+
+Result：
+
+- Focused `186 passed`、compatibility `278 passed`、full `1835 passed, 3 warnings in 48.71s`；finalizer injected integration `10 passed`。
+- replay request `5050...` 只有 attempt `attempt_366f8c1f90d1449b83b272a0cbab50de` 和一组 work events；重复 turn 0 tools，new request `6060...` 创建独立 Step 2 attempt。
+- running attempt 重启后 blocked/pending、无 tool replay；ordinary continue 无新 row，explicit retry 恰好创建 attempt 2。
+- side-effect attempt waiting authorization 时目标 hash/content 不变、write/edit/shell 为 0；abort 后 cancelled、step pending、history retained。
+- 最终 live DB 为 4 succeeded、1 blocked、1 cancelled、0 active attempt；用户原 Agent PID/socket/port 全程保持运行。
+
+限制：
+
+- 不能把结果表述为完整自主本地执行器；授权批准、拒绝、写入执行、diff 和 rollback 尚未实现。
+- defer 的 structured `requested_*` columns 尚为空；replay final-only 曾出现 provider literal DSML tool syntax，作为 LA-003/P2 与 provider formatting 后续项记录。
+
+面试表达：
+
+我没有把“继续执行”做成一条让模型自由调用工具的 prompt，而是给 TaskPlan 增加了 durable execution attempt。transport request ID 决定 replay，同请求直接回原 attempt；重启发现旧 runtime 的 running attempt 时只标记 unknown outcome，不自动重放；真正成功还必须同时有 runtime 分类的 read-only work event 和 finish。真实 smoke 中重复 raw IPC 没有推进第二步，重启后普通 continue 也没有隐式 retry，文件修改步骤只进入待授权且目标完全不变。这样系统从“会列计划”变成“能安全恢复并执行一个只读步骤”，同时明确把副作用批准和回滚留在后续权限阶段。

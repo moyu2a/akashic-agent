@@ -301,11 +301,11 @@
 - 纯计划首轮只暴露 create provider；四轮没有 LRU 预加载污染，TaskPlan SQLite 第一步更新结果正确。
 - 基础 4/4 再次通过；偏好/历史/否定路径沿用 2026-07-14 隔离 live gate 和自动化证据，不因未在同一天重复运行而改变 LA-001 fixed 状态。
 
-下一阶段已登记 `LA-002`：任务恢复与受控执行编排。先实现 active task 重启恢复、stale step 判定、execution attempt、单步幂等推进和待授权状态；暂停/取消/重试、多任务视图以及任意本地副作用执行继续后置。
+`LA-002` 第一版已完成：active task/attempt 重启恢复、stale step 判定、request-ID 幂等、受控只读单步推进、显式 retry/abort 和待授权状态均通过自动化与隔离真实模型 smoke。
 
-设计文档：`my_md/local_agent/03-task-plan-recovery-execution-design.md`，五项产品边界已于 2026-07-15 获用户确认。交付拆为 `LA-002a Recovery Foundation` 与 `LA-002b Controlled Read-only Execution`；第一版只自动允许 registry `read-only` 工具，其他风险进入 waiting authorization。
+设计文档：`my_md/local_agent/03-task-plan-recovery-execution-design.md`。`LA-002a Recovery Foundation` 与 `LA-002b Controlled Read-only Execution` 已交付；第一版只自动允许 registry `read-only` 工具，其他风险进入 waiting authorization。
 
-实施计划：`docs/superpowers/plans/2026-07-15-task-plan-recovery-execution-implementation.md`，共 10 个 TDD 任务；Tasks 1-5 完成 LA-002a 检查点，Tasks 6-10 完成 LA-002b、完整回归和 live smoke。
+Task 10 结果：focused `186 passed`，compatibility `278 passed`，full `1835 passed, 3 warnings`；真实 replay/restart/defer/abort 通过，write/edit/shell 真实事件为 0。下一阶段 `LA-003/P2` 先规范化 structured authorization request 和批准/拒绝协议，再由 P3 diff/snapshot/rollback 决定是否开放文件写入。
 
 ## 暂不处理
 
