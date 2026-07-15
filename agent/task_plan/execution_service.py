@@ -266,13 +266,14 @@ class TaskExecutionService:
         if attempt.status in {"succeeded", "failed", "blocked", "cancelled"}:
             return self._snapshot(attempt)
         reason = bounded_execution_preview(terminal_reason)
-        del error_code
+        bounded_error_code = bounded_execution_preview(error_code, max_chars=128)
         try:
             blocked = self._store.block_execution_attempt(
                 attempt_id=attempt_id,
                 owner_instance_id=self._runtime_instance_id,
                 now=self._now(),
                 terminal_reason=reason,
+                error_code=bounded_error_code,
             )
         except (ExecutionAttemptConflictError, TaskExecutionAttemptNotFoundError) as exc:
             raise TaskExecutionConflictError(str(exc)) from exc

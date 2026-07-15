@@ -355,6 +355,30 @@ def test_runtime_block_resets_step_without_marking_failed(
     assert plan.task_id == active.task_id
 
 
+def test_runtime_block_persists_bounded_error_code_on_attempt_and_event(
+    execution_service: TaskExecutionService,
+) -> None:
+    execution_service.plan_service.create_task_plan(
+        session_key="cli:s1", title="Interrupted", steps=["Read README"]
+    )
+    claimed = execution_service.begin_next_step(
+        session_key="cli:s1", request_id="req-block-error"
+    )
+    error_code = "interrupted_" + "x" * 200
+
+    snapshot = execution_service.block_attempt(
+        session_key="cli:s1",
+        attempt_id=claimed.attempt.attempt_id,
+        terminal_reason="turn_interrupted_outcome_unknown",
+        error_code=error_code,
+    )
+
+    assert snapshot.attempt is not None
+    assert snapshot.attempt.error_code == error_code[:125] + "..."
+    assert snapshot.events[-1].event_type == "attempt_blocked"
+    assert snapshot.events[-1].error_code == error_code[:125] + "..."
+
+
 def test_active_attempt_rejects_manual_update_completion_cancellation_and_replacement(
     execution_service: TaskExecutionService,
 ) -> None:

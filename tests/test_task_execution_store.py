@@ -284,9 +284,12 @@ def test_block_requires_current_unexpired_owner_and_resets_step(tmp_path: Path) 
         owner_instance_id="runtime-1",
         now=NOW,
         terminal_reason="interrupted",
+        error_code="turn_interrupted",
     )
     assert blocked.status == "blocked"
+    assert blocked.error_code == "turn_interrupted"
     assert store.get_plan(task_id).steps[0].status == "pending"  # type: ignore[union-attr]
+    assert store.list_execution_events(attempt_id)[-1].error_code == "turn_interrupted"
 
 
 def test_lease_cas_never_renews_expired_or_foreign_attempt(tmp_path: Path) -> None:

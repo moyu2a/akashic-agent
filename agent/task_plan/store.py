@@ -787,6 +787,7 @@ class TaskPlanStore:
         owner_instance_id: str,
         now: datetime,
         terminal_reason: str,
+        error_code: str = "",
     ) -> TaskExecutionAttempt:
         timestamp = _datetime_to_iso(now)
         with self._lock, self._connect() as conn:
@@ -795,13 +796,14 @@ class TaskPlanStore:
                 cur = conn.execute(
                     """
                     UPDATE task_execution_attempts
-                    SET status = 'blocked', terminal_reason = ?, updated_at = ?,
-                        finished_at = ?
+                    SET status = 'blocked', terminal_reason = ?, error_code = ?,
+                        updated_at = ?, finished_at = ?
                     WHERE attempt_id = ? AND owner_instance_id = ?
                       AND status IN ('pending', 'running') AND lease_expires_at > ?
                     """,
                     (
                         terminal_reason,
+                        error_code,
                         timestamp,
                         timestamp,
                         attempt_id,
@@ -820,7 +822,7 @@ class TaskPlanStore:
                     attempt_id=attempt_id,
                     event_type="attempt_blocked",
                     created_at=timestamp,
-                    error_code="",
+                    error_code=error_code,
                     result_preview=terminal_reason,
                 )
                 conn.commit()
