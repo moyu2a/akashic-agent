@@ -153,6 +153,25 @@ class DocRagConfig:
 
 
 @dataclass
+class TaskExecutionConfig:
+    enabled: bool = False
+    auto_allowed_risks: list[str] = field(default_factory=lambda: ["read-only"])
+    max_work_tool_calls: int = 3
+    max_tool_search_calls: int = 1
+    lease_seconds: int = 300
+
+    def __post_init__(self) -> None:
+        if set(self.auto_allowed_risks) != {"read-only"}:
+            raise ValueError("task execution auto risk must be exactly read-only")
+        if self.max_work_tool_calls < 1:
+            raise ValueError("max_work_tool_calls must be positive")
+        if self.max_tool_search_calls != 1:
+            raise ValueError("max_tool_search_calls must be exactly 1")
+        if self.lease_seconds < 30:
+            raise ValueError("lease_seconds must be at least 30")
+
+
+@dataclass
 class FitbitIntegrationConfig:
     enabled: bool = False
 
@@ -218,6 +237,7 @@ class Config:
     peer_agents: list[PeerAgentConfig] = field(default_factory=list)
     wiring: WiringConfig = field(default_factory=WiringConfig)
     doc_rag: DocRagConfig = field(default_factory=DocRagConfig)
+    task_execution: TaskExecutionConfig = field(default_factory=TaskExecutionConfig)
 
     @classmethod
     def load(cls, path: str | Path = "config.toml") -> Config:
@@ -246,5 +266,6 @@ __all__ = [
     "QQBotGroupConfig",
     "QQGroupConfig",
     "TelegramChannelConfig",
+    "TaskExecutionConfig",
     "WiringConfig",
 ]

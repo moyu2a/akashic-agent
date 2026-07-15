@@ -33,6 +33,7 @@ from agent.config_models import (
     QQChannelConfig,
     QQGroupConfig,
     TelegramChannelConfig,
+    TaskExecutionConfig,
     WiringConfig,
 )
 from proactive_v2.config import ProactiveConfig
@@ -99,6 +100,7 @@ def load_config(path: str | Path = "config.toml") -> Config:
     fitbit = _load_fitbit_config(data)
     wiring = _load_wiring_config(data)
     doc_rag = _load_doc_rag_config(data)
+    task_execution = _load_task_execution_config(data)
 
     return Config(
         provider=provider,
@@ -170,6 +172,7 @@ def load_config(path: str | Path = "config.toml") -> Config:
         peer_agents=peer_agents,
         wiring=wiring,
         doc_rag=doc_rag,
+        task_execution=task_execution,
     )
 
 
@@ -384,6 +387,19 @@ def _load_doc_rag_config(data: dict) -> DocRagConfig:
             ),
             report_dir=str(eval_cfg.get("report_dir", "my_md/rag/eval_reports")),
         ),
+    )
+
+
+def _load_task_execution_config(data: dict) -> TaskExecutionConfig:
+    raw = _as_dict(data.get("task_execution"))
+    return TaskExecutionConfig(
+        enabled=bool(raw.get("enabled", False)),
+        auto_allowed_risks=[
+            str(risk) for risk in raw.get("auto_allowed_risks", ["read-only"])
+        ],
+        max_work_tool_calls=int(raw.get("max_work_tool_calls", 3)),
+        max_tool_search_calls=int(raw.get("max_tool_search_calls", 1)),
+        lease_seconds=int(raw.get("lease_seconds", 300)),
     )
 
 

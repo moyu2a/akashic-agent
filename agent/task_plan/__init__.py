@@ -10,6 +10,22 @@ from agent.task_plan.models import (
     validate_task_status,
 )
 from agent.task_plan.context import TaskPlanPromptRenderModule, render_task_plan_context
+from agent.task_plan.execution_models import (
+    ACTIVE_ATTEMPT_STATUSES,
+    TERMINAL_ATTEMPT_STATUSES,
+    AttemptClaimDisposition,
+    AttemptClaimResult,
+    AttemptStatus,
+    ExecutionEventType,
+    ExecutionMode,
+    RuntimeToolEvent,
+    TaskExecutionAttempt,
+    TaskExecutionEvent,
+    TaskExecutionSnapshot,
+    new_attempt_id,
+    validate_attempt_status,
+    validate_attempt_transition,
+)
 from agent.task_plan.service import (
     TaskPlanAccessDeniedError,
     TaskPlanConflictError,
@@ -43,4 +59,18 @@ __all__ = [
     "TaskPlanNotFoundError",
     "TaskPlanStore",
     "TaskStepNotFoundError",
+    "ACTIVE_ATTEMPT_STATUSES",
+    "TERMINAL_ATTEMPT_STATUSES",
+    "AttemptClaimDisposition",
+    "AttemptClaimResult",
+    "AttemptStatus",
+    "ExecutionEventType",
+    "ExecutionMode",
+    "RuntimeToolEvent",
+    "TaskExecutionAttempt",
+    "TaskExecutionEvent",
+    "TaskExecutionSnapshot",
+    "new_attempt_id",
+    "validate_attempt_status",
+    "validate_attempt_transition",
 ]
