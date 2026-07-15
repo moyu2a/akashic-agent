@@ -153,21 +153,8 @@ class TaskExecutionService:
         latest = self._store.get_latest_execution_attempt_for_step(step.step_id)
         if latest is None or not self._is_retryable_attempt(latest):
             raise TaskExecutionConflictError("step_requires_failed_or_blocked_attempt")
-        if step.status == "failed":
-            try:
-                self.plan_service.update_step_status(
-                    session_key=session_key,
-                    task_id=plan.task_id,
-                    step_id=step.step_id,
-                    status="pending",
-                    source_turn_id=source_turn_id,
-                )
-            except TaskPlanConflictError as exc:
-                raise TaskExecutionConflictError(str(exc)) from exc
-            plan = self._require_active_owned_plan(session_key=session_key)
-            step = self._find_step(plan, step_id)
-        if step.status != "pending":
-            raise TaskExecutionConflictError("retry_step_is_not_pending")
+        if step.status not in {"failed", "pending"}:
+            raise TaskExecutionConflictError("retry_step_is_not_failed_or_pending")
         return self._claim_step(
             plan=plan,
             step=step,
@@ -175,6 +162,7 @@ class TaskExecutionService:
             request_id=request_id,
             source_turn_id=source_turn_id,
             action="retry",
+            retry_from_attempt_id=latest.attempt_id,
         )
 
     def find_retryable_step(self, *, session_key: str) -> TaskStep | None:
@@ -398,6 +386,7 @@ class TaskExecutionService:
         request_id: str,
         source_turn_id: int | None,
         action: str,
+        retry_from_attempt_id: str | None = None,
     ) -> BeginExecutionResult:
         try:
             claim = self._store.claim_execution_attempt(
@@ -417,6 +406,7 @@ class TaskExecutionService:
                     self._now() + timedelta(seconds=self._config.lease_seconds)
                 ).isoformat(),
                 source_turn_id=source_turn_id,
+                retry_from_attempt_id=retry_from_attempt_id,
             )
         except ExecutionAttemptConflictError as exc:
             raise TaskExecutionConflictError(str(exc)) from exc

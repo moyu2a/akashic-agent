@@ -177,13 +177,21 @@ def test_replay_is_returned_after_terminal_attempt(
     assert replay.attempt.attempt_id == original.attempt.attempt_id
 
 
-def test_retry_creates_next_attempt_and_preserves_prior_events(
+def test_retry_creates_next_attempt_without_separate_step_update(
     execution_service: TaskExecutionService,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     plan = execution_service.plan_service.create_task_plan(
         session_key="cli:s1", title="One step", steps=["Read README"]
     )
     first_id = _fail_first_step(execution_service)
+    monkeypatch.setattr(
+        execution_service.plan_service,
+        "update_step_status",
+        lambda **_: (_ for _ in ()).throw(
+            AssertionError("retry must not commit a separate step reset")
+        ),
+    )
 
     retried = execution_service.retry_step(
         session_key="cli:s1",

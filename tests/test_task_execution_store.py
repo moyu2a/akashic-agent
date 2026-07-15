@@ -141,6 +141,92 @@ def test_concurrent_claim_has_one_active_attempt(tmp_path: Path) -> None:
     }
 
 
+def test_retry_claim_is_atomic_against_ordinary_continue(tmp_path: Path) -> None:
+    db_path = tmp_path / "task.db"
+    setup_store, task_id, step_id, first_attempt_id = _create_claimed_attempt(tmp_path)
+    setup_store.start_execution_attempt(
+        attempt_id=first_attempt_id,
+        owner_instance_id="runtime-1",
+        now=NOW,
+    )
+    setup_store.finalize_execution_attempt(
+        attempt_id=first_attempt_id,
+        owner_instance_id="runtime-1",
+        now=NOW,
+        success=False,
+        error_code="read_failed",
+    )
+    barrier = Barrier(2)
+
+    def claim(action: str) -> str:
+        store = TaskPlanStore(db_path)
+        barrier.wait()
+        try:
+            result = store.claim_execution_attempt(
+                task_id=task_id,
+                step_id=step_id,
+                session_key="cli:s1",
+                request_id=f"req-{action}",
+                idempotency_key=f"idem-{action}",
+                owner_instance_id="runtime-1",
+                lease_expires_at=LEASE_EXPIRES_AT,
+                retry_from_attempt_id=(
+                    first_attempt_id if action == "retry" else None
+                ),
+            )
+        except ExecutionAttemptConflictError:
+            return "conflict"
+        return result.disposition
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        outcomes = list(pool.map(claim, ["retry", "continue"]))
+
+    assert sorted(outcomes) in (
+        ["active_conflict", "created"],
+        ["conflict", "created"],
+    )
+    attempts = setup_store.list_execution_attempts(task_id)
+    assert len(attempts) == 2
+    assert attempts[-1].attempt_no == 2
+    assert attempts[-1].request_id == "req-retry"
+
+
+def test_retry_claim_rolls_back_step_reset_and_attempt_on_failure(tmp_path: Path) -> None:
+    store, task_id, step_id, first_attempt_id = _create_claimed_attempt(tmp_path)
+    store.start_execution_attempt(
+        attempt_id=first_attempt_id,
+        owner_instance_id="runtime-1",
+        now=NOW,
+    )
+    store.finalize_execution_attempt(
+        attempt_id=first_attempt_id,
+        owner_instance_id="runtime-1",
+        now=NOW,
+        success=False,
+        error_code="read_failed",
+    )
+    store._after_execution_mutation = _raise_at(  # type: ignore[method-assign]
+        "retry_after_step_reset"
+    )
+
+    with pytest.raises(RuntimeError, match="retry_after_step_reset"):
+        store.claim_execution_attempt(
+            task_id=task_id,
+            step_id=step_id,
+            session_key="cli:s1",
+            request_id="req-retry",
+            idempotency_key="idem-retry",
+            owner_instance_id="runtime-1",
+            lease_expires_at=LEASE_EXPIRES_AT,
+            retry_from_attempt_id=first_attempt_id,
+        )
+
+    plan = store.get_plan(task_id)
+    assert plan is not None
+    assert plan.steps[0].status == "failed"
+    assert len(store.list_execution_attempts(task_id)) == 1
+
+
 def test_claim_persists_initial_event_and_query_helpers(tmp_path: Path) -> None:
     store, task_id, step_id, attempt_id = _create_claimed_attempt(tmp_path)
 

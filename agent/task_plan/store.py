@@ -348,6 +348,7 @@ class TaskPlanStore:
         owner_instance_id: str,
         lease_expires_at: str,
         source_turn_id: int | None = None,
+        retry_from_attempt_id: str | None = None,
     ) -> AttemptClaimResult:
         with self._lock, self._connect() as conn:
             conn.execute("BEGIN IMMEDIATE")
@@ -386,8 +387,40 @@ class TaskPlanStore:
                 ).fetchone()
                 if step is None:
                     raise TaskStepNotFoundError("task step not found")
-                if step["status"] != "pending":
-                    raise ExecutionAttemptConflictError("task step is not pending")
+                latest = conn.execute(
+                    """
+                    SELECT * FROM task_execution_attempts
+                    WHERE step_id = ?
+                    ORDER BY attempt_no DESC LIMIT 1
+                    """,
+                    (step_id,),
+                ).fetchone()
+                if retry_from_attempt_id is None:
+                    if step["status"] != "pending":
+                        raise ExecutionAttemptConflictError("task step is not pending")
+                    if latest is not None and latest["status"] in {
+                        "failed",
+                        "blocked",
+                    }:
+                        raise ExecutionAttemptConflictError(
+                            "terminal step requires explicit retry"
+                        )
+                else:
+                    if (
+                        latest is None
+                        or latest["attempt_id"] != retry_from_attempt_id
+                        or latest["status"] not in {"failed", "blocked"}
+                    ):
+                        raise ExecutionAttemptConflictError(
+                            "retry source attempt conflict"
+                        )
+                    if step["status"] not in {"failed", "pending"}:
+                        raise ExecutionAttemptConflictError(
+                            "retry step is not failed or pending"
+                        )
+                    if step["status"] == "failed":
+                        self._reset_execution_step(conn, step_id, task_id)
+                        self._after_execution_mutation("retry_after_step_reset")
                 normalized_lease_expires_at = normalize_execution_lease_timestamp(
                     lease_expires_at
                 )
