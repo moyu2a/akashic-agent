@@ -851,10 +851,11 @@
 
 结果：
 
-- 自动化 full baseline `1835 passed, 3 warnings in 48.71s`；finalizer 注入集成 `10 passed`。
+- 最终复审自动化 baseline `1838 passed, 3 warnings in 49.91s`；LA-002 focused `189 passed`，finalizer 注入集成 `10 passed`。
 - 真实模型 replay 使用同 request ID 时只保留 attempt `attempt_366f8c1f90d1449b83b272a0cbab50de`，重复 turn 0 tools；新 request 同文本创建独立 Step 2 attempt。
 - controlled restart 将 running attempt 变为 `runtime_restarted_outcome_unknown` blocked/pending，不自动重放；普通 continue 不新建，显式 retry 创建 attempt 2。
 - 文件修改计划只进入 waiting authorization，目标未变且 write/edit/shell event 为 0；abort 后 step pending、历史保留。
+- 整体 review 发现 failed retry 曾跨两个事务执行 step reset 与 attempt claim；修复后 retry claim 在 Store 内原子验证 exact latest attempt，并与普通 continue 竞争时只允许 retry attempt 2 创建。
 
 影响：
 

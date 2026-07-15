@@ -305,7 +305,7 @@
 
 设计文档：`my_md/local_agent/03-task-plan-recovery-execution-design.md`。`LA-002a Recovery Foundation` 与 `LA-002b Controlled Read-only Execution` 已交付；第一版只自动允许 registry `read-only` 工具，其他风险进入 waiting authorization。
 
-Task 10 结果：focused `186 passed`，compatibility `278 passed`，full `1835 passed, 3 warnings`；真实 replay/restart/defer/abort 通过，write/edit/shell 真实事件为 0。下一阶段 `LA-003/P2` 先规范化 structured authorization request 和批准/拒绝协议，再由 P3 diff/snapshot/rollback 决定是否开放文件写入。
+Task 10 最终复审结果：focused `189 passed`，compatibility `278 passed`，full `1838 passed, 3 warnings`；真实 replay/restart/defer/abort 通过，write/edit/shell 真实事件为 0；failed retry 与 ordinary continue 的竞争已改为 Store 原子 claim。下一阶段 `LA-003/P2` 先规范化 structured authorization request 和批准/拒绝协议，再由 P3 diff/snapshot/rollback 决定是否开放文件写入。
 
 ## 暂不处理
 

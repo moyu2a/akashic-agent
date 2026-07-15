@@ -18,7 +18,7 @@
 
 ## 当前实现状态
 
-- TaskPlan 第一阶段、LA-001 上下文 capability scope，以及 LA-002 可恢复受控只读执行均已完成代码实现、审阅和隔离真实 smoke；Task 10 基线完整回归为 `1835 passed, 3 warnings in 48.71s`。
+- TaskPlan 第一阶段、LA-001 上下文 capability scope，以及 LA-002 可恢复受控只读执行均已完成代码实现、审阅和隔离真实 smoke；Task 10 最终复审完整回归为 `1838 passed, 3 warnings in 49.91s`。
 - 当前能力包括：每个 session 一个 active task、任务步骤持久化、deferred task tools、active task prompt context、TaskPlanAccessPolicy、task tools non-LRU。
 - 第三轮真实 CLI smoke turn `382-385` 已验证：计划创建不再调用 spawn/RAG/local，查看和更新分别收敛为 `inspect_task_plan -> final`、`update_task_step -> final`，明确后台任务为 `spawn_manage -> final`。
 - 计划创建从 15 轮降到 4 轮，累计 prompt token 从 `985779` 降到 `52205`；TaskPlan completion final-only 已在真实运行中生效。

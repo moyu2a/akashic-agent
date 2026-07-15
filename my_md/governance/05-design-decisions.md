@@ -138,7 +138,8 @@ CapabilityScope
 - 同 raw request replay 只有一个 Step 1 attempt 和一组 work events；new-ID same-text 创建独立 Step 2 attempt。
 - controlled restart 得到 `runtime_restarted_outcome_unknown`，普通 continue 无新 row，显式 retry 只有 attempt 2。
 - side-effect target 未变化，write/edit/shell event 为 0，abort 后 history 保留。
-- Full pytest baseline `1835 passed, 3 warnings in 48.71s`；finalizer injected integration `10 passed`。
+- 最终复审 Full pytest baseline `1838 passed, 3 warnings in 49.91s`；finalizer injected integration `10 passed`。
+- 显式 retry 不能先通过 TaskPlanService 单独提交 failed -> pending；Store 必须在同一 `BEGIN IMMEDIATE` 中校验 exact latest failed/recovery-blocked attempt、重置 step、创建 attempt 和 claim event，普通 continue 只得到 terminal/active conflict。
 
 影响与限制：
 

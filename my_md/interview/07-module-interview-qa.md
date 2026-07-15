@@ -20256,7 +20256,7 @@ TaskPlan 负责长期业务状态：任务、步骤顺序、pending/in-progress/
 2. 恢复：旧 runtime 的 running attempt 在重启后标记 `runtime_restarted_outcome_unknown`，step 回 pending，但系统绝不自动重放；只有显式 retry 才创建 attempt number + 1。
 3. 副作用安全：第一版只自动执行 registry exact read-only。write/external/unknown/shell 必须先进入 waiting authorization，destructive 保持 core deny；成功还必须有真实 `counts_as_work=true` work event 和 finish。
 
-验证不能只看模型回复。Task 10 使用独立 PID/socket/workspace/SQLite/dashboard，发送 raw IPC duplicate frame，执行 controlled restart，并对比 agent log、observe turn 和 SQLite rows。结果是 replay 0 new attempt、restart 0 auto replay、ordinary continue 0 retry、explicit retry exactly one new attempt；文件修改计划目标不变且 write/edit/shell event 为 0。完整回归为 `1835 passed, 3 warnings`。
+验证不能只看模型回复。Task 10 使用独立 PID/socket/workspace/SQLite/dashboard，发送 raw IPC duplicate frame，执行 controlled restart，并对比 agent log、observe turn 和 SQLite rows。结果是 replay 0 new attempt、restart 0 auto replay、ordinary continue 0 retry、explicit retry exactly one new attempt；文件修改计划目标不变且 write/edit/shell event 为 0。最终复审还加入 retry/continue 原子竞争测试，完整回归为 `1838 passed, 3 warnings`。
 
 当前边界也要说清楚：这证明的是 recoverable controlled read-only execution，不是完整自主本地执行器。批准/拒绝协议、structured authorization request columns、文件 diff、snapshot 和 rollback 仍属于 P2/P3。
 

@@ -528,7 +528,7 @@ git commit -m "feat: define task execution state contract"
 
 **Interfaces:**
 
-- `TaskPlanStore.claim_execution_attempt(*, task_id: str, step_id: str, session_key: str, request_id: str, idempotency_key: str, owner_instance_id: str, lease_expires_at: str, source_turn_id: int | None = None) -> AttemptClaimResult`.
+- `TaskPlanStore.claim_execution_attempt(*, task_id: str, step_id: str, session_key: str, request_id: str, idempotency_key: str, owner_instance_id: str, lease_expires_at: str, source_turn_id: int | None = None, retry_from_attempt_id: str | None = None) -> AttemptClaimResult`. Retry mode atomically validates the exact latest failed/recovery-blocked attempt, resets the step when needed, and inserts the new attempt/event in the same `BEGIN IMMEDIATE`; normal mode rejects a terminal latest attempt.
 - `TaskPlanStore.get_execution_attempt(attempt_id) -> TaskExecutionAttempt | None`.
 - `TaskPlanStore.get_execution_attempt_by_request(*, session_key: str, request_id: str) -> TaskExecutionAttempt | None`.
 - `TaskPlanStore.get_active_execution_attempt(task_id) -> TaskExecutionAttempt | None`.

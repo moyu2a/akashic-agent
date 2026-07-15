@@ -970,7 +970,11 @@ LA-002 完成必须同时满足：
 
 ## 31. 2026-07-15 Task 10 验证结果
 
-自动化基线：LA-002 focused `186 passed`，compatibility `278 passed`；兼容断言更新后完整 pytest `1835 passed, 3 warnings in 48.71s`，规定的 compileall 与 `git diff --check` 均为 exit 0。注入式 finalizer 集成另有 `10 passed in 1.27s`。
+最终复审自动化基线：LA-002 focused `189 passed in 9.70s`，compatibility `278 passed in 9.61s`；完整 pytest `1838 passed, 3 warnings in 49.91s`，规定的 compileall 与 `git diff --check` 均为 exit 0。注入式 finalizer 集成另有 `10 passed in 1.27s`。
+
+最终审阅强化了 CLI user frame 的完整 key set 与 canonical UUID hex 断言。审阅提出的 abort owner/lease CAS 问题经权威设计复核后不成立：start/event/finish/defer 属于 runtime-owned mutation，显式 abort 则故意只依赖 session ownership，保证旧 owner 重启且 lease 过期后的 `waiting_authorization` 仍可取消；新增 recovery regression 固化了这一例外。
+
+整体 review 随后复现了 failed retry 的真实并发窗口：旧实现先经 TaskPlanService 独立提交 `failed -> pending`，再创建 retry attempt，期间 ordinary continue 可以把该 step 当作普通 pending claim。最终实现改为 Store 原子 retry claim：同一 `BEGIN IMMEDIATE` 内验证 exact latest failed/recovery-blocked attempt、必要时 reset step、插入 attempt 2 和 `attempt_claimed` event；normal claim 对 terminal latest 保持拒绝。两个独立 connection 的竞争测试覆盖 continue 先到和 retry 先到，failure injection 证明 reset、attempt 和 event 同步回滚。
 
 隔离真实模型 runtime 使用 PID `444596`，重启后 PID `445782`，socket `/tmp/akashic-task10-20260715.sock`、workspace `/tmp/akashic-task10-20260715/workspace`、SQLite `task_plans.db`、dashboard `127.0.0.1:2247`。原有 PID `372968`、`/tmp/akashic.sock` 和 `2236` 未被停止、替换或复用。
 
