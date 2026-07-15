@@ -9,6 +9,7 @@ from threading import Barrier
 import pytest
 
 from agent.task_plan.store import (
+    ActiveTaskExistsError,
     ExecutionAttemptConflictError,
     TaskPlanStore,
 )
@@ -39,7 +40,10 @@ def _create_claimed_attempt(tmp_path: Path) -> tuple[TaskPlanStore, str, str, st
 
 def test_schema_migrates_execution_tables(tmp_path: Path) -> None:
     db_path = tmp_path / "task.db"
-    TaskPlanStore(db_path)
+    _seed_base_task_plan_schema(db_path)
+
+    store = TaskPlanStore(db_path)
+    active = store.get_active_plan("cli:legacy")
 
     with sqlite3.connect(db_path) as conn:
         names = {
@@ -48,7 +52,29 @@ def test_schema_migrates_execution_tables(tmp_path: Path) -> None:
                 "SELECT name FROM sqlite_master WHERE type = 'table'"
             )
         }
+        indexes = {
+            row[0]
+            for row in conn.execute(
+                "SELECT name FROM sqlite_master WHERE type = 'index'"
+            )
+        }
+    assert active is not None
+    assert active.task_id == "task_legacy"
+    assert active.status == "active"
+    assert [(step.step_id, step.status) for step in active.steps] == [
+        ("step_legacy", "pending")
+    ]
     assert {"task_execution_attempts", "task_execution_events"} <= names
+    assert {
+        "ux_task_plans_one_active_per_session",
+        "ux_task_execution_one_active_per_step",
+        "ux_task_execution_one_active_per_task",
+        "ix_task_execution_events_attempt_sequence",
+    } <= indexes
+    with pytest.raises(ActiveTaskExistsError):
+        store.create_plan(
+            session_key="cli:legacy", title="Second task", step_titles=["Step"]
+        )
 
 
 def test_claim_replays_same_request(tmp_path: Path) -> None:
@@ -287,6 +313,122 @@ def test_lease_cas_never_renews_expired_or_foreign_attempt(tmp_path: Path) -> No
             owner_instance_id="runtime-1",
             now=datetime(2030, 7, 15, 2, 1, tzinfo=UTC),
             lease_expires_at="2030-07-15T04:00:00+00:00",
+        )
+
+
+def test_lease_cas_rejects_expired_offset_crossing_timestamp(tmp_path: Path) -> None:
+    store = TaskPlanStore(tmp_path / "task.db")
+    plan = store.create_plan(
+        session_key="cli:s1", title="Read project", step_titles=["Read README"]
+    )
+    claim = store.claim_execution_attempt(
+        task_id=plan.task_id,
+        step_id=plan.steps[0].step_id,
+        session_key="cli:s1",
+        request_id="req-offset",
+        idempotency_key="idem-offset",
+        owner_instance_id="runtime-1",
+        lease_expires_at="2030-07-15T09:00:00+08:00",
+    )
+    assert claim.attempt.lease_expires_at == "2030-07-15T01:00:00+00:00"
+
+    with pytest.raises(ExecutionAttemptConflictError):
+        store.renew_execution_attempt_lease(
+            attempt_id=claim.attempt.attempt_id,
+            owner_instance_id="runtime-1",
+            now=datetime(2030, 7, 15, 2, tzinfo=UTC),
+            lease_expires_at="2030-07-15T03:00:00+00:00",
+        )
+
+
+def test_schema_normalizes_persisted_legacy_offset_lease(tmp_path: Path) -> None:
+    store, _, _, attempt_id = _create_claimed_attempt(tmp_path)
+    with sqlite3.connect(tmp_path / "task.db") as conn:
+        conn.execute(
+            """
+            UPDATE task_execution_attempts SET lease_expires_at = ?
+            WHERE attempt_id = ?
+            """,
+            ("2030-07-15T09:00:00+08:00", attempt_id),
+        )
+
+    upgraded = TaskPlanStore(tmp_path / "task.db")
+    attempt = upgraded.get_execution_attempt(attempt_id)
+
+    assert attempt is not None
+    assert attempt.lease_expires_at == "2030-07-15T01:00:00+00:00"
+
+
+def _seed_base_task_plan_schema(db_path: Path) -> None:
+    with sqlite3.connect(db_path) as conn:
+        conn.executescript(
+            """
+            CREATE TABLE task_plans (
+                task_id TEXT PRIMARY KEY,
+                session_key TEXT NOT NULL,
+                title TEXT NOT NULL,
+                status TEXT NOT NULL CHECK (
+                    status IN ('active', 'completed', 'cancelled', 'failed')
+                ),
+                source_turn_id INTEGER,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                completed_at TEXT,
+                terminal_reason TEXT NOT NULL DEFAULT '',
+                metadata_json TEXT NOT NULL DEFAULT '{}'
+            );
+
+            CREATE UNIQUE INDEX ux_task_plans_one_active_per_session
+            ON task_plans(session_key)
+            WHERE status = 'active';
+
+            CREATE INDEX ix_task_plans_session_status_updated
+            ON task_plans(session_key, status, updated_at);
+
+            CREATE TABLE task_steps (
+                step_id TEXT PRIMARY KEY,
+                task_id TEXT NOT NULL,
+                step_index INTEGER NOT NULL,
+                title TEXT NOT NULL,
+                status TEXT NOT NULL CHECK (
+                    status IN (
+                        'pending', 'in_progress', 'completed', 'failed', 'skipped'
+                    )
+                ),
+                tool_names_json TEXT NOT NULL DEFAULT '[]',
+                result_summary TEXT NOT NULL DEFAULT '',
+                source_turn_id INTEGER,
+                started_at TEXT,
+                completed_at TEXT,
+                metadata_json TEXT NOT NULL DEFAULT '{}',
+                FOREIGN KEY(task_id) REFERENCES task_plans(task_id) ON DELETE CASCADE,
+                UNIQUE(task_id, step_index)
+            );
+
+            CREATE INDEX ix_task_steps_task_index
+            ON task_steps(task_id, step_index);
+            """
+        )
+        conn.execute(
+            """
+            INSERT INTO task_plans (
+                task_id, session_key, title, status, created_at, updated_at,
+                metadata_json
+            ) VALUES (?, ?, ?, 'active', ?, ?, '{}')
+            """,
+            (
+                "task_legacy",
+                "cli:legacy",
+                "Existing task",
+                "2030-07-15T00:00:00+00:00",
+                "2030-07-15T00:00:00+00:00",
+            ),
+        )
+        conn.execute(
+            """
+            INSERT INTO task_steps (step_id, task_id, step_index, title, status)
+            VALUES ('step_legacy', 'task_legacy', 1, 'Existing step', 'pending')
+            """
         )
 
 

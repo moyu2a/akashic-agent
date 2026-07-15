@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from datetime import UTC, datetime
 from typing import Any, cast
 from uuid import uuid4
 
 from agent.task_plan.execution_models import (
-    AttemptStatus,
     ExecutionEventType,
     ExecutionMode,
     TaskExecutionAttempt,
@@ -93,6 +93,22 @@ ON task_execution_events(attempt_id, sequence_no);
 
 def new_execution_event_id() -> str:
     return f"event_{uuid4().hex}"
+
+
+def normalize_execution_lease_timestamp(value: str) -> str:
+    try:
+        parsed = datetime.fromisoformat(value)
+    except ValueError as exc:
+        raise ValueError("invalid execution attempt lease timestamp") from exc
+    if parsed.tzinfo is None:
+        raise ValueError("execution attempt lease timestamps must be timezone-aware")
+    return parsed.astimezone(UTC).isoformat()
+
+
+def normalize_execution_comparison_timestamp(value: datetime) -> str:
+    if value.tzinfo is None:
+        raise ValueError("execution attempt timestamps must be timezone-aware")
+    return value.astimezone(UTC).isoformat()
 
 
 def row_to_execution_attempt(row: sqlite3.Row) -> TaskExecutionAttempt:

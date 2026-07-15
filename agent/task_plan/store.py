@@ -19,6 +19,8 @@ from agent.task_plan.execution_store import (
     EXECUTION_SCHEMA_SQL,
     json_dump as _execution_json_dump,
     new_execution_event_id,
+    normalize_execution_comparison_timestamp,
+    normalize_execution_lease_timestamp,
     row_to_execution_attempt,
     row_to_execution_event,
 )
@@ -331,6 +333,8 @@ class TaskPlanStore:
                 """
             )
             conn.executescript(EXECUTION_SCHEMA_SQL)
+            self._normalize_persisted_execution_lease_timestamps(conn)
+            conn.commit()
 
     def claim_execution_attempt(
         self,
@@ -383,6 +387,9 @@ class TaskPlanStore:
                     raise TaskStepNotFoundError("task step not found")
                 if step["status"] != "pending":
                     raise ExecutionAttemptConflictError("task step is not pending")
+                normalized_lease_expires_at = normalize_execution_lease_timestamp(
+                    lease_expires_at
+                )
                 attempt_no = int(
                     conn.execute(
                         """
@@ -400,7 +407,7 @@ class TaskPlanStore:
                     idempotency_key=idempotency_key,
                     attempt_no=attempt_no,
                     owner_instance_id=owner_instance_id,
-                    lease_expires_at=lease_expires_at,
+                    lease_expires_at=normalized_lease_expires_at,
                     source_turn_id=source_turn_id,
                 )
                 conn.execute(
@@ -544,6 +551,9 @@ class TaskPlanStore:
         lease_expires_at: str,
     ) -> TaskExecutionAttempt:
         timestamp = _datetime_to_iso(now)
+        normalized_lease_expires_at = normalize_execution_lease_timestamp(
+            lease_expires_at
+        )
         with self._lock, self._connect() as conn:
             conn.execute("BEGIN IMMEDIATE")
             try:
@@ -555,7 +565,13 @@ class TaskPlanStore:
                       AND status IN ('pending', 'running', 'waiting_authorization')
                       AND lease_expires_at > ?
                     """,
-                    (lease_expires_at, timestamp, attempt_id, owner_instance_id, timestamp),
+                    (
+                        normalized_lease_expires_at,
+                        timestamp,
+                        attempt_id,
+                        owner_instance_id,
+                        timestamp,
+                    ),
                 )
                 if cur.rowcount != 1:
                     raise ExecutionAttemptConflictError("execution attempt lease conflict")
@@ -950,6 +966,26 @@ class TaskPlanStore:
     def _after_execution_mutation(self, point: str) -> None:
         del point
 
+    @staticmethod
+    def _normalize_persisted_execution_lease_timestamps(
+        conn: sqlite3.Connection,
+    ) -> None:
+        rows = conn.execute(
+            "SELECT attempt_id, lease_expires_at FROM task_execution_attempts"
+        ).fetchall()
+        for row in rows:
+            normalized = normalize_execution_lease_timestamp(
+                str(row["lease_expires_at"])
+            )
+            if normalized != row["lease_expires_at"]:
+                conn.execute(
+                    """
+                    UPDATE task_execution_attempts SET lease_expires_at = ?
+                    WHERE attempt_id = ?
+                    """,
+                    (normalized, row["attempt_id"]),
+                )
+
     def _append_execution_event_in_transaction(
         self,
         conn: sqlite3.Connection,
@@ -1227,6 +1263,4 @@ def _is_active_unique_error(exc: sqlite3.IntegrityError) -> bool:
 
 
 def _datetime_to_iso(value: datetime) -> str:
-    if value.tzinfo is None:
-        raise ValueError("execution attempt timestamps must be timezone-aware")
-    return value.isoformat()
+    return normalize_execution_comparison_timestamp(value)
