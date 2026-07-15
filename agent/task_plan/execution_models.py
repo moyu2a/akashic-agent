@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 from typing import Any, Literal, cast
 from uuid import uuid4
 
+from agent.task_plan.execution_redaction import redact_execution_arguments
 from agent.task_plan.models import utc_now_iso
 
 AttemptStatus = Literal[
@@ -145,6 +146,10 @@ class TaskExecutionAttempt:
 
     def to_dict(self) -> dict[str, Any]:
         payload = deepcopy(self.__dict__)
+        payload["requested_arguments"] = redact_execution_arguments(
+            payload["requested_arguments"]
+        )
+        payload["metadata"] = redact_execution_arguments(payload["metadata"])
         payload["requested_capabilities"] = list(self.requested_capabilities)
         return payload
 

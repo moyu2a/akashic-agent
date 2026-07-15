@@ -60,6 +60,42 @@ def test_attempt_serialization_returns_copies() -> None:
     assert replace(attempt, status="pending").status == "pending"
 
 
+def test_attempt_serialization_redacts_nested_execution_payloads() -> None:
+    attempt = replace(
+        TaskExecutionAttempt.new(
+            task_id="task_1",
+            step_id="step_1",
+            session_key="cli:s1",
+            request_id="req_1",
+            idempotency_key="idem_1",
+            attempt_no=1,
+            owner_instance_id="runtime_1",
+            lease_expires_at="2026-07-15T01:00:00+00:00",
+        ),
+        requested_arguments={
+            "path": "README.md",
+            "headers": {"Authorization": "Bearer request-secret"},
+            "nested": [{"token": "request-token"}],
+        },
+        metadata={
+            "source": "cli",
+            "nested": {"api_key": "metadata-secret"},
+        },
+    )
+
+    payload = attempt.to_dict()
+
+    assert payload["requested_arguments"]["path"] == "README.md"
+    assert payload["requested_arguments"]["headers"]["Authorization"] == "[REDACTED]"
+    assert payload["requested_arguments"]["nested"][0]["token"] == "[REDACTED]"
+    assert payload["metadata"]["source"] == "cli"
+    assert payload["metadata"]["nested"]["api_key"] == "[REDACTED]"
+    assert attempt.requested_arguments["headers"]["Authorization"] == (
+        "Bearer request-secret"
+    )
+    assert attempt.metadata["nested"]["api_key"] == "metadata-secret"
+
+
 def test_attempt_status_sets_and_validator_match_contract() -> None:
     assert ACTIVE_ATTEMPT_STATUSES == {
         "pending",
