@@ -283,7 +283,7 @@ class PluginManager:
             plugin_name = getattr(instance, "name", None) or module_path
             self._tool_registry.register(
                 ToolCls(),
-                risk=md.tool_risk or "read-write",
+                risk=md.tool_risk or "unknown",
                 always_on=bool(md.tool_always_on),
                 search_hint=md.tool_search_hint,
                 source_type="plugin",

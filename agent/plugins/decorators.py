@@ -129,7 +129,7 @@ def on_tool_pre(
 def tool(
     name: str,
     *,
-    risk: str = "read-write",
+    risk: str = "unknown",
     always_on: bool = False,
     search_hint: str | None = None,
 ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:

@@ -67,6 +67,8 @@ class ToolExecutionResult:
     status: ToolExecStatus
     output: Any
     final_arguments: dict[str, Any]
+    invoker_reached: bool = False
+    invoker_succeeded: bool = False
     extra_messages: list[str] = field(default_factory=_empty_str_list)
     pre_hook_trace: list[HookTraceItem] = field(default_factory=_empty_pre_trace)
     post_hook_trace: list[HookTraceItem] = field(default_factory=_empty_post_trace)

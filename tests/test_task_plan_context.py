@@ -18,6 +18,8 @@ from agent.task_plan.context import (
     TaskPlanPromptRenderModule,
     render_task_plan_context,
 )
+from agent.config_models import TaskExecutionConfig
+from agent.task_plan.execution_service import TaskExecutionService
 from agent.task_plan.service import TaskPlanService
 from agent.task_plan.store import TaskPlanStore
 from bootstrap.tools import CoreRuntime
@@ -79,6 +81,44 @@ def test_render_task_plan_context_distinguishes_spawn_job(tmp_path: Path) -> Non
 
     assert "不等同于后台 spawn job" in rendered
     assert "不要自动启动后台任务" in rendered
+
+
+def test_prompt_renders_only_current_attempt_summary(tmp_path: Path) -> None:
+    store = TaskPlanStore(tmp_path / "task_plans.db")
+    service = TaskPlanService(store)
+    execution = TaskExecutionService(
+        store=store,
+        plan_service=service,
+        runtime_instance_id="runtime-test",
+        config=TaskExecutionConfig(),
+        clock=lambda: datetime.now(UTC),
+    )
+    service.create_task_plan(
+        session_key="cli:s1",
+        title="Fix RAG",
+        steps=["Read logs"],
+    )
+    started = execution.begin_next_step(session_key="cli:s1", request_id="request-1")
+    running = execution.start_attempt(
+        session_key="cli:s1", attempt_id=started.attempt.attempt_id
+    )
+    waiting = execution.defer_attempt(
+        session_key="cli:s1",
+        attempt_id=running.attempt.attempt_id,
+        tool_name="write_file",
+        requested_arguments={"token": "secret-value"},
+        requested_capabilities=("filesystem.write",),
+        reason="waiting_authorization",
+    )
+    plan = service.get_active_task_plan(session_key="cli:s1")
+
+    assert plan is not None
+    rendered = render_task_plan_context(plan, execution=waiting)
+
+    assert "Execution:" in rendered
+    assert "waiting_authorization" in rendered
+    assert "secret-value" not in rendered
+    assert "old-attempt-event" not in rendered
 
 
 @pytest.mark.asyncio

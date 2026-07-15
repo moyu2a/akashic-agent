@@ -4,6 +4,8 @@ from typing import Any
 
 from agent.prompting import PromptSectionRender
 from agent.task_plan.models import TaskPlan, TaskStep
+from agent.task_plan.execution_models import TaskExecutionSnapshot
+from agent.task_plan.execution_service import TaskExecutionService
 from agent.task_plan.service import TaskPlanService
 
 
@@ -12,9 +14,17 @@ class TaskPlanPromptRenderModule:
     requires = ("prompt_render.emit", "prompt:ctx")
     produces = ("prompt:section_bottom:task_plan",)
 
-    def __init__(self, service: TaskPlanService, max_chars: int = 1200) -> None:
+    def __init__(
+        self,
+        service: TaskPlanService,
+        execution_service: TaskExecutionService | None = None,
+        max_chars: int = 1200,
+        max_execution_chars: int = 400,
+    ) -> None:
         self._service = service
+        self._execution_service = execution_service
         self._max_chars = max_chars
+        self._max_execution_chars = max_execution_chars
 
     async def run(self, frame: Any) -> Any:
         ctx = frame.slots.get("prompt:ctx")
@@ -24,7 +34,17 @@ class TaskPlanPromptRenderModule:
         plan = self._service.get_active_task_plan(session_key=session_key)
         if plan is None:
             return frame
-        content = render_task_plan_context(plan, max_chars=self._max_chars)
+        execution = (
+            self._execution_service.inspect(session_key=session_key)
+            if self._execution_service is not None
+            else None
+        )
+        content = render_task_plan_context(
+            plan,
+            max_chars=self._max_chars,
+            execution=execution,
+            max_execution_chars=self._max_execution_chars,
+        )
         if not content.strip():
             return frame
         frame.slots["prompt:section_bottom:task_plan"] = PromptSectionRender(
@@ -35,7 +55,13 @@ class TaskPlanPromptRenderModule:
         return frame
 
 
-def render_task_plan_context(plan: TaskPlan, max_chars: int = 1200) -> str:
+def render_task_plan_context(
+    plan: TaskPlan,
+    max_chars: int = 1200,
+    *,
+    execution: TaskExecutionSnapshot | None = None,
+    max_execution_chars: int = 400,
+) -> str:
     ordered = sorted(plan.steps, key=lambda step: step.index)
     current = _current_step(ordered)
     next_step = _next_pending_step(ordered, current)
@@ -64,10 +90,32 @@ def render_task_plan_context(plan: TaskPlan, max_chars: int = 1200) -> str:
             "- 不要跳过 pending 步骤，除非用户明确要求。",
         ]
     )
-    content = "\n".join(lines)
-    if len(content) <= max_chars:
-        return content
-    return content[: max(0, max_chars - 3)].rstrip() + "..."
+    content = _truncate("\n".join(lines), max_chars)
+    execution_content = render_task_execution_context(
+        execution, max_chars=max_execution_chars
+    )
+    return f"{content}\n\n{execution_content}" if execution_content else content
+
+
+def render_task_execution_context(
+    snapshot: TaskExecutionSnapshot | None,
+    *,
+    max_chars: int = 400,
+) -> str:
+    if snapshot is None or snapshot.attempt is None:
+        return ""
+    attempt = snapshot.attempt
+    lines = [
+        "Execution:",
+        f"- attempt_id: {attempt.attempt_id}",
+        f"- status: {attempt.status}",
+        f"- step_id: {attempt.step_id}",
+    ]
+    if attempt.error_code:
+        lines.append(f"- error_code: {_truncate(attempt.error_code, 120)}")
+    if attempt.terminal_reason:
+        lines.append(f"- reason: {_truncate(attempt.terminal_reason, 160)}")
+    return _truncate("\n".join(lines), max_chars)
 
 
 def _current_step(steps: list[TaskStep]) -> TaskStep | None:
@@ -101,8 +149,7 @@ def _recent_result(steps: list[TaskStep]) -> str:
 
 def _format_step(step: TaskStep) -> str:
     return (
-        f"[{step.status}] #{step.index} {step.step_id} "
-        f"{_truncate(step.title, 180)}"
+        f"[{step.status}] #{step.index} {step.step_id} " f"{_truncate(step.title, 180)}"
     )
 
 

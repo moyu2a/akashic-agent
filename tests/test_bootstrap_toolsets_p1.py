@@ -82,14 +82,18 @@ def test_build_registered_tools_uses_toolset_providers(monkeypatch, tmp_path: Pa
             return ToolsetRegistrationResult(source_name="doc_rag")
 
     class _TaskPlanProvider:
-        def __init__(self, service):
+        def __init__(self, service, execution_service):
             self._service = service
+            self._execution_service = execution_service
 
         def register(self, registry, deps):
             calls.append("task_plan")
             return ToolsetRegistrationResult(
                 source_name="task_plan",
-                extras={"task_plan_service": self._service},
+                extras={
+                    "task_plan_service": self._service,
+                    "task_execution_service": self._execution_service,
+                },
             )
 
     monkeypatch.setattr(
@@ -98,13 +102,13 @@ def test_build_registered_tools_uses_toolset_providers(monkeypatch, tmp_path: Pa
     )
     monkeypatch.setattr(
         "bootstrap.tools.resolve_toolset_provider",
-        lambda name, readonly_tools=None, task_plan_service=None: {
+        lambda name, readonly_tools=None, task_plan_service=None, task_execution_service=None: {
             "meta_common": _MetaProvider(readonly_tools),
             "spawn": _SpawnProvider(),
             "schedule": _ScheduleProvider(),
             "mcp": _McpProvider(),
             "doc_rag": _DocRagProvider(),
-            "task_plan": _TaskPlanProvider(task_plan_service),
+            "task_plan": _TaskPlanProvider(task_plan_service, task_execution_service),
         }[name],
     )
     monkeypatch.setattr("bootstrap.tools.build_readonly_tools", lambda *_, **__: {})

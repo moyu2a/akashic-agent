@@ -158,6 +158,7 @@ def _read_image(file_path: Path, detected_mime: str | None = None) -> ToolResult
                 "image_url": {"url": f"data:{mime};base64,{b64}", "detail": "high"},
             }
         ],
+        ok=True,
     )
 
 
@@ -309,7 +310,7 @@ class ReadFileTool(Tool):
             "required": ["path"],
         }
 
-    async def execute(self, path: str, **kwargs: Any) -> str | ToolResult:
+    async def execute(self, path: str, **kwargs: Any) -> ToolResult:
         offset: int = int(kwargs.get("offset", 0))
         limit: int | None = kwargs.get("limit")
         if limit is not None:
@@ -317,9 +318,17 @@ class ReadFileTool(Tool):
         try:
             file_path = _resolve_path(path, self._allowed_dir)
             if not file_path.exists():
-                return f"错误：文件不存在：{path}"
+                return ToolResult(
+                    text=f"错误：文件不存在：{path}",
+                    ok=False,
+                    error_code="file_not_found",
+                )
             if not file_path.is_file():
-                return f"错误：路径不是文件：{path}"
+                return ToolResult(
+                    text=f"错误：路径不是文件：{path}",
+                    ok=False,
+                    error_code="path_not_file",
+                )
 
             with builtins.open(file_path, "rb") as fh:
                 head = fh.read(_READ_PROBE_BYTES)
@@ -328,21 +337,33 @@ class ReadFileTool(Tool):
                 if self._multimodal:
                     return _read_image(file_path, image_mime)
                 if self._vl_available:
-                    return (
-                        f"[检测到图片文件 {file_path.name}（{image_mime}）]\n"
-                        f"当前主模型不支持多模态，无法直接查看图片内容。\n"
-                        f"请使用 read_image_vision 工具来分析此图片：\n"
-                        f"read_image_vision(path='{path}', prompt='描述你想从图片中了解什么')"
+                    return ToolResult(
+                        text=(
+                            f"[检测到图片文件 {file_path.name}（{image_mime}）]\n"
+                            f"当前主模型不支持多模态，无法直接查看图片内容。\n"
+                            f"请使用 read_image_vision 工具来分析此图片：\n"
+                            f"read_image_vision(path='{path}', prompt='描述你想从图片中了解什么')"
+                        ),
+                        ok=False,
+                        error_code="image_requires_vision_tool",
                     )
-                return (
-                    f"[检测到图片文件 {file_path.name}（{image_mime}）]\n"
-                    f"当前主模型不支持多模态，且未配置 VL 视觉模型（llm.vl），无法处理图片。\n"
-                    f"请在 config.toml 中配置 llm.vl 以启用图片识别能力。"
+                return ToolResult(
+                    text=(
+                        f"[检测到图片文件 {file_path.name}（{image_mime}）]\n"
+                        f"当前主模型不支持多模态，且未配置 VL 视觉模型（llm.vl），无法处理图片。\n"
+                        f"请在 config.toml 中配置 llm.vl 以启用图片识别能力。"
+                    ),
+                    ok=False,
+                    error_code="image_unsupported",
                 )
             if _looks_binary(head):
-                return (
-                    f"错误：{path} 看起来是二进制文件，read_file 仅适合文本和图片。"
-                    "建议改用 shell 搭配 file/xxd/strings 查看。"
+                return ToolResult(
+                    text=(
+                        f"错误：{path} 看起来是二进制文件，read_file 仅适合文本和图片。"
+                        "建议改用 shell 搭配 file/xxd/strings 查看。"
+                    ),
+                    ok=False,
+                    error_code="binary_file",
                 )
 
             sliced, total_lines, total_bytes, had_decode_errors = _scan_text_file(
@@ -391,11 +412,13 @@ class ReadFileTool(Tool):
                     "\n\n[提示：文件不是标准 UTF-8，已用替代字符显示无法解码的字节。]"
                 )
 
-            return text + suffix_note
+            return ToolResult(text=text + suffix_note, ok=True)
         except PermissionError as e:
-            return f"错误：{e}"
+            return ToolResult(
+                text=f"错误：{e}", ok=False, error_code="path_access_denied"
+            )
         except Exception as e:
-            return f"读取文件失败：{e}"
+            return ToolResult(text=f"读取文件失败：{e}", ok=False, error_code="read_failed")
 
 
 class WriteFileTool(Tool):
@@ -565,13 +588,21 @@ class ListDirTool(Tool):
             "required": ["path"],
         }
 
-    async def execute(self, path: str, **kwargs: Any) -> str:
+    async def execute(self, path: str, **kwargs: Any) -> ToolResult:
         try:
             dir_path = _resolve_path(path, self._allowed_dir)
             if not dir_path.exists():
-                return f"错误：目录不存在：{path}"
+                return ToolResult(
+                    text=f"错误：目录不存在：{path}",
+                    ok=False,
+                    error_code="directory_not_found",
+                )
             if not dir_path.is_dir():
-                return f"错误：路径不是目录：{path}"
+                return ToolResult(
+                    text=f"错误：路径不是目录：{path}",
+                    ok=False,
+                    error_code="path_not_directory",
+                )
 
             items = []
             for item in sorted(dir_path.iterdir()):
@@ -579,10 +610,14 @@ class ListDirTool(Tool):
                 items.append(f"{prefix}{item.name}")
 
             if not items:
-                return f"目录 {path} 为空"
+                return ToolResult(text=f"目录 {path} 为空", ok=True)
 
-            return "\n".join(items)
+            return ToolResult(text="\n".join(items), ok=True)
         except PermissionError as e:
-            return f"错误：{e}"
+            return ToolResult(
+                text=f"错误：{e}", ok=False, error_code="path_access_denied"
+            )
         except Exception as e:
-            return f"列举目录失败：{e}"
+            return ToolResult(
+                text=f"列举目录失败：{e}", ok=False, error_code="list_directory_failed"
+            )

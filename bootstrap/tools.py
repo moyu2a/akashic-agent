@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 from collections import Counter
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, cast
 from uuid import uuid4
@@ -12,7 +13,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-from agent.config_models import Config, WiringConfig
+from agent.config_models import Config, TaskExecutionConfig, WiringConfig
 from agent.context import ContextBuilder
 from agent.peer_agent.process_manager import PeerProcessManager
 from agent.peer_agent.poller import PeerAgentPoller
@@ -101,7 +102,12 @@ class CoreRuntime:
         self.mcp_registry.start_connect_all_background()
         if self.task_plan_service is not None:
             self.loop.add_prompt_render_plugin_modules(
-                [TaskPlanPromptRenderModule(self.task_plan_service)]
+                [
+                    TaskPlanPromptRenderModule(
+                        self.task_plan_service,
+                        self.task_execution_service,
+                    )
+                ]
             )
 
         if (
@@ -218,7 +224,12 @@ class CoreRuntime:
                         Any,
                         [
                             *(
-                                [TaskPlanPromptRenderModule(self.task_plan_service)]
+                                [
+                                    TaskPlanPromptRenderModule(
+                                        self.task_plan_service,
+                                        self.task_execution_service,
+                                    )
+                                ]
                                 if self.task_plan_service is not None
                                 else []
                             ),
@@ -297,6 +308,8 @@ def build_registered_tools(
     event_publisher=None,
     agent_loop_provider: Callable[[], Any] | None = None,
     task_plan_store: TaskPlanStore | None = None,
+    task_plan_service: TaskPlanService | None = None,
+    task_execution_service: TaskExecutionService | None = None,
 ) -> tuple[
     ToolRegistry,
     MessagePushTool,
@@ -312,8 +325,14 @@ def build_registered_tools(
     # ── 第一阶段：建服务（依赖无顺序陷阱）────────────────────────────────────
     wiring = getattr(config, "wiring", WiringConfig())
     tools = tools or ToolRegistry()
-    task_plan_service = TaskPlanService(
-        task_plan_store or TaskPlanStore(workspace / "task_plans.db")
+    plan_store = task_plan_store or TaskPlanStore(workspace / "task_plans.db")
+    task_plan_service = task_plan_service or TaskPlanService(plan_store)
+    task_execution_service = task_execution_service or TaskExecutionService(
+        store=plan_store,
+        plan_service=task_plan_service,
+        runtime_instance_id="bootstrap-toolset",
+        config=getattr(config, "task_execution", TaskExecutionConfig()),
+        clock=lambda: datetime.now(UTC),
     )
     multimodal = getattr(config, "multimodal", True)
     vl_available = (not multimodal) and bool(getattr(config, "vl_model", ""))
@@ -357,6 +376,9 @@ def build_registered_tools(
             name,
             readonly_tools=readonly_tools if name == "meta_common" else None,
             task_plan_service=task_plan_service if name == "task_plan" else None,
+            task_execution_service=(
+                task_execution_service if name == "task_plan" else None
+            ),
         )
         result = provider_obj.register(
             tools,
@@ -494,6 +516,13 @@ def build_core_runtime(
     session_manager = SessionManager(workspace)
     task_plan_store = TaskPlanStore(workspace / "task_plans.db")
     runtime_instance_id = f"runtime_{uuid4().hex}"
+    task_plan_service = TaskPlanService(task_plan_store)
+    task_execution_service, task_execution_recovery = build_task_execution_services(
+        store=task_plan_store,
+        plan_service=task_plan_service,
+        runtime_instance_id=runtime_instance_id,
+        config=config.task_execution,
+    )
     loop_ref: dict[str, AgentLoop] = {}
     (
         tools,
@@ -516,16 +545,10 @@ def build_core_runtime(
         event_publisher=event_bus,
         agent_loop_provider=lambda: loop_ref.get("loop"),
         task_plan_store=task_plan_store,
+        task_plan_service=task_plan_service,
+        task_execution_service=task_execution_service,
     )
-    task_execution_service: TaskExecutionService | None = None
-    task_execution_recovery: TaskExecutionRecoveryService | None = None
     try:
-        task_execution_service, task_execution_recovery = build_task_execution_services(
-            store=task_plan_store,
-            plan_service=task_plan_service,
-            runtime_instance_id=runtime_instance_id,
-            config=config.task_execution,
-        )
         recovery_results = task_execution_recovery.reconcile_startup()
         logger.info(
             "Task execution startup recovery reconciled %d attempts: %s",
@@ -533,9 +556,7 @@ def build_core_runtime(
             dict(Counter(result.reason for result in recovery_results)),
         )
     except Exception:
-        logger.exception("Task execution recovery failed; task execution disabled")
-        task_execution_service = None
-        task_execution_recovery = None
+        logger.exception("Task execution startup recovery failed")
     presence = PresenceStore(session_manager._store)
     processing_state = ProcessingState()
     loop_deps = _build_loop_deps(

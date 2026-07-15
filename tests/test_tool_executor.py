@@ -6,6 +6,9 @@ from typing import Any
 from agent.tool_hooks.base import ToolHook
 from agent.tool_hooks.executor import ToolExecutor
 from agent.tool_hooks.types import HookContext, HookOutcome, ToolExecutionRequest
+from agent.tools.base import Tool
+from agent.tools.execution_context import ToolExecutionContext
+from agent.tools.registry import ToolRegistry
 
 
 class _SpyHook(ToolHook):
@@ -39,6 +42,15 @@ class _SpyHook(ToolHook):
 
 async def _invoke(tool_name: str, arguments: dict[str, Any]) -> Any:
     return {"tool": tool_name, "arguments": dict(arguments)}
+
+
+class _ThrowingTool(Tool):
+    name = "throwing"
+    description = "throws during execution"
+    parameters = {"type": "object", "properties": {}}
+
+    async def execute(self, **_: Any) -> str:
+        raise RuntimeError("boom")
 
 
 def test_tool_executor_pre_hook_can_update_arguments() -> None:
@@ -89,6 +101,8 @@ def test_tool_executor_denied_is_not_error() -> None:
 
     assert result.status == "denied"
     assert result.output == "blocked"
+    assert result.invoker_reached is False
+    assert result.invoker_succeeded is False
 
 
 def test_tool_executor_post_hook_only_adds_extra_message() -> None:
@@ -142,6 +156,36 @@ def test_tool_executor_post_error_hook_cannot_swallow_error() -> None:
     assert result.status == "error"
     assert result.output == "工具执行出错: boom"
     assert result.extra_messages == ["logged"]
+    assert result.invoker_reached is True
+    assert result.invoker_succeeded is False
+
+
+def test_execution_context_propagates_registry_tool_error_to_executor() -> None:
+    registry = ToolRegistry()
+    registry.register(_ThrowingTool(), risk="read-only")
+    executor = ToolExecutor()
+
+    result = asyncio.run(
+        executor.execute(
+            ToolExecutionRequest(
+                call_id="c1",
+                tool_name="throwing",
+                arguments={},
+                source="passive",
+            ),
+            lambda name, arguments: registry.execute(
+                name,
+                arguments,
+                execution_context=ToolExecutionContext(
+                    protected={}, propagate_tool_errors=True
+                ),
+            ),
+        )
+    )
+
+    assert result.status == "error"
+    assert result.invoker_reached is True
+    assert result.invoker_succeeded is False
 
 
 def test_tool_executor_hook_exception_becomes_controlled_error() -> None:

@@ -146,14 +146,14 @@ async def test_filesystem_tools_cover_core_paths(monkeypatch: pytest.MonkeyPatch
     fake_image = base / "fake.png"
     fake_image.write_text("secret text", encoding="utf-8")
     fake_image_result = await reader.execute("fake.png")
-    assert isinstance(fake_image_result, str)
-    assert "secret text" in fake_image_result
+    assert isinstance(fake_image_result, ToolResult)
+    assert "secret text" in fake_image_result.text
 
     svg = base / "icon.svg"
     svg.write_text("<svg><rect width='10' height='10'/></svg>\n", encoding="utf-8")
     svg_result = await reader.execute("icon.svg")
-    assert isinstance(svg_result, str)
-    assert "<svg>" in svg_result
+    assert isinstance(svg_result, ToolResult)
+    assert "<svg>" in svg_result.text
 
     from PIL import Image
 
@@ -284,11 +284,11 @@ async def test_filesystem_tools_cover_core_paths(monkeypatch: pytest.MonkeyPatch
     assert mixed.read_bytes() == b"left\r\nright\nx\ny\n"
 
     lister = ListDirTool(base)
-    assert "📄 a.txt" in await lister.execute(".")
+    assert "📄 a.txt" in _as_text(await lister.execute("."))
     empty = base / "empty"
     empty.mkdir()
-    assert "为空" in await lister.execute("empty")
-    assert "不是目录" in await lister.execute("a.txt")
+    assert "为空" in _as_text(await lister.execute("empty"))
+    assert "不是目录" in _as_text(await lister.execute("a.txt"))
 
 
 def test_vision_rejects_extension_only_image(tmp_path: Path):

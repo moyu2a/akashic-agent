@@ -874,6 +874,8 @@ class DefaultReasoner(Reasoner):
             if callable(get_tool_capabilities)
             else {}
         )
+        get_tool_risks = getattr(self._tools, "get_risks_by_name", None)
+        tool_risks = get_tool_risks() if callable(get_tool_risks) else {}
         preloaded: set[str] | None = None
         tool_boundary_context: ToolBoundaryContext | None = None
         visible_names: set[str] | None = None
@@ -892,6 +894,7 @@ class DefaultReasoner(Reasoner):
             turn_metadata=self._build_tool_access_metadata(msg, session.key),
             registered_tools=registered_tools,
             tool_capabilities=tool_capabilities,
+            tool_risks=tool_risks,
             tool_discovery_enabled=self._tool_search_enabled,
         )
         candidate_boundary_context = self._tool_boundary.build_context(

@@ -164,11 +164,15 @@ def resolve_toolset_provider(
     *,
     readonly_tools: dict[str, Tool] | None = None,
     task_plan_service: "TaskPlanService | None" = None,
+    task_execution_service: TaskExecutionService | None = None,
 ) -> ToolsetProvider:
     if name == "meta_common":
         return CommonMetaToolsetProvider(readonly_tools or {})
     if name == "task_plan":
-        return TaskPlanToolsetProvider(task_plan_service)
+        return TaskPlanToolsetProvider(
+            task_plan_service,
+            execution_service=task_execution_service,
+        )
     if name not in _TOOLSET_WIRING:
         choices = ", ".join(sorted(["meta_common", *_TOOLSET_WIRING.keys()]))
         raise ValueError(f"未知 toolset wiring: {name}；可选值: {choices}")

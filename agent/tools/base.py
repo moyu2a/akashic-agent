@@ -8,6 +8,8 @@ from typing import Any
 class ToolResult:
     text: str = ""
     content_blocks: list[dict[str, Any]] = field(default_factory=list)
+    ok: bool | None = None
+    error_code: str = ""
 
     def preview(self) -> str:
         if self.text:

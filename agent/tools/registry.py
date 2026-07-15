@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from typing import Any, cast
 
 from agent.tools.base import Tool, ToolResult
+from agent.tools.execution_context import ToolExecutionContext
 from agent.tools.search_backend import KeywordSearchBackend, SearchBackend
 
 logger = logging.getLogger(__name__)
@@ -12,6 +13,7 @@ logger = logging.getLogger(__name__)
 # 元工具（不参与搜索结果，也不出现在 deferred 工具目录里）
 _META_TOOLS: frozenset[str] = frozenset({"tool_search"})
 _PROGRESS_DESCRIPTION_FIELD = "description"
+_EXECUTION_CONTEXT_MARKER = "_tool_execution_context_active"
 _PROGRESS_DESCRIPTION_SCHEMA: dict[str, str] = {
     "type": "string",
     "description": (
@@ -64,7 +66,7 @@ def _with_progress_description(schema: dict[str, Any], tool: Tool) -> dict[str, 
 
 @dataclass
 class ToolMeta:
-    risk: str = "read-only"  # "read-only" | "write" | "external-side-effect"
+    risk: str = "unknown"
     always_on: bool = False
     # 可选：3–10 词短语，补充工具名和描述中没有的别名或口语化表达。
     # 不需要重复名称或描述里已有的词——搜索后端自动索引 name + description。
@@ -137,7 +139,7 @@ class ToolRegistry:
         self,
         tool: Tool,
         *,
-        risk: str = "read-only",
+        risk: str = "unknown",
         always_on: bool = False,
         search_hint: str | None = None,
         non_lru: bool = False,
@@ -228,6 +230,10 @@ class ToolRegistry:
             for name, meta in self._metadata.items()
         }
 
+    def get_risks_by_name(self) -> dict[str, str]:
+        """Return a defensive snapshot for runtime access decisions."""
+        return {name: meta.risk for name, meta in self._metadata.items()}
+
     def get_documents(self) -> list[ToolDocument]:
         """返回所有已注册工具的索引文档列表。"""
         return list(self._documents.values())
@@ -259,7 +265,13 @@ class ToolRegistry:
             "mcp": {k: sorted(v) for k, v in sorted(mcp.items())},
         }
 
-    async def execute(self, name: str, arguments: dict[str, Any]) -> str | ToolResult:
+    async def execute(
+        self,
+        name: str,
+        arguments: dict[str, Any],
+        *,
+        execution_context: ToolExecutionContext | None = None,
+    ) -> str | ToolResult:
         tool = self._tools.get(name)
         if tool is None:
             return f"工具 '{name}' 不存在"
@@ -272,16 +284,30 @@ class ToolRegistry:
             protected_context = {
                 k: v for k, v in self._context.items() if k.startswith("_")
             }
+            model_arguments = {
+                key: value
+                for key, value in arguments.items()
+                if key != _EXECUTION_CONTEXT_MARKER
+            }
             merged: dict[str, Any] = {
                 **public_context,
-                **arguments,
+                **model_arguments,
                 **protected_context,
+                **(
+                    dict(execution_context.protected)
+                    if execution_context is not None
+                    else {}
+                ),
             }
+            if execution_context is not None:
+                merged[_EXECUTION_CONTEXT_MARKER] = True
             if not _tool_defines_parameter(tool, _PROGRESS_DESCRIPTION_FIELD):
                 merged.pop(_PROGRESS_DESCRIPTION_FIELD, None)
             return await tool.execute(**merged)
         except Exception as e:
             logger.error(f"工具 {name} 执行出错: {e}", exc_info=True)
+            if execution_context is not None and execution_context.propagate_tool_errors:
+                raise
             return f"工具执行出错: {e}"
 
     def get_schemas_as_doc_results(self, names: list[str]) -> list[dict[str, Any]]:

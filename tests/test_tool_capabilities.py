@@ -104,6 +104,13 @@ def test_capability_mapping_is_a_defensive_copy() -> None:
     )
 
 
+def test_registry_defaults_missing_risk_to_authoritative_unknown() -> None:
+    registry = ToolRegistry()
+    registry.register(_NoCapabilityTool())
+
+    assert registry.get_risks_by_name() == {"no_capability": "unknown"}
+
+
 def test_invalid_capability_registration_is_atomic() -> None:
     registry = ToolRegistry()
 
