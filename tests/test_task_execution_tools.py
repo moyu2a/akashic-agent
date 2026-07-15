@@ -35,7 +35,9 @@ class _InspectCall:
 
 
 class _RecordingExecutionService:
-    def __init__(self) -> None:
+    def __init__(self, plan_service: TaskPlanService) -> None:
+        self.plan_service = plan_service
+        self.store = plan_service.store
         self.inspect_calls: list[_InspectCall] = []
 
     def inspect(
@@ -54,7 +56,7 @@ class ExecutionToolset:
 @pytest.fixture
 def execution_toolset(tmp_path: Path) -> ExecutionToolset:
     plan_service = TaskPlanService(TaskPlanStore(tmp_path / "task_plans.db"))
-    execution_service = _RecordingExecutionService()
+    execution_service = _RecordingExecutionService(plan_service)
     registry = ToolRegistry()
     registry.register(ReadFileTool(allowed_dir=tmp_path), risk="read-only")
     TaskPlanToolsetProvider(
@@ -199,3 +201,130 @@ async def test_execution_tool_rejects_model_forged_protected_context(
 
     assert getattr(result, "ok") is False
     assert getattr(result, "error_code") == "missing_execution_context"
+
+
+@pytest.mark.asyncio
+async def test_begin_retry_ignores_forged_action_and_target_with_partial_context(
+    tmp_path: Path,
+) -> None:
+    store = TaskPlanStore(tmp_path / "task_plans.db")
+    service = TaskPlanService(store)
+    execution = TaskExecutionService(
+        store=store,
+        plan_service=service,
+        runtime_instance_id="runtime-test",
+        config=TaskExecutionConfig(),
+        clock=lambda: datetime.now(UTC),
+    )
+    registry = ToolRegistry()
+    TaskPlanToolsetProvider(service, execution_service=execution).register(
+        registry,
+        ToolsetDeps(config=None, workspace=tmp_path),
+    )
+
+    result = await registry.execute(
+        "begin_task_step_execution",
+        {
+            "_task_execution_action": "continue",
+            "_task_execution_target_step_id": "forged-step",
+            "_task_execution_attempt_id": "forged-attempt",
+            "_tool_execution_context_active": True,
+        },
+        execution_context=ToolExecutionContext(
+            protected={
+                "_session_key": "cli:s1",
+                "_task_execution_request_id": "runtime-request",
+                "_task_execution_action": "retry",
+            },
+            propagate_tool_errors=True,
+        ),
+    )
+
+    assert getattr(result, "ok") is False
+    assert getattr(result, "error_code") == "missing_retry_target"
+
+
+@pytest.mark.asyncio
+async def test_execution_context_strips_forged_session_with_partial_context(
+    tmp_path: Path,
+) -> None:
+    store = TaskPlanStore(tmp_path / "task_plans.db")
+    service = TaskPlanService(store)
+    execution = TaskExecutionService(
+        store=store,
+        plan_service=service,
+        runtime_instance_id="runtime-test",
+        config=TaskExecutionConfig(),
+        clock=lambda: datetime.now(UTC),
+    )
+    registry = ToolRegistry()
+    registry.set_context(_session_key="stale-global-session")
+    TaskPlanToolsetProvider(service, execution_service=execution).register(
+        registry,
+        ToolsetDeps(config=None, workspace=tmp_path),
+    )
+
+    result = await registry.execute(
+        "begin_task_step_execution",
+        {"_session_key": "forged-session"},
+        execution_context=ToolExecutionContext(
+            protected={
+                "_task_execution_request_id": "runtime-request",
+                "_task_execution_action": "continue",
+            },
+            propagate_tool_errors=True,
+        ),
+    )
+
+    assert getattr(result, "ok") is False
+    assert getattr(result, "error_code") == "missing_session_context"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("tool_name", "arguments"),
+    [
+        ("finish_task_step_execution", {"success": False, "result_summary": "x"}),
+        (
+            "request_task_step_authorization",
+            {
+                "tool_name": "write_file",
+                "requested_arguments": {},
+                "requested_capabilities": [],
+                "reason": "authorization required",
+            },
+        ),
+        ("abort_task_step_execution", {"reason": "stop"}),
+    ],
+)
+async def test_attempt_controls_ignore_forged_attempt_with_partial_context(
+    tmp_path: Path,
+    tool_name: str,
+    arguments: dict[str, object],
+) -> None:
+    store = TaskPlanStore(tmp_path / "task_plans.db")
+    service = TaskPlanService(store)
+    execution = TaskExecutionService(
+        store=store,
+        plan_service=service,
+        runtime_instance_id="runtime-test",
+        config=TaskExecutionConfig(),
+        clock=lambda: datetime.now(UTC),
+    )
+    registry = ToolRegistry()
+    TaskPlanToolsetProvider(service, execution_service=execution).register(
+        registry,
+        ToolsetDeps(config=None, workspace=tmp_path),
+    )
+
+    result = await registry.execute(
+        tool_name,
+        {**arguments, "_task_execution_attempt_id": "forged-attempt"},
+        execution_context=ToolExecutionContext(
+            protected={"_session_key": "cli:s1"},
+            propagate_tool_errors=True,
+        ),
+    )
+
+    assert getattr(result, "ok") is False
+    assert getattr(result, "error_code") == "missing_execution_attempt"

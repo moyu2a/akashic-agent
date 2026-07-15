@@ -5,6 +5,18 @@ from dataclasses import dataclass, field
 from types import MappingProxyType
 
 
+TASK_EXECUTION_PROTECTED_KEYS = frozenset(
+    {
+        "_session_key",
+        "_task_execution_request_id",
+        "_task_execution_action",
+        "_task_execution_target_step_id",
+        "_task_execution_attempt_id",
+        "_tool_execution_context_active",
+    }
+)
+
+
 @dataclass(frozen=True)
 class ToolExecutionContext:
     """Runtime-owned values for one registry execution call only."""

@@ -76,6 +76,10 @@ class TaskExecutionService:
         self._config = config
         self._now = clock
 
+    @property
+    def store(self) -> TaskPlanStore:
+        return self._store
+
     def replay_request(
         self, *, session_key: str, request_id: str
     ) -> BeginExecutionResult | None:

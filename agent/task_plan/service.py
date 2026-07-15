@@ -26,6 +26,10 @@ class TaskPlanService:
     def __init__(self, store: TaskPlanStore) -> None:
         self._store = store
 
+    @property
+    def store(self) -> TaskPlanStore:
+        return self._store
+
     def create_task_plan(
         self,
         *,

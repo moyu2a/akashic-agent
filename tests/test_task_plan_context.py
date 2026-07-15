@@ -19,6 +19,7 @@ from agent.task_plan.context import (
     render_task_plan_context,
 )
 from agent.config_models import TaskExecutionConfig
+from agent.task_plan.execution_models import RuntimeToolEvent
 from agent.task_plan.execution_service import TaskExecutionService
 from agent.task_plan.service import TaskPlanService
 from agent.task_plan.store import TaskPlanStore
@@ -98,6 +99,35 @@ def test_prompt_renders_only_current_attempt_summary(tmp_path: Path) -> None:
         title="Fix RAG",
         steps=["Read logs"],
     )
+    old = execution.begin_next_step(session_key="cli:s1", request_id="request-old")
+    old_running = execution.start_attempt(
+        session_key="cli:s1", attempt_id=old.attempt.attempt_id
+    )
+    execution.record_tool_event(
+        session_key="cli:s1",
+        attempt_id=old_running.attempt.attempt_id,
+        event=RuntimeToolEvent(
+            event_type="tool_finished",
+            tool_name="read_file",
+            tool_call_id="old-call",
+            source_turn_id=None,
+            tool_risk="read-only",
+            tool_capabilities=(),
+            counts_as_work=True,
+            invoker_reached=True,
+            invoker_succeeded=True,
+            execution_status="success",
+            result_ok=True,
+            error_code="",
+            arguments_hash="old-hash",
+            result_preview="old-attempt-event secret-value",
+        ),
+    )
+    execution.abort_attempt(
+        session_key="cli:s1",
+        attempt_id=old_running.attempt.attempt_id,
+        reason="cancelled old attempt",
+    )
     started = execution.begin_next_step(session_key="cli:s1", request_id="request-1")
     running = execution.start_attempt(
         session_key="cli:s1", attempt_id=started.attempt.attempt_id
@@ -119,6 +149,9 @@ def test_prompt_renders_only_current_attempt_summary(tmp_path: Path) -> None:
     assert "waiting_authorization" in rendered
     assert "secret-value" not in rendered
     assert "old-attempt-event" not in rendered
+    assert old.attempt.attempt_id not in rendered
+    assert waiting.attempt is not None
+    assert waiting.attempt.attempt_id in rendered
 
 
 @pytest.mark.asyncio

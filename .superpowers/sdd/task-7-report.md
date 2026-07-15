@@ -44,3 +44,41 @@ Adjacent execution, TaskPlan/access, filesystem, and plugin suite:
 ## Concern
 
 `tests/test_tool_access_gateway_reasoner.py::test_active_task_prompt_exposes_progress_task_tools` fails because `继续执行当前任务，更新下一步` is classified as `plan_inspect`, exposing only `inspect_task_plan`. The identical focused test also fails in a clean `ad07f60` archive, so it is a pre-existing TaskPlan intent-classification issue and is not included in this Task 7 commit.
+
+## Corrective Review Fix
+
+### RED
+
+The review regressions failed before the corrective implementation:
+
+```text
+begin retry accepted forged model target/action through a partial execution context
+finish/defer/abort accepted forged model attempt ids
+ReadFileTool offset conversion raised ValueError instead of a ToolResult error
+ToolBoundaryManager attempted to slice ToolResult and lost structured outcome state
+TaskPlanToolsetProvider accepted mismatched execution stores
+startup recovery failure left task execution controls registered
+```
+
+The stale-global-session regression also failed before the final registry hardening:
+
+```text
+begin_task_step_execution accepted a retained registry _session_key when the
+per-call ToolExecutionContext omitted it.
+```
+
+### GREEN
+
+Final review-focused repair suite:
+
+```text
+78 passed in 2.45s
+```
+
+Final required Task 7 suite:
+
+```text
+49 passed in 1.68s
+```
+
+Both runs were followed by a clean `git diff --check`.

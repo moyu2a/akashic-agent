@@ -28,6 +28,7 @@ from agent.policies.tool_ledger import (
     stable_args_hash,
     summarize_args,
 )
+from agent.tools.base import ToolResult, normalize_tool_result
 
 logger = logging.getLogger(__name__)
 
@@ -124,7 +125,7 @@ class TurnToolBoundaryManager:
         self,
         context: ToolBoundaryContext,
         tool_name: str,
-        result_text: str,
+        result_text: str | ToolResult,
         *,
         execution_status: str = "success",
     ) -> None:
@@ -231,7 +232,7 @@ class TurnToolBoundaryManager:
         *,
         tool_name: str,
         arguments: Mapping[str, Any],
-        result_text: str,
+        result_text: str | ToolResult,
         visible_before_call: bool,
         decision_action: str,
         decision_reason: str,
@@ -240,6 +241,8 @@ class TurnToolBoundaryManager:
         unlocked_tools: tuple[str, ...] = (),
         blocked_tools: tuple[str, ...] = (),
     ) -> None:
+        normalized = normalize_tool_result(result_text)
+        rendered_text = normalized.preview()
         facts = extract_tool_result_facts(tool_name, result_text)
         context.ledger.add_record(
             ToolCallRecord(
@@ -260,8 +263,8 @@ class TurnToolBoundaryManager:
                 citation_refs=facts.citation_refs,
                 chunk_keys=facts.chunk_keys,
                 terminal_scope=facts.terminal_scope,
-                result_summary=result_text[:240],
-                result_text=result_text,
+                result_summary=rendered_text[:240],
+                result_text=rendered_text,
                 result_has_evidence=facts.result_has_evidence,
                 result_has_citation=facts.result_has_citation,
                 result_error_code=facts.result_error_code,

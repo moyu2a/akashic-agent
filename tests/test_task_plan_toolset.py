@@ -3,6 +3,8 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from pathlib import Path
 
+import pytest
+
 from agent.config import load_config
 from agent.config_models import WiringConfig
 from agent.config_models import TaskExecutionConfig
@@ -86,3 +88,21 @@ def test_task_plan_toolset_registers_deferred_non_lru_tools(tmp_path: Path) -> N
     assert result.extras["task_plan_service"] is service
     assert result.extras["task_execution_service"] is execution_service
     assert execution_service.plan_service is service
+
+
+def test_task_plan_toolset_rejects_mismatched_execution_store(tmp_path: Path) -> None:
+    plan_service = TaskPlanService(TaskPlanStore(tmp_path / "plans.db"))
+    other_store = TaskPlanStore(tmp_path / "other.db")
+    execution_service = TaskExecutionService(
+        store=other_store,
+        plan_service=TaskPlanService(other_store),
+        runtime_instance_id="test-runtime",
+        config=TaskExecutionConfig(),
+        clock=lambda: datetime.now(UTC),
+    )
+
+    with pytest.raises(ValueError, match="same TaskPlanStore"):
+        TaskPlanToolsetProvider(
+            plan_service,
+            execution_service=execution_service,
+        ).register(ToolRegistry(), ToolsetDeps(config=None, workspace=tmp_path))

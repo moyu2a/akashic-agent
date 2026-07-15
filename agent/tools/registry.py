@@ -5,7 +5,10 @@ from dataclasses import dataclass
 from typing import Any, cast
 
 from agent.tools.base import Tool, ToolResult
-from agent.tools.execution_context import ToolExecutionContext
+from agent.tools.execution_context import (
+    TASK_EXECUTION_PROTECTED_KEYS,
+    ToolExecutionContext,
+)
 from agent.tools.search_backend import KeywordSearchBackend, SearchBackend
 
 logger = logging.getLogger(__name__)
@@ -282,12 +285,18 @@ class ToolRegistry:
                 k: v for k, v in self._context.items() if not k.startswith("_")
             }
             protected_context = {
-                k: v for k, v in self._context.items() if k.startswith("_")
+                k: v
+                for k, v in self._context.items()
+                if k.startswith("_")
+                and (
+                    execution_context is None
+                    or k not in TASK_EXECUTION_PROTECTED_KEYS
+                )
             }
             model_arguments = {
                 key: value
                 for key, value in arguments.items()
-                if key != _EXECUTION_CONTEXT_MARKER
+                if key not in TASK_EXECUTION_PROTECTED_KEYS
             }
             merged: dict[str, Any] = {
                 **public_context,

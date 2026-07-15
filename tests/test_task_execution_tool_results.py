@@ -34,6 +34,19 @@ async def test_read_file_returns_structured_error_for_missing_file(
 
 
 @pytest.mark.asyncio
+async def test_read_file_invalid_range_is_a_structured_error(tmp_path: Path) -> None:
+    (tmp_path / "README.md").write_text("hello\n", encoding="utf-8")
+
+    result = await ReadFileTool(allowed_dir=tmp_path).execute(
+        "README.md", offset="not-an-integer"
+    )
+
+    assert isinstance(result, ToolResult)
+    assert result.ok is False
+    assert result.error_code == "invalid_read_range"
+
+
+@pytest.mark.asyncio
 async def test_list_dir_returns_structured_outcomes(tmp_path: Path) -> None:
     (tmp_path / "child.txt").write_text("x", encoding="utf-8")
 

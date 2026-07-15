@@ -1671,16 +1671,16 @@ class DefaultReasoner(Reasoner):
                                 str(result),
                             )
                         )
+                    normalized = normalize_tool_result(result)
                     await self._bus.fanout(AfterToolResultCtx(
                         session_key=tool_event_session_key,
                         channel=tool_event_channel,
                         chat_id=tool_event_chat_id,
                         tool_name=tool_call.name,
                         arguments=dict(exec_result.final_arguments),
-                        result=str(result),
+                        result=normalized.preview(),
                         status=exec_result.status,
                     ))
-                    normalized = normalize_tool_result(result)
                     _result_preview = support.log_preview(normalized.preview())
                     _result_len = len(normalized.preview() or "")
                     await self._observe_tool_call_completed(
@@ -1712,7 +1712,7 @@ class DefaultReasoner(Reasoner):
                             tool_boundary_context,
                             tool_name=tool_call.name,
                             arguments=exec_result.final_arguments,
-                            result_text=str(result),
+                            result_text=result,
                             visible_before_call=visible_before_call,
                             decision_action=(
                                 boundary_decision.action
@@ -1731,7 +1731,7 @@ class DefaultReasoner(Reasoner):
                         self._tool_boundary.observe_access_tool_result(
                             tool_boundary_context,
                             tool_call.name,
-                            str(result),
+                            normalized.text,
                             execution_status=exec_result.status,
                         )
                         if tool_boundary_context.access_plan != old_plan:

@@ -311,11 +311,11 @@ class ReadFileTool(Tool):
         }
 
     async def execute(self, path: str, **kwargs: Any) -> ToolResult:
-        offset: int = int(kwargs.get("offset", 0))
-        limit: int | None = kwargs.get("limit")
-        if limit is not None:
-            limit = int(limit)
         try:
+            offset: int = int(kwargs.get("offset", 0))
+            limit: int | None = kwargs.get("limit")
+            if limit is not None:
+                limit = int(limit)
             file_path = _resolve_path(path, self._allowed_dir)
             if not file_path.exists():
                 return ToolResult(
@@ -413,6 +413,12 @@ class ReadFileTool(Tool):
                 )
 
             return ToolResult(text=text + suffix_note, ok=True)
+        except (TypeError, ValueError):
+            return ToolResult(
+                text="错误：offset 和 limit 必须是有效整数。",
+                ok=False,
+                error_code="invalid_read_range",
+            )
         except PermissionError as e:
             return ToolResult(
                 text=f"错误：{e}", ok=False, error_code="path_access_denied"

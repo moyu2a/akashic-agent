@@ -12,6 +12,7 @@ if TYPE_CHECKING:
     from agent.plugins.manager import PluginManager
 
 logger = logging.getLogger(__name__)
+_UNSET = object()
 
 from agent.config_models import Config, TaskExecutionConfig, WiringConfig
 from agent.context import ContextBuilder
@@ -309,7 +310,7 @@ def build_registered_tools(
     agent_loop_provider: Callable[[], Any] | None = None,
     task_plan_store: TaskPlanStore | None = None,
     task_plan_service: TaskPlanService | None = None,
-    task_execution_service: TaskExecutionService | None = None,
+    task_execution_service: TaskExecutionService | None | object = _UNSET,
 ) -> tuple[
     ToolRegistry,
     MessagePushTool,
@@ -325,15 +326,25 @@ def build_registered_tools(
     # ── 第一阶段：建服务（依赖无顺序陷阱）────────────────────────────────────
     wiring = getattr(config, "wiring", WiringConfig())
     tools = tools or ToolRegistry()
-    plan_store = task_plan_store or TaskPlanStore(workspace / "task_plans.db")
-    task_plan_service = task_plan_service or TaskPlanService(plan_store)
-    task_execution_service = task_execution_service or TaskExecutionService(
-        store=plan_store,
-        plan_service=task_plan_service,
-        runtime_instance_id="bootstrap-toolset",
-        config=getattr(config, "task_execution", TaskExecutionConfig()),
-        clock=lambda: datetime.now(UTC),
-    )
+    if task_plan_service is not None:
+        plan_store = task_plan_service.store
+        if task_plan_store is not None and task_plan_store is not plan_store:
+            raise ValueError("task_plan_store must match task_plan_service.store")
+    else:
+        plan_store = task_plan_store or TaskPlanStore(workspace / "task_plans.db")
+        task_plan_service = TaskPlanService(plan_store)
+    if task_execution_service is _UNSET:
+        task_execution_service = TaskExecutionService(
+            store=plan_store,
+            plan_service=task_plan_service,
+            runtime_instance_id="bootstrap-toolset",
+            config=getattr(config, "task_execution", TaskExecutionConfig()),
+            clock=lambda: datetime.now(UTC),
+        )
+    if task_execution_service is not None and not isinstance(
+        task_execution_service, TaskExecutionService
+    ):
+        raise TypeError("task_execution_service must be a TaskExecutionService or None")
     multimodal = getattr(config, "multimodal", True)
     vl_available = (not multimodal) and bool(getattr(config, "vl_model", ""))
     readonly_tools = build_readonly_tools(
@@ -377,7 +388,10 @@ def build_registered_tools(
             readonly_tools=readonly_tools if name == "meta_common" else None,
             task_plan_service=task_plan_service if name == "task_plan" else None,
             task_execution_service=(
-                task_execution_service if name == "task_plan" else None
+                task_execution_service
+                if name == "task_plan"
+                and isinstance(task_execution_service, TaskExecutionService)
+                else None
             ),
         )
         result = provider_obj.register(
@@ -523,6 +537,17 @@ def build_core_runtime(
         runtime_instance_id=runtime_instance_id,
         config=config.task_execution,
     )
+    try:
+        recovery_results = task_execution_recovery.reconcile_startup()
+        logger.info(
+            "Task execution startup recovery reconciled %d attempts: %s",
+            len(recovery_results),
+            dict(Counter(result.reason for result in recovery_results)),
+        )
+    except Exception:
+        logger.exception("Task execution startup recovery failed; disabling task execution")
+        task_execution_service = None
+        task_execution_recovery = None
     loop_ref: dict[str, AgentLoop] = {}
     (
         tools,
@@ -548,15 +573,6 @@ def build_core_runtime(
         task_plan_service=task_plan_service,
         task_execution_service=task_execution_service,
     )
-    try:
-        recovery_results = task_execution_recovery.reconcile_startup()
-        logger.info(
-            "Task execution startup recovery reconciled %d attempts: %s",
-            len(recovery_results),
-            dict(Counter(result.reason for result in recovery_results)),
-        )
-    except Exception:
-        logger.exception("Task execution startup recovery failed")
     presence = PresenceStore(session_manager._store)
     processing_state = ProcessingState()
     loop_deps = _build_loop_deps(

@@ -39,6 +39,14 @@ class TaskPlanToolsetProvider(ToolsetProvider):
         service = self._service or TaskPlanService(
             TaskPlanStore(deps.workspace / "task_plans.db")
         )
+        if self._execution_service is not None and (
+            self._execution_service.plan_service is not service
+            or self._execution_service.store is not service.store
+        ):
+            raise ValueError(
+                "TaskPlanToolsetProvider requires services backed by the same "
+                "TaskPlanStore"
+            )
         tool_specs = (
             (CreateTaskPlanTool(service), "write"),
             (UpdateTaskStepTool(service), "write"),

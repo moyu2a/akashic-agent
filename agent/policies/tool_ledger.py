@@ -7,6 +7,8 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
+from agent.tools.base import ToolResult
+
 ToolClass = Literal[
     "discovery",
     "retrieval",
@@ -130,16 +132,33 @@ def summarize_args(arguments: Mapping[str, Any], *, max_chars: int = 240) -> str
     return encoded[: max_chars - 1] + "..."
 
 
-def extract_tool_result_facts(tool_name: str, result_text: str) -> ToolResultFacts:
+def extract_tool_result_facts(
+    tool_name: str,
+    result_text: str | ToolResult,
+) -> ToolResultFacts:
+    explicit_ok: bool | None = None
+    explicit_error_code = ""
+    if isinstance(result_text, ToolResult):
+        explicit_ok = result_text.ok
+        explicit_error_code = result_text.error_code
+        text = result_text.text
+    else:
+        text = result_text
     try:
-        payload = json.loads(result_text)
+        payload = json.loads(text)
     except (TypeError, ValueError):
-        return ToolResultFacts(result_ok=False)
+        return ToolResultFacts(
+            result_ok=explicit_ok is True,
+            result_error_code=explicit_error_code,
+        )
     if not isinstance(payload, dict):
-        return ToolResultFacts(result_ok=False)
+        return ToolResultFacts(
+            result_ok=explicit_ok is True,
+            result_error_code=explicit_error_code,
+        )
 
-    result_ok = payload.get("ok") is True
-    error_code = str(payload.get("error_code") or "")
+    result_ok = explicit_ok if explicit_ok is not None else payload.get("ok") is True
+    error_code = explicit_error_code or str(payload.get("error_code") or "")
     terminal_scope = str(payload.get("terminal_scope") or "")
     hit_count = _as_int(payload.get("hit_count"))
     citations: list[str] = []

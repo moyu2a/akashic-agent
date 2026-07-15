@@ -5,6 +5,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from agent.task_plan.service import TaskPlanService
+from agent.task_plan.store import TaskPlanStore
 from agent.tools.registry import ToolRegistry
 from bootstrap.toolsets.protocol import (
     ToolsetRegistrationResult,
@@ -39,6 +40,7 @@ def test_scheduler_toolset_provider_registers_expected_tools(tmp_path: Path):
 
 def test_build_registered_tools_uses_toolset_providers(monkeypatch, tmp_path: Path):
     calls: list[str] = []
+    execution_services: list[object] = []
 
     class _MemoryProvider:
         def register(self, registry, deps):
@@ -85,6 +87,7 @@ def test_build_registered_tools_uses_toolset_providers(monkeypatch, tmp_path: Pa
         def __init__(self, service, execution_service):
             self._service = service
             self._execution_service = execution_service
+            execution_services.append(execution_service)
 
         def register(self, registry, deps):
             calls.append("task_plan")
@@ -121,6 +124,7 @@ def test_build_registered_tools_uses_toolset_providers(monkeypatch, tmp_path: Pa
         lambda *_args, **_kwargs: (None, None),
     )
 
+    injected_plan_service = TaskPlanService(TaskPlanStore(tmp_path / "injected.db"))
     (
         tools,
         push_tool,
@@ -141,6 +145,7 @@ def test_build_registered_tools_uses_toolset_providers(monkeypatch, tmp_path: Pa
         tools=ToolRegistry(),
         event_publisher=EventBus(),
         agent_loop_provider=lambda: None,
+        task_plan_service=injected_plan_service,
     )
 
     assert calls == ["memory", "meta", "spawn", "schedule", "mcp", "doc_rag", "task_plan"]
@@ -150,7 +155,9 @@ def test_build_registered_tools_uses_toolset_providers(monkeypatch, tmp_path: Pa
     assert memory_runtime.engine is not None
     assert peer_pm is None
     assert peer_poller is None
-    assert isinstance(task_plan_service, TaskPlanService)
+    assert task_plan_service is injected_plan_service
+    assert execution_services[-1].plan_service is injected_plan_service
+    assert execution_services[-1].store is injected_plan_service.store
     assert tools.has_tool("inspect_turn_trace")
     assert "inspect_turn_trace" not in tools.get_always_on_names()
 

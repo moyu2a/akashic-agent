@@ -16,6 +16,7 @@ from agent.looping.interrupt import TurnInterruptState
 from agent.task_plan.service import TaskPlanService
 from agent.task_plan.store import TaskPlanStore
 from agent.tools.registry import ToolRegistry
+from agent.tools.base import Tool
 from bootstrap.tools import _build_loop_deps, build_core_runtime, build_registered_tools
 from bootstrap.wiring import (
     wire_turn_lifecycle,
@@ -123,7 +124,7 @@ def test_core_runtime_disables_only_task_execution_after_recovery_error(
         def __init__(self, *args, **kwargs) -> None:
             self.active_turn_states = {}
 
-    _prepare_core_runtime(monkeypatch, loop_type=_Loop)
+    _prepare_core_runtime(monkeypatch, loop_type=_Loop, execution_tools=True)
     monkeypatch.setattr(
         "bootstrap.tools.build_task_execution_services",
         lambda **kwargs: (object(), _Recovery()),
@@ -138,6 +139,15 @@ def test_core_runtime_disables_only_task_execution_after_recovery_error(
     assert isinstance(runtime.loop, _Loop)
     assert runtime.task_execution_service is None
     assert runtime.task_execution_recovery is None
+    assert runtime.tools.get_registered_names().isdisjoint(
+        {
+            "begin_task_step_execution",
+            "finish_task_step_execution",
+            "request_task_step_authorization",
+            "inspect_task_execution",
+            "abort_task_step_execution",
+        }
+    )
 
 
 def _core_runtime_config() -> ConfigModel:
@@ -150,7 +160,7 @@ def _core_runtime_config() -> ConfigModel:
     )
 
 
-def _prepare_core_runtime(monkeypatch, *, loop_type) -> None:
+def _prepare_core_runtime(monkeypatch, *, loop_type, execution_tools: bool = False) -> None:
     class _NoopProvider:
         pass
 
@@ -159,8 +169,18 @@ def _prepare_core_runtime(monkeypatch, *, loop_type) -> None:
             pass
 
     def build_tools(*args, task_plan_store, **kwargs):
+        registry = ToolRegistry()
+        if execution_tools and kwargs.get("task_execution_service") is not None:
+            for name in (
+                "begin_task_step_execution",
+                "finish_task_step_execution",
+                "request_task_step_authorization",
+                "inspect_task_execution",
+                "abort_task_step_execution",
+            ):
+                registry.register(_NamedTool(name), risk="write")
         return (
-            ToolRegistry(),
+            registry,
             SimpleNamespace(),
             SimpleNamespace(),
             SimpleNamespace(),
@@ -179,6 +199,18 @@ def _prepare_core_runtime(monkeypatch, *, loop_type) -> None:
     monkeypatch.setattr("bootstrap.tools._build_loop_deps", lambda **kwargs: object())
     monkeypatch.setattr("bootstrap.tools.AgentLoop", loop_type)
     monkeypatch.setattr("agent.plugins.manager.PluginManager", _PluginManager)
+
+
+class _NamedTool(Tool):
+    name = "placeholder"
+    description = "test tool"
+    parameters = {"type": "object", "properties": {}}
+
+    def __init__(self, name: str) -> None:
+        self.name = name
+
+    async def execute(self, **_: Any) -> str:
+        return "ok"
 
 
 def test_task_execution_wiring_uses_the_task_plan_store(tmp_path: Path) -> None:
@@ -657,7 +689,7 @@ def test_build_registered_tools_respects_toolset_order_and_subset(monkeypatch, t
     )
     monkeypatch.setattr(
         "bootstrap.tools.resolve_toolset_provider",
-        lambda name, readonly_tools=None, task_plan_service=None: _ToolsetProvider(name),
+        lambda name, readonly_tools=None, task_plan_service=None, task_execution_service=None: _ToolsetProvider(name),
     )
     monkeypatch.setattr("bootstrap.tools.build_readonly_tools", lambda *_, **__: {})
     monkeypatch.setattr(
@@ -871,7 +903,7 @@ def test_build_registered_tools_without_mcp_toolset_still_returns_empty_registry
     )
     monkeypatch.setattr(
         "bootstrap.tools.resolve_toolset_provider",
-        lambda name, readonly_tools=None, task_plan_service=None: SimpleNamespace(
+        lambda name, readonly_tools=None, task_plan_service=None, task_execution_service=None: SimpleNamespace(
             register=lambda registry, deps: SimpleNamespace(extras={})
         ),
     )

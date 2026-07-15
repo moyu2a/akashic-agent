@@ -2,9 +2,14 @@ from __future__ import annotations
 
 import json
 import logging
+from pathlib import Path
+
+import pytest
 
 from agent.policies.tool_access import ToolAccessContext
 from agent.policies.tool_boundary import TurnToolBoundaryManager
+from agent.tools.base import ToolResult
+from agent.tools.filesystem import ReadFileTool
 
 
 def _ctx(text: str) -> ToolAccessContext:
@@ -193,6 +198,33 @@ def test_trace_contains_decisions_and_ledger_summary() -> None:
     assert trace["intent"] == "doc_qa_with_evidence"
     assert trace["decisions"][0]["action"] == "soft_stop"
     assert trace["ledger_summary"]["tool_calls"] == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("path", "expected_ok"), [("README.md", True), ("missing", False)])
+async def test_boundary_ledger_preserves_read_file_structured_outcome(
+    tmp_path: Path,
+    path: str,
+    expected_ok: bool,
+) -> None:
+    (tmp_path / "README.md").write_text("hello\n", encoding="utf-8")
+    manager = TurnToolBoundaryManager()
+    context = manager.build_context(_ctx("read a local file"))
+    result = await ReadFileTool(allowed_dir=tmp_path).execute(path)
+
+    assert isinstance(result, ToolResult)
+    manager.record_tool_result(
+        context,
+        tool_name="read_file",
+        arguments={"path": path},
+        result_text=result,
+        visible_before_call=True,
+        decision_action="allow",
+        decision_reason="within_budget",
+        execution_status="success",
+    )
+
+    assert context.ledger.records[-1].result_ok is expected_ok
 
 
 def test_recent_decisions_exposes_soft_stop_for_completion_controller(caplog) -> None:
