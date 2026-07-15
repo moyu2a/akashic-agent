@@ -17,6 +17,7 @@ from agent.task_plan.execution_models import (
 )
 from agent.task_plan.execution_store import (
     EXECUTION_SCHEMA_SQL,
+    ReconciledExecutionAttempt,
     json_dump as _execution_json_dump,
     new_execution_event_id,
     normalize_execution_comparison_timestamp,
@@ -908,57 +909,79 @@ class TaskPlanStore:
         self,
         *,
         now: datetime,
+        runtime_instance_id: str,
         session_key: str | None = None,
-    ) -> list[TaskExecutionAttempt]:
+    ) -> list[ReconciledExecutionAttempt]:
         timestamp = _datetime_to_iso(now)
         with self._lock, self._connect() as conn:
             conn.execute("BEGIN IMMEDIATE")
             try:
                 query = """
                     SELECT * FROM task_execution_attempts
-                    WHERE status IN ('pending', 'running') AND lease_expires_at <= ?
+                    WHERE status IN ('pending', 'running')
+                      AND (owner_instance_id != ? OR lease_expires_at <= ?)
                 """
-                params: tuple[object, ...] = (timestamp,)
+                params: tuple[object, ...] = (runtime_instance_id, timestamp)
                 if session_key is not None:
                     query += " AND session_key = ?"
-                    params = (timestamp, session_key)
-                rows = conn.execute(query, params).fetchall()
-                reconciled: list[TaskExecutionAttempt] = []
+                    params = (runtime_instance_id, timestamp, session_key)
+                rows = conn.execute(query + " ORDER BY created_at ASC", params).fetchall()
+                reconciled: list[ReconciledExecutionAttempt] = []
                 for row in rows:
                     attempt_id = str(row["attempt_id"])
-                    conn.execute(
+                    previous_status = row_to_execution_attempt(row).status
+                    reason = (
+                        "runtime_restarted_outcome_unknown"
+                        if row["owner_instance_id"] != runtime_instance_id
+                        else "lease_expired_outcome_unknown"
+                    )
+                    cur = conn.execute(
                         """
                         UPDATE task_execution_attempts
                         SET status = 'blocked', terminal_reason = ?, updated_at = ?,
                             finished_at = ?
                         WHERE attempt_id = ? AND status IN ('pending', 'running')
-                          AND lease_expires_at <= ?
+                          AND (owner_instance_id != ? OR lease_expires_at <= ?)
                         """,
                         (
-                            "lease_expired_outcome_unknown",
+                            reason,
                             timestamp,
                             timestamp,
                             attempt_id,
+                            runtime_instance_id,
                             timestamp,
                         ),
                     )
-                    if row["status"] == "running":
-                        conn.execute(
+                    if cur.rowcount != 1:
+                        continue
+                    step_reset = False
+                    if previous_status == "running":
+                        step_reset = (
+                            conn.execute(
                             """
                             UPDATE task_steps SET status = 'pending', started_at = NULL,
                                 completed_at = NULL
                             WHERE step_id = ? AND task_id = ? AND status = 'in_progress'
                             """,
                             (row["step_id"], row["task_id"]),
+                            ).rowcount
+                            == 1
                         )
                     self._append_execution_event_in_transaction(
                         conn,
                         attempt_id=attempt_id,
                         event_type="recovery_reconciled",
                         created_at=timestamp,
-                        result_preview="lease_expired_outcome_unknown",
+                        result_preview=reason,
                     )
-                    reconciled.append(self._require_execution_attempt(conn, attempt_id))
+                    reconciled.append(
+                        ReconciledExecutionAttempt(
+                            attempt=self._require_execution_attempt(conn, attempt_id),
+                            previous_status=previous_status,
+                            reason=reason,
+                            step_reset=step_reset,
+                        )
+                    )
                 conn.commit()
                 return reconciled
             except Exception:

@@ -262,9 +262,10 @@ def test_block_defer_abort_and_reconcile_preserve_required_step_state(
         attempt_id=attempt_id, owner_instance_id="runtime-1", now=NOW
     )
     reconciled = store.reconcile_execution_attempts(
-        now=datetime(2030, 7, 15, 2, tzinfo=UTC)
+        now=datetime(2030, 7, 15, 2, tzinfo=UTC),
+        runtime_instance_id="runtime-1",
     )
-    assert [item.status for item in reconciled] == ["blocked"]
+    assert [item.attempt.status for item in reconciled] == ["blocked"]
     assert store.get_plan(task_id).steps[0].status == "pending"  # type: ignore[union-attr]
 
 

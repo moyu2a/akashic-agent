@@ -2,11 +2,18 @@ from __future__ import annotations
 
 import importlib.util
 import sys
+from collections.abc import Callable
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, Mapping
+from typing import TYPE_CHECKING, Any, Mapping
 
 from agent.context import ContextBuilder
+from agent.config_models import TaskExecutionConfig
 from agent.lifecycle.facade import TurnLifecycle
+from agent.task_plan.execution_service import TaskExecutionService
+from agent.task_plan.recovery import TaskExecutionRecoveryService
+from agent.task_plan.service import TaskPlanService
+from agent.task_plan.store import TaskPlanStore
 from agent.tools.base import Tool
 from bootstrap.toolsets.doc_rag import DocRagToolsetProvider
 from bootstrap.toolsets.mcp import McpToolsetProvider
@@ -72,6 +79,25 @@ def wire_turn_lifecycle(
         state.tool_chain_partial = list(ctx.tool_chain_partial)
 
     lifecycle.on_after_step(_progress_reporter)
+
+
+def build_task_execution_services(
+    *,
+    store: TaskPlanStore,
+    plan_service: TaskPlanService,
+    runtime_instance_id: str,
+    config: TaskExecutionConfig,
+    clock: Callable[[], datetime] | None = None,
+) -> tuple[TaskExecutionService, TaskExecutionRecoveryService]:
+    runtime_clock = clock or (lambda: datetime.now(UTC))
+    service = TaskExecutionService(
+        store=store,
+        plan_service=plan_service,
+        runtime_instance_id=runtime_instance_id,
+        config=config,
+        clock=runtime_clock,
+    )
+    return service, TaskExecutionRecoveryService(service=service, clock=runtime_clock)
 
 
 def resolve_memory_toolset_provider(name: str) -> ToolsetProvider:

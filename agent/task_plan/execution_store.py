@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, cast
 from uuid import uuid4
@@ -9,10 +10,19 @@ from uuid import uuid4
 from agent.task_plan.execution_models import (
     ExecutionEventType,
     ExecutionMode,
+    AttemptStatus,
     TaskExecutionAttempt,
     TaskExecutionEvent,
     validate_attempt_status,
 )
+
+
+@dataclass(frozen=True)
+class ReconciledExecutionAttempt:
+    attempt: TaskExecutionAttempt
+    previous_status: AttemptStatus
+    reason: str
+    step_reset: bool
 
 
 EXECUTION_SCHEMA_SQL = """

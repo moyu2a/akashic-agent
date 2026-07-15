@@ -9,21 +9,100 @@ from types import SimpleNamespace
 import pytest
 
 from agent.config import Config, DEFAULT_SOCKET
-from agent.config_models import Config as ConfigModel, WiringConfig
+from agent.config_models import Config as ConfigModel, TaskExecutionConfig, WiringConfig
 from agent.lifecycle.facade import TurnLifecycle
 from agent.lifecycle.types import AfterStepCtx
 from agent.looping.interrupt import TurnInterruptState
+from agent.task_plan.service import TaskPlanService
+from agent.task_plan.store import TaskPlanStore
 from agent.tools.registry import ToolRegistry
-from bootstrap.tools import _build_loop_deps, build_registered_tools
+from bootstrap.tools import _build_loop_deps, build_core_runtime, build_registered_tools
 from bootstrap.wiring import (
     wire_turn_lifecycle,
     register_memory_plugin,
+    build_task_execution_services,
     resolve_context_factory,
     resolve_memory_plugin,
     resolve_memory_toolset_provider,
     resolve_toolset_provider,
 )
 from bus.event_bus import EventBus
+
+
+def test_core_runtime_exposes_no_task_execution_tools(tmp_path: Path, monkeypatch) -> None:
+    class _NoopProvider:
+        pass
+
+    class _Loop:
+        def __init__(self, *args, **kwargs) -> None:
+            self.active_turn_states = {}
+
+    class _PluginManager:
+        def __init__(self, **kwargs) -> None:
+            pass
+
+    def build_tools(*args, task_plan_store, **kwargs):
+        return (
+            ToolRegistry(),
+            SimpleNamespace(),
+            SimpleNamespace(),
+            SimpleNamespace(),
+            SimpleNamespace(engine=object()),
+            None,
+            None,
+            TaskPlanService(task_plan_store),
+        )
+
+    monkeypatch.setattr(
+        "bootstrap.tools.build_providers",
+        lambda config: (_NoopProvider(), None, None),
+    )
+    monkeypatch.setattr("bootstrap.tools.build_vl_provider", lambda config: None)
+    monkeypatch.setattr("bootstrap.tools.build_registered_tools", build_tools)
+    monkeypatch.setattr("bootstrap.tools._build_loop_deps", lambda **kwargs: object())
+    monkeypatch.setattr("bootstrap.tools.AgentLoop", _Loop)
+    monkeypatch.setattr("agent.plugins.manager.PluginManager", _PluginManager)
+
+    config = ConfigModel(
+        provider="openai",
+        model="m",
+        api_key="k",
+        system_prompt="s",
+        wiring=WiringConfig(toolsets=[]),
+    )
+    runtime = build_core_runtime(
+        config,
+        tmp_path,
+        cast(Any, SimpleNamespace()),
+    )
+
+    assert runtime.task_execution_service is not None
+    assert runtime.tools.get_tool("continue_task_execution") is None
+    assert runtime.tools.get_tool("retry_task_execution") is None
+
+
+def test_task_execution_wiring_uses_the_task_plan_store(tmp_path: Path) -> None:
+    store = TaskPlanStore(tmp_path / "task_plans.db")
+    plan_service = TaskPlanService(store)
+    plan_service.create_task_plan(
+        session_key="cli:s1",
+        title="Read project",
+        steps=["Read README"],
+    )
+
+    execution_service, recovery = build_task_execution_services(
+        store=store,
+        plan_service=plan_service,
+        runtime_instance_id="runtime-current",
+        config=TaskExecutionConfig(lease_seconds=60),
+    )
+    claim = execution_service.begin_next_step(
+        session_key="cli:s1",
+        request_id="req-1",
+    )
+
+    assert claim.attempt.owner_instance_id == "runtime-current"
+    assert recovery.reconcile_session("cli:s1") == ()
 
 
 def _toml_value(value):

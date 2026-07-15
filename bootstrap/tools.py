@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import logging
+from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, cast
+from uuid import uuid4
 
 if TYPE_CHECKING:
     from agent.plugins.manager import PluginManager
@@ -30,6 +32,8 @@ from agent.provider import LLMProvider
 from agent.retrieval.default_pipeline import DefaultMemoryRetrievalPipeline
 from agent.scheduler import SchedulerService
 from agent.task_plan.context import TaskPlanPromptRenderModule
+from agent.task_plan.execution_service import TaskExecutionService
+from agent.task_plan.recovery import TaskExecutionRecoveryService
 from agent.task_plan.service import TaskPlanService
 from agent.task_plan.store import TaskPlanStore
 from agent.tools.message_push import MessagePushTool
@@ -51,6 +55,7 @@ from bootstrap.toolsets.schedule import (
     build_scheduler,
 )
 from bootstrap.wiring import (
+    build_task_execution_services,
     wire_turn_lifecycle,
     resolve_context_factory,
     resolve_memory_toolset_provider,
@@ -88,6 +93,8 @@ class CoreRuntime:
     peer_poller: PeerAgentPoller | None
     agent_provider: LLMProvider | None = None
     task_plan_service: TaskPlanService | None = None
+    task_execution_service: TaskExecutionService | None = None
+    task_execution_recovery: TaskExecutionRecoveryService | None = None
     plugin_manager: "PluginManager | None" = None
 
     async def start(self) -> None:
@@ -289,6 +296,7 @@ def build_registered_tools(
     tools: ToolRegistry | None = None,
     event_publisher=None,
     agent_loop_provider: Callable[[], Any] | None = None,
+    task_plan_store: TaskPlanStore | None = None,
 ) -> tuple[
     ToolRegistry,
     MessagePushTool,
@@ -304,7 +312,9 @@ def build_registered_tools(
     # ── 第一阶段：建服务（依赖无顺序陷阱）────────────────────────────────────
     wiring = getattr(config, "wiring", WiringConfig())
     tools = tools or ToolRegistry()
-    task_plan_service = TaskPlanService(TaskPlanStore(workspace / "task_plans.db"))
+    task_plan_service = TaskPlanService(
+        task_plan_store or TaskPlanStore(workspace / "task_plans.db")
+    )
     multimodal = getattr(config, "multimodal", True)
     vl_available = (not multimodal) and bool(getattr(config, "vl_model", ""))
     readonly_tools = build_readonly_tools(
@@ -482,6 +492,8 @@ def build_core_runtime(
     loop_provider = agent_provider or provider
     loop_model = config.agent_model or config.model
     session_manager = SessionManager(workspace)
+    task_plan_store = TaskPlanStore(workspace / "task_plans.db")
+    runtime_instance_id = f"runtime_{uuid4().hex}"
     loop_ref: dict[str, AgentLoop] = {}
     (
         tools,
@@ -503,7 +515,27 @@ def build_core_runtime(
         session_store=session_manager._store,
         event_publisher=event_bus,
         agent_loop_provider=lambda: loop_ref.get("loop"),
+        task_plan_store=task_plan_store,
     )
+    task_execution_service: TaskExecutionService | None = None
+    task_execution_recovery: TaskExecutionRecoveryService | None = None
+    try:
+        task_execution_service, task_execution_recovery = build_task_execution_services(
+            store=task_plan_store,
+            plan_service=task_plan_service,
+            runtime_instance_id=runtime_instance_id,
+            config=config.task_execution,
+        )
+        recovery_results = task_execution_recovery.reconcile_startup()
+        logger.info(
+            "Task execution startup recovery reconciled %d attempts: %s",
+            len(recovery_results),
+            dict(Counter(result.reason for result in recovery_results)),
+        )
+    except Exception:
+        logger.exception("Task execution recovery failed; task execution disabled")
+        task_execution_service = None
+        task_execution_recovery = None
     presence = PresenceStore(session_manager._store)
     processing_state = ProcessingState()
     loop_deps = _build_loop_deps(
@@ -569,6 +601,8 @@ def build_core_runtime(
         light_provider=light_provider,
         agent_provider=agent_provider,
         task_plan_service=task_plan_service,
+        task_execution_service=task_execution_service,
+        task_execution_recovery=task_execution_recovery,
         mcp_registry=mcp_registry,
         memory_runtime=memory_runtime,
         presence=presence,

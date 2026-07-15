@@ -16,6 +16,7 @@ from agent.task_plan.execution_redaction import (
     hash_execution_arguments,
     redact_execution_arguments,
 )
+from agent.task_plan.execution_store import ReconciledExecutionAttempt
 from agent.task_plan.models import TaskPlan, TaskStep
 from agent.task_plan.request_identity import derive_task_execution_idempotency_key
 from agent.task_plan.service import (
@@ -31,7 +32,11 @@ from agent.task_plan.store import (
 
 
 _RETRYABLE_BLOCK_REASONS = frozenset(
-    {"lease_expired_outcome_unknown", "turn_interrupted_outcome_unknown"}
+    {
+        "lease_expired_outcome_unknown",
+        "runtime_restarted_outcome_unknown",
+        "turn_interrupted_outcome_unknown",
+    }
 )
 
 
@@ -336,6 +341,18 @@ class TaskExecutionService:
             return TaskExecutionSnapshot(attempt=attempt) if attempt is None else self._snapshot(attempt)
         attempt = self._require_owned_attempt(session_key=session_key, attempt_id=attempt_id)
         return self._snapshot(attempt)
+
+    def reconcile_attempts(
+        self,
+        *,
+        now: datetime,
+        session_key: str | None = None,
+    ) -> list[ReconciledExecutionAttempt]:
+        return self._store.reconcile_execution_attempts(
+            now=now,
+            runtime_instance_id=self._runtime_instance_id,
+            session_key=session_key,
+        )
 
     def _claim_step(
         self,
