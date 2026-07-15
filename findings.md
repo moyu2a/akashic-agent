@@ -60,3 +60,9 @@
 - A database transaction cannot provide exactly-once behavior across an external side effect. If the process dies after a tool acts but before finalization, the attempt outcome is unknown and must not be automatically replayed.
 - Startup recovery should be complemented by session reconciliation before claim/inspect; waiting authorization can remain waiting, while stale running/pending attempts become blocked with an explicit recovery reason.
 - The safe read-only flow needs explicit begin and finish control operations. Arbitrary tool success alone must not mark a TaskPlan step complete.
+- Implementation planning confirmed `TaskPlanStore` should remain the single transaction owner; `execution_store.py` will provide connection-scoped SQL helpers rather than opening an independently committed repository.
+- `DefaultReasoner.run_turn()` already constructs a typed boundary context before prompt rendering, and `run()` already supports dynamic visibility transitions for LA-001. LA-002 should reuse that mechanism through a separate `TaskExecutionTurnContract`.
+- `ToolRegistry.execute()` merges public arguments with protected underscore context last. Runtime-owned `_request_id` and `_attempt_id` can use the same anti-forgery rule as `_session_key`.
+- Execution tools should join the existing `task_plan` toolset and return the shared `TaskExecutionService` through toolset extras; a second toolset would make service/store identity easier to miswire.
+- `TaskPlanPromptRenderModule` is the correct prompt integration point for a bounded current-attempt summary; full event history should stay in SQLite/observe.
+- The config model needs a separate `TaskExecutionConfig` with `enabled=false`; the implementation plan must test that invalid high-risk auto configuration cannot enable write/external/destructive execution.

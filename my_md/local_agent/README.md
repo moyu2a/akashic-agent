@@ -29,6 +29,7 @@
 
 - 先把 `LA-001` 视为已关闭能力边界，继续观察同批候选生成和 session context 增长，不把它们重新定义为执行授权失败。
 - 下一项正式登记为 `LA-002 TaskPlan Recovery and Execution Orchestration`：实现重启恢复、stale step 判定、execution attempt 和受控单步推进。
+- 正式设计与 implementation plan 均已完成：`03-task-plan-recovery-execution-design.md`、`docs/superpowers/plans/2026-07-15-task-plan-recovery-execution-implementation.md`；下一步进入按任务执行和审阅。
 - 在本地操作权限、用户确认和文件回滚完成前，执行编排不得直接放开任意 shell 或文件写入副作用。
 
 ## 后续可扩展文档

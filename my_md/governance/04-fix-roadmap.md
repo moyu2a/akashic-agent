@@ -303,7 +303,9 @@
 
 下一阶段已登记 `LA-002`：任务恢复与受控执行编排。先实现 active task 重启恢复、stale step 判定、execution attempt、单步幂等推进和待授权状态；暂停/取消/重试、多任务视图以及任意本地副作用执行继续后置。
 
-设计文档：`my_md/local_agent/03-task-plan-recovery-execution-design.md`。交付拆为 `LA-002a Recovery Foundation` 与 `LA-002b Controlled Read-only Execution`；第一版只自动允许 registry `read-only` 工具，其他风险进入 waiting authorization。
+设计文档：`my_md/local_agent/03-task-plan-recovery-execution-design.md`，五项产品边界已于 2026-07-15 获用户确认。交付拆为 `LA-002a Recovery Foundation` 与 `LA-002b Controlled Read-only Execution`；第一版只自动允许 registry `read-only` 工具，其他风险进入 waiting authorization。
+
+实施计划：`docs/superpowers/plans/2026-07-15-task-plan-recovery-execution-implementation.md`，共 10 个 TDD 任务；Tasks 1-5 完成 LA-002a 检查点，Tasks 6-10 完成 LA-002b、完整回归和 live smoke。
 
 ## 暂不处理
 

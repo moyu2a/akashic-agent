@@ -338,3 +338,13 @@
   - first version auto-allows only exact registry `read-only`; write/external/unknown risks defer, destructive is core-denied, and shell never auto-executes;
   - added explicit abort so a waiting-authorization attempt cannot permanently hold the active-attempt constraint;
   - documented that database transactions cannot promise exactly-once external effects and stale running attempts must not auto-replay.
+- 2026-07-15 user approved the LA-002 design decisions one by one:
+  - only exact registry read-only tools auto-execute; write/external/unknown/shell defer to P2 authorization;
+  - stale running attempts block with unknown outcome and never auto-retry;
+  - transport request ID defines replay while separate messages remain separate operations;
+  - failed steps require explicit retry or skip;
+  - automatic completion requires a successful real work-tool event plus finish validation.
+- 2026-07-15 completed the LA-002 implementation plan at `docs/superpowers/plans/2026-07-15-task-plan-recovery-execution-implementation.md`:
+  - decomposed work into 10 TDD/review tasks with an LA-002a checkpoint after models/store/service/request identity/recovery and LA-002b after controlled read-only runtime integration;
+  - added three-way claim disposition (`created/request_replay/active_conflict`), protected transport request identity, lease renewal, recursive redaction, registry risk snapshots, explicit pending-to-running transition, and full compatibility/live gates during self-review;
+  - all approved product decisions map to negative tests; no implementation code was changed while planning.

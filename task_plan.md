@@ -43,3 +43,13 @@ Goal: produce a reviewable design for recoverable, idempotent, single-step TaskP
 3. Write `my_md/local_agent/03-task-plan-recovery-execution-design.md` and update indexes - complete
 4. Self-review placeholders, contradictions, scope, security claims, and acceptance criteria - complete
 5. Run documentation checks and commit the design - complete
+
+## LA-002 Implementation Plan
+
+Goal: turn the approved LA-002 design into a complete, TDD-oriented, file-level implementation plan without changing business code.
+
+1. Record approved product decisions in the design/governance docs - complete
+2. Map exact files, interfaces, migrations, and tests for LA-002a/LA-002b - complete
+3. Write `docs/superpowers/plans/2026-07-15-task-plan-recovery-execution-implementation.md` - complete
+4. Self-review spec coverage, placeholders, and type consistency - complete
+5. Run plan checks and commit the approved design plus implementation plan - complete

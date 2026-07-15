@@ -2,9 +2,21 @@
 
 日期：2026-07-15
 
-状态：design draft / awaiting user review
+状态：approved / implementation plan ready
 
 关联问题：`LA-002 local-agent/task-execution/recovery`
+
+实施计划：`docs/superpowers/plans/2026-07-15-task-plan-recovery-execution-implementation.md`
+
+## 用户确认的产品边界
+
+2026-07-15 用户逐项确认以下决策：
+
+1. LA-002 第一版只自动执行 registry `read-only` 工具；write、external、unknown 和 shell 只进入 `waiting_authorization`，批准后执行留给 P2。
+2. stale running attempt 在重启或 lease 过期后转为 `blocked/outcome_unknown`，step 恢复 pending，但绝不自动重试。
+3. 相同 transport request ID 视为重投并返回原 attempt；两条独立“继续”视为两个有效操作，不使用文本 hash 去重。
+4. failed step 不能被普通“继续”跳过或自动重试；用户必须显式 retry 或 skip，retry 创建新 attempt。
+5. 自动完成必须有至少一个成功真实工作工具 event，并通过 finish 合同；没有工具证据的纯思考步骤只能手动更新。
 
 ## 1. 背景
 
