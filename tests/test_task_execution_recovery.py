@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
+import sqlite3
 
 import pytest
 
@@ -65,6 +66,30 @@ def recovery_fixture(tmp_path: Path):
                 now=datetime(2026, 7, 14, 23, 59, tzinfo=UTC),
                 terminal_reason="authorization required",
             )
+        elif status in {"succeeded", "failed"}:
+            store.start_execution_attempt(
+                attempt_id=claim.attempt.attempt_id,
+                owner_instance_id=owner,
+                now=datetime(2026, 7, 14, 23, 59, tzinfo=UTC),
+            )
+            store.finalize_execution_attempt(
+                attempt_id=claim.attempt.attempt_id,
+                owner_instance_id=owner,
+                now=datetime(2026, 7, 14, 23, 59, tzinfo=UTC),
+                success=status == "succeeded",
+            )
+        elif status == "blocked":
+            store.block_execution_attempt(
+                attempt_id=claim.attempt.attempt_id,
+                owner_instance_id=owner,
+                now=datetime(2026, 7, 14, 23, 59, tzinfo=UTC),
+                terminal_reason="turn_interrupted_outcome_unknown",
+            )
+        elif status == "cancelled":
+            store.abort_execution_attempt(
+                attempt_id=claim.attempt.attempt_id,
+                terminal_reason="user_cancelled",
+            )
         execution_service = TaskExecutionService(
             store=store,
             plan_service=plan_service,
@@ -104,6 +129,104 @@ def test_old_runtime_running_attempt_blocks_without_retry(recovery_fixture) -> N
     assert plan is not None
     assert plan.steps[0].status == "pending"
     assert len(fixture.store.list_execution_attempts(fixture.task_id)) == 1
+
+
+def test_old_runtime_pending_attempt_blocks_as_interrupted_dispatch(
+    recovery_fixture,
+) -> None:
+    fixture = recovery_fixture(status="pending", owner="runtime-old")
+
+    results = fixture.recovery.reconcile_session("cli:s1")
+
+    snapshot = fixture.execution_service.inspect(
+        session_key="cli:s1",
+        attempt_id=fixture.attempt_id,
+    )
+    assert len(results) == 1
+    assert results[0].attempt_id == fixture.attempt_id
+    assert results[0].previous_status == "pending"
+    assert results[0].current_status == "blocked"
+    assert results[0].reason == "dispatch_interrupted"
+    assert results[0].step_reset is False
+    assert snapshot.attempt is not None
+    assert snapshot.attempt.terminal_reason == "dispatch_interrupted"
+    events = fixture.store.list_execution_events(fixture.attempt_id)
+    assert [(event.event_type, event.result_preview) for event in events] == [
+        ("attempt_claimed", ""),
+        ("recovery_reconciled", "dispatch_interrupted"),
+    ]
+
+
+def test_interrupted_dispatch_requires_explicit_retry_and_can_be_retried(
+    recovery_fixture,
+) -> None:
+    fixture = recovery_fixture(status="pending", owner="runtime-old")
+    fixture.recovery.reconcile_session("cli:s1")
+    plan = fixture.plan_service.get_active_task_plan(session_key="cli:s1")
+    assert plan is not None
+    before = fixture.store.list_execution_attempts(fixture.task_id)
+
+    with pytest.raises(TaskExecutionConflictError, match="explicit_retry"):
+        fixture.execution_service.begin_next_step(
+            session_key="cli:s1",
+            request_id="req-ordinary-continue",
+        )
+    assert fixture.store.list_execution_attempts(fixture.task_id) == before
+
+    retry = fixture.execution_service.retry_step(
+        session_key="cli:s1",
+        step_id=plan.steps[0].step_id,
+        request_id="req-explicit-retry",
+    )
+    assert retry.attempt.attempt_no == 2
+
+
+@pytest.mark.parametrize("status", ["succeeded", "failed", "blocked", "cancelled"])
+def test_terminal_attempts_are_not_reconciled(recovery_fixture, status: str) -> None:
+    fixture = recovery_fixture(status=status, owner="runtime-old")
+    before = fixture.store.list_execution_events(fixture.attempt_id)
+
+    assert fixture.recovery.reconcile_session("cli:s1") == ()
+
+    snapshot = fixture.execution_service.inspect(
+        session_key="cli:s1",
+        attempt_id=fixture.attempt_id,
+    )
+    assert snapshot.attempt is not None
+    assert snapshot.attempt.status == status
+    assert fixture.store.list_execution_events(fixture.attempt_id) == before
+
+
+@pytest.mark.parametrize("durable_step_status", ["completed", "skipped"])
+def test_recovery_never_overwrites_completed_or_skipped_steps(
+    recovery_fixture,
+    durable_step_status: str,
+) -> None:
+    fixture = recovery_fixture(status="running", owner="runtime-old")
+    with sqlite3.connect(fixture.store._db_path) as conn:  # type: ignore[attr-defined]
+        conn.execute(
+            "UPDATE task_steps SET status = ? WHERE task_id = ?",
+            (durable_step_status, fixture.task_id),
+        )
+
+    results = fixture.recovery.reconcile_session("cli:s1")
+
+    plan = fixture.plan_service.get_active_task_plan(session_key="cli:s1")
+    assert results[0].step_reset is False
+    assert plan is not None
+    assert plan.steps[0].status == durable_step_status
+
+
+def test_repeated_reconcile_is_idempotent(recovery_fixture) -> None:
+    fixture = recovery_fixture(status="running", owner="runtime-old")
+
+    first = fixture.recovery.reconcile_session("cli:s1")
+    events_after_first = fixture.store.list_execution_events(fixture.attempt_id)
+    second = fixture.recovery.reconcile_session("cli:s1")
+
+    assert len(first) == 1
+    assert second == ()
+    assert fixture.store.list_execution_events(fixture.attempt_id) == events_after_first
 
 
 def test_waiting_authorization_survives_restart(recovery_fixture) -> None:

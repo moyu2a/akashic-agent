@@ -930,11 +930,14 @@ class TaskPlanStore:
                 for row in rows:
                     attempt_id = str(row["attempt_id"])
                     previous_status = row_to_execution_attempt(row).status
-                    reason = (
-                        "runtime_restarted_outcome_unknown"
-                        if row["owner_instance_id"] != runtime_instance_id
-                        else "lease_expired_outcome_unknown"
-                    )
+                    if row["owner_instance_id"] != runtime_instance_id:
+                        reason = (
+                            "dispatch_interrupted"
+                            if previous_status == "pending"
+                            else "runtime_restarted_outcome_unknown"
+                        )
+                    else:
+                        reason = "lease_expired_outcome_unknown"
                     cur = conn.execute(
                         """
                         UPDATE task_execution_attempts

@@ -33,6 +33,7 @@ from agent.task_plan.store import (
 
 _RETRYABLE_BLOCK_REASONS = frozenset(
     {
+        "dispatch_interrupted",
         "lease_expired_outcome_unknown",
         "runtime_restarted_outcome_unknown",
         "turn_interrupted_outcome_unknown",

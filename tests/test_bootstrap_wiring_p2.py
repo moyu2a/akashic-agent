@@ -81,6 +81,106 @@ def test_core_runtime_exposes_no_task_execution_tools(tmp_path: Path, monkeypatc
     assert runtime.tools.get_tool("retry_task_execution") is None
 
 
+def test_core_runtime_reconciles_before_constructing_agent_loop(
+    tmp_path: Path, monkeypatch
+) -> None:
+    events: list[str] = []
+    service = object()
+
+    class _Recovery:
+        def reconcile_startup(self):
+            events.append("reconciled")
+            return ()
+
+    class _Loop:
+        def __init__(self, *args, **kwargs) -> None:
+            assert events == ["reconciled"]
+            self.active_turn_states = {}
+
+    _prepare_core_runtime(monkeypatch, loop_type=_Loop)
+    monkeypatch.setattr(
+        "bootstrap.tools.build_task_execution_services",
+        lambda **kwargs: (service, _Recovery()),
+    )
+
+    runtime = build_core_runtime(
+        _core_runtime_config(),
+        tmp_path,
+        cast(Any, SimpleNamespace()),
+    )
+
+    assert runtime.task_execution_service is service
+
+
+def test_core_runtime_disables_only_task_execution_after_recovery_error(
+    tmp_path: Path, monkeypatch
+) -> None:
+    class _Recovery:
+        def reconcile_startup(self):
+            raise RuntimeError("recovery failed")
+
+    class _Loop:
+        def __init__(self, *args, **kwargs) -> None:
+            self.active_turn_states = {}
+
+    _prepare_core_runtime(monkeypatch, loop_type=_Loop)
+    monkeypatch.setattr(
+        "bootstrap.tools.build_task_execution_services",
+        lambda **kwargs: (object(), _Recovery()),
+    )
+
+    runtime = build_core_runtime(
+        _core_runtime_config(),
+        tmp_path,
+        cast(Any, SimpleNamespace()),
+    )
+
+    assert isinstance(runtime.loop, _Loop)
+    assert runtime.task_execution_service is None
+    assert runtime.task_execution_recovery is None
+
+
+def _core_runtime_config() -> ConfigModel:
+    return ConfigModel(
+        provider="openai",
+        model="m",
+        api_key="k",
+        system_prompt="s",
+        wiring=WiringConfig(toolsets=[]),
+    )
+
+
+def _prepare_core_runtime(monkeypatch, *, loop_type) -> None:
+    class _NoopProvider:
+        pass
+
+    class _PluginManager:
+        def __init__(self, **kwargs) -> None:
+            pass
+
+    def build_tools(*args, task_plan_store, **kwargs):
+        return (
+            ToolRegistry(),
+            SimpleNamespace(),
+            SimpleNamespace(),
+            SimpleNamespace(),
+            SimpleNamespace(engine=object()),
+            None,
+            None,
+            TaskPlanService(task_plan_store),
+        )
+
+    monkeypatch.setattr(
+        "bootstrap.tools.build_providers",
+        lambda config: (_NoopProvider(), None, None),
+    )
+    monkeypatch.setattr("bootstrap.tools.build_vl_provider", lambda config: None)
+    monkeypatch.setattr("bootstrap.tools.build_registered_tools", build_tools)
+    monkeypatch.setattr("bootstrap.tools._build_loop_deps", lambda **kwargs: object())
+    monkeypatch.setattr("bootstrap.tools.AgentLoop", loop_type)
+    monkeypatch.setattr("agent.plugins.manager.PluginManager", _PluginManager)
+
+
 def test_task_execution_wiring_uses_the_task_plan_store(tmp_path: Path) -> None:
     store = TaskPlanStore(tmp_path / "task_plans.db")
     plan_service = TaskPlanService(store)
