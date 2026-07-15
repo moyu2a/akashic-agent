@@ -42,7 +42,7 @@ from agent.tools.task_plan import (
 )
 from agent.tools.tool_search import ToolSearchTool
 from agent.tool_hooks.base import ToolHook
-from agent.tool_hooks.types import HookContext, HookOutcome
+from agent.tool_hooks.types import HookContext, HookOutcome, ToolExecutionResult
 from bus.events import InboundMessage
 
 
@@ -654,6 +654,253 @@ async def test_begin_service_conflict_stays_model_visible_without_starting(
         "action": "conflict",
         "reason": "attempt_already_active",
     }
+
+
+def _start_foreign_running_attempt(reasoner_fixture):
+    claimed = reasoner_fixture.execution_service.begin_next_step(
+        session_key=reasoner_fixture.session_key,
+        request_id="request-a",
+    )
+    snapshot = reasoner_fixture.execution_service.start_attempt(
+        session_key=reasoner_fixture.session_key,
+        attempt_id=claimed.attempt.attempt_id,
+    )
+    assert snapshot.attempt is not None
+    return snapshot.attempt
+
+
+def _prepare_foreign_request(reasoner_fixture, *, content: str, request_id: str):
+    assert reasoner_fixture.coordinator is not None
+    msg = InboundMessage(
+        channel="cli",
+        sender="tester",
+        chat_id="execution",
+        content=content,
+        timestamp=reasoner_fixture.clock(),
+        metadata={"_transport_request_id": request_id},
+    )
+    return reasoner_fixture.coordinator.prepare_turn(
+        msg=msg,
+        session_key=reasoner_fixture.session_key,
+    )
+
+
+@pytest.mark.asyncio
+async def test_foreign_continue_conflict_and_two_finals_do_not_mutate_owner_attempt(
+    reasoner_fixture,
+) -> None:
+    attempt_a = _start_foreign_running_attempt(reasoner_fixture)
+    captured_turns = []
+    original_prepare = reasoner_fixture.coordinator.prepare_turn
+
+    def capture_prepare(**kwargs: Any):
+        turn = original_prepare(**kwargs)
+        captured_turns.append(turn)
+        return turn
+
+    reasoner_fixture.coordinator.prepare_turn = capture_prepare
+    reasoner_fixture.llm.responses = [
+        tool_call("begin_task_step_execution", {}),
+        final_reply("Request B cannot claim the active attempt"),
+        final_reply("Second bare final must also be harmless"),
+        final_reply("Legacy terminal response"),
+    ]
+
+    result = await reasoner_fixture.run_turn(
+        "继续执行下一步",
+        request_id="request-b",
+    )
+    second_final = reasoner_fixture.coordinator.handle_model_final(captured_turns[0])
+
+    payload = json.loads(result.tool_chain[0]["calls"][0]["result"])
+    assert payload["decision"]["action"] == "conflict"
+    assert len(reasoner_fixture.llm.calls) == 2
+    assert second_final.action == "accept"
+    assert reasoner_fixture.store.get_execution_attempt(attempt_a.attempt_id).status == (
+        "running"
+    )
+
+    assert reasoner_fixture.coordinator.protocol_correction_count == 0
+
+
+@pytest.mark.asyncio
+async def test_foreign_inspect_running_attempt_is_read_only_final_only(
+    reasoner_fixture,
+) -> None:
+    attempt_a = _start_foreign_running_attempt(reasoner_fixture)
+    events_before = reasoner_fixture.store.list_execution_events(attempt_a.attempt_id)
+    reasoner_fixture.llm.responses = [
+        tool_call("inspect_task_execution", {}),
+        final_reply("Request A is still running"),
+        final_reply("Legacy protocol correction"),
+        final_reply("Legacy terminal response"),
+    ]
+
+    result = await reasoner_fixture.run_turn(
+        "查看执行状态",
+        request_id="request-b-inspect",
+    )
+
+    assert result.tools_used == ["inspect_task_execution"]
+    assert reasoner_fixture.llm.calls[1]["tools"] == []
+    assert result.context_retry["task_execution"]["phase"] == "finish"
+    assert reasoner_fixture.store.get_execution_attempt(attempt_a.attempt_id).status == (
+        "running"
+    )
+    assert (
+        reasoner_fixture.store.list_execution_events(attempt_a.attempt_id)
+        == events_before
+    )
+
+
+@pytest.mark.asyncio
+async def test_foreign_request_hard_called_work_tool_has_no_executor_or_event(
+    reasoner_fixture,
+) -> None:
+    attempt_a = _start_foreign_running_attempt(reasoner_fixture)
+    events_before = reasoner_fixture.store.list_execution_events(attempt_a.attempt_id)
+    reasoner_fixture.llm.responses = [
+        tool_call("inspect_task_execution", {}),
+        tool_call("read_file", {"path": "README.md"}),
+        final_reply("The work call was rejected"),
+        final_reply("Legacy protocol correction"),
+        final_reply("Legacy terminal response"),
+    ]
+
+    result = await reasoner_fixture.run_turn(
+        "查看执行状态",
+        request_id="request-b-hard-call",
+    )
+
+    assert result.reply.startswith("final_only_tool_call:")
+    assert reasoner_fixture.read_executor_calls == []
+    assert (
+        reasoner_fixture.store.list_execution_events(attempt_a.attempt_id)
+        == events_before
+    )
+    assert reasoner_fixture.store.get_execution_attempt(attempt_a.attempt_id).status == (
+        "running"
+    )
+
+    turn_b = _prepare_foreign_request(
+        reasoner_fixture,
+        content="继续执行下一步",
+        request_id="request-b-direct-work",
+    )
+    turn_b.contract = reasoner_fixture.coordinator._contract_for_snapshot(turn_b)
+    call_decision = await reasoner_fixture.coordinator.before_tool_call(
+        turn_b,
+        tool_name="read_file",
+        arguments={"path": "README.md"},
+        tool_capabilities=frozenset(),
+        boundary_decision=None,
+    )
+    assert call_decision.execute is False
+    assert call_decision.status == "blocked_by_task_execution_ownership"
+    await reasoner_fixture.coordinator.after_tool_call(
+        turn_b,
+        tool_name="read_file",
+        tool_call_id="foreign-work-result",
+        arguments={"path": "README.md"},
+        result=ToolResult(ok=True, text='{"ok": true}'),
+        execution_result=ToolExecutionResult(
+            status="success",
+            output='{"ok": true}',
+            final_arguments={"path": "README.md"},
+            invoker_reached=True,
+            invoker_succeeded=True,
+        ),
+        registry_risk="read-only",
+        registry_capabilities=frozenset(),
+    )
+    assert (
+        reasoner_fixture.store.list_execution_events(attempt_a.attempt_id)
+        == events_before
+    )
+
+
+def test_protocol_failure_and_finalizer_require_exact_request_ownership(
+    reasoner_fixture,
+) -> None:
+    attempt_a = _start_foreign_running_attempt(reasoner_fixture)
+    turn_b = _prepare_foreign_request(
+        reasoner_fixture,
+        content="继续执行下一步",
+        request_id="request-b-protocol",
+    )
+
+    assert reasoner_fixture.coordinator.handle_model_final(turn_b).action == "accept"
+    assert reasoner_fixture.coordinator.handle_model_final(turn_b).action == "accept"
+    reasoner_fixture.coordinator._fail_attempt(turn_b, "must_not_fail_foreign_attempt")
+    reasoner_fixture.coordinator.finalize_turn(
+        turn_b,
+        exit_kind="provider_error",
+    )
+
+    assert reasoner_fixture.store.get_execution_attempt(attempt_a.attempt_id).status == (
+        "running"
+    )
+
+
+@pytest.mark.asyncio
+async def test_abort_remains_cross_request_session_control(reasoner_fixture) -> None:
+    attempt_a = _start_foreign_running_attempt(reasoner_fixture)
+    reasoner_fixture.llm.responses = [
+        tool_call("abort_task_step_execution", {"reason": "user cancelled"}),
+        final_reply("Cancelled"),
+    ]
+
+    await reasoner_fixture.run_turn(
+        "取消执行",
+        request_id="request-b-abort",
+    )
+
+    assert reasoner_fixture.store.get_execution_attempt(attempt_a.attempt_id).status == (
+        "cancelled"
+    )
+
+
+@pytest.mark.asyncio
+async def test_fresh_claim_trace_uses_step_claimed_reason(reasoner_fixture) -> None:
+    turn = _prepare_foreign_request(
+        reasoner_fixture,
+        content="继续执行下一步",
+        request_id="fresh-claim-request",
+    )
+    call_decision = await reasoner_fixture.coordinator.before_tool_call(
+        turn,
+        tool_name="begin_task_step_execution",
+        arguments={},
+        tool_capabilities=frozenset({"task_execution.begin"}),
+        boundary_decision=None,
+    )
+    assert call_decision.execution_context is not None
+    result = await reasoner_fixture.registry.execute(
+        "begin_task_step_execution",
+        {},
+        execution_context=call_decision.execution_context,
+    )
+    execution_result = ToolExecutionResult(
+        status="success",
+        output=result,
+        final_arguments={},
+        invoker_reached=True,
+        invoker_succeeded=True,
+    )
+    await reasoner_fixture.coordinator.after_tool_call(
+        turn,
+        tool_name="begin_task_step_execution",
+        tool_call_id="fresh-claim-call",
+        arguments={},
+        result=result,
+        execution_result=execution_result,
+        registry_risk="write",
+        registry_capabilities=frozenset({"task_execution.begin"}),
+    )
+
+    assert reasoner_fixture.coordinator.trace(turn)["reason"] == (
+        "task_execution_step_claimed"
+    )
 
 
 @pytest.mark.parametrize("raises", [False, True])

@@ -20,6 +20,7 @@ from agent.policies.task_plan_contract import infer_task_plan_turn_decision
 from agent.policies.tool_boundary import BoundaryExecutionDecision
 from agent.task_plan.execution_models import (
     RuntimeToolEvent,
+    TaskExecutionAttempt,
     TaskExecutionSnapshot,
     TERMINAL_ATTEMPT_STATUSES,
 )
@@ -71,6 +72,7 @@ class PreparedTaskExecutionTurn:
     )
     request_replayed: bool = False
     request_claimed_attempt: bool = False
+    request_owned_attempt_id: str | None = None
     decision_reason: str = "no_task_execution_intent"
     protocol_corrections: int = 0
     execution_tool_names: set[str] = field(default_factory=set)
@@ -84,13 +86,24 @@ class PreparedTaskExecutionTurn:
 
     @property
     def has_claimed_attempt(self) -> bool:
-        return self.request_claimed_attempt and self.attempt_id is not None
+        return self.owns_current_attempt
+
+    @property
+    def owns_current_attempt(self) -> bool:
+        attempt = self.snapshot.attempt
+        return bool(
+            self.request_claimed_attempt
+            and attempt is not None
+            and self.request_owned_attempt_id == attempt.attempt_id
+            and attempt.session_key == self.session_key
+            and attempt.request_id == self.request_id
+        )
 
     @property
     def attempt_is_active(self) -> bool:
         attempt = self.snapshot.attempt
         return bool(
-            self.request_claimed_attempt
+            self.owns_current_attempt
             and attempt is not None
             and attempt.status in {"pending", "running"}
         )
@@ -257,6 +270,7 @@ class TaskExecutionRuntimeCoordinator:
                 snapshot=snapshot,
                 request_replayed=True,
                 request_claimed_attempt=True,
+                request_owned_attempt_id=replay.attempt.attempt_id,
                 decision_reason="task_execution_request_replayed",
                 finalized=True,
             )
@@ -318,6 +332,15 @@ class TaskExecutionRuntimeCoordinator:
     ) -> RuntimeCallDecision:
         if not turn.contract.active:
             return RuntimeCallDecision(execute=True)
+        session_control = _is_unowned_session_control(tool_capabilities)
+        if not session_control and not turn.owns_current_attempt:
+            return RuntimeCallDecision(
+                execute=False,
+                result_payload=_error_payload("task_execution_request_not_owner"),
+                status="blocked_by_task_execution_ownership",
+                reason="task_execution_request_not_owner",
+                final_only=True,
+            )
         waiting_control_allowed = bool(
             turn.snapshot.attempt is not None
             and turn.snapshot.attempt.status == "waiting_authorization"
@@ -424,6 +447,11 @@ class TaskExecutionRuntimeCoordinator:
                 session_key=turn.session_key,
                 attempt_id=replay.attempt.attempt_id,
             )
+            if snapshot.attempt is None or not _attempt_matches_turn(
+                turn, snapshot.attempt
+            ):
+                turn.decision_reason = "task_execution_begin_state_mismatch"
+                return
             if snapshot.attempt is not None and snapshot.attempt.status == "pending":
                 snapshot = self._require_service().start_attempt(
                     session_key=turn.session_key,
@@ -432,11 +460,16 @@ class TaskExecutionRuntimeCoordinator:
             turn.snapshot = snapshot
             turn.request_replayed = begin_action == "replayed"
             turn.request_claimed_attempt = True
+            turn.request_owned_attempt_id = snapshot.attempt.attempt_id
             turn.finalized = False
             turn.decision_reason = (
                 "task_execution_request_replayed"
-                if replay.replayed
-                else "task_execution_step_started"
+                if begin_action == "replayed"
+                else (
+                    "task_execution_step_retry_claimed"
+                    if turn.contract.action == "retry"
+                    else "task_execution_step_claimed"
+                )
             )
             turn.contract = self._contract_for_snapshot(turn)
             return
@@ -450,6 +483,17 @@ class TaskExecutionRuntimeCoordinator:
                 )
                 turn.contract = self._contract_for_snapshot(turn)
                 attempt = turn.snapshot.attempt
+                if (
+                    "task_execution.inspect" in registry_capabilities
+                    and not turn.owns_current_attempt
+                ):
+                    turn.contract = _inspect_final_contract(
+                        attempt_id,
+                        matched_terms=turn.contract.matched_terms,
+                    )
+                    turn.finalized = True
+                    turn.decision_reason = "task_execution_inspected"
+                    return
                 if attempt is not None and (
                     attempt.status in TERMINAL_ATTEMPT_STATUSES
                     or attempt.status == "waiting_authorization"
@@ -459,7 +503,11 @@ class TaskExecutionRuntimeCoordinator:
             return
 
         attempt_id = turn.attempt_id
-        if attempt_id is None or turn.contract.phase != "work":
+        if (
+            attempt_id is None
+            or turn.contract.phase != "work"
+            or not turn.owns_current_attempt
+        ):
             return
         normalized = normalize_tool_result(result)
         result_ok, error_code = _result_facts(normalized)
@@ -512,7 +560,12 @@ class TaskExecutionRuntimeCoordinator:
         turn: PreparedTaskExecutionTurn,
     ) -> RuntimeFinalDecision:
         attempt = turn.snapshot.attempt
-        if attempt is None or attempt.status != "running":
+        if (
+            not turn.owns_current_attempt
+            or turn.contract.phase != "work"
+            or attempt is None
+            or attempt.status != "running"
+        ):
             return RuntimeFinalDecision(action="accept")
         if turn.protocol_corrections == 0:
             turn.protocol_corrections = 1
@@ -543,17 +596,21 @@ class TaskExecutionRuntimeCoordinator:
         del error
         if turn.finalized and not turn.attempt_is_active:
             return
-        if not turn.request_claimed_attempt:
+        if not turn.owns_current_attempt:
             replay = self._require_service().replay_request(
                 session_key=turn.session_key,
                 request_id=turn.request_id,
             )
-            if replay is not None:
-                turn.snapshot = self._require_service().inspect(
-                    session_key=turn.session_key,
-                    attempt_id=replay.attempt.attempt_id,
-                )
-                turn.request_claimed_attempt = True
+            if replay is None or not _attempt_matches_turn(turn, replay.attempt):
+                return
+            turn.snapshot = self._require_service().inspect(
+                session_key=turn.session_key,
+                attempt_id=replay.attempt.attempt_id,
+            )
+            turn.request_claimed_attempt = True
+            turn.request_owned_attempt_id = replay.attempt.attempt_id
+        if not turn.owns_current_attempt:
+            return
         attempt = turn.snapshot.attempt
         if attempt is None:
             return
@@ -599,7 +656,7 @@ class TaskExecutionRuntimeCoordinator:
     ) -> TaskExecutionLeaseGuard | _NullLeaseGuard:
         attempt = turn.snapshot.attempt
         if (
-            not turn.request_claimed_attempt
+            not turn.owns_current_attempt
             or attempt is None
             or attempt.status not in {"pending", "running"}
         ):
@@ -636,7 +693,7 @@ class TaskExecutionRuntimeCoordinator:
         capabilities: frozenset[str],
     ) -> None:
         attempt_id = turn.attempt_id
-        if attempt_id is None:
+        if attempt_id is None or not turn.owns_current_attempt:
             raise RuntimeError("authorization defer requires a claimed attempt")
         try:
             turn.snapshot = self._require_service().defer_attempt(
@@ -681,8 +738,19 @@ class TaskExecutionRuntimeCoordinator:
             "_task_execution_request_id": turn.request_id,
             "_task_execution_action": turn.contract.action,
             "_task_execution_target_step_id": turn.contract.target_step_id or "",
-            "_task_execution_attempt_id": turn.attempt_id or "",
-            "_task_execution_read_only": turn.contract.phase == "work",
+            "_task_execution_attempt_id": (
+                turn.attempt_id
+                if turn.owns_current_attempt
+                or tool_capabilities
+                in {
+                    frozenset({"task_execution.inspect"}),
+                    frozenset({"task_execution.abort"}),
+                }
+                else ""
+            ),
+            "_task_execution_read_only": (
+                turn.owns_current_attempt and turn.contract.phase == "work"
+            ),
         }
         if not tool_capabilities & _CONTROL_CAPABILITIES:
             protected["_task_execution_action"] = turn.contract.action
@@ -696,6 +764,13 @@ class TaskExecutionRuntimeCoordinator:
             return TaskExecutionTurnContract.inactive()
         if attempt.status in TERMINAL_ATTEMPT_STATUSES:
             return _terminal_contract(attempt.attempt_id)
+        if not turn.owns_current_attempt:
+            if turn.contract.action == "inspect":
+                return _inspect_final_contract(
+                    attempt.attempt_id,
+                    matched_terms=turn.contract.matched_terms,
+                )
+            return turn.contract
         if attempt.status == "waiting_authorization":
             return TaskExecutionTurnContract(
                 active=True,
@@ -747,7 +822,7 @@ class TaskExecutionRuntimeCoordinator:
 
     def _fail_attempt(self, turn: PreparedTaskExecutionTurn, reason: str) -> None:
         attempt_id = turn.attempt_id
-        if attempt_id is None:
+        if attempt_id is None or not turn.owns_current_attempt:
             return
         turn.snapshot = self._require_service().finish_attempt(
             session_key=turn.session_key,
@@ -805,6 +880,46 @@ def _terminal_contract(attempt_id: str) -> TaskExecutionTurnContract:
         reason="runtime_request_replay",
         matched_terms=(),
     )
+
+
+def _inspect_final_contract(
+    attempt_id: str,
+    *,
+    matched_terms: tuple[str, ...],
+) -> TaskExecutionTurnContract:
+    return TaskExecutionTurnContract(
+        active=True,
+        action="inspect",
+        phase="finish",
+        attempt_id=attempt_id,
+        target_step_id=None,
+        required_capabilities=frozenset({"task_execution.inspect"}),
+        allowed_capabilities=frozenset({"task_execution.inspect"}),
+        allowed_risks=frozenset(),
+        work_call_budget=0,
+        tool_search_budget=0,
+        completion_capability="task_execution.inspect",
+        reason="task_execution_inspected",
+        matched_terms=matched_terms,
+    )
+
+
+def _attempt_matches_turn(
+    turn: PreparedTaskExecutionTurn,
+    attempt: TaskExecutionAttempt,
+) -> bool:
+    return bool(
+        attempt.session_key == turn.session_key
+        and attempt.request_id == turn.request_id
+    )
+
+
+def _is_unowned_session_control(capabilities: frozenset[str]) -> bool:
+    return capabilities in {
+        frozenset({"task_execution.begin"}),
+        frozenset({"task_execution.inspect"}),
+        frozenset({"task_execution.abort"}),
+    }
 
 
 def _optional_int(value: object) -> int | None:
