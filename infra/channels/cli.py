@@ -7,6 +7,7 @@ from __future__ import annotations
 import asyncio
 import os
 import sys
+import uuid
 
 from agent.config import DEFAULT_SOCKET, _normalize_cli_socket_endpoint
 from infra.channels.ipc_protocol import (
@@ -69,7 +70,15 @@ class CLIClient:
                     break
                 if not stripped:
                     continue
-                writer.write(encode_frame({"type": "user", "content": stripped}))
+                writer.write(
+                    encode_frame(
+                        {
+                            "type": "user",
+                            "request_id": uuid.uuid4().hex,
+                            "content": stripped,
+                        }
+                    )
+                )
                 await writer.drain()
         except (KeyboardInterrupt, EOFError):
             pass

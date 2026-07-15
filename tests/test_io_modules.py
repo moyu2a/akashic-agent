@@ -455,7 +455,9 @@ async def test_ipc_server_v2_hello_uses_stable_chat_id() -> None:
     reader = _FrameReader(
         [
             encode_frame(build_hello_payload("client-a", "rag-smoke")),
-            encode_frame({"type": "user", "content": "hello"}),
+            encode_frame(
+                {"type": "user", "request_id": "req-v2", "content": "hello"}
+            ),
         ]
     )
     await channel._handle_connection(
@@ -465,6 +467,7 @@ async def test_ipc_server_v2_hello_uses_stable_chat_id() -> None:
     inbound = await asyncio.wait_for(bus.consume_inbound(), timeout=1)
     assert inbound.chat_id == "cli-client-a-rag-smoke"
     assert inbound.content == "hello"
+    assert inbound.metadata == {"_transport_request_id": "req-v2"}
 
 
 @pytest.mark.asyncio
@@ -480,6 +483,52 @@ async def test_ipc_server_legacy_line_client_still_works() -> None:
     inbound = await asyncio.wait_for(bus.consume_inbound(), timeout=1)
     assert inbound.chat_id.startswith("cli-")
     assert inbound.content == "legacy hello"
+    assert inbound.metadata == {}
+
+
+@pytest.mark.asyncio
+async def test_ipc_server_v2_client_without_request_id_still_works() -> None:
+    bus = MessageBus()
+    channel = IPCServerChannel(bus, "/tmp/unused.sock", None)
+    writes: list[bytes] = []
+    reader = _FrameReader(
+        [
+            encode_frame(build_hello_payload("client-a", "default")),
+            encode_frame({"type": "user", "content": "hello"}),
+        ]
+    )
+
+    await channel._handle_connection(
+        cast(asyncio.StreamReader, reader),
+        cast(asyncio.StreamWriter, _writer(writes)),
+    )
+
+    inbound = await asyncio.wait_for(bus.consume_inbound(), timeout=1)
+    assert inbound.content == "hello"
+    assert inbound.metadata == {}
+
+
+@pytest.mark.asyncio
+async def test_ipc_server_bounds_v2_request_id_metadata() -> None:
+    bus = MessageBus()
+    channel = IPCServerChannel(bus, "/tmp/unused.sock", None)
+    writes: list[bytes] = []
+    reader = _FrameReader(
+        [
+            encode_frame(build_hello_payload("client-a", "default")),
+            encode_frame(
+                {"type": "user", "request_id": "x" * 200, "content": "hello"}
+            ),
+        ]
+    )
+
+    await channel._handle_connection(
+        cast(asyncio.StreamReader, reader),
+        cast(asyncio.StreamWriter, _writer(writes)),
+    )
+
+    inbound = await asyncio.wait_for(bus.consume_inbound(), timeout=1)
+    assert inbound.metadata == {"_transport_request_id": "x" * 128}
 
 
 @pytest.mark.asyncio

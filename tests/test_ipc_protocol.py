@@ -33,10 +33,11 @@ class _Reader:
 
 @pytest.mark.asyncio
 async def test_encode_read_frame_roundtrip() -> None:
-    frame = encode_frame({"type": "assistant", "content": "你好"})
+    payload = {"type": "user", "request_id": "req-v2", "content": "你好"}
+    frame = encode_frame(payload)
     assert frame.startswith(IPC_FRAME_MAGIC)
     decoded = await read_frame(_Reader(frame))  # type: ignore[arg-type]
-    assert decoded == {"type": "assistant", "content": "你好"}
+    assert decoded == payload
 
 
 @pytest.mark.asyncio

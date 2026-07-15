@@ -55,6 +55,23 @@ class _FrameReaderFromBytes:
         return out
 
 
+class _CLIWriter:
+    def __init__(self) -> None:
+        self.payloads: list[bytes] = []
+
+    def write(self, payload: bytes) -> None:
+        self.payloads.append(payload)
+
+    async def drain(self) -> None:
+        return None
+
+    def close(self) -> None:
+        return None
+
+    async def wait_closed(self) -> None:
+        return None
+
+
 def _import_cli_tui(monkeypatch: pytest.MonkeyPatch):
     rich_mod = types.ModuleType("rich")
     rich_markdown = types.ModuleType("rich.markdown")
@@ -200,6 +217,45 @@ async def test_basic_cli_receive_reads_v2_frame(
     await asyncio.wait_for(CLIClient._receive(Reader()), timeout=1)  # type: ignore[arg-type]
     out = capsys.readouterr().out
     assert "large " in out
+
+
+@pytest.mark.asyncio
+async def test_basic_cli_assigns_a_distinct_uuid_to_each_user_payload(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    from infra.channels.cli import CLIClient
+    from infra.channels.ipc_protocol import read_frame
+
+    writer = _CLIWriter()
+    reader = _FrameReaderFromBytes(b"")
+    inputs = iter(["one", "two", "exit"])
+
+    async def _read_line() -> str:
+        return next(inputs)
+
+    async def _receive(_reader: asyncio.StreamReader) -> None:
+        return None
+
+    monkeypatch.setattr("infra.channels.cli._read_line", _read_line)
+    monkeypatch.setattr(
+        "infra.channels.cli.CLIClient._receive", staticmethod(_receive)
+    )
+    monkeypatch.setattr(
+        "infra.channels.cli.asyncio.open_unix_connection",
+        AsyncMock(return_value=(reader, writer)),
+    )
+    monkeypatch.setenv("AKASHIC_CLI_CLIENT_ID_PATH", str(tmp_path / "client-id"))
+
+    await CLIClient("/tmp/test.sock").run()
+
+    payloads = [
+        await read_frame(_FrameReaderFromBytes(payload))
+        for payload in writer.payloads[1:]
+    ]
+    assert [payload["content"] for payload in payloads] == ["one", "two"]
+    assert all(len(payload["request_id"]) == 32 for payload in payloads)
+    assert payloads[0]["request_id"] != payloads[1]["request_id"]
 
 
 def test_cli_tui_writes_tool_summary(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -20,6 +20,7 @@ from bus.events import InboundMessage, OutboundMessage
 from bus.queue import MessageBus
 from infra.channels.ipc_protocol import (
     IPC_FRAME_MAGIC,
+    IPC_REQUEST_ID_LIMIT,
     ProtocolError,
     build_cli_outbound_payload,
     chat_id_from_hello,
@@ -213,6 +214,8 @@ class IPCServerChannel:
         content = str(data.get("content", "")).strip()
         if not content:
             return
+        request_id = str(data.get("request_id") or "").strip()[:IPC_REQUEST_ID_LIMIT]
+        metadata = {"_transport_request_id": request_id} if request_id else {}
         preview = content[:60] + "..." if len(content) > 60 else content
         logger.info("[cli] received session=%s content=%r", chat_id, preview)
         await self._bus.publish_inbound(
@@ -221,6 +224,7 @@ class IPCServerChannel:
                 sender="cli-user",
                 chat_id=chat_id,
                 content=content,
+                metadata=metadata,
             )
         )
 
