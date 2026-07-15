@@ -38,6 +38,7 @@ from agent.tool_runtime import (
     tool_call_batch_snapshot,
 )
 from agent.tools.base import normalize_tool_result
+from agent.tools.execution_context import ToolExecutionContext
 from agent.tools.tool_search import ToolSearchTool
 from agent.turns.outbound import OutboundDispatch, OutboundPort
 from bus.event_bus import EventBus
@@ -1640,6 +1641,34 @@ class DefaultReasoner(Reasoner):
                         tool_name=tool_call.name,
                         arguments=dict(tool_call.arguments),
                     ))
+                    execution_context = None
+                    execution_contract = (
+                        tool_boundary_context.access_plan.task_execution_contract
+                        if tool_boundary_context is not None
+                        else None
+                    )
+                    if (
+                        tool_call.name == "tool_search"
+                        and execution_contract is not None
+                        and execution_contract.active
+                        and execution_contract.phase == "work"
+                    ):
+                        execution_context = ToolExecutionContext(
+                            protected={
+                                "_session_key": tool_event_session_key,
+                                "_task_execution_read_only": True,
+                            }
+                        )
+
+                    async def _invoke_tool(
+                        tool_name: str, arguments: dict[str, Any]
+                    ) -> object:
+                        return await self._tools.execute(
+                            tool_name,
+                            arguments,
+                            execution_context=execution_context,
+                        )
+
                     exec_result = await self._tool_executor.execute(
                         ToolExecutionRequest(
                             call_id=tool_call.id,
@@ -1654,7 +1683,7 @@ class DefaultReasoner(Reasoner):
                         ),
                         # 真实工具执行入口仍是 ToolRegistry.execute；
                         # hook 只负责拦截与记录，不替代 registry。
-                        self._tools.execute,
+                        _invoke_tool,
                     )
                     if exec_result.status == "success":
                         tools_used.append(tool_call.name)

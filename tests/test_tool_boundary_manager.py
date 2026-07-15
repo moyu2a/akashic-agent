@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -50,6 +51,7 @@ def _execution_ctx() -> ToolAccessContext:
         "read_file": "read-only",
         "shell": "read-only",
         "write_file": "write",
+        "send_webhook": "external-side-effect",
         "delete_workspace": "destructive",
         "finish_task_step_execution": "write",
         "request_task_step_authorization": "write",
@@ -146,6 +148,33 @@ def test_registered_write_returns_typed_defer_before_visibility_block() -> None:
     assert decision.action == "defer"
     assert decision.execute is False
     assert decision.metadata["durable_transition"] == "waiting_authorization"
+
+
+@pytest.mark.parametrize("tool_name", ["write_file", "send_webhook"])
+def test_missing_required_capability_blocks_registered_side_effect_before_defer(
+    tool_name: str,
+) -> None:
+    source = _execution_ctx()
+    context = replace(
+        source,
+        tool_capabilities={
+            "request_task_step_authorization": frozenset({"task_execution.defer"}),
+            "abort_task_step_execution": frozenset({"task_execution.abort"}),
+        },
+    )
+    manager = TurnToolBoundaryManager()
+    boundary_context = manager.build_context(context)
+
+    decision = manager.evaluate_tool_call(
+        boundary_context,
+        tool_name=tool_name,
+        arguments={},
+        visible_names=set(),
+    )
+
+    assert decision.action == "block"
+    assert decision.execute is False
+    assert decision.reason == "task_execution_required_capability_missing"
 
 
 def test_task_plan_create_blocks_spawn_at_boundary_manager() -> None:

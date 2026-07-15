@@ -185,7 +185,10 @@ class TurnToolBoundaryManager:
             execution_contract is not None
             and execution_contract.active
             and execution_contract.phase == "work"
-            and tool_name in context.access_context.disabled_tools
+            and (
+                context.access_plan.filter_error
+                or tool_name in context.access_context.disabled_tools
+            )
         ):
             gate = self._access.check_tool_call(
                 context.access_plan,

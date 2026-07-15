@@ -35,12 +35,16 @@ def _contract() -> TaskExecutionTurnContract:
 
 
 def _snapshot(
-    status: str, events: tuple[TaskExecutionEvent, ...]
+    status: str,
+    events: tuple[TaskExecutionEvent, ...],
+    *,
+    attempt_id: str = "attempt-1",
+    step_id: str = "step-1",
 ) -> TaskExecutionSnapshot:
     attempt = TaskExecutionAttempt(
-        attempt_id="attempt-1",
+        attempt_id=attempt_id,
         task_id="task-1",
-        step_id="step-1",
+        step_id=step_id,
         session_key="cli:s1",
         request_id="req-1",
         idempotency_key="key-1",
@@ -64,10 +68,15 @@ def _snapshot(
     return TaskExecutionSnapshot(attempt=attempt, events=events)
 
 
-def _event(event_type: str, *, work: bool = False) -> TaskExecutionEvent:
+def _event(
+    event_type: str,
+    *,
+    work: bool = False,
+    attempt_id: str = "attempt-1",
+) -> TaskExecutionEvent:
     return TaskExecutionEvent(
         event_id=f"event-{event_type}",
-        attempt_id="attempt-1",
+        attempt_id=attempt_id,
         sequence_no=1,
         event_type=event_type,  # type: ignore[arg-type]
         tool_name="read_file" if work else "",
@@ -169,3 +178,40 @@ def test_waiting_authorization_requires_durable_defer_transition() -> None:
     assert missing_event is None
     assert deferred is not None
     assert deferred.reason == "task_execution_waiting_authorization"
+
+
+def test_completion_rejects_snapshot_for_a_different_attempt() -> None:
+    decision = TaskExecutionCompletionPolicy().evaluate(
+        contract=_contract(),
+        snapshot=_snapshot(
+            "succeeded",
+            (
+                _event("tool_finished", work=True, attempt_id="attempt-2"),
+                _event("attempt_succeeded", attempt_id="attempt-2"),
+            ),
+            attempt_id="attempt-2",
+        ),
+        ledger=ToolCallLedger(),
+        tool_capabilities={
+            "finish_task_step_execution": frozenset({"task_execution.finish"})
+        },
+    )
+
+    assert decision is None
+
+
+def test_completion_rejects_snapshot_for_a_different_target_step() -> None:
+    decision = TaskExecutionCompletionPolicy().evaluate(
+        contract=_contract(),
+        snapshot=_snapshot(
+            "succeeded",
+            (_event("tool_finished", work=True), _event("attempt_succeeded")),
+            step_id="step-2",
+        ),
+        ledger=ToolCallLedger(),
+        tool_capabilities={
+            "finish_task_step_execution": frozenset({"task_execution.finish"})
+        },
+    )
+
+    assert decision is None

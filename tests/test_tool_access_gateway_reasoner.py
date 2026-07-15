@@ -27,6 +27,7 @@ from agent.tools.task_plan import (
     UpdateTaskStepTool,
 )
 from agent.tools.tool_search import ToolSearchTool
+from agent.policies.task_execution_contract import TaskExecutionTurnContract
 
 
 class _RecordingTool(Tool):
@@ -57,6 +58,19 @@ class _RecordingTool(Tool):
     async def execute(self, **kwargs: Any) -> str:
         self.calls.append(kwargs)
         return self._result
+
+
+class _RecordingToolSearch(ToolSearchTool):
+    def __init__(self, registry: ToolRegistry) -> None:
+        super().__init__(registry)
+        self.calls: list[dict[str, Any]] = []
+        self.raw_results: list[str] = []
+
+    async def execute(self, **kwargs: Any) -> str:
+        self.calls.append(dict(kwargs))
+        result = await super().execute(**kwargs)
+        self.raw_results.append(result)
+        return result
 
 
 class _Provider:
@@ -93,13 +107,16 @@ class _ErrorToolHook(_DenyToolHook):
         raise RuntimeError("hook failed")
 
 
-def _msg(content: str) -> SimpleNamespace:
+def _msg(
+    content: str, *, metadata: dict[str, object] | None = None
+) -> SimpleNamespace:
     return SimpleNamespace(
         content=content,
         media=[],
         channel="cli",
         chat_id="1",
         timestamp=datetime.now(timezone.utc),
+        metadata=metadata or {},
     )
 
 
@@ -118,16 +135,18 @@ def _make_reasoner(
     *,
     read_file: _RecordingTool | None = None,
     extra_tools: list[Tool] | None = None,
+    extra_tool_risks: dict[str, str] | None = None,
     discovery: ToolDiscoveryState | None = None,
     task_plan_service: TaskPlanService | None = None,
     recall_memory: _RecordingTool | None = None,
     search_messages: _RecordingTool | None = None,
     tool_search_enabled: bool = True,
     render_requests: list[ContextRequest] | None = None,
+    tool_search_type: type[ToolSearchTool] = ToolSearchTool,
 ) -> DefaultReasoner:
     tools = ToolRegistry()
     tools.set_context(_session_key="cli:1")
-    tools.register(ToolSearchTool(tools), always_on=True, risk="read-only")
+    tools.register(tool_search_type(tools), always_on=True, risk="read-only")
     tools.register(_RecordingTool("search_docs"))
     tools.register(_RecordingTool("fetch_doc_chunk"))
     tools.register(read_file or _RecordingTool("read_file"), always_on=True)
@@ -154,7 +173,7 @@ def _make_reasoner(
         tools.register(UpdateTaskStepTool(task_plan_service))
         tools.register(InspectTaskPlanTool(task_plan_service))
     for tool in extra_tools or []:
-        tools.register(tool)
+        tools.register(tool, risk=(extra_tool_risks or {}).get(tool.name, "unknown"))
 
     def _render(request: ContextRequest, **_kwargs: object) -> ContextRenderResult:
         if render_requests is not None:
@@ -186,6 +205,30 @@ def _make_reasoner(
 
 def _tool_names(call: dict[str, Any]) -> set[str]:
     return {schema["function"]["name"] for schema in call["tools"]}
+
+
+def _execution_work_contract() -> TaskExecutionTurnContract:
+    return TaskExecutionTurnContract(
+        active=True,
+        action="continue",
+        phase="work",
+        attempt_id="attempt-1",
+        target_step_id="step-1",
+        required_capabilities=frozenset({"task_execution.finish"}),
+        allowed_capabilities=frozenset(
+            {
+                "task_execution.finish",
+                "task_execution.defer",
+                "task_execution.abort",
+            }
+        ),
+        allowed_risks=frozenset({"read-only"}),
+        work_call_budget=3,
+        tool_search_budget=1,
+        completion_capability="task_execution.finish",
+        reason="attempt_running",
+        matched_terms=(),
+    )
 
 
 async def _run_reasoner_visibility_case(
@@ -304,6 +347,51 @@ def test_tool_search_result_is_filtered_before_model_can_see_blocked_tool() -> N
         "read_file",
         "shell",
     ]
+
+
+def test_execution_work_tool_search_uses_protected_read_only_scope() -> None:
+    provider = _Provider(
+        [
+            LLMResponse(
+                content="",
+                tool_calls=[
+                    ToolCall(
+                        "s1",
+                        "tool_search",
+                        {"query": "select:write_file", "allowed_risk": ["write"]},
+                    )
+                ],
+            ),
+            LLMResponse(content="final", tool_calls=[]),
+        ]
+    )
+    reasoner = _make_reasoner(
+        provider,
+        extra_tools=[
+            _RecordingTool(
+                "finish_task_step_execution",
+                capabilities=frozenset({"task_execution.finish"}),
+            ),
+            _RecordingTool("write_file"),
+        ],
+        extra_tool_risks={"write_file": "write"},
+        tool_search_type=_RecordingToolSearch,
+    )
+
+    asyncio.run(
+        reasoner.run_turn(
+            msg=_msg(
+                "continue execution",
+                metadata={"task_execution_contract": _execution_work_contract()},
+            ),
+            session=cast(Any, _session()),
+        )
+    )
+
+    tool_search = cast(_RecordingToolSearch, reasoner._tool_search_tool)
+    assert tool_search.calls[0]["_task_execution_read_only"] is True
+    assert tool_search.calls[0]["_session_key"] == "cli:1"
+    assert json.loads(tool_search.raw_results[0])["matched"] == []
 
 
 def test_gateway_blocked_tool_call_does_not_execute_or_count_as_used() -> None:

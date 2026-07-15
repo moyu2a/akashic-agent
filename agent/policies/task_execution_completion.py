@@ -33,6 +33,13 @@ class TaskExecutionCompletionPolicy:
         attempt = snapshot.attempt
         if attempt is None:
             return None
+        if attempt.attempt_id != contract.attempt_id:
+            return None
+        if (
+            contract.target_step_id is not None
+            and attempt.step_id != contract.target_step_id
+        ):
+            return None
         transition_event = _TRANSITION_EVENT_BY_STATUS.get(attempt.status)
         if transition_event is None or not _has_event(
             snapshot.events, attempt.attempt_id, transition_event
