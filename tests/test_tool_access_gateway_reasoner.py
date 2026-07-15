@@ -439,7 +439,7 @@ def test_explicit_source_request_keeps_local_file_schemas_available() -> None:
     assert {"search_docs", "read_file"} <= names
 
 
-def test_active_task_prompt_exposes_progress_task_tools(tmp_path: Path) -> None:
+def test_ordinary_task_plan_turn_remains_la001(tmp_path: Path) -> None:
     service = TaskPlanService(TaskPlanStore(tmp_path / "task_plans.db"))
     service.create_task_plan(
         session_key="cli:1",
@@ -451,7 +451,7 @@ def test_active_task_prompt_exposes_progress_task_tools(tmp_path: Path) -> None:
 
     asyncio.run(
         reasoner.run_turn(
-            msg=_msg("继续执行当前任务，更新下一步"),
+            msg=_msg("标记当前任务第一步已完成"),
             session=cast(Any, _session()),
         )
     )

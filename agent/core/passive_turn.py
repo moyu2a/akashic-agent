@@ -39,6 +39,11 @@ from agent.tool_runtime import (
 )
 from agent.tools.base import normalize_tool_result
 from agent.tools.execution_context import ToolExecutionContext
+from agent.task_plan.execution_runtime import (
+    PreparedTaskExecutionTurn,
+    TaskExecutionLeaseLostError,
+    TaskExecutionRuntimeCoordinator,
+)
 from agent.tools.tool_search import ToolSearchTool
 from agent.turns.outbound import OutboundDispatch, OutboundPort
 from bus.event_bus import EventBus
@@ -198,6 +203,18 @@ def _latest_user_text(messages: list[dict]) -> str:
         if isinstance(content, str):
             return content
     return ""
+
+
+def _task_execution_exit_kind(exc: BaseException) -> str:
+    if isinstance(exc, asyncio.CancelledError):
+        return "cancelled"
+    if isinstance(exc, asyncio.TimeoutError):
+        return "timeout"
+    if isinstance(exc, ContentSafetyError):
+        return "safety_error_after_begin"
+    if isinstance(exc, ContextLengthError):
+        return "context_error_after_begin"
+    return "provider_or_hook_error"
 
 
 def _disabled_tools_from_msg(msg: object) -> set[str]:
@@ -694,6 +711,7 @@ class DefaultReasoner(Reasoner):
         session_manager: "SessionManager | None" = None,
         event_bus: "EventBus | None" = None,
         task_plan_service: "TaskPlanService | None" = None,
+        task_execution_coordinator: TaskExecutionRuntimeCoordinator | None = None,
     ) -> None:
         self._llm = llm
         self._llm_config = llm_config
@@ -705,6 +723,7 @@ class DefaultReasoner(Reasoner):
         self._session_manager = session_manager
         self._event_bus = event_bus
         self._task_plan_service = task_plan_service
+        self._task_execution_coordinator = task_execution_coordinator
         self._prompt_render_plugin_modules: list[object] = []
         self._before_step_plugin_modules: list[object] = []
         self._after_step_plugin_modules: list[object] = []
@@ -852,6 +871,15 @@ class DefaultReasoner(Reasoner):
             "selected_plan": None,
             "trimmed_sections": [],
         }
+        task_execution_turn: PreparedTaskExecutionTurn | None = None
+        if self._task_execution_coordinator is not None:
+            task_execution_turn = self._task_execution_coordinator.prepare_turn(
+                msg=msg,
+                session_key=session.key,
+            )
+            retry_trace["task_execution"] = self._task_execution_coordinator.trace(
+                task_execution_turn
+            )
         source_history = (
             base_history
             if base_history is not None
@@ -886,13 +914,18 @@ class DefaultReasoner(Reasoner):
                 "[tool_search] LRU preloaded=%s",
                 sorted(preloaded) if preloaded else "[]",
             )
+        tool_access_metadata = (
+            task_execution_turn.turn_metadata
+            if task_execution_turn is not None
+            else self._build_tool_access_metadata(msg, session.key)
+        )
         tool_access_context = ToolAccessContext(
             session_key=session.key,
             user_text=str(msg.content or ""),
             always_on_tools=frozenset(self._tools.get_always_on_names()),
             lru_preloaded_tools=frozenset(preloaded or set()),
             disabled_tools=frozenset(disabled_tools),
-            turn_metadata=self._build_tool_access_metadata(msg, session.key),
+            turn_metadata=tool_access_metadata,
             registered_tools=registered_tools,
             tool_capabilities=tool_capabilities,
             tool_risks=tool_risks,
@@ -977,21 +1010,56 @@ class DefaultReasoner(Reasoner):
                 initial_messages
             )
             try:
-                result = await self.run(
-                    initial_messages,
-                    request_time=msg.timestamp,
-                    preloaded_tools=preloaded,
-                    initial_visible_names=visible_names,
-                    tool_boundary_context=tool_boundary_context,
-                    preflight_injected=True,
-                    on_content_delta=stream_sink,
-                    tool_event_session_key=session.key,
-                    tool_event_channel=msg.channel,
-                    tool_event_chat_id=msg.chat_id,
-                    disabled_tools=disabled_tools,
-                )
+                try:
+                    result = await self.run(
+                        initial_messages,
+                        request_time=msg.timestamp,
+                        preloaded_tools=preloaded,
+                        initial_visible_names=visible_names,
+                        tool_boundary_context=tool_boundary_context,
+                        preflight_injected=True,
+                        on_content_delta=stream_sink,
+                        tool_event_session_key=session.key,
+                        tool_event_channel=msg.channel,
+                        tool_event_chat_id=msg.chat_id,
+                        disabled_tools=disabled_tools,
+                        task_execution_turn=task_execution_turn,
+                    )
+                except BaseException as exc:
+                    if (
+                        self._task_execution_coordinator is not None
+                        and task_execution_turn is not None
+                    ):
+                        self._task_execution_coordinator.finalize_turn(
+                            task_execution_turn,
+                            exit_kind=_task_execution_exit_kind(exc),
+                            error=exc,
+                        )
+                        retry_trace["task_execution"] = (
+                            self._task_execution_coordinator.trace(task_execution_turn)
+                        )
+                    raise
+                if (
+                    self._task_execution_coordinator is not None
+                    and task_execution_turn is not None
+                    and task_execution_turn.attempt_is_active
+                ):
+                    self._task_execution_coordinator.finalize_turn(
+                        task_execution_turn,
+                        exit_kind="normal_return_before_terminal",
+                    )
+                if task_execution_turn is not None:
+                    result.metadata["non_lru_tools"] = sorted(
+                        task_execution_turn.execution_tool_names
+                    )
+                    retry_trace["task_execution"] = (
+                        self._task_execution_coordinator.trace(task_execution_turn)
+                        if self._task_execution_coordinator is not None
+                        else {}
+                    )
                 tools_used = list(result.metadata.get("tools_used") or [])
                 tool_chain = list(result.metadata.get("tool_chain") or [])
+                execution_non_lru = set(result.metadata.get("non_lru_tools") or [])
                 if attempt > 0:
                     window = plan["history_window"]
                     retry_trace["selected_plan"] = plan["name"]
@@ -1018,7 +1086,7 @@ class DefaultReasoner(Reasoner):
                         session.key,
                         tools_used,
                         self._tools.get_always_on_names(),
-                        non_lru=non_lru_names,
+                        non_lru=set(non_lru_names) | execution_non_lru,
                     )
                 if attempt == 0:
                     retry_trace["selected_plan"] = plan["name"]
@@ -1047,8 +1115,19 @@ class DefaultReasoner(Reasoner):
                     thinking=result.thinking,
                     streamed=result.streamed,
                     context_retry=retry_trace,
+                    non_lru_tools=execution_non_lru,
                 )
             except ContentSafetyError:
+                if self._claimed_execution_request(task_execution_turn):
+                    return TurnRunResult(
+                        reply="你的消息触发了安全审查，无法处理。",
+                        context_retry=retry_trace,
+                        non_lru_tools=set(
+                            task_execution_turn.execution_tool_names
+                            if task_execution_turn is not None
+                            else set()
+                        ),
+                    )
                 if attempt < len(attempts) - 1:
                     next_plan = attempts[attempt + 1]
                     logger.warning(
@@ -1065,6 +1144,16 @@ class DefaultReasoner(Reasoner):
                         context_retry=retry_trace,
                     )
             except ContextLengthError:
+                if self._claimed_execution_request(task_execution_turn):
+                    return TurnRunResult(
+                        reply="上下文过长无法处理，请尝试新建对话。",
+                        context_retry=retry_trace,
+                        non_lru_tools=set(
+                            task_execution_turn.execution_tool_names
+                            if task_execution_turn is not None
+                            else set()
+                        ),
+                    )
                 if attempt < len(attempts) - 1:
                     next_plan = attempts[attempt + 1]
                     logger.warning(
@@ -1086,7 +1175,32 @@ class DefaultReasoner(Reasoner):
                     reply="模型流响应中断，请刷新对话重试。",
                     context_retry=retry_trace,
                 )
+            except TaskExecutionLeaseLostError:
+                logger.warning(
+                    "[task_execution_lease_lost] request=%s",
+                    task_execution_turn.request_id if task_execution_turn else "-",
+                )
+                return TurnRunResult(
+                    reply="任务执行租约已失效，本次结果未被记录。",
+                    context_retry=retry_trace,
+                    non_lru_tools=set(
+                        task_execution_turn.execution_tool_names
+                        if task_execution_turn is not None
+                        else set()
+                    ),
+                )
         return TurnRunResult(reply="（安全重试异常）", context_retry=retry_trace)
+
+    def _claimed_execution_request(
+        self,
+        turn: PreparedTaskExecutionTurn | None,
+    ) -> bool:
+        if self._task_execution_coordinator is None or turn is None:
+            return False
+        return self._task_execution_coordinator.request_has_claimed_attempt(
+            session_key=turn.session_key,
+            request_id=turn.request_id,
+        )
 
     async def run(
         self,
@@ -1102,6 +1216,7 @@ class DefaultReasoner(Reasoner):
         tool_event_channel: str = "",
         tool_event_chat_id: str = "",
         disabled_tools: set[str] | None = None,
+        task_execution_turn: PreparedTaskExecutionTurn | None = None,
     ) -> ReasonerResult:
         # 1. 初始化消息上下文、本轮工具轨迹。
         messages = initial_messages
@@ -1229,14 +1344,30 @@ class DefaultReasoner(Reasoner):
                 if final_only_next_call
                 else self._tools.get_schemas(names=schema_names)
             )
-            response = await self._llm.provider.chat(
-                messages=messages,
-                tools=tools_for_call,
-                model=self._llm_config.model,
-                max_tokens=self._llm_config.max_tokens,
-                tool_choice="auto",
-                on_content_delta=on_content_delta,
-            )
+            if (
+                self._task_execution_coordinator is not None
+                and task_execution_turn is not None
+            ):
+                async with self._task_execution_coordinator.lease_guard(
+                    task_execution_turn
+                ):
+                    response = await self._llm.provider.chat(
+                        messages=messages,
+                        tools=tools_for_call,
+                        model=self._llm_config.model,
+                        max_tokens=self._llm_config.max_tokens,
+                        tool_choice="auto",
+                        on_content_delta=on_content_delta,
+                    )
+            else:
+                response = await self._llm.provider.chat(
+                    messages=messages,
+                    tools=tools_for_call,
+                    model=self._llm_config.model,
+                    max_tokens=self._llm_config.max_tokens,
+                    tool_choice="auto",
+                    on_content_delta=on_content_delta,
+                )
             if on_content_delta is not None and response.content:
                 streamed = True
             if response.cache_prompt_tokens is not None:
@@ -1293,6 +1424,7 @@ class DefaultReasoner(Reasoner):
                 # 6. 逐个执行本轮工具调用。
                 iter_calls: list[dict[str, Any]] = []
                 for tool_batch_index, tool_call in enumerate(response.tool_calls):
+                    runtime_call_decision = None
                     if tool_call.name in disabled:
                         await self._observe_tool_call_started(
                             session_key=tool_event_session_key,
@@ -1407,6 +1539,67 @@ class DefaultReasoner(Reasoner):
                             arguments=tool_call.arguments,
                             visible_names=visible_names,
                         )
+                        if (
+                            self._task_execution_coordinator is not None
+                            and task_execution_turn is not None
+                        ):
+                            runtime_call_decision = (
+                                await self._task_execution_coordinator.before_tool_call(
+                                    task_execution_turn,
+                                    tool_name=tool_call.name,
+                                    arguments=tool_call.arguments,
+                                    tool_capabilities=(
+                                        tool_boundary_context.access_context.tool_capabilities.get(
+                                            tool_call.name,
+                                            frozenset(),
+                                        )
+                                    ),
+                                    boundary_decision=boundary_decision,
+                                )
+                            )
+                            if not runtime_call_decision.execute:
+                                result = runtime_call_decision.result_payload
+                                append_tool_result(
+                                    messages,
+                                    tool_call_id=tool_call.id,
+                                    content=result,
+                                    tool_name=tool_call.name,
+                                )
+                                await self._observe_tool_call_completed(
+                                    session_key=tool_event_session_key,
+                                    channel=tool_event_channel,
+                                    chat_id=tool_event_chat_id,
+                                    iteration=iteration + 1,
+                                    call_id=tool_call.id,
+                                    tool_name=tool_call.name,
+                                    arguments=tool_call.arguments,
+                                    final_arguments=tool_call.arguments,
+                                    status=runtime_call_decision.status,
+                                    result_preview=support.log_preview(result),
+                                )
+                                iter_calls.append(
+                                    {
+                                        "call_id": tool_call.id,
+                                        "name": tool_call.name,
+                                        "status": runtime_call_decision.status,
+                                        "arguments": tool_call.arguments,
+                                        "boundary_action": boundary_decision.action,
+                                        "boundary_reason": runtime_call_decision.reason,
+                                        "result": result,
+                                    }
+                                )
+                                tool_boundary_context = (
+                                    self._tool_boundary.refresh_task_execution_contract(
+                                        tool_boundary_context,
+                                        task_execution_turn.contract,
+                                    )
+                                )
+                                visible_names = self._tool_boundary.compute_visible_names(
+                                    tool_boundary_context
+                                )
+                                if runtime_call_decision.final_only:
+                                    final_only_next_call = True
+                                continue
                         if not boundary_decision.execute:
                             result = boundary_decision.result_payload or ""
                             append_tool_result(
@@ -1478,6 +1671,19 @@ class DefaultReasoner(Reasoner):
                                 if turn_completion_decision.action == "final_only":
                                     final_only_next_call = True
                             continue
+                    elif (
+                        self._task_execution_coordinator is not None
+                        and task_execution_turn is not None
+                    ):
+                        runtime_call_decision = (
+                            await self._task_execution_coordinator.before_tool_call(
+                                task_execution_turn,
+                                tool_name=tool_call.name,
+                                arguments=tool_call.arguments,
+                                tool_capabilities=frozenset(),
+                                boundary_decision=None,
+                            )
+                        )
                     # 6.1 deferred 工具未解锁时，先回填 select: 引导错误。
                     if visible_names is not None and tool_call.name not in visible_names:
                         exec_result = await self._tool_executor.preflight(
@@ -1641,13 +1847,19 @@ class DefaultReasoner(Reasoner):
                         tool_name=tool_call.name,
                         arguments=dict(tool_call.arguments),
                     ))
-                    execution_context = None
+                    execution_context = (
+                        runtime_call_decision.execution_context
+                        if runtime_call_decision is not None
+                        else None
+                    )
                     execution_contract = (
                         tool_boundary_context.access_plan.task_execution_contract
                         if tool_boundary_context is not None
                         else None
                     )
                     if (
+                        execution_context is None
+                        and
                         tool_call.name == "tool_search"
                         and execution_contract is not None
                         and execution_contract.active
@@ -1669,22 +1881,35 @@ class DefaultReasoner(Reasoner):
                             execution_context=execution_context,
                         )
 
-                    exec_result = await self._tool_executor.execute(
-                        ToolExecutionRequest(
-                            call_id=tool_call.id,
-                            tool_name=tool_call.name,
-                            arguments=tool_call.arguments,
-                            source="passive",
-                            session_key=tool_event_session_key,
-                            channel=tool_event_channel,
-                            chat_id=tool_event_chat_id,
-                            tool_batch=tool_batch,
-                            tool_batch_index=tool_batch_index,
-                        ),
-                        # 真实工具执行入口仍是 ToolRegistry.execute；
-                        # hook 只负责拦截与记录，不替代 registry。
-                        _invoke_tool,
+                    execution_request = ToolExecutionRequest(
+                        call_id=tool_call.id,
+                        tool_name=tool_call.name,
+                        arguments=tool_call.arguments,
+                        source="passive",
+                        session_key=tool_event_session_key,
+                        channel=tool_event_channel,
+                        chat_id=tool_event_chat_id,
+                        tool_batch=tool_batch,
+                        tool_batch_index=tool_batch_index,
                     )
+                    if (
+                        self._task_execution_coordinator is not None
+                        and task_execution_turn is not None
+                    ):
+                        async with self._task_execution_coordinator.lease_guard(
+                            task_execution_turn
+                        ):
+                            exec_result = await self._tool_executor.execute(
+                                execution_request,
+                                _invoke_tool,
+                            )
+                    else:
+                        exec_result = await self._tool_executor.execute(
+                            execution_request,
+                            # 真实工具执行入口仍是 ToolRegistry.execute；
+                            # hook 只负责拦截与记录，不替代 registry。
+                            _invoke_tool,
+                        )
                     if exec_result.status == "success":
                         tools_used.append(tool_call.name)
                     result = exec_result.output
@@ -1759,6 +1984,41 @@ class DefaultReasoner(Reasoner):
                             invoker_reached=exec_result.invoker_reached,
                             invoker_succeeded=exec_result.invoker_succeeded,
                         )
+                        if (
+                            self._task_execution_coordinator is not None
+                            and task_execution_turn is not None
+                        ):
+                            await self._task_execution_coordinator.after_tool_call(
+                                task_execution_turn,
+                                tool_name=tool_call.name,
+                                tool_call_id=tool_call.id,
+                                arguments=exec_result.final_arguments,
+                                result=result,
+                                execution_result=exec_result,
+                                registry_risk=(
+                                    tool_boundary_context.access_context.tool_risks.get(
+                                        tool_call.name,
+                                        "unknown",
+                                    )
+                                ),
+                                registry_capabilities=(
+                                    tool_boundary_context.access_context.tool_capabilities.get(
+                                        tool_call.name,
+                                        frozenset(),
+                                    )
+                                ),
+                            )
+                            tool_boundary_context = (
+                                self._tool_boundary.refresh_task_execution_contract(
+                                    tool_boundary_context,
+                                    task_execution_turn.contract,
+                                )
+                            )
+                            visible_names = self._tool_boundary.compute_visible_names(
+                                tool_boundary_context
+                            )
+                            if task_execution_turn.finalized:
+                                final_only_next_call = True
                         old_plan = tool_boundary_context.access_plan
                         self._tool_boundary.observe_access_tool_result(
                             tool_boundary_context,
@@ -1801,6 +2061,14 @@ class DefaultReasoner(Reasoner):
                             proactive_allowed=react_decision.recommend_final_only,
                             task_plan_contract=(
                                 tool_boundary_context.task_plan_contract
+                            ),
+                            task_execution_contract=(
+                                tool_boundary_context.task_execution_contract
+                            ),
+                            task_execution_snapshot=(
+                                task_execution_turn.snapshot
+                                if task_execution_turn is not None
+                                else None
                             ),
                             tool_capabilities=(
                                 tool_boundary_context.access_context.tool_capabilities
@@ -2003,6 +2271,38 @@ class DefaultReasoner(Reasoner):
                 continue
 
             # 8. 没有 tool_calls 时，说明本轮得到最终回复。
+            if (
+                self._task_execution_coordinator is not None
+                and task_execution_turn is not None
+            ):
+                runtime_final = self._task_execution_coordinator.handle_model_final(
+                    task_execution_turn
+                )
+                if runtime_final.action != "accept":
+                    messages.append(
+                        {"role": "assistant", "content": response.content or ""}
+                    )
+                    messages.append(
+                        support.build_context_hint_message(
+                            "task_execution_protocol",
+                            runtime_final.model_hint,
+                        )
+                    )
+                    tool_boundary_context = (
+                        self._tool_boundary.refresh_task_execution_contract(
+                            tool_boundary_context,
+                            task_execution_turn.contract,
+                        )
+                        if tool_boundary_context is not None
+                        else None
+                    )
+                    if tool_boundary_context is not None:
+                        visible_names = self._tool_boundary.compute_visible_names(
+                            tool_boundary_context
+                        )
+                    if runtime_final.action == "failed":
+                        final_only_next_call = True
+                    continue
             # 8a. 若 content 为空（模型只输出了 thinking），retry 一次。
             if not response.content and response.thinking:
                 logger.warning(
@@ -2075,6 +2375,14 @@ class DefaultReasoner(Reasoner):
             )
 
         # 9. 达到最大迭代次数后，生成不完整进展总结。
+        if (
+            self._task_execution_coordinator is not None
+            and task_execution_turn is not None
+        ):
+            self._task_execution_coordinator.finalize_turn(
+                task_execution_turn,
+                exit_kind="max_iterations",
+            )
         logger.warning(
             "[迭代上限] 达到最大轮次%d，触发收尾总结，已调用工具: %s",
             iteration,

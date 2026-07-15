@@ -184,6 +184,27 @@ class ToolAccessGateway:
         plan = ToolAccessPlan()
         for policy in self._policies:
             plan = _merge_plans(plan, policy.build_plan(context))
+        if (
+            context.turn_metadata.get("task_execution_requested") is True
+            and context.turn_metadata.get("task_execution_provider_available") is False
+        ):
+            execution_universe = frozenset(context.registered_tools)
+            plan = _merge_plans(
+                plan,
+                ToolAccessPlan(
+                    visible_suppress=execution_universe,
+                    tool_search_block=execution_universe,
+                    execution_block=execution_universe,
+                    reason="task_execution_provider_unavailable",
+                    policies=("TaskExecutionProviderPolicy",),
+                    model_hints=(
+                        "Task execution is unavailable for this turn. Do not use "
+                        "unrelated tools as an execution fallback.",
+                    ),
+                    strict_capability_scope=True,
+                    final_only=True,
+                ),
+            )
         if plan.reason == "no_tool_access_policy" and plan.policies:
             plan = replace(plan, reason=plan.policies[-1])
         return plan

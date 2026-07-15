@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import logging
 from collections.abc import Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any
 
 from agent.policies.evidence_completion import EvidenceCompletionPolicy
@@ -34,6 +34,7 @@ from agent.policies.tool_ledger import (
     summarize_args,
 )
 from agent.tools.base import ToolResult, normalize_tool_result
+from agent.policies.task_execution_contract import TaskExecutionTurnContract
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +45,7 @@ class ToolBoundaryContext:
     access_plan: ToolAccessPlan
     intent: TaskIntent
     task_plan_contract: TaskPlanTurnContract | None = None
+    task_execution_contract: TaskExecutionTurnContract | None = None
     ledger: ToolCallLedger = field(default_factory=ToolCallLedger)
     pending_hints: list[str] = field(default_factory=list)
     decisions: list[dict[str, object]] = field(default_factory=list)
@@ -96,8 +98,42 @@ class TurnToolBoundaryManager:
                 else infer_task_intent(access_context.user_text)
             ),
             task_plan_contract=contract,
+            task_execution_contract=access_plan.task_execution_contract,
             pending_hints=list(access_plan.model_hints),
         )
+
+    def refresh_task_execution_contract(
+        self,
+        context: ToolBoundaryContext,
+        contract: TaskExecutionTurnContract,
+    ) -> ToolBoundaryContext:
+        metadata = dict(context.access_context.turn_metadata)
+        metadata["task_execution_contract"] = contract
+        access_context = replace(context.access_context, turn_metadata=metadata)
+        refreshed = self.build_context(access_context)
+        if (
+            contract.active
+            and contract.phase == "work"
+            and refreshed.access_plan.execution_dynamic_tools
+        ):
+            refreshed.access_plan = replace(
+                refreshed.access_plan,
+                visible_add=(
+                    refreshed.access_plan.visible_add
+                    | refreshed.access_plan.execution_dynamic_tools
+                ),
+            )
+        refreshed.ledger = context.ledger
+        refreshed.decisions = context.decisions
+        refreshed.pending_hints = [
+            *context.pending_hints,
+            *(
+                hint
+                for hint in refreshed.pending_hints
+                if hint not in context.pending_hints
+            ),
+        ]
+        return refreshed
 
     def compute_visible_names(self, context: ToolBoundaryContext) -> set[str]:
         return self._access.compute_visible_names(

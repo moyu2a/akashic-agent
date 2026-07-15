@@ -201,6 +201,29 @@ class TaskExecutionService:
             raise TaskExecutionConflictError(str(exc)) from exc
         return self._snapshot(attempt)
 
+    def renew_attempt_lease(
+        self, *, session_key: str, attempt_id: str
+    ) -> TaskExecutionSnapshot:
+        current = self._require_owned_attempt(
+            session_key=session_key,
+            attempt_id=attempt_id,
+        )
+        if current.status not in {"pending", "running"}:
+            return self._snapshot(current)
+        now = self._now()
+        try:
+            attempt = self._store.renew_execution_attempt_lease(
+                attempt_id=attempt_id,
+                owner_instance_id=self._runtime_instance_id,
+                now=now,
+                lease_expires_at=(
+                    now + timedelta(seconds=self._config.lease_seconds)
+                ).isoformat(),
+            )
+        except (ExecutionAttemptConflictError, TaskExecutionAttemptNotFoundError) as exc:
+            raise TaskExecutionConflictError(str(exc)) from exc
+        return self._snapshot(attempt)
+
     def record_tool_event(
         self,
         *,
@@ -244,6 +267,7 @@ class TaskExecutionService:
         success: bool,
         result_summary: str,
         error_code: str = "",
+        terminal_reason: str | None = None,
     ) -> TaskExecutionSnapshot:
         self._require_owned_attempt(session_key=session_key, attempt_id=attempt_id)
         if success and not self._has_successful_work_event(attempt_id):
@@ -257,7 +281,13 @@ class TaskExecutionService:
                 result_summary=bounded_execution_preview(result_summary),
                 error_code=bounded_execution_preview(error_code, max_chars=128),
                 terminal_reason=(
-                    "read_only_work_succeeded" if success else "read_only_work_failed"
+                    bounded_execution_preview(terminal_reason)
+                    if terminal_reason
+                    else (
+                        "read_only_work_succeeded"
+                        if success
+                        else "read_only_work_failed"
+                    )
                 ),
             )
         except (ExecutionAttemptConflictError, TaskExecutionAttemptNotFoundError) as exc:

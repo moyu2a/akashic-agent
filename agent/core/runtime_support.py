@@ -112,6 +112,7 @@ class TurnRunResult:
     thinking: str | None = None
     streamed: bool = False
     context_retry: dict[str, object] = field(default_factory=dict)
+    non_lru_tools: set[str] = field(default_factory=set)
 
 
 class AgentLoopRunner(Protocol):
