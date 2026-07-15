@@ -32,6 +32,19 @@ from agent.task_plan.service import (
     TaskPlanError,
     TaskPlanService,
 )
+from agent.task_plan.execution_service import (
+    BeginExecutionResult,
+    TaskExecutionAccessDeniedError,
+    TaskExecutionConflictError,
+    TaskExecutionError,
+    TaskExecutionService,
+)
+from agent.task_plan.orchestrator import (
+    ExecutionOrchestrationAction,
+    ExecutionOrchestrationDecision,
+    TaskExecutionOrchestrator,
+)
+from agent.task_plan.request_identity import derive_task_execution_idempotency_key
 from agent.task_plan.store import (
     ActiveTaskExistsError,
     TaskPlanNotFoundError,
@@ -55,6 +68,15 @@ __all__ = [
     "TaskPlanConflictError",
     "TaskPlanError",
     "TaskPlanService",
+    "BeginExecutionResult",
+    "TaskExecutionAccessDeniedError",
+    "TaskExecutionConflictError",
+    "TaskExecutionError",
+    "TaskExecutionService",
+    "ExecutionOrchestrationAction",
+    "ExecutionOrchestrationDecision",
+    "TaskExecutionOrchestrator",
+    "derive_task_execution_idempotency_key",
     "ActiveTaskExistsError",
     "TaskPlanNotFoundError",
     "TaskPlanStore",

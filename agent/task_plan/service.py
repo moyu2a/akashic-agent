@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from agent.task_plan.models import StepStatus, TaskPlan, validate_step_status
 from agent.task_plan.store import (
+    ActiveExecutionAttemptExistsError,
     ActiveTaskExistsError,
     TaskPlanNotFoundError,
     TaskPlanStore,
@@ -49,6 +50,8 @@ class TaskPlanService:
             )
         except ActiveTaskExistsError as exc:
             raise TaskPlanConflictError("active task already exists") from exc
+        except ActiveExecutionAttemptExistsError as exc:
+            raise TaskPlanConflictError("active execution attempt exists") from exc
 
     def get_active_task_plan(self, *, session_key: str) -> TaskPlan | None:
         return self._store.get_active_plan(_require_text(session_key, "session_key"))
@@ -88,6 +91,8 @@ class TaskPlanService:
             )
         except TaskStepNotFoundError as exc:
             raise ValueError("step_id or step_index does not match a task step") from exc
+        except ActiveExecutionAttemptExistsError as exc:
+            raise TaskPlanConflictError("active execution attempt exists") from exc
 
         if updated.steps and all(
             step.status in {"completed", "skipped"} for step in updated.steps
@@ -111,11 +116,14 @@ class TaskPlanService:
             return plan
         if plan.status in {"cancelled", "failed"}:
             raise TaskPlanConflictError("task is already terminal")
-        return self._store.set_task_status(
-            task_id=plan.task_id,
-            status="completed",
-            terminal_reason=terminal_reason,
-        )
+        try:
+            return self._store.set_task_status(
+                task_id=plan.task_id,
+                status="completed",
+                terminal_reason=terminal_reason,
+            )
+        except ActiveExecutionAttemptExistsError as exc:
+            raise TaskPlanConflictError("active execution attempt exists") from exc
 
     def cancel_task_plan(
         self,
@@ -129,11 +137,17 @@ class TaskPlanService:
             return plan
         if plan.status in {"completed", "failed"}:
             raise TaskPlanConflictError("task is already terminal")
-        return self._store.set_task_status(
-            task_id=plan.task_id,
-            status="cancelled",
-            terminal_reason=terminal_reason,
-        )
+        try:
+            return self._store.set_task_status(
+                task_id=plan.task_id,
+                status="cancelled",
+                terminal_reason=terminal_reason,
+            )
+        except ActiveExecutionAttemptExistsError as exc:
+            raise TaskPlanConflictError("active execution attempt exists") from exc
+
+    def require_owned_task_plan(self, *, session_key: str, task_id: str) -> TaskPlan:
+        return self._require_owned_plan(session_key=session_key, task_id=task_id)
 
     def _require_owned_plan(self, *, session_key: str, task_id: str) -> TaskPlan:
         clean_session = _require_text(session_key, "session_key")
