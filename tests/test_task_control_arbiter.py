@@ -27,7 +27,7 @@ def test_explicit_execution_continue_beats_generic_plan_update() -> None:
         {"has_active_task": True, "task_execution_enabled": True},
     )
 
-    assert decision.task_plan_contract is None
+    assert decision.task_plan_contract.action == "none"
     assert decision.task_execution_contract.action == "continue"
 
 
@@ -48,7 +48,6 @@ def test_explicit_task_plan_commands_beat_execution_intent(
         {"has_active_task": True, "task_execution_enabled": True},
     )
 
-    assert decision.task_plan_contract is not None
     assert decision.task_plan_contract.action == task_action
     assert decision.task_execution_contract.active is False
 
@@ -71,7 +70,7 @@ def test_explicit_execution_actions_are_selected(text: str, action: str) -> None
         },
     )
 
-    assert decision.task_plan_contract is None
+    assert decision.task_plan_contract.action == "none"
     assert decision.task_execution_contract.action == action
 
 
@@ -85,7 +84,7 @@ def test_runtime_replay_has_priority_over_explicit_task_plan_update() -> None:
         },
     )
 
-    assert decision.task_plan_contract is None
+    assert decision.task_plan_contract.action == "none"
     assert decision.task_execution_contract.action == "replay"
 
 
@@ -95,7 +94,7 @@ def test_background_passthrough_selects_no_strict_contract() -> None:
         {"has_active_task": True, "task_execution_enabled": True},
     )
 
-    assert decision.task_plan_contract is None
+    assert decision.task_plan_contract.action == "none"
     assert decision.task_execution_contract.active is False
 
 
@@ -105,6 +104,5 @@ def test_feature_disabled_keeps_generic_task_plan_update() -> None:
         {"has_active_task": True, "task_execution_enabled": False},
     )
 
-    assert decision.task_plan_contract is not None
     assert decision.task_plan_contract.action == "plan_update"
     assert decision.task_execution_contract.active is False

@@ -7,6 +7,7 @@ from dataclasses import replace
 from typing import Any
 
 from agent.policies.doc_rag_intent import DOC_RAG_TOOL_NAMES, decide_doc_rag_preload
+from agent.policies.task_control_arbiter import resolve_task_control_context
 from agent.policies.task_execution_access import TaskExecutionAccessPolicy
 from agent.policies.task_plan_boundary import TaskPlanAccessPolicy
 from agent.policies.tool_access_types import (
@@ -179,6 +180,7 @@ class ToolAccessGateway:
         )
 
     def build_plan(self, context: ToolAccessContext) -> ToolAccessPlan:
+        context = resolve_task_control_context(context)
         plan = ToolAccessPlan()
         for policy in self._policies:
             plan = _merge_plans(plan, policy.build_plan(context))

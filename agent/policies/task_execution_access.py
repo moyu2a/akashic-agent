@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from agent.policies.task_control_arbiter import resolve_task_control_context
 from agent.policies.task_execution_contract import TaskExecutionTurnContract
 from agent.policies.tool_access_types import ToolAccessContext, ToolAccessPlan
 
@@ -10,6 +11,7 @@ class TaskExecutionAccessPolicy:
     name = "TaskExecutionAccessPolicy"
 
     def build_plan(self, context: ToolAccessContext) -> ToolAccessPlan:
+        context = resolve_task_control_context(context)
         contract = context.turn_metadata.get("task_execution_contract")
         if not isinstance(contract, TaskExecutionTurnContract) or not contract.active:
             return ToolAccessPlan()

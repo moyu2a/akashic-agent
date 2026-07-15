@@ -8,6 +8,7 @@ from agent.policies.task_plan_contract import (
     TaskPlanTurnContract,
     infer_task_plan_turn_decision,
 )
+from agent.policies.task_control_arbiter import resolve_task_control_context
 from agent.policies.tool_access_types import ToolAccessContext, ToolAccessPlan
 
 TASK_PLAN_TOOL_NAMES = frozenset(
@@ -64,27 +65,32 @@ class TaskPlanAccessPolicy:
     name = "TaskPlanAccessPolicy"
 
     def build_plan(self, context: ToolAccessContext) -> ToolAccessPlan:
-        has_active_task = bool(context.turn_metadata.get("has_active_task"))
-        decision = infer_task_plan_turn_decision(
-            context.user_text,
-            has_active_task=has_active_task,
-        )
-        if decision.background_mode != "none":
+        context = resolve_task_control_context(context)
+        background_mode = context.turn_metadata.get("_task_control_background_mode")
+        contract = context.turn_metadata.get("task_plan_contract")
+        if background_mode != "none" and background_mode in _BACKGROUND_TOOLS:
             return ToolAccessPlan(
-                visible_add=_BACKGROUND_TOOLS[decision.background_mode],
-                reason=f"background_{decision.background_mode}_passthrough",
-                matched_terms=decision.contract.matched_terms,
+                visible_add=_BACKGROUND_TOOLS[background_mode],
+                reason=f"background_{background_mode}_passthrough",
+                matched_terms=(
+                    contract.matched_terms
+                    if isinstance(contract, TaskPlanTurnContract)
+                    else ()
+                ),
                 policies=(self.name,),
                 policy_metadata={
                     "task_plan": {
-                        **decision.contract.to_trace_metadata(),
-                        "background_mode": decision.background_mode,
+                        **(
+                            contract.to_trace_metadata()
+                            if isinstance(contract, TaskPlanTurnContract)
+                            else TaskPlanTurnContract.inactive().to_trace_metadata()
+                        ),
+                        "background_mode": background_mode,
                     }
                 },
             )
 
-        contract = decision.contract
-        if not contract.active:
+        if not isinstance(contract, TaskPlanTurnContract) or not contract.active:
             return ToolAccessPlan()
 
         universe = _registered_universe(context)

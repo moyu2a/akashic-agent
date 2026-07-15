@@ -4,7 +4,6 @@ import json
 
 from agent.policies.tool_access import ToolAccessContext, ToolAccessGateway
 
-
 LOCAL_TOOLS = {"shell", "read_file", "list_dir"}
 DOC_RAG_TOOLS = {"search_docs", "fetch_doc_chunk"}
 
@@ -22,6 +21,41 @@ def _ctx(
         always_on_tools=frozenset(always_on or {"tool_search", *LOCAL_TOOLS}),
         lru_preloaded_tools=frozenset(lru or set()),
         disabled_tools=frozenset(disabled or set()),
+    )
+
+
+def _task_control_ctx(
+    text: str,
+    metadata: dict[str, object],
+) -> ToolAccessContext:
+    capabilities = {
+        "create_task_plan": frozenset({"task_plan.create"}),
+        "inspect_task_plan": frozenset({"task_plan.inspect"}),
+        "update_task_step": frozenset({"task_plan.update"}),
+        "begin_task_step_execution": frozenset({"task_execution.begin"}),
+        "inspect_task_execution": frozenset({"task_execution.inspect"}),
+    }
+    registered = frozenset({"tool_search", *capabilities})
+    return ToolAccessContext(
+        session_key="cli:task-control",
+        user_text=text,
+        always_on_tools=frozenset({"tool_search"}),
+        lru_preloaded_tools=frozenset(),
+        disabled_tools=frozenset(),
+        turn_metadata=metadata,
+        registered_tools=registered,
+        tool_capabilities=capabilities,
+        tool_risks={name: "read-only" for name in registered},
+    )
+
+
+def _active_strict_contract_count(plan) -> int:
+    return sum(
+        contract is not None and contract.active
+        for contract in (
+            plan.task_plan_contract,
+            plan.task_execution_contract,
+        )
     )
 
 
@@ -175,3 +209,51 @@ def test_terminal_doc_rag_result_blocks_later_local_fallback() -> None:
     assert LOCAL_TOOLS <= updated.tool_search_block
     assert LOCAL_TOOLS <= updated.execution_block
     assert LOCAL_TOOLS <= updated.visible_suppress
+
+
+def test_gateway_arbitrates_continue_before_building_policy_plans() -> None:
+    context = _task_control_ctx(
+        "继续执行下一步",
+        {"has_active_task": True, "task_execution_enabled": True},
+    )
+
+    plan = ToolAccessGateway().build_plan(context)
+
+    assert plan.task_plan_contract is None
+    assert plan.task_execution_contract is not None
+    assert plan.task_execution_contract.action == "continue"
+    assert plan.reason != "conflicting_task_plan_contracts"
+    assert _active_strict_contract_count(plan) == 1
+
+
+def test_gateway_arbitration_keeps_explicit_task_plan_update() -> None:
+    context = _task_control_ctx(
+        "把第一步标记完成，然后继续执行下一步",
+        {"has_active_task": True, "task_execution_enabled": True},
+    )
+
+    plan = ToolAccessGateway().build_plan(context)
+
+    assert plan.task_plan_contract is not None
+    assert plan.task_plan_contract.action == "plan_update"
+    assert plan.task_execution_contract is None
+    assert _active_strict_contract_count(plan) == 1
+
+
+def test_gateway_preserves_runtime_replay_over_task_plan_text() -> None:
+    context = _task_control_ctx(
+        "把第一步标记完成",
+        {
+            "has_active_task": False,
+            "task_execution_enabled": True,
+            "request_replay_attempt_id": "attempt-final",
+        },
+    )
+
+    plan = ToolAccessGateway().build_plan(context)
+
+    assert plan.task_plan_contract is None
+    assert plan.task_execution_contract is not None
+    assert plan.task_execution_contract.action == "replay"
+    assert plan.task_execution_contract.phase == "terminal"
+    assert _active_strict_contract_count(plan) == 1
