@@ -2,10 +2,22 @@ from __future__ import annotations
 
 import pytest
 
+import agent.policies.task_execution_contract as execution_contract_module
+
 from agent.policies.task_execution_contract import (
     TaskExecutionTurnContract,
     infer_task_execution_contract,
 )
+
+
+def _detect_task_execution_intent(text: str) -> bool:
+    detector = getattr(
+        execution_contract_module,
+        "detect_task_execution_intent",
+        None,
+    )
+    assert detector is not None, "canonical execution intent detector is missing"
+    return bool(detector(text))
 
 
 def test_continue_requires_active_task_and_enabled_execution() -> None:
@@ -105,6 +117,36 @@ def test_feature_disabled_fails_closed_even_for_runtime_replay() -> None:
     )
 
     assert contract == TaskExecutionTurnContract.inactive()
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "执行下一步",
+        "取消执行",
+        "abort",
+        "retry",
+        "inspect execution",
+    ],
+)
+def test_canonical_execution_intent_detector_accepts_supported_terms(text: str) -> None:
+    assert _detect_task_execution_intent(text) is True
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "不要执行下一步",
+        "do not retry",
+        "不要查看执行状态",
+        "聊聊天",
+        "查看当前任务",
+    ],
+)
+def test_canonical_execution_intent_detector_rejects_negation_and_chat(
+    text: str,
+) -> None:
+    assert _detect_task_execution_intent(text) is False
 
 
 def test_inactive_contract_must_use_empty_state() -> None:

@@ -1,8 +1,10 @@
 from __future__ import annotations
 from typing import Any, cast
+from unittest.mock import MagicMock
 
 import json
 import sys
+from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -12,9 +14,16 @@ from agent.config import Config, DEFAULT_SOCKET
 from agent.config_models import Config as ConfigModel, TaskExecutionConfig, WiringConfig
 from agent.lifecycle.facade import TurnLifecycle
 from agent.lifecycle.types import AfterStepCtx
+from agent.looping.core import AgentLoop
+from agent.looping.ports import (
+    AgentLoopConfig,
+    AgentLoopDeps,
+    MemoryServices,
+)
 from agent.looping.interrupt import TurnInterruptState
 from agent.task_plan.service import TaskPlanService
 from agent.task_plan.store import TaskPlanStore
+from agent.task_plan.execution_runtime import TaskExecutionRuntimeCoordinator
 from agent.tools.registry import ToolRegistry
 from agent.tools.base import Tool
 from bootstrap.tools import _build_loop_deps, build_core_runtime, build_registered_tools
@@ -28,9 +37,12 @@ from bootstrap.wiring import (
     resolve_toolset_provider,
 )
 from bus.event_bus import EventBus
+from tests.memory_fakes import FakeMemoryEngine
 
 
 def test_core_runtime_exposes_no_task_execution_tools(tmp_path: Path, monkeypatch) -> None:
+    observed: dict[str, object] = {}
+
     class _NoopProvider:
         pass
 
@@ -43,6 +55,9 @@ def test_core_runtime_exposes_no_task_execution_tools(tmp_path: Path, monkeypatc
             pass
 
     def build_tools(*args, task_plan_store, **kwargs):
+        observed["registered_execution_service"] = kwargs.get(
+            "task_execution_service"
+        )
         return (
             ToolRegistry(),
             SimpleNamespace(),
@@ -60,7 +75,11 @@ def test_core_runtime_exposes_no_task_execution_tools(tmp_path: Path, monkeypatc
     )
     monkeypatch.setattr("bootstrap.tools.build_vl_provider", lambda config: None)
     monkeypatch.setattr("bootstrap.tools.build_registered_tools", build_tools)
-    monkeypatch.setattr("bootstrap.tools._build_loop_deps", lambda **kwargs: object())
+    def build_loop_deps(**kwargs):
+        observed.update(kwargs)
+        return object()
+
+    monkeypatch.setattr("bootstrap.tools._build_loop_deps", build_loop_deps)
     monkeypatch.setattr("bootstrap.tools.AgentLoop", _Loop)
     monkeypatch.setattr("agent.plugins.manager.PluginManager", _PluginManager)
 
@@ -78,6 +97,8 @@ def test_core_runtime_exposes_no_task_execution_tools(tmp_path: Path, monkeypatc
     )
 
     assert runtime.task_execution_service is not None
+    assert observed["registered_execution_service"] is None
+    assert observed["task_execution_coordinator"] is None
     assert runtime.tools.get_tool("continue_task_execution") is None
     assert runtime.tools.get_tool("retry_task_execution") is None
 
@@ -87,6 +108,7 @@ def test_core_runtime_reconciles_before_constructing_agent_loop(
 ) -> None:
     events: list[str] = []
     service = object()
+    observed: dict[str, object] = {}
 
     class _Recovery:
         def reconcile_startup(self):
@@ -100,17 +122,33 @@ def test_core_runtime_reconciles_before_constructing_agent_loop(
 
     _prepare_core_runtime(monkeypatch, loop_type=_Loop)
     monkeypatch.setattr(
+        "bootstrap.tools._build_loop_deps",
+        lambda **kwargs: observed.update(kwargs) or object(),
+    )
+    monkeypatch.setattr(
         "bootstrap.tools.build_task_execution_services",
         lambda **kwargs: (service, _Recovery()),
     )
 
     runtime = build_core_runtime(
-        _core_runtime_config(),
+        ConfigModel(
+            provider="openai",
+            model="m",
+            api_key="k",
+            system_prompt="s",
+            wiring=WiringConfig(toolsets=[]),
+            task_execution=TaskExecutionConfig(enabled=True),
+        ),
         tmp_path,
         cast(Any, SimpleNamespace()),
     )
 
     assert runtime.task_execution_service is service
+    assert isinstance(
+        observed["task_execution_coordinator"],
+        TaskExecutionRuntimeCoordinator,
+    )
+    assert observed["task_execution_coordinator"]._service is service
 
 
 def test_core_runtime_disables_only_task_execution_after_recovery_error(
@@ -124,14 +162,26 @@ def test_core_runtime_disables_only_task_execution_after_recovery_error(
         def __init__(self, *args, **kwargs) -> None:
             self.active_turn_states = {}
 
+    observed: dict[str, object] = {}
     _prepare_core_runtime(monkeypatch, loop_type=_Loop, execution_tools=True)
+    monkeypatch.setattr(
+        "bootstrap.tools._build_loop_deps",
+        lambda **kwargs: observed.update(kwargs) or object(),
+    )
     monkeypatch.setattr(
         "bootstrap.tools.build_task_execution_services",
         lambda **kwargs: (object(), _Recovery()),
     )
 
     runtime = build_core_runtime(
-        _core_runtime_config(),
+        ConfigModel(
+            provider="openai",
+            model="m",
+            api_key="k",
+            system_prompt="s",
+            wiring=WiringConfig(toolsets=[]),
+            task_execution=TaskExecutionConfig(enabled=True),
+        ),
         tmp_path,
         cast(Any, SimpleNamespace()),
     )
@@ -139,6 +189,7 @@ def test_core_runtime_disables_only_task_execution_after_recovery_error(
     assert isinstance(runtime.loop, _Loop)
     assert runtime.task_execution_service is None
     assert runtime.task_execution_recovery is None
+    assert observed["task_execution_coordinator"] is None
     assert runtime.tools.get_registered_names().isdisjoint(
         {
             "begin_task_step_execution",
@@ -211,6 +262,39 @@ class _NamedTool(Tool):
 
     async def execute(self, **_: Any) -> str:
         return "ok"
+
+
+def test_agent_loop_default_reasoner_receives_composed_execution_coordinator(
+    tmp_path: Path,
+) -> None:
+    store = TaskPlanStore(tmp_path / "composition_task_plans.db")
+    plan_service = TaskPlanService(store)
+    execution_service, _ = build_task_execution_services(
+        store=store,
+        plan_service=plan_service,
+        runtime_instance_id="runtime-composition-test",
+        config=TaskExecutionConfig(enabled=True),
+    )
+    coordinator = TaskExecutionRuntimeCoordinator(
+        execution_service,
+        config=TaskExecutionConfig(enabled=True),
+        runtime_instance_id="runtime-composition-test",
+        clock=lambda: datetime.now(UTC),
+    )
+    loop = AgentLoop(
+        AgentLoopDeps(
+            bus=MagicMock(),
+            provider=MagicMock(),
+            tools=ToolRegistry(),
+            session_manager=MagicMock(),
+            workspace=tmp_path,
+            memory_services=MemoryServices(engine=FakeMemoryEngine(tmp_path)),
+            task_execution_coordinator=coordinator,
+        ),
+        AgentLoopConfig(),
+    )
+
+    assert loop._reasoner._task_execution_coordinator is coordinator
 
 
 def test_task_execution_wiring_uses_the_task_plan_store(tmp_path: Path) -> None:

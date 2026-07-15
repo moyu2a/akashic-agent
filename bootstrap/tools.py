@@ -35,6 +35,7 @@ from agent.retrieval.default_pipeline import DefaultMemoryRetrievalPipeline
 from agent.scheduler import SchedulerService
 from agent.task_plan.context import TaskPlanPromptRenderModule
 from agent.task_plan.execution_service import TaskExecutionService
+from agent.task_plan.execution_runtime import TaskExecutionRuntimeCoordinator
 from agent.task_plan.recovery import TaskExecutionRecoveryService
 from agent.task_plan.service import TaskPlanService
 from agent.task_plan.store import TaskPlanStore
@@ -452,6 +453,7 @@ def _build_loop_deps(
     event_bus: EventBus,
     memory_runtime: MemoryRuntime,
     task_plan_service: TaskPlanService | None = None,
+    task_execution_coordinator: TaskExecutionRuntimeCoordinator | None = None,
 ) -> AgentLoopDeps:
     wiring = getattr(config, "wiring", WiringConfig())
     context = resolve_context_factory(wiring.context)(
@@ -495,6 +497,7 @@ def _build_loop_deps(
         memory_services=memory_services,
         session_services=session_services,
         task_plan_service=task_plan_service,
+        task_execution_coordinator=task_execution_coordinator,
     )
 
 
@@ -531,12 +534,17 @@ def build_core_runtime(
     task_plan_store = TaskPlanStore(workspace / "task_plans.db")
     runtime_instance_id = f"runtime_{uuid4().hex}"
     task_plan_service = TaskPlanService(task_plan_store)
+    def task_execution_clock() -> datetime:
+        return datetime.now(UTC)
+
     task_execution_service, task_execution_recovery = build_task_execution_services(
         store=task_plan_store,
         plan_service=task_plan_service,
         runtime_instance_id=runtime_instance_id,
         config=config.task_execution,
+        clock=task_execution_clock,
     )
+    task_execution_coordinator = None
     try:
         recovery_results = task_execution_recovery.reconcile_startup()
         logger.info(
@@ -548,6 +556,13 @@ def build_core_runtime(
         logger.exception("Task execution startup recovery failed; disabling task execution")
         task_execution_service = None
         task_execution_recovery = None
+    if config.task_execution.enabled and task_execution_service is not None:
+        task_execution_coordinator = TaskExecutionRuntimeCoordinator(
+            task_execution_service,
+            config=config.task_execution,
+            runtime_instance_id=runtime_instance_id,
+            clock=task_execution_clock,
+        )
     loop_ref: dict[str, AgentLoop] = {}
     (
         tools,
@@ -571,7 +586,9 @@ def build_core_runtime(
         agent_loop_provider=lambda: loop_ref.get("loop"),
         task_plan_store=task_plan_store,
         task_plan_service=task_plan_service,
-        task_execution_service=task_execution_service,
+        task_execution_service=(
+            task_execution_service if task_execution_coordinator is not None else None
+        ),
     )
     presence = PresenceStore(session_manager._store)
     processing_state = ProcessingState()
@@ -588,6 +605,7 @@ def build_core_runtime(
         event_bus=event_bus,
         memory_runtime=memory_runtime,
         task_plan_service=task_plan_service,
+        task_execution_coordinator=task_execution_coordinator,
     )
     loop = AgentLoop(
         loop_deps,

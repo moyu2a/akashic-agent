@@ -292,6 +292,7 @@ class AgentLoop:
             session_manager=self.session_manager,
             event_bus=self._event_bus,
             task_plan_service=deps.task_plan_service,
+            task_execution_coordinator=deps.task_execution_coordinator,
         )
 
         # 3. 最后串 passive prepare / execute / commit 主链。

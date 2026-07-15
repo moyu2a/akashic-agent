@@ -83,7 +83,8 @@ _INSPECT_TERMS = ("查看执行状态", "执行进度", "执行状态", "inspect
 _CONTINUE_TERMS = ("继续执行", "执行下一步", "下一步执行", "continue execution")
 _NEGATED_EXECUTION_RE = re.compile(
     r"(?:请勿|不要|不再|无需|无须|不用|不必|暂时别|暂不|先别|先不|别|不)"
-    r"\s*(?:再\s*)?(?:继续\s*执行|执行\s*下一步|重试|终止\s*执行|停止\s*执行|取消\s*执行|abort|retry)",
+    r"\s*(?:再\s*)?(?:继续\s*执行|执行\s*下一步|重试|终止\s*执行|停止\s*执行|取消\s*执行|查看\s*执行状态|执行状态|abort|retry|inspect\s+execution)"
+    r"|(?:do\s+not|don't|dont|never)\s+(?:continue\s+execution|execute\s+next\s+step|retry|abort|inspect\s+execution)",
     re.IGNORECASE,
 )
 
@@ -302,26 +303,25 @@ def infer_task_execution_contract(
         )
 
     text = str(user_text or "")
-    if (
-        _matched_terms(text, _BACKGROUND_TERMS)
-        or _matched_terms(text, _TASK_PLAN_TERMS)
-        or _NEGATED_EXECUTION_RE.search(text)
+    action, matched_terms = _parse_task_execution_intent(text)
+    if _matched_terms(text, _BACKGROUND_TERMS) or _matched_terms(
+        text, _TASK_PLAN_TERMS
     ):
         return TaskExecutionTurnContract.inactive()
     if not bool(metadata.get("has_active_task")):
         return TaskExecutionTurnContract.inactive()
 
-    retry_terms = _matched_terms(text, _RETRY_TERMS)
-    if retry_terms:
+    if action == "retry":
         target_step_id = metadata.get("latest_retryable_step_id")
         if not _valid_id(target_step_id):
             return TaskExecutionTurnContract.inactive()
-        return _claim_contract("retry", retry_terms, target_step_id=target_step_id)
+        return _claim_contract(
+            "retry",
+            matched_terms,
+            target_step_id=target_step_id,
+        )
 
-    abort_terms = _dedupe_terms(
-        (*_matched_terms(text, _ABORT_TERMS), *_matched_regex_terms(text, _ABORT_RE))
-    )
-    if abort_terms:
+    if action == "abort":
         return TaskExecutionTurnContract(
             active=True,
             action="abort",
@@ -335,11 +335,10 @@ def infer_task_execution_contract(
             tool_search_budget=0,
             completion_capability="task_execution.abort",
             reason="abort_execution",
-            matched_terms=abort_terms,
+            matched_terms=matched_terms,
         )
 
-    inspect_terms = _matched_terms(text, _INSPECT_TERMS)
-    if inspect_terms:
+    if action == "inspect":
         return TaskExecutionTurnContract(
             active=True,
             action="inspect",
@@ -353,13 +352,39 @@ def infer_task_execution_contract(
             tool_search_budget=0,
             completion_capability="task_execution.inspect",
             reason="inspect_execution",
-            matched_terms=inspect_terms,
+            matched_terms=matched_terms,
         )
 
+    if action == "continue":
+        return _claim_contract("continue", matched_terms)
+    return TaskExecutionTurnContract.inactive()
+
+
+def detect_task_execution_intent(user_text: str) -> bool:
+    action, _ = _parse_task_execution_intent(str(user_text or ""))
+    return action != "inactive"
+
+
+def _parse_task_execution_intent(
+    text: str,
+) -> tuple[Literal["inactive", "continue", "retry", "inspect", "abort"], tuple[str, ...]]:
+    if _matched_terms(text, _BACKGROUND_TERMS) or _NEGATED_EXECUTION_RE.search(text):
+        return "inactive", ()
+    retry_terms = _matched_terms(text, _RETRY_TERMS)
+    if retry_terms:
+        return "retry", retry_terms
+    abort_terms = _dedupe_terms(
+        (*_matched_terms(text, _ABORT_TERMS), *_matched_regex_terms(text, _ABORT_RE))
+    )
+    if abort_terms:
+        return "abort", abort_terms
+    inspect_terms = _matched_terms(text, _INSPECT_TERMS)
+    if inspect_terms:
+        return "inspect", inspect_terms
     continue_terms = _matched_terms(text, _CONTINUE_TERMS)
     if continue_terms:
-        return _claim_contract("continue", continue_terms)
-    return TaskExecutionTurnContract.inactive()
+        return "continue", continue_terms
+    return "inactive", ()
 
 
 def _claim_contract(

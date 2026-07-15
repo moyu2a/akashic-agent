@@ -17,6 +17,7 @@ from agent.core.runtime_support import LLMServices, ToolDiscoveryState
 from agent.core.types import ContextRenderResult, ContextRequest
 from agent.looping.ports import LLMConfig
 from agent.provider import ContentSafetyError, ContextLengthError, LLMResponse, ToolCall
+import agent.task_plan.execution_runtime as execution_runtime_module
 from agent.task_plan.execution_models import RuntimeToolEvent
 from agent.task_plan.execution_service import (
     TaskExecutionConflictError,
@@ -40,6 +41,8 @@ from agent.tools.task_plan import (
     UpdateTaskStepTool,
 )
 from agent.tools.tool_search import ToolSearchTool
+from agent.tool_hooks.base import ToolHook
+from agent.tool_hooks.types import HookContext, HookOutcome
 from bus.events import InboundMessage
 
 
@@ -120,12 +123,54 @@ class _WorkTool(Tool):
 
 class _FaultInjectingExecutionService(TaskExecutionService):
     fail_next_defer = False
+    fail_all_blocks = False
 
     def defer_attempt(self, **kwargs: Any):
         if self.fail_next_defer:
             self.fail_next_defer = False
             raise TaskExecutionConflictError("injected defer persistence failure")
         return super().defer_attempt(**kwargs)
+
+    def block_attempt(self, **kwargs: Any):
+        if self.fail_all_blocks:
+            raise TaskExecutionConflictError("injected block persistence failure")
+        return super().block_attempt(**kwargs)
+
+
+class _BeginFailureTool(Tool):
+    name = "begin_task_step_execution"
+    description = "return a structured begin failure"
+    parameters = {"type": "object", "properties": {}, "required": []}
+    capabilities = frozenset({"task_execution.begin"})
+
+    async def execute(self, **kwargs: Any) -> ToolResult:
+        del kwargs
+        return ToolResult(
+            ok=False,
+            error_code="adapter_rejected",
+            text=json.dumps(
+                {"ok": False, "error_code": "adapter_rejected"},
+                ensure_ascii=False,
+            ),
+        )
+
+
+class _PreToolHook(ToolHook):
+    event = "pre_tool_use"
+
+    def __init__(self, tool_name: str, *, raises: bool) -> None:
+        self.name = "error_begin_hook" if raises else "deny_begin_hook"
+        self._tool_name = tool_name
+        self._raises = raises
+
+    def matches(self, ctx: HookContext) -> bool:
+        return ctx.request.tool_name == self._tool_name
+
+    async def run(self, ctx: HookContext) -> HookOutcome:
+        del ctx
+        if self._raises:
+            raise RuntimeError("pre-tool hook failed")
+        return HookOutcome(decision="deny", reason="pre-tool hook denied")
 
 
 class ReasonerExecutionFixture:
@@ -346,6 +391,13 @@ class ReasonerExecutionFixture:
     def lru_names(self) -> set[str]:
         return self.discovery.get_preloaded(self.session_key)
 
+    def replace_begin_with_structured_failure(self) -> None:
+        self.registry.register(
+            _BeginFailureTool(),
+            risk="write",
+            non_lru=True,
+        )
+
     def attempt_for_request(self, request_id: str | None = None):
         target = request_id or self.last_request_id
         attempt = self.store.get_execution_attempt_by_request(
@@ -440,16 +492,9 @@ class ReasonerExecutionFixture:
             self.llm.responses = [
                 tool_call("begin_task_step_execution", {}),
                 tool_call("read_file", {"path": "README.md"}),
+                RuntimeError("provider failed after hook error"),
             ]
-            if self.coordinator is not None:
-                original = self.coordinator.after_tool_call
-
-                async def hook_fault(*args: Any, **kwargs: Any):
-                    if kwargs.get("tool_name") == "read_file":
-                        raise RuntimeError("hook failed")
-                    return await original(*args, **kwargs)
-
-                self.coordinator.after_tool_call = hook_fault
+            self.reasoner.add_tool_hooks([_PreToolHook("read_file", raises=True)])
         elif kind == "max_iterations":
             self.reasoner._llm_config.max_iterations = 2
             self.llm.responses = [
@@ -552,6 +597,101 @@ async def test_provider_error_blocks_and_releases_step(reasoner_fixture) -> None
     assert reasoner_fixture.step_status(1) == "pending"
 
 
+@pytest.mark.parametrize(
+    "preclaim_error",
+    [
+        ContextLengthError("context too long before claim"),
+        ContentSafetyError("safety failure before claim"),
+    ],
+)
+@pytest.mark.asyncio
+async def test_preclaim_outer_retry_can_complete_execution(
+    reasoner_fixture,
+    preclaim_error,
+) -> None:
+    reasoner_fixture.llm.responses = [
+        preclaim_error,
+        tool_call("begin_task_step_execution", {}),
+        tool_call("read_file", {"path": "README.md"}),
+        tool_call(
+            "finish_task_step_execution",
+            {"success": True, "result_summary": "retry completed"},
+        ),
+        final_reply("Completed after retry"),
+    ]
+
+    result = await reasoner_fixture.run_turn("继续执行下一步")
+
+    assert result.tools_used == [
+        "begin_task_step_execution",
+        "read_file",
+        "finish_task_step_execution",
+    ]
+    assert reasoner_fixture.attempt_status() == "succeeded"
+
+
+@pytest.mark.asyncio
+async def test_begin_service_conflict_stays_model_visible_without_starting(
+    reasoner_fixture,
+) -> None:
+    old = reasoner_fixture.execution_service.begin_next_step(
+        session_key=reasoner_fixture.session_key,
+        request_id="existing-request",
+    )
+    reasoner_fixture.llm.responses = [
+        tool_call("begin_task_step_execution", {}),
+        final_reply("The existing attempt prevents begin"),
+    ]
+
+    result = await reasoner_fixture.run_turn("继续执行下一步")
+
+    assert reasoner_fixture.store.get_execution_attempt(old.attempt.attempt_id).status == (
+        "pending"
+    )
+    assert result.tool_chain[0]["calls"][0]["status"] == "success"
+    payload = json.loads(result.tool_chain[0]["calls"][0]["result"])
+    assert payload["decision"] == {
+        "action": "conflict",
+        "reason": "attempt_already_active",
+    }
+
+
+@pytest.mark.parametrize("raises", [False, True])
+@pytest.mark.asyncio
+async def test_begin_pre_tool_hook_failure_never_claims_or_raises(
+    reasoner_fixture,
+    raises,
+) -> None:
+    reasoner_fixture.reasoner.add_tool_hooks(
+        [_PreToolHook("begin_task_step_execution", raises=raises)]
+    )
+    reasoner_fixture.llm.responses = [
+        tool_call("begin_task_step_execution", {}),
+        final_reply("Begin was rejected"),
+    ]
+
+    result = await reasoner_fixture.run_turn("继续执行下一步")
+
+    assert reasoner_fixture.attempts() == []
+    assert result.tool_chain[0]["calls"][0]["status"] in {"denied", "error"}
+
+
+@pytest.mark.asyncio
+async def test_begin_adapter_structured_error_never_claims_or_raises(
+    reasoner_fixture,
+) -> None:
+    reasoner_fixture.replace_begin_with_structured_failure()
+    reasoner_fixture.llm.responses = [
+        tool_call("begin_task_step_execution", {}),
+        final_reply("Begin adapter rejected the request"),
+    ]
+
+    result = await reasoner_fixture.run_turn("继续执行下一步")
+
+    assert reasoner_fixture.attempts() == []
+    assert "adapter_rejected" in result.tool_chain[0]["calls"][0]["result"]
+
+
 @pytest.mark.asyncio
 async def test_defer_persistence_failure_never_executes_write(reasoner_fixture) -> None:
     reasoner_fixture.execution_service.fail_next_defer = True
@@ -568,6 +708,36 @@ async def test_defer_persistence_failure_never_executes_write(reasoner_fixture) 
     )
     assert result.context_retry["task_execution"]["reason"] == (
         "defer_persistence_failed"
+    )
+
+
+@pytest.mark.asyncio
+async def test_defer_and_block_double_failure_raises_without_synthetic_result(
+    reasoner_fixture,
+) -> None:
+    reasoner_fixture.execution_service.fail_next_defer = True
+    reasoner_fixture.execution_service.fail_all_blocks = True
+    reasoner_fixture.llm.responses = [
+        tool_call("begin_task_step_execution", {}),
+        tool_call("write_file", {"path": "x.txt", "content": "x"}),
+    ]
+
+    persistence_error = getattr(
+        execution_runtime_module,
+        "TaskExecutionPersistenceError",
+        RuntimeError,
+    )
+    with pytest.raises(persistence_error, match="defer persistence"):
+        await reasoner_fixture.run_turn("继续执行下一步")
+
+    assert reasoner_fixture.write_executor_calls == []
+    assert len(reasoner_fixture.llm.calls) == 2
+    assert reasoner_fixture.attempt_status() == "running"
+    assert not any(
+        event.event_type in {"authorization_deferred", "attempt_blocked"}
+        for event in reasoner_fixture.store.list_execution_events(
+            reasoner_fixture.latest_attempt().attempt_id
+        )
     )
 
 
@@ -723,16 +893,37 @@ async def test_execution_disabled_is_not_discoverable(tmp_path: Path) -> None:
     assert "begin_task_step_execution" not in names
 
 
+@pytest.mark.parametrize(
+    "prompt",
+    ["执行下一步", "取消执行", "abort", "retry", "inspect execution"],
+)
 @pytest.mark.asyncio
-async def test_provider_missing_fails_closed(tmp_path: Path) -> None:
+async def test_provider_missing_fails_closed_for_canonical_execution_intent(
+    tmp_path: Path,
+    prompt: str,
+) -> None:
     fixture = ReasonerExecutionFixture(tmp_path, provider_present=False)
     fixture.llm.responses = [final_reply("Execution unavailable")]
-    result = await fixture.run_turn("继续执行下一步")
-    names = {schema["function"]["name"] for schema in fixture.llm.calls[0]["tools"]}
-    assert "begin_task_step_execution" not in names
+    result = await fixture.run_turn(prompt)
+    assert fixture.llm.calls[0]["tools"] == []
     assert result.context_retry["task_execution"]["reason"] == (
         "task_execution_provider_unavailable"
     )
+
+
+@pytest.mark.parametrize(
+    "prompt",
+    ["不要执行下一步", "do not retry", "不要查看执行状态", "聊聊天", "查看当前任务"],
+)
+@pytest.mark.asyncio
+async def test_provider_missing_does_not_false_positive_on_chat_or_negation(
+    tmp_path: Path,
+    prompt: str,
+) -> None:
+    fixture = ReasonerExecutionFixture(tmp_path, provider_present=False)
+    fixture.llm.responses = [final_reply("Ordinary response")]
+    await fixture.run_turn(prompt)
+    assert fixture.llm.calls[0]["tools"] != []
 
 
 @pytest.mark.asyncio

@@ -12,6 +12,7 @@ if TYPE_CHECKING:
     from agent.provider import LLMProvider
     from agent.retrieval.protocol import MemoryRetrievalPipeline
     from agent.task_plan.service import TaskPlanService
+    from agent.task_plan.execution_runtime import TaskExecutionRuntimeCoordinator
     from agent.tools.registry import ToolRegistry
     from bus.event_bus import EventBus
     from bus.processing import ProcessingState
@@ -88,6 +89,7 @@ class AgentLoopDeps:
     session_services: SessionServices | None = None
     tool_discovery: "ToolDiscoveryState | None" = None
     task_plan_service: "TaskPlanService | None" = None
+    task_execution_coordinator: "TaskExecutionRuntimeCoordinator | None" = None
     reasoner: "Reasoner | None" = None
     core_runner: "CoreRunner | None" = None
 

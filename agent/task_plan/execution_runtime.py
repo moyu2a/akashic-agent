@@ -13,6 +13,7 @@ from agent.policies.task_control_arbiter import TaskControlIntentArbiter
 from agent.policies.task_execution_budget import TaskExecutionEventClassifier
 from agent.policies.task_execution_contract import (
     TaskExecutionTurnContract,
+    detect_task_execution_intent,
     infer_task_execution_contract,
 )
 from agent.policies.task_plan_contract import infer_task_plan_turn_decision
@@ -53,6 +54,10 @@ class TaskExecutionLeaseLostError(RuntimeError):
     pass
 
 
+class TaskExecutionPersistenceError(RuntimeError):
+    pass
+
+
 @dataclass
 class PreparedTaskExecutionTurn:
     session_key: str
@@ -65,6 +70,7 @@ class PreparedTaskExecutionTurn:
         default_factory=lambda: TaskExecutionSnapshot(attempt=None)
     )
     request_replayed: bool = False
+    request_claimed_attempt: bool = False
     decision_reason: str = "no_task_execution_intent"
     protocol_corrections: int = 0
     execution_tool_names: set[str] = field(default_factory=set)
@@ -78,12 +84,16 @@ class PreparedTaskExecutionTurn:
 
     @property
     def has_claimed_attempt(self) -> bool:
-        return self.attempt_id is not None
+        return self.request_claimed_attempt and self.attempt_id is not None
 
     @property
     def attempt_is_active(self) -> bool:
         attempt = self.snapshot.attempt
-        return attempt is not None and attempt.status in {"pending", "running"}
+        return bool(
+            self.request_claimed_attempt
+            and attempt is not None
+            and attempt.status in {"pending", "running"}
+        )
 
 
 @dataclass(frozen=True)
@@ -137,18 +147,21 @@ class TaskExecutionLeaseGuard:
         return self
 
     async def __aexit__(self, exc_type, exc, traceback) -> None:
+        renewal_error: TaskExecutionLeaseLostError | None = None
         if self._task is not None:
             self._task.cancel()
             try:
                 await self._task
             except asyncio.CancelledError:
                 pass
+            except TaskExecutionLeaseLostError as task_error:
+                renewal_error = task_error
+        if exc is not None:
+            return None
+        if renewal_error is not None:
+            raise renewal_error
         if exc is None:
             self.renew_now()
-        if self._conflict is not None and exc is None:
-            raise TaskExecutionLeaseLostError(
-                "task execution lease ownership was lost"
-            ) from self._conflict
 
     async def _renew_loop(self) -> None:
         while True:
@@ -184,7 +197,7 @@ class TaskExecutionRuntimeCoordinator:
         metadata = dict(raw_metadata) if isinstance(raw_metadata, Mapping) else {}
         source_turn_id = _optional_int(metadata.get("source_turn_id"))
         self.protocol_correction_count = 0
-        requested = _looks_like_execution_request(user_text)
+        requested = detect_task_execution_intent(user_text)
         metadata.update(
             {
                 "task_execution_enabled": bool(self._config.enabled and self._service),
@@ -243,6 +256,7 @@ class TaskExecutionRuntimeCoordinator:
                 contract=contract,
                 snapshot=snapshot,
                 request_replayed=True,
+                request_claimed_attempt=True,
                 decision_reason="task_execution_request_replayed",
                 finalized=True,
             )
@@ -387,12 +401,25 @@ class TaskExecutionRuntimeCoordinator:
             return
         turn.execution_tool_names.add(tool_name)
         if "task_execution.begin" in registry_capabilities:
+            normalized = normalize_tool_result(result)
+            result_ok, _ = _result_facts(normalized)
+            begin_action = _begin_decision_action(normalized)
+            if not (
+                execution_result.status == "success"
+                and execution_result.invoker_reached
+                and execution_result.invoker_succeeded
+                and result_ok
+                and begin_action in {"claimed", "replayed"}
+            ):
+                turn.decision_reason = "task_execution_begin_not_committed"
+                return
             replay = self._require_service().replay_request(
                 session_key=turn.session_key,
                 request_id=turn.request_id,
             )
             if replay is None:
-                raise RuntimeError("execution claim committed without request replay")
+                turn.decision_reason = "task_execution_begin_state_missing"
+                return
             snapshot = self._require_service().inspect(
                 session_key=turn.session_key,
                 attempt_id=replay.attempt.attempt_id,
@@ -403,7 +430,9 @@ class TaskExecutionRuntimeCoordinator:
                     attempt_id=snapshot.attempt.attempt_id,
                 )
             turn.snapshot = snapshot
-            turn.request_replayed = replay.replayed
+            turn.request_replayed = begin_action == "replayed"
+            turn.request_claimed_attempt = True
+            turn.finalized = False
             turn.decision_reason = (
                 "task_execution_request_replayed"
                 if replay.replayed
@@ -514,7 +543,7 @@ class TaskExecutionRuntimeCoordinator:
         del error
         if turn.finalized and not turn.attempt_is_active:
             return
-        if turn.snapshot.attempt is None:
+        if not turn.request_claimed_attempt:
             replay = self._require_service().replay_request(
                 session_key=turn.session_key,
                 request_id=turn.request_id,
@@ -524,8 +553,11 @@ class TaskExecutionRuntimeCoordinator:
                     session_key=turn.session_key,
                     attempt_id=replay.attempt.attempt_id,
                 )
+                turn.request_claimed_attempt = True
         attempt = turn.snapshot.attempt
-        if attempt is None or attempt.status in TERMINAL_ATTEMPT_STATUSES:
+        if attempt is None:
+            return
+        if attempt.status in TERMINAL_ATTEMPT_STATUSES:
             turn.finalized = True
             return
         if attempt.status == "waiting_authorization":
@@ -566,7 +598,11 @@ class TaskExecutionRuntimeCoordinator:
         self, turn: PreparedTaskExecutionTurn
     ) -> TaskExecutionLeaseGuard | _NullLeaseGuard:
         attempt = turn.snapshot.attempt
-        if attempt is None or attempt.status not in {"pending", "running"}:
+        if (
+            not turn.request_claimed_attempt
+            or attempt is None
+            or attempt.status not in {"pending", "running"}
+        ):
             return _NullLeaseGuard()
         return TaskExecutionLeaseGuard(
             self._require_service(),
@@ -629,8 +665,10 @@ class TaskExecutionRuntimeCoordinator:
                 turn.decision_reason = "defer_persistence_failed"
                 turn.contract = self._contract_for_snapshot(turn)
                 turn.finalized = True
-            except Exception:
-                self._recover_expired_owner(turn)
+            except Exception as block_error:
+                raise TaskExecutionPersistenceError(
+                    "task execution defer persistence failed"
+                ) from block_error
 
     def _execution_context(
         self,
@@ -769,14 +807,6 @@ def _terminal_contract(attempt_id: str) -> TaskExecutionTurnContract:
     )
 
 
-def _looks_like_execution_request(text: str) -> bool:
-    normalized = (text or "").lower()
-    return any(
-        term in normalized
-        for term in ("继续执行", "重试", "任务执行", "取消当前", "continue execution")
-    )
-
-
 def _optional_int(value: object) -> int | None:
     return value if isinstance(value, int) and not isinstance(value, bool) else None
 
@@ -791,6 +821,19 @@ def _result_facts(result: ToolResult) -> tuple[bool, str]:
     if not isinstance(payload, dict):
         return False, "unstructured_result"
     return bool(payload.get("ok")), str(payload.get("error_code") or "")
+
+
+def _begin_decision_action(result: ToolResult) -> str:
+    try:
+        payload = json.loads(result.text)
+    except (TypeError, ValueError):
+        return ""
+    if not isinstance(payload, dict):
+        return ""
+    decision = payload.get("decision")
+    if not isinstance(decision, dict):
+        return ""
+    return str(decision.get("action") or "")
 
 
 def _attempt_reason(attempt: object) -> str:
