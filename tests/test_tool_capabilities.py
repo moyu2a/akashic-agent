@@ -104,6 +104,16 @@ def test_capability_mapping_is_a_defensive_copy() -> None:
     )
 
 
+def test_risk_mapping_is_a_defensive_copy() -> None:
+    registry = ToolRegistry()
+    registry.register(_DeclaredCapabilityTool(), risk="write")
+
+    first = registry.get_risks_by_name()
+    first["declared_capability"] = "read-only"
+
+    assert registry.get_risks_by_name() == {"declared_capability": "write"}
+
+
 def test_invalid_capability_registration_is_atomic() -> None:
     registry = ToolRegistry()
 

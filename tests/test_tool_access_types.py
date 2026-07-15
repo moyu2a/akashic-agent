@@ -7,6 +7,7 @@ from agent.policies.tool_access import (
     ToolExecutionGateResult as GatewayToolExecutionGateResult,
 )
 from agent.policies.task_plan_contract import infer_task_plan_turn_decision
+from agent.policies.task_execution_contract import TaskExecutionTurnContract
 from agent.policies.task_plan_boundary import TaskPlanAccessPolicy
 from agent.policies.tool_access import _merge_plans
 from agent.policies.tool_access_types import (
@@ -30,16 +31,20 @@ def test_tool_access_types_keep_current_defaults() -> None:
     assert context.turn_metadata == {}
     assert context.registered_tools == frozenset()
     assert context.tool_capabilities == {}
+    assert context.tool_risks == {}
     assert context.tool_discovery_enabled is True
     assert plan.reason == "no_tool_access_policy"
     assert plan.visible_add == frozenset()
     assert plan.execution_block == frozenset()
     assert plan.policy_metadata == {}
     assert plan.task_plan_contract is None
+    assert plan.task_execution_contract is None
     assert plan.strict_capability_scope is False
     assert plan.context_retrieval_tools == frozenset()
     assert plan.context_retrieval_consumed is False
     assert plan.model_hints == ()
+    assert plan.execution_dynamic_tools == frozenset()
+    assert plan.final_only is False
     assert gate.allowed is True
     assert gate.error_code == ""
 

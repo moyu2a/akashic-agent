@@ -7,6 +7,7 @@ from dataclasses import replace
 from typing import Any
 
 from agent.policies.doc_rag_intent import DOC_RAG_TOOL_NAMES, decide_doc_rag_preload
+from agent.policies.task_execution_access import TaskExecutionAccessPolicy
 from agent.policies.task_plan_boundary import TaskPlanAccessPolicy
 from agent.policies.tool_access_types import (
     ToolAccessContext,
@@ -173,6 +174,7 @@ class ToolAccessGateway:
             DocRagAccessPolicy(),
             SessionMetaAccessPolicy(),
             TaskPlanAccessPolicy(),
+            TaskExecutionAccessPolicy(),
             TerminalResultAccessPolicy(),
         )
 
@@ -189,14 +191,14 @@ class ToolAccessGateway:
         context: ToolAccessContext,
         plan: ToolAccessPlan,
     ) -> set[str]:
-        if not context.tool_discovery_enabled and not plan.strict_capability_scope:
+        if plan.strict_capability_scope:
+            visible = set(plan.visible_add)
+        elif not context.tool_discovery_enabled:
             visible = set(context.registered_tools) or (
                 set(context.always_on_tools)
                 | set(context.lru_preloaded_tools)
                 | set(plan.visible_add)
             )
-        elif not context.tool_discovery_enabled:
-            visible = set(context.registered_tools) | set(plan.visible_add)
         else:
             visible = (
                 set(context.always_on_tools)
@@ -221,6 +223,13 @@ class ToolAccessGateway:
         allowed_unlocks -= set(context.disabled_tools)
         allowed_unlocks -= set(plan.visible_suppress)
         allowed_unlocks -= set(plan.tool_search_block)
+        execution_contract = plan.task_execution_contract
+        if (
+            execution_contract is not None
+            and execution_contract.active
+            and execution_contract.phase == "work"
+        ):
+            allowed_unlocks &= set(plan.execution_dynamic_tools)
         if context.registered_tools:
             allowed_unlocks &= set(context.registered_tools)
         visible.update(allowed_unlocks)
@@ -243,7 +252,17 @@ class ToolAccessGateway:
         blocked: list[str] = []
         filtered: list[Any] = []
         for item in matched:
-            if isinstance(item, dict) and item.get("name") in plan.tool_search_block:
+            tool_name = item.get("name") if isinstance(item, dict) else None
+            execution_contract = plan.task_execution_contract
+            execution_dynamic_block = (
+                execution_contract is not None
+                and execution_contract.active
+                and execution_contract.phase == "work"
+                and tool_name not in plan.execution_dynamic_tools
+            )
+            if isinstance(item, dict) and (
+                tool_name in plan.tool_search_block or execution_dynamic_block
+            ):
                 blocked.append(str(item["name"]))
                 continue
             filtered.append(item)
@@ -281,6 +300,14 @@ class ToolAccessGateway:
                     message=hint or "The required TaskPlan service is unavailable.",
                     reason=plan.reason,
                 )
+            if plan.reason == "task_execution_required_capability_missing":
+                hint = plan.model_hints[0] if plan.model_hints else ""
+                return ToolExecutionGateResult(
+                    allowed=False,
+                    error_code="task_execution_required_capability_missing",
+                    message=hint or "The required TaskExecution service is unavailable.",
+                    reason=plan.reason,
+                )
             recommended = tuple(
                 sorted(
                     set(plan.visible_add)
@@ -288,6 +315,19 @@ class ToolAccessGateway:
                     - set(plan.execution_block)
                 )
             )
+            execution_contract = plan.task_execution_contract
+            if execution_contract is not None and execution_contract.active:
+                return ToolExecutionGateResult(
+                    allowed=False,
+                    error_code="tool_blocked_by_task_execution_policy",
+                    message=(
+                        "Current TaskExecution scope allows only: "
+                        + (", ".join(recommended) if recommended else "no tools")
+                        + ". Use only tools in this scope."
+                    ),
+                    recommended_tools=recommended,
+                    reason="task_execution_policy_block",
+                )
             return ToolExecutionGateResult(
                 allowed=False,
                 error_code="tool_blocked_by_task_plan_policy",
@@ -340,11 +380,30 @@ def _merge_plans(left: ToolAccessPlan, right: ToolAccessPlan) -> ToolAccessPlan:
     matched = _dedupe_tuple((*left.matched_terms, *right.matched_terms))
     reason = right.reason if right.reason != "no_tool_access_policy" else left.reason
     strict = left.strict_capability_scope or right.strict_capability_scope
-    contract = left.task_plan_contract or right.task_plan_contract
-    conflict = (
+    task_plan_contract = left.task_plan_contract or right.task_plan_contract
+    task_execution_contract = (
+        left.task_execution_contract or right.task_execution_contract
+    )
+    task_plan_conflict = (
         left.task_plan_contract is not None
         and right.task_plan_contract is not None
         and left.task_plan_contract != right.task_plan_contract
+    )
+    task_execution_conflict = (
+        left.task_execution_contract is not None
+        and right.task_execution_contract is not None
+        and left.task_execution_contract != right.task_execution_contract
+    )
+    strict_control_conflict = (
+        left.task_plan_contract is not None
+        and left.task_plan_contract.active
+        and right.task_execution_contract is not None
+        and right.task_execution_contract.active
+    ) or (
+        right.task_plan_contract is not None
+        and right.task_plan_contract.active
+        and left.task_execution_contract is not None
+        and left.task_execution_contract.active
     )
     model_hints = _dedupe_tuple((*left.model_hints, *right.model_hints))
     filter_error = left.filter_error or right.filter_error
@@ -355,31 +414,61 @@ def _merge_plans(left: ToolAccessPlan, right: ToolAccessPlan) -> ToolAccessPlan:
     context_retrieval_tools = (
         left.context_retrieval_tools | right.context_retrieval_tools
     )
+    execution_dynamic_tools = (
+        left.execution_dynamic_tools | right.execution_dynamic_tools
+    )
     policy_metadata = {**dict(left.policy_metadata), **dict(right.policy_metadata)}
-    if conflict:
+    if task_plan_conflict or task_execution_conflict or strict_control_conflict:
         conflict_universe = frozenset(
             set(visible_add)
             | set(visible_suppress)
             | set(tool_search_block)
             | set(execution_block)
             | set(context_retrieval_tools)
+            | set(execution_dynamic_tools)
         )
-        contract = None
-        reason = "conflicting_task_plan_contracts"
+        task_plan_contract = None
+        task_execution_contract = None
+        reason = (
+            "conflicting_task_plan_contracts"
+            if task_plan_conflict
+            else "conflicting_task_execution_contracts"
+            if task_execution_conflict
+            else "conflicting_strict_task_control_contracts"
+        )
         filter_error = True
         visible_add = frozenset()
         visible_suppress = conflict_universe
         tool_search_block = conflict_universe
         execution_block = conflict_universe
         context_retrieval_tools = frozenset()
-        policy_metadata["task_plan_contract_conflict"] = {
-            "left": left.task_plan_contract.to_trace_metadata(),
-            "right": right.task_plan_contract.to_trace_metadata(),
+        execution_dynamic_tools = frozenset()
+        policy_metadata["strict_contract_conflict"] = {
+            "left_task_plan": (
+                left.task_plan_contract.to_trace_metadata()
+                if left.task_plan_contract is not None
+                else None
+            ),
+            "right_task_plan": (
+                right.task_plan_contract.to_trace_metadata()
+                if right.task_plan_contract is not None
+                else None
+            ),
+            "left_task_execution": (
+                left.task_execution_contract.to_trace_metadata()
+                if left.task_execution_contract is not None
+                else None
+            ),
+            "right_task_execution": (
+                right.task_execution_contract.to_trace_metadata()
+                if right.task_execution_contract is not None
+                else None
+            ),
         }
         model_hints = _dedupe_tuple(
             (
                 *model_hints,
-                "Conflicting TaskPlan contracts were produced; no tool fallback "
+                "Conflicting strict task-control contracts were produced; no tool fallback "
                 "is allowed for this turn.",
             )
         )
@@ -398,13 +487,16 @@ def _merge_plans(left: ToolAccessPlan, right: ToolAccessPlan) -> ToolAccessPlan:
             else left.local_source_allowed or right.local_source_allowed
         ),
         policy_metadata=policy_metadata,
-        task_plan_contract=contract,
+        task_plan_contract=task_plan_contract,
+        task_execution_contract=task_execution_contract,
         strict_capability_scope=strict,
         context_retrieval_tools=context_retrieval_tools,
         context_retrieval_consumed=(
             left.context_retrieval_consumed
             or right.context_retrieval_consumed
         ),
+        execution_dynamic_tools=execution_dynamic_tools,
+        final_only=left.final_only or right.final_only,
         model_hints=model_hints,
     )
 

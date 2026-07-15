@@ -228,6 +228,10 @@ class ToolRegistry:
             for name, meta in self._metadata.items()
         }
 
+    def get_risks_by_name(self) -> dict[str, str]:
+        """返回注册工具的内部风险元数据副本。"""
+        return {name: meta.risk for name, meta in self._metadata.items()}
+
     def get_documents(self) -> list[ToolDocument]:
         """返回所有已注册工具的索引文档列表。"""
         return list(self._documents.values())

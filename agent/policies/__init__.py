@@ -20,6 +20,15 @@ from agent.policies.history_route import (
     RouteDecisionReasonCode,
     RouteDecisionSource,
 )
+from agent.policies.task_control_arbiter import (
+    TaskControlIntentArbiter,
+    TaskControlIntentDecision,
+)
+from agent.policies.task_execution_access import TaskExecutionAccessPolicy
+from agent.policies.task_execution_contract import (
+    TaskExecutionTurnContract,
+    infer_task_execution_contract,
+)
 from agent.policies.tool_access import ToolAccessGateway
 from agent.policies.tool_access_types import (
     ToolAccessContext,
@@ -43,9 +52,14 @@ __all__ = [
     "SpawnDecisionMeta",
     "SpawnDecisionReasonCode",
     "SpawnDecisionSource",
+    "TaskControlIntentArbiter",
+    "TaskControlIntentDecision",
+    "TaskExecutionAccessPolicy",
+    "TaskExecutionTurnContract",
     "ToolAccessContext",
     "ToolAccessGateway",
     "ToolAccessPlan",
     "ToolExecutionGateResult",
     "decide_doc_rag_preload",
+    "infer_task_execution_contract",
 ]

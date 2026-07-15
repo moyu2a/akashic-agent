@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Protocol
 
 if TYPE_CHECKING:
+    from agent.policies.task_execution_contract import TaskExecutionTurnContract
     from agent.policies.task_plan_contract import TaskPlanTurnContract
 
 
@@ -18,6 +19,7 @@ class ToolAccessContext:
     turn_metadata: Mapping[str, Any] = field(default_factory=dict)
     registered_tools: frozenset[str] = frozenset()
     tool_capabilities: Mapping[str, frozenset[str]] = field(default_factory=dict)
+    tool_risks: Mapping[str, str] = field(default_factory=dict)
     tool_discovery_enabled: bool = True
 
 
@@ -34,9 +36,12 @@ class ToolAccessPlan:
     local_source_allowed: bool = False
     policy_metadata: Mapping[str, object] = field(default_factory=dict)
     task_plan_contract: TaskPlanTurnContract | None = None
+    task_execution_contract: TaskExecutionTurnContract | None = None
     strict_capability_scope: bool = False
     context_retrieval_tools: frozenset[str] = frozenset()
     context_retrieval_consumed: bool = False
+    execution_dynamic_tools: frozenset[str] = frozenset()
+    final_only: bool = False
     model_hints: tuple[str, ...] = ()
 
 

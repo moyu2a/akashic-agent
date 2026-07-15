@@ -135,6 +135,7 @@ _PLAN_UPDATE_TERMS = (
     "完成第",
     "更新步骤",
     "更新任务",
+    "跳过",
     "继续执行",
     "下一步",
 )
@@ -388,6 +389,22 @@ def infer_task_plan_turn_decision(
                 text=text,
                 has_active_task=has_active_task,
                 action_terms=create_terms,
+            )
+        )
+
+    explicit_update_terms = tuple(
+        term
+        for term in update_terms
+        if term != "继续执行"
+        and not (term == "下一步" and "继续下一步" not in text)
+    )
+    if inspect_terms and not explicit_update_terms:
+        return TaskPlanIntentDecision(
+            contract=_active_contract(
+                action="plan_inspect",
+                text=text,
+                has_active_task=has_active_task,
+                action_terms=inspect_terms,
             )
         )
 
