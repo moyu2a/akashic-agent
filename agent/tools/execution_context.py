@@ -12,6 +12,7 @@ TASK_EXECUTION_PROTECTED_KEYS = frozenset(
         "_task_execution_action",
         "_task_execution_target_step_id",
         "_task_execution_attempt_id",
+        "_task_execution_read_only",
         "_tool_execution_context_active",
     }
 )

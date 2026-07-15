@@ -1726,6 +1726,9 @@ class DefaultReasoner(Reasoner):
                             ),
                             blocked_tools=tool_search_blocked,
                             execution_status=exec_result.status,
+                            tool_call_id=tool_call.id,
+                            invoker_reached=exec_result.invoker_reached,
+                            invoker_succeeded=exec_result.invoker_succeeded,
                         )
                         old_plan = tool_boundary_context.access_plan
                         self._tool_boundary.observe_access_tool_result(

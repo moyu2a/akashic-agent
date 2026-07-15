@@ -54,6 +54,7 @@ class ToolCallRecord:
     args_summary: str
     call_index: int
     visible_before_call: bool
+    tool_call_id: str = ""
     decision_action: str = "allow"
     decision_reason: str = ""
     requested_unlocks: tuple[str, ...] = ()
@@ -70,6 +71,11 @@ class ToolCallRecord:
     result_has_evidence: bool = False
     result_has_citation: bool = False
     result_error_code: str = ""
+    tool_risk: str = ""
+    tool_capabilities: tuple[str, ...] = ()
+    counts_as_work: bool = False
+    invoker_reached: bool = False
+    invoker_succeeded: bool = False
 
 
 @dataclass
@@ -93,6 +99,23 @@ class ToolCallLedger:
             1
             for record in self.records
             if record.tool_name == tool_name and record.args_hash == args_hash
+        )
+
+    def count_task_execution_work(self) -> int:
+        return sum(
+            1
+            for record in self.records
+            if record.counts_as_work and record.invoker_reached
+        )
+
+    def same_task_execution_work_args(self, tool_name: str, args_hash: str) -> int:
+        return sum(
+            1
+            for record in self.records
+            if record.tool_name == tool_name
+            and record.args_hash == args_hash
+            and record.counts_as_work
+            and record.invoker_reached
         )
 
     def has_successful_retrieval(self) -> bool:

@@ -8,6 +8,7 @@ import pytest
 
 from agent.policies.tool_access import ToolAccessContext
 from agent.policies.tool_boundary import TurnToolBoundaryManager
+from agent.policies.task_execution_contract import TaskExecutionTurnContract
 from agent.tools.base import ToolResult
 from agent.tools.filesystem import ReadFileTool
 
@@ -19,6 +20,55 @@ def _ctx(text: str) -> ToolAccessContext:
         always_on_tools=frozenset({"tool_search", "read_file", "shell", "list_dir"}),
         lru_preloaded_tools=frozenset(),
         disabled_tools=frozenset(),
+    )
+
+
+def _execution_ctx() -> ToolAccessContext:
+    contract = TaskExecutionTurnContract(
+        active=True,
+        action="continue",
+        phase="work",
+        attempt_id="attempt-1",
+        target_step_id="step-1",
+        required_capabilities=frozenset({"task_execution.finish"}),
+        allowed_capabilities=frozenset(
+            {
+                "task_execution.finish",
+                "task_execution.defer",
+                "task_execution.abort",
+            }
+        ),
+        allowed_risks=frozenset({"read-only"}),
+        work_call_budget=3,
+        tool_search_budget=1,
+        completion_capability="task_execution.finish",
+        reason="attempt_running",
+        matched_terms=(),
+    )
+    risks = {
+        "tool_search": "read-only",
+        "read_file": "read-only",
+        "shell": "read-only",
+        "write_file": "write",
+        "delete_workspace": "destructive",
+        "finish_task_step_execution": "write",
+        "request_task_step_authorization": "write",
+        "abort_task_step_execution": "write",
+    }
+    return ToolAccessContext(
+        session_key="cli:execution",
+        user_text="continue execution",
+        always_on_tools=frozenset({"tool_search"}),
+        lru_preloaded_tools=frozenset(),
+        disabled_tools=frozenset(),
+        turn_metadata={"task_execution_contract": contract},
+        registered_tools=frozenset(risks),
+        tool_risks=risks,
+        tool_capabilities={
+            "finish_task_step_execution": frozenset({"task_execution.finish"}),
+            "request_task_step_authorization": frozenset({"task_execution.defer"}),
+            "abort_task_step_execution": frozenset({"task_execution.abort"}),
+        },
     )
 
 
@@ -47,6 +97,55 @@ def test_core_access_block_wins_before_budget() -> None:
     assert decision.action == "block"
     assert decision.reason == "tool_blocked_by_doc_rag_policy"
     assert decision.execute is False
+
+
+def test_shell_is_deferred_even_when_command_looks_read_only() -> None:
+    manager = TurnToolBoundaryManager()
+    context = manager.build_context(_execution_ctx())
+
+    decision = manager.evaluate_tool_call(
+        context,
+        tool_name="shell",
+        arguments={"command": "pwd"},
+        visible_names=manager.compute_visible_names(context),
+    )
+
+    assert decision.action == "soft_stop"
+    assert decision.reason == "task_execution_authorization_required"
+    assert decision.execute is False
+    assert context.ledger.records == []
+
+
+def test_destructive_is_core_denied_before_task_execution_visibility() -> None:
+    manager = TurnToolBoundaryManager()
+    context = manager.build_context(_execution_ctx())
+
+    decision = manager.evaluate_tool_call(
+        context,
+        tool_name="delete_workspace",
+        arguments={},
+        visible_names=set(),
+    )
+
+    assert decision.action == "block"
+    assert decision.reason == "task_execution_destructive_denied"
+    assert decision.execute is False
+
+
+def test_registered_write_returns_typed_defer_before_visibility_block() -> None:
+    manager = TurnToolBoundaryManager()
+    context = manager.build_context(_execution_ctx())
+
+    decision = manager.evaluate_tool_call(
+        context,
+        tool_name="write_file",
+        arguments={"path": "x.txt", "content": "x"},
+        visible_names=set(),
+    )
+
+    assert decision.action == "defer"
+    assert decision.execute is False
+    assert decision.metadata["durable_transition"] == "waiting_authorization"
 
 
 def test_task_plan_create_blocks_spawn_at_boundary_manager() -> None:

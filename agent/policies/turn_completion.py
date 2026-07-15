@@ -5,12 +5,15 @@ from collections.abc import Mapping, Sequence
 from agent.policies.evidence_contract import EvidenceAssessment
 from agent.policies.task_plan_completion import TaskPlanCompletionPolicy
 from agent.policies.task_plan_contract import TaskPlanTurnContract
+from agent.policies.task_execution_completion import TaskExecutionCompletionPolicy
+from agent.policies.task_execution_contract import TaskExecutionTurnContract
 from agent.policies.tool_budget import TaskIntent
 from agent.policies.tool_ledger import ToolCallLedger
 from agent.policies.turn_completion_types import (
     TurnCompletionAction,
     TurnCompletionDecision,
 )
+from agent.task_plan.execution_models import TaskExecutionSnapshot
 
 
 class TurnCompletionController:
@@ -18,8 +21,10 @@ class TurnCompletionController:
         self,
         *,
         task_plan_policy: TaskPlanCompletionPolicy | None = None,
+        task_execution_policy: TaskExecutionCompletionPolicy | None = None,
     ) -> None:
         self._task_plan = task_plan_policy or TaskPlanCompletionPolicy()
+        self._task_execution = task_execution_policy or TaskExecutionCompletionPolicy()
 
     def evaluate(
         self,
@@ -31,8 +36,26 @@ class TurnCompletionController:
         local_source_allowed: bool = False,
         proactive_allowed: bool = False,
         task_plan_contract: TaskPlanTurnContract | None = None,
+        task_execution_contract: TaskExecutionTurnContract | None = None,
+        task_execution_snapshot: TaskExecutionSnapshot | None = None,
         tool_capabilities: Mapping[str, frozenset[str]] | None = None,
     ) -> TurnCompletionDecision:
+        task_execution_decision = self._task_execution.evaluate(
+            contract=task_execution_contract,
+            snapshot=task_execution_snapshot,
+            ledger=ledger,
+            tool_capabilities=tool_capabilities or {},
+        )
+        if task_execution_decision is not None:
+            return TurnCompletionDecision(
+                action=task_execution_decision.action,
+                reason=task_execution_decision.reason,
+                model_hint=task_execution_decision.model_hint,
+                metadata={
+                    **self._metadata(ledger, boundary_decisions),
+                    **dict(task_execution_decision.metadata),
+                },
+            )
         task_plan_decision = self._task_plan.evaluate(
             contract=task_plan_contract,
             ledger=ledger,

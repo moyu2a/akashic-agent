@@ -21,6 +21,7 @@ import pytest
 from agent.mcp.client import McpToolInfo
 from agent.mcp.tool import McpToolWrapper
 from agent.tools.base import Tool
+from agent.tools.execution_context import ToolExecutionContext
 from agent.tools.registry import ToolRegistry
 from agent.tools.search_backend import _default_normalize
 from agent.tools.tool_search import ToolSearchTool
@@ -92,6 +93,22 @@ class _EchoPrivateSessionTool(Tool):
 
     async def execute(self, _session_key: str = "", **_: object) -> str:
         return _session_key
+
+
+def test_protected_task_execution_scope_forces_read_only_search_results() -> None:
+    registry = _make_registry()
+
+    payload = asyncio.run(
+        registry.execute(
+            "tool_search",
+            {"query": "select:write_file", "allowed_risk": ["write"]},
+            execution_context=ToolExecutionContext(
+                protected={"_task_execution_read_only": True}
+            ),
+        )
+    )
+
+    assert all(item["name"] != "write_file" for item in json.loads(str(payload))["matched"])
 
 
 def _make_registry() -> ToolRegistry:

@@ -9,6 +9,11 @@ from typing import Any
 from agent.policies.evidence_completion import EvidenceCompletionPolicy
 from agent.policies.task_plan_context_budget import TaskPlanContextBudgetPolicy
 from agent.policies.task_plan_contract import TaskPlanTurnContract
+from agent.policies.task_execution_boundary import TaskExecutionRiskPolicy
+from agent.policies.task_execution_budget import (
+    TaskExecutionBudgetPolicy,
+    TaskExecutionEventClassifier,
+)
 from agent.policies.tool_access import ToolAccessGateway
 from agent.policies.tool_access_types import (
     ToolAccessContext,
@@ -62,6 +67,8 @@ class TurnToolBoundaryManager:
         budget_policy: ToolBudgetPolicy | None = None,
         evidence_policy: EvidenceCompletionPolicy | None = None,
         task_plan_context_budget_policy: TaskPlanContextBudgetPolicy | None = None,
+        task_execution_risk_policy: TaskExecutionRiskPolicy | None = None,
+        task_execution_budget_policy: TaskExecutionBudgetPolicy | None = None,
     ) -> None:
         self._access = access_gateway or ToolAccessGateway()
         self._budget = budget_policy or ToolBudgetPolicy()
@@ -69,6 +76,13 @@ class TurnToolBoundaryManager:
         self._task_plan_context_budget = (
             task_plan_context_budget_policy or TaskPlanContextBudgetPolicy()
         )
+        self._task_execution_risk = (
+            task_execution_risk_policy or TaskExecutionRiskPolicy()
+        )
+        self._task_execution_budget = (
+            task_execution_budget_policy or TaskExecutionBudgetPolicy()
+        )
+        self._task_execution_event_classifier = TaskExecutionEventClassifier()
 
     def build_context(self, access_context: ToolAccessContext) -> ToolBoundaryContext:
         access_plan = self._access.build_plan(access_context)
@@ -150,30 +164,117 @@ class TurnToolBoundaryManager:
         arguments: Mapping[str, Any],
         visible_names: set[str] | None,
     ) -> BoundaryExecutionDecision:
+        execution_contract = context.access_plan.task_execution_contract
+        registered_tools = context.access_context.registered_tools
+        registered = (
+            tool_name in registered_tools
+            if registered_tools
+            else tool_name in context.access_context.tool_risks
+        )
+        is_execution_control = bool(
+            context.access_context.tool_capabilities.get(tool_name, frozenset())
+            & {
+                "task_execution.begin",
+                "task_execution.inspect",
+                "task_execution.finish",
+                "task_execution.defer",
+                "task_execution.abort",
+            }
+        )
+        if (
+            execution_contract is not None
+            and execution_contract.active
+            and execution_contract.phase == "work"
+            and tool_name in context.access_context.disabled_tools
+        ):
+            gate = self._access.check_tool_call(
+                context.access_plan,
+                tool_name,
+                dict(arguments),
+            )
+            return self._access_block(
+                context,
+                tool_name,
+                arguments,
+                error_code=gate.error_code,
+                message=gate.message,
+                recommended_tools=gate.recommended_tools,
+                reason=gate.error_code or gate.reason or "tool_access_block",
+            )
+        if not is_execution_control:
+            risk_decision = self._task_execution_risk.evaluate(
+                contract=execution_contract,
+                tool_name=tool_name,
+                registered=registered,
+                registry_risk=context.access_context.tool_risks.get(tool_name, "unknown"),
+            )
+            if risk_decision is not None and risk_decision.action == "unknown_tool":
+                return self._boundary_block(
+                    context,
+                    tool_name,
+                    arguments,
+                    risk_decision.reason,
+                    risk_decision.metadata,
+                )
+            if risk_decision is not None and risk_decision.action == "deny":
+                return self._boundary_block(
+                    context,
+                    tool_name,
+                    arguments,
+                    risk_decision.reason,
+                    risk_decision.metadata,
+                )
+            if risk_decision is not None and risk_decision.action == "defer":
+                return self._authorization_defer(
+                    context,
+                    tool_name,
+                    arguments,
+                    metadata=risk_decision.metadata,
+                    shell_compatibility=(tool_name == "shell"),
+                )
+
         gate = self._access.check_tool_call(
             context.access_plan,
             tool_name,
             dict(arguments),
         )
         if not gate.allowed:
-            decision = BoundaryExecutionDecision(
-                action="block",
+            return self._access_block(
+                context,
+                tool_name,
+                arguments,
+                error_code=gate.error_code,
+                message=gate.message,
+                recommended_tools=gate.recommended_tools,
                 reason=gate.error_code or gate.reason or "tool_access_block",
-                execute=False,
-                result_payload=json.dumps(
-                    {
-                        "ok": False,
-                        "error_code": gate.error_code,
-                        "message": gate.message,
-                        "recommended_tools": list(gate.recommended_tools),
-                        "fallback_allowed": False,
-                    },
-                    ensure_ascii=False,
-                ),
-                metadata={"recommended_tools": list(gate.recommended_tools)},
             )
-            self._record_decision(context, tool_name, decision, arguments)
-            return decision
+
+        task_execution_budget_decision = self._task_execution_budget.evaluate(
+            contract=execution_contract,
+            ledger=context.ledger,
+            tool_name=tool_name,
+            arguments=dict(arguments),
+            tool_risk=context.access_context.tool_risks.get(tool_name, "unknown"),
+            tool_capabilities=context.access_context.tool_capabilities,
+        )
+        if task_execution_budget_decision is not None:
+            if task_execution_budget_decision.action == "soft_stop":
+                return self._soft_stop(
+                    context,
+                    tool_name,
+                    arguments,
+                    task_execution_budget_decision,
+                )
+            if task_execution_budget_decision.action != "allow":
+                decision = BoundaryExecutionDecision(
+                    action=task_execution_budget_decision.action,
+                    reason=task_execution_budget_decision.reason,
+                    execute=True,
+                    model_hint=task_execution_budget_decision.model_hint,
+                    metadata=dict(task_execution_budget_decision.metadata),
+                )
+                self._record_decision(context, tool_name, decision, arguments)
+                return decision
 
         task_plan_budget_decision = self._task_plan_context_budget.evaluate_call(
             contract=context.task_plan_contract,
@@ -237,6 +338,9 @@ class TurnToolBoundaryManager:
         decision_action: str,
         decision_reason: str,
         execution_status: str = "",
+        tool_call_id: str = "",
+        invoker_reached: bool | None = None,
+        invoker_succeeded: bool | None = None,
         requested_unlocks: tuple[str, ...] = (),
         unlocked_tools: tuple[str, ...] = (),
         blocked_tools: tuple[str, ...] = (),
@@ -244,9 +348,33 @@ class TurnToolBoundaryManager:
         normalized = normalize_tool_result(result_text)
         rendered_text = normalized.preview()
         facts = extract_tool_result_facts(tool_name, result_text)
+        execution_contract = context.access_plan.task_execution_contract
+        is_execution_work = bool(
+            execution_contract is not None
+            and execution_contract.active
+            and execution_contract.phase == "work"
+        )
+        event = self._task_execution_event_classifier.classify(
+            tool_name=tool_name,
+            tool_call_id=tool_call_id,
+            registry_risk=context.access_context.tool_risks.get(tool_name, "unknown"),
+            invoker_reached=(
+                execution_status == "success"
+                if invoker_reached is None
+                else invoker_reached
+            ),
+            invoker_succeeded=(
+                execution_status == "success"
+                if invoker_succeeded is None
+                else invoker_succeeded
+            ),
+            execution_status=execution_status,
+            result_ok=facts.result_ok,
+        )
         context.ledger.add_record(
             ToolCallRecord(
                 tool_name=tool_name,
+                tool_call_id=event.tool_call_id if is_execution_work else "",
                 tool_class=classify_tool_name(tool_name),
                 args_hash=stable_args_hash(arguments),
                 args_summary=summarize_args(arguments),
@@ -268,6 +396,17 @@ class TurnToolBoundaryManager:
                 result_has_evidence=facts.result_has_evidence,
                 result_has_citation=facts.result_has_citation,
                 result_error_code=facts.result_error_code,
+                tool_risk=event.tool_risk if is_execution_work else "",
+                tool_capabilities=tuple(
+                    sorted(context.access_context.tool_capabilities.get(tool_name, frozenset()))
+                )
+                if is_execution_work
+                else (),
+                counts_as_work=event.counts_as_work if is_execution_work else False,
+                invoker_reached=event.invoker_reached if is_execution_work else False,
+                invoker_succeeded=(
+                    event.invoker_succeeded if is_execution_work else False
+                ),
             )
         )
 
@@ -372,6 +511,85 @@ class TurnToolBoundaryManager:
             result_payload=_soft_stop_payload(policy_decision),
             model_hint=policy_decision.model_hint,
             metadata=dict(policy_decision.metadata),
+        )
+        self._record_decision(context, tool_name, decision, arguments)
+        return decision
+
+    def _authorization_defer(
+        self,
+        context: ToolBoundaryContext,
+        tool_name: str,
+        arguments: Mapping[str, Any],
+        *,
+        metadata: Mapping[str, object],
+        shell_compatibility: bool,
+    ) -> BoundaryExecutionDecision:
+        decision = BoundaryExecutionDecision(
+            action="soft_stop" if shell_compatibility else "defer",
+            reason="task_execution_authorization_required",
+            execute=False,
+            result_payload=json.dumps(
+                {
+                    "ok": False,
+                    "error_code": "task_execution_authorization_required",
+                    "fallback_allowed": False,
+                },
+                ensure_ascii=False,
+            ),
+            metadata=dict(metadata),
+        )
+        self._record_decision(context, tool_name, decision, arguments)
+        return decision
+
+    def _access_block(
+        self,
+        context: ToolBoundaryContext,
+        tool_name: str,
+        arguments: Mapping[str, Any],
+        *,
+        error_code: str = "",
+        message: str = "",
+        recommended_tools: tuple[str, ...] = (),
+        reason: str | None = None,
+    ) -> BoundaryExecutionDecision:
+        return self._boundary_block(
+            context,
+            tool_name,
+            arguments,
+            reason or error_code or "tool_access_block",
+            {"recommended_tools": list(recommended_tools)},
+            error_code=error_code,
+            message=message,
+            recommended_tools=recommended_tools,
+        )
+
+    def _boundary_block(
+        self,
+        context: ToolBoundaryContext,
+        tool_name: str,
+        arguments: Mapping[str, Any],
+        reason: str,
+        metadata: Mapping[str, object],
+        *,
+        error_code: str | None = None,
+        message: str = "",
+        recommended_tools: tuple[str, ...] = (),
+    ) -> BoundaryExecutionDecision:
+        decision = BoundaryExecutionDecision(
+            action="block",
+            reason=reason,
+            execute=False,
+            result_payload=json.dumps(
+                {
+                    "ok": False,
+                    "error_code": error_code or reason,
+                    "message": message,
+                    "recommended_tools": list(recommended_tools),
+                    "fallback_allowed": False,
+                },
+                ensure_ascii=False,
+            ),
+            metadata=dict(metadata),
         )
         self._record_decision(context, tool_name, decision, arguments)
         return decision

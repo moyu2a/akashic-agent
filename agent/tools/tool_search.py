@@ -82,6 +82,7 @@ class ToolSearchTool(Tool):
         query: str,
         top_k: int = 5,
         allowed_risk: list[str] | None = None,
+        _task_execution_read_only: bool = False,
         **_: Any,
     ) -> str:
         # Consume-once: Reasoner calls set_excluded_names() before each dispatch.
@@ -89,6 +90,9 @@ class ToolSearchTool(Tool):
         self._excluded_names = None
 
         query = (query or "").strip()
+        effective_allowed_risk = (
+            ["read-only"] if _task_execution_read_only else allowed_risk
+        )
         if not query:
             return json.dumps(
                 {"matched": [], "tip": "query 不能为空，请描述你需要的功能"},
@@ -99,7 +103,7 @@ class ToolSearchTool(Tool):
         if query.lower().startswith("select:"):
             return self._handle_select(
                 query[7:],
-                allowed_risk=allowed_risk,
+                allowed_risk=effective_allowed_risk,
                 excluded_names=excluded_names,
             )
 
@@ -108,7 +112,7 @@ class ToolSearchTool(Tool):
         results = self._registry.search(
             query=query,
             top_k=top_k,
-            allowed_risk=allowed_risk,
+            allowed_risk=effective_allowed_risk,
             excluded_names=excluded_names,
         )
         if not results:
