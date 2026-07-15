@@ -1,0 +1,373 @@
+from __future__ import annotations
+
+import sqlite3
+from concurrent.futures import ThreadPoolExecutor
+from datetime import UTC, datetime
+from pathlib import Path
+from threading import Barrier
+
+import pytest
+
+from agent.task_plan.store import (
+    ExecutionAttemptConflictError,
+    TaskPlanStore,
+)
+
+
+LEASE_EXPIRES_AT = "2030-07-15T01:00:00+00:00"
+NOW = datetime(2030, 7, 15, tzinfo=UTC)
+
+
+def _create_claimed_attempt(tmp_path: Path) -> tuple[TaskPlanStore, str, str, str]:
+    store = TaskPlanStore(tmp_path / "task.db")
+    plan = store.create_plan(
+        session_key="cli:s1",
+        title="Read project",
+        step_titles=["Read README"],
+    )
+    result = store.claim_execution_attempt(
+        task_id=plan.task_id,
+        step_id=plan.steps[0].step_id,
+        session_key="cli:s1",
+        request_id="req-1",
+        idempotency_key="idem-1",
+        owner_instance_id="runtime-1",
+        lease_expires_at=LEASE_EXPIRES_AT,
+    )
+    return store, plan.task_id, plan.steps[0].step_id, result.attempt.attempt_id
+
+
+def test_schema_migrates_execution_tables(tmp_path: Path) -> None:
+    db_path = tmp_path / "task.db"
+    TaskPlanStore(db_path)
+
+    with sqlite3.connect(db_path) as conn:
+        names = {
+            row[0]
+            for row in conn.execute(
+                "SELECT name FROM sqlite_master WHERE type = 'table'"
+            )
+        }
+    assert {"task_execution_attempts", "task_execution_events"} <= names
+
+
+def test_claim_replays_same_request(tmp_path: Path) -> None:
+    store = TaskPlanStore(tmp_path / "task.db")
+    plan = store.create_plan(
+        session_key="cli:s1",
+        title="Read project",
+        step_titles=["Read README", "Summarize tests"],
+    )
+    first = store.claim_execution_attempt(
+        task_id=plan.task_id,
+        step_id=plan.steps[0].step_id,
+        session_key="cli:s1",
+        request_id="req-1",
+        idempotency_key="idem-1",
+        owner_instance_id="runtime-1",
+        lease_expires_at=LEASE_EXPIRES_AT,
+    )
+    second = store.claim_execution_attempt(
+        task_id=plan.task_id,
+        step_id=plan.steps[0].step_id,
+        session_key="cli:s1",
+        request_id="req-1",
+        idempotency_key="idem-1",
+        owner_instance_id="runtime-1",
+        lease_expires_at=LEASE_EXPIRES_AT,
+    )
+    assert first.attempt.attempt_id == second.attempt.attempt_id
+    assert first.disposition == "created"
+    assert second.disposition == "request_replay"
+
+
+def test_concurrent_claim_has_one_active_attempt(tmp_path: Path) -> None:
+    db_path = tmp_path / "task.db"
+    setup_store = TaskPlanStore(db_path)
+    plan = setup_store.create_plan(
+        session_key="cli:s1",
+        title="Read project",
+        step_titles=["Read README"],
+    )
+
+    barrier = Barrier(2)
+
+    def claim(index: int) -> tuple[str, str]:
+        store = TaskPlanStore(db_path)
+        barrier.wait()
+        result = store.claim_execution_attempt(
+            task_id=plan.task_id,
+            step_id=plan.steps[0].step_id,
+            session_key="cli:s1",
+            request_id=f"req-{index}",
+            idempotency_key=f"idem-{index}",
+            owner_instance_id="runtime-1",
+            lease_expires_at=LEASE_EXPIRES_AT,
+        )
+        return result.attempt.attempt_id, result.disposition
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(pool.map(claim, [1, 2]))
+    assert len({attempt_id for attempt_id, _ in results}) == 1
+    assert {disposition for _, disposition in results} == {
+        "created",
+        "active_conflict",
+    }
+
+
+def test_claim_persists_initial_event_and_query_helpers(tmp_path: Path) -> None:
+    store, task_id, step_id, attempt_id = _create_claimed_attempt(tmp_path)
+
+    attempt = store.get_execution_attempt(attempt_id)
+    by_request = store.get_execution_attempt_by_request(
+        session_key="cli:s1", request_id="req-1"
+    )
+    active = store.get_active_execution_attempt(task_id)
+    latest = store.get_latest_execution_attempt_for_step(step_id)
+    events = store.list_execution_events(attempt_id)
+
+    assert attempt is not None
+    assert by_request == attempt
+    assert active == attempt
+    assert latest == attempt
+    assert store.list_execution_attempts(task_id) == [attempt]
+    assert store.list_recoverable_execution_attempts("cli:s1") == [attempt]
+    assert [(event.sequence_no, event.event_type) for event in events] == [
+        (1, "attempt_claimed")
+    ]
+
+
+def test_start_append_and_finalize_success_update_all_records(tmp_path: Path) -> None:
+    store, task_id, _, attempt_id = _create_claimed_attempt(tmp_path)
+
+    started = store.start_execution_attempt(
+        attempt_id=attempt_id,
+        owner_instance_id="runtime-1",
+        now=NOW,
+    )
+    event = store.append_execution_event(
+        attempt_id=attempt_id,
+        owner_instance_id="runtime-1",
+        now=NOW,
+        event_type="tool_finished",
+        tool_name="read_file",
+        tool_call_id="call-1",
+        source_turn_id=42,
+        tool_risk="read-only",
+        tool_capabilities=("filesystem:read",),
+        counts_as_work=True,
+        invoker_reached=True,
+        invoker_succeeded=True,
+        execution_status="completed",
+        result_ok=True,
+        result_preview="README contents",
+    )
+    finished = store.finalize_execution_attempt(
+        attempt_id=attempt_id,
+        owner_instance_id="runtime-1",
+        now=NOW,
+        success=True,
+        result_summary="README read",
+    )
+    plan = store.get_plan(task_id)
+
+    assert started.status == "running"
+    assert event.sequence_no == 3
+    assert event.tool_call_id == "call-1"
+    assert event.tool_capabilities == ("filesystem:read",)
+    assert event.counts_as_work is True
+    assert finished.status == "succeeded"
+    assert plan is not None
+    assert plan.steps[0].status == "completed"
+    assert plan.status == "completed"
+    assert [item.event_type for item in store.list_execution_events(attempt_id)] == [
+        "attempt_claimed",
+        "attempt_started",
+        "tool_finished",
+        "attempt_succeeded",
+    ]
+
+
+def test_finalize_failure_marks_attempt_and_step_failed(tmp_path: Path) -> None:
+    store, task_id, _, attempt_id = _create_claimed_attempt(tmp_path)
+    store.start_execution_attempt(
+        attempt_id=attempt_id, owner_instance_id="runtime-1", now=NOW
+    )
+
+    failed = store.finalize_execution_attempt(
+        attempt_id=attempt_id,
+        owner_instance_id="runtime-1",
+        now=NOW,
+        success=False,
+        error_code="tool_failed",
+        terminal_reason="tool invocation failed",
+    )
+    plan = store.get_plan(task_id)
+
+    assert failed.status == "failed"
+    assert failed.error_code == "tool_failed"
+    assert plan is not None
+    assert plan.steps[0].status == "failed"
+    assert plan.status == "active"
+    assert store.list_execution_events(attempt_id)[-1].event_type == "attempt_failed"
+
+
+def test_block_defer_abort_and_reconcile_preserve_required_step_state(
+    tmp_path: Path,
+) -> None:
+    store, task_id, _, attempt_id = _create_claimed_attempt(tmp_path)
+    deferred = store.defer_execution_attempt(
+        attempt_id=attempt_id,
+        owner_instance_id="runtime-1",
+        now=NOW,
+        terminal_reason="authorization required",
+    )
+    assert deferred.status == "waiting_authorization"
+    assert store.get_plan(task_id).steps[0].status == "pending"  # type: ignore[union-attr]
+    aborted = store.abort_execution_attempt(
+        attempt_id=attempt_id,
+        terminal_reason="user cancelled",
+    )
+    assert aborted.status == "cancelled"
+
+    _, task_id, _, attempt_id = _create_claimed_attempt(tmp_path / "stale")
+    store = TaskPlanStore(tmp_path / "stale" / "task.db")
+    store.start_execution_attempt(
+        attempt_id=attempt_id, owner_instance_id="runtime-1", now=NOW
+    )
+    reconciled = store.reconcile_execution_attempts(
+        now=datetime(2030, 7, 15, 2, tzinfo=UTC)
+    )
+    assert [item.status for item in reconciled] == ["blocked"]
+    assert store.get_plan(task_id).steps[0].status == "pending"  # type: ignore[union-attr]
+
+
+def test_block_requires_current_unexpired_owner_and_resets_step(tmp_path: Path) -> None:
+    store, task_id, _, attempt_id = _create_claimed_attempt(tmp_path)
+
+    with pytest.raises(ExecutionAttemptConflictError):
+        store.block_execution_attempt(
+            attempt_id=attempt_id,
+            owner_instance_id="runtime-other",
+            now=NOW,
+            terminal_reason="interrupted",
+        )
+
+    blocked = store.block_execution_attempt(
+        attempt_id=attempt_id,
+        owner_instance_id="runtime-1",
+        now=NOW,
+        terminal_reason="interrupted",
+    )
+    assert blocked.status == "blocked"
+    assert store.get_plan(task_id).steps[0].status == "pending"  # type: ignore[union-attr]
+
+
+def test_lease_cas_never_renews_expired_or_foreign_attempt(tmp_path: Path) -> None:
+    store, _, _, attempt_id = _create_claimed_attempt(tmp_path)
+
+    renewed = store.renew_execution_attempt_lease(
+        attempt_id=attempt_id,
+        owner_instance_id="runtime-1",
+        now=NOW,
+        lease_expires_at="2030-07-15T02:00:00+00:00",
+    )
+    assert renewed.lease_expires_at == "2030-07-15T02:00:00+00:00"
+
+    with pytest.raises(ExecutionAttemptConflictError):
+        store.renew_execution_attempt_lease(
+            attempt_id=attempt_id,
+            owner_instance_id="runtime-other",
+            now=NOW,
+            lease_expires_at="2030-07-15T03:00:00+00:00",
+        )
+    with pytest.raises(ExecutionAttemptConflictError):
+        store.renew_execution_attempt_lease(
+            attempt_id=attempt_id,
+            owner_instance_id="runtime-1",
+            now=datetime(2030, 7, 15, 2, 1, tzinfo=UTC),
+            lease_expires_at="2030-07-15T04:00:00+00:00",
+        )
+
+
+@pytest.mark.parametrize("failure_point", ["claim_after_attempt_insert", "claim_after_event_insert"])
+def test_claim_rolls_back_when_injected_mutation_fails(
+    tmp_path: Path, failure_point: str
+) -> None:
+    store = TaskPlanStore(tmp_path / "task.db")
+    plan = store.create_plan(
+        session_key="cli:s1", title="Read project", step_titles=["Read README"]
+    )
+    store._after_execution_mutation = _raise_at(failure_point)  # type: ignore[method-assign]
+
+    with pytest.raises(RuntimeError, match=failure_point):
+        store.claim_execution_attempt(
+            task_id=plan.task_id,
+            step_id=plan.steps[0].step_id,
+            session_key="cli:s1",
+            request_id="req-1",
+            idempotency_key="idem-1",
+            owner_instance_id="runtime-1",
+            lease_expires_at=LEASE_EXPIRES_AT,
+        )
+    assert store.list_execution_attempts(plan.task_id) == []
+
+
+def test_start_rolls_back_when_step_update_fails(tmp_path: Path) -> None:
+    store, task_id, _, attempt_id = _create_claimed_attempt(tmp_path)
+    store._after_execution_mutation = _raise_at("start_after_step_update")  # type: ignore[method-assign]
+
+    with pytest.raises(RuntimeError, match="start_after_step_update"):
+        store.start_execution_attempt(
+            attempt_id=attempt_id, owner_instance_id="runtime-1", now=NOW
+        )
+    assert store.get_execution_attempt(attempt_id).status == "pending"  # type: ignore[union-attr]
+    assert store.get_plan(task_id).steps[0].status == "pending"  # type: ignore[union-attr]
+
+
+def test_finalize_rolls_back_when_plan_completion_fails(tmp_path: Path) -> None:
+    store, task_id, _, attempt_id = _create_claimed_attempt(tmp_path)
+    store.start_execution_attempt(
+        attempt_id=attempt_id, owner_instance_id="runtime-1", now=NOW
+    )
+    store._after_execution_mutation = _raise_at("finalize_after_plan_completion")  # type: ignore[method-assign]
+
+    with pytest.raises(RuntimeError, match="finalize_after_plan_completion"):
+        store.finalize_execution_attempt(
+            attempt_id=attempt_id,
+            owner_instance_id="runtime-1",
+            now=NOW,
+            success=True,
+        )
+    assert store.get_execution_attempt(attempt_id).status == "running"  # type: ignore[union-attr]
+    assert store.get_plan(task_id).status == "active"  # type: ignore[union-attr]
+    assert [item.event_type for item in store.list_execution_events(attempt_id)] == [
+        "attempt_claimed",
+        "attempt_started",
+    ]
+
+
+def test_block_rolls_back_between_attempt_step_and_event_mutations(tmp_path: Path) -> None:
+    store, task_id, _, attempt_id = _create_claimed_attempt(tmp_path)
+    store._after_execution_mutation = _raise_at("block_after_step_reset")  # type: ignore[method-assign]
+
+    with pytest.raises(RuntimeError, match="block_after_step_reset"):
+        store.block_execution_attempt(
+            attempt_id=attempt_id,
+            owner_instance_id="runtime-1",
+            now=NOW,
+            terminal_reason="interrupted",
+        )
+    assert store.get_execution_attempt(attempt_id).status == "pending"  # type: ignore[union-attr]
+    assert store.get_plan(task_id).steps[0].status == "pending"  # type: ignore[union-attr]
+    assert [item.event_type for item in store.list_execution_events(attempt_id)] == [
+        "attempt_claimed"
+    ]
+
+
+def _raise_at(expected_point: str):
+    def inject(point: str) -> None:
+        if point == expected_point:
+            raise RuntimeError(point)
+
+    return inject

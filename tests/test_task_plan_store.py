@@ -5,7 +5,11 @@ from pathlib import Path
 
 import pytest
 
-from agent.task_plan.store import ActiveTaskExistsError, TaskPlanStore
+from agent.task_plan.store import (
+    ActiveExecutionAttemptExistsError,
+    ActiveTaskExistsError,
+    TaskPlanStore,
+)
 
 
 def test_create_and_get_active_plan(tmp_path: Path) -> None:
@@ -119,3 +123,31 @@ def test_set_task_status_marks_terminal_reason(tmp_path: Path) -> None:
     assert updated.status == "cancelled"
     assert updated.terminal_reason == "replaced"
     assert updated.completed_at is not None
+
+
+def test_manual_mutations_and_replacement_reject_active_execution_attempt(
+    tmp_path: Path,
+) -> None:
+    store = TaskPlanStore(tmp_path / "task_plans.db")
+    plan = store.create_plan(session_key="cli:s1", title="Fix RAG", step_titles=["A"])
+    store.claim_execution_attempt(
+        task_id=plan.task_id,
+        step_id=plan.steps[0].step_id,
+        session_key="cli:s1",
+        request_id="req-1",
+        idempotency_key="idem-1",
+        owner_instance_id="runtime-1",
+        lease_expires_at="2030-07-15T01:00:00+00:00",
+    )
+
+    with pytest.raises(ActiveExecutionAttemptExistsError):
+        store.update_step(task_id=plan.task_id, step_index=1, status="completed")
+    with pytest.raises(ActiveExecutionAttemptExistsError):
+        store.set_task_status(task_id=plan.task_id, status="cancelled")
+    with pytest.raises(ActiveExecutionAttemptExistsError):
+        store.create_plan(
+            session_key="cli:s1",
+            title="Replacement",
+            step_titles=["B"],
+            replace_active=True,
+        )

@@ -5,9 +5,23 @@ import sqlite3
 import threading
 from collections.abc import Iterator
 from contextlib import contextmanager
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from agent.task_plan.execution_models import (
+    AttemptClaimResult,
+    ExecutionEventType,
+    TaskExecutionAttempt,
+    TaskExecutionEvent,
+)
+from agent.task_plan.execution_store import (
+    EXECUTION_SCHEMA_SQL,
+    json_dump as _execution_json_dump,
+    new_execution_event_id,
+    row_to_execution_attempt,
+    row_to_execution_event,
+)
 from agent.task_plan.models import (
     StepStatus,
     TaskPlan,
@@ -33,6 +47,18 @@ class TaskStepNotFoundError(RuntimeError):
     pass
 
 
+class ActiveExecutionAttemptExistsError(RuntimeError):
+    pass
+
+
+class ExecutionAttemptConflictError(RuntimeError):
+    pass
+
+
+class TaskExecutionAttemptNotFoundError(RuntimeError):
+    pass
+
+
 class TaskPlanStore:
     def __init__(self, db_path: Path) -> None:
         self._db_path = db_path
@@ -55,6 +81,10 @@ class TaskPlanStore:
             conn.execute("BEGIN IMMEDIATE")
             try:
                 if replace_active:
+                    if self._has_active_execution_attempt_for_session(conn, session_key):
+                        raise ActiveExecutionAttemptExistsError(
+                            "abort the active execution attempt first"
+                        )
                     conn.execute(
                         """
                         UPDATE task_plans
@@ -168,6 +198,7 @@ class TaskPlanStore:
                 ).fetchone()
                 if row is None:
                     raise TaskStepNotFoundError("task step not found")
+                self._require_no_active_execution_attempt(conn, task_id)
                 started_at = row["started_at"]
                 completed_at = row["completed_at"]
                 if status == "in_progress" and started_at is None:
@@ -225,6 +256,7 @@ class TaskPlanStore:
         with self._lock, self._connect() as conn:
             conn.execute("BEGIN IMMEDIATE")
             try:
+                self._require_no_active_execution_attempt(conn, task_id)
                 cur = conn.execute(
                     """
                     UPDATE task_plans
@@ -298,6 +330,793 @@ class TaskPlanStore:
                 ON task_steps(task_id, step_index);
                 """
             )
+            conn.executescript(EXECUTION_SCHEMA_SQL)
+
+    def claim_execution_attempt(
+        self,
+        *,
+        task_id: str,
+        step_id: str,
+        session_key: str,
+        request_id: str,
+        idempotency_key: str,
+        owner_instance_id: str,
+        lease_expires_at: str,
+        source_turn_id: int | None = None,
+    ) -> AttemptClaimResult:
+        with self._lock, self._connect() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            try:
+                replay = conn.execute(
+                    """
+                    SELECT * FROM task_execution_attempts
+                    WHERE session_key = ? AND request_id = ?
+                    """,
+                    (session_key, request_id),
+                ).fetchone()
+                if replay is not None:
+                    conn.commit()
+                    return AttemptClaimResult(
+                        attempt=row_to_execution_attempt(replay),
+                        disposition="request_replay",
+                    )
+                active = self._fetch_active_execution_attempt(conn, task_id)
+                if active is not None:
+                    conn.commit()
+                    return AttemptClaimResult(
+                        attempt=row_to_execution_attempt(active),
+                        disposition="active_conflict",
+                    )
+
+                task = conn.execute(
+                    "SELECT * FROM task_plans WHERE task_id = ?", (task_id,)
+                ).fetchone()
+                if task is None or task["session_key"] != session_key:
+                    raise TaskPlanNotFoundError(task_id)
+                if task["status"] != "active":
+                    raise ExecutionAttemptConflictError("task plan is not active")
+                step = conn.execute(
+                    "SELECT * FROM task_steps WHERE step_id = ? AND task_id = ?",
+                    (step_id, task_id),
+                ).fetchone()
+                if step is None:
+                    raise TaskStepNotFoundError("task step not found")
+                if step["status"] != "pending":
+                    raise ExecutionAttemptConflictError("task step is not pending")
+                attempt_no = int(
+                    conn.execute(
+                        """
+                        SELECT COALESCE(MAX(attempt_no), 0) + 1
+                        FROM task_execution_attempts WHERE step_id = ?
+                        """,
+                        (step_id,),
+                    ).fetchone()[0]
+                )
+                attempt = TaskExecutionAttempt.new(
+                    task_id=task_id,
+                    step_id=step_id,
+                    session_key=session_key,
+                    request_id=request_id,
+                    idempotency_key=idempotency_key,
+                    attempt_no=attempt_no,
+                    owner_instance_id=owner_instance_id,
+                    lease_expires_at=lease_expires_at,
+                    source_turn_id=source_turn_id,
+                )
+                conn.execute(
+                    """
+                    INSERT INTO task_execution_attempts (
+                        attempt_id, task_id, step_id, session_key, request_id,
+                        idempotency_key, attempt_no, status, execution_mode,
+                        owner_instance_id, lease_expires_at, source_turn_id,
+                        requested_tool_name, requested_arguments_json,
+                        requested_capabilities_json, result_summary, error_code,
+                        terminal_reason, created_at, started_at, updated_at,
+                        finished_at, metadata_json
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        attempt.attempt_id,
+                        attempt.task_id,
+                        attempt.step_id,
+                        attempt.session_key,
+                        attempt.request_id,
+                        attempt.idempotency_key,
+                        attempt.attempt_no,
+                        attempt.status,
+                        attempt.execution_mode,
+                        attempt.owner_instance_id,
+                        attempt.lease_expires_at,
+                        attempt.source_turn_id,
+                        attempt.requested_tool_name,
+                        _execution_json_dump(attempt.requested_arguments),
+                        _execution_json_dump(list(attempt.requested_capabilities)),
+                        attempt.result_summary,
+                        attempt.error_code,
+                        attempt.terminal_reason,
+                        attempt.created_at,
+                        attempt.started_at,
+                        attempt.updated_at,
+                        attempt.finished_at,
+                        _execution_json_dump(attempt.metadata),
+                    ),
+                )
+                self._after_execution_mutation("claim_after_attempt_insert")
+                self._append_execution_event_in_transaction(
+                    conn,
+                    attempt_id=attempt.attempt_id,
+                    event_type="attempt_claimed",
+                    created_at=attempt.created_at,
+                )
+                self._after_execution_mutation("claim_after_event_insert")
+                conn.commit()
+                return AttemptClaimResult(attempt=attempt, disposition="created")
+            except sqlite3.IntegrityError:
+                conn.rollback()
+                return self._claim_conflict_result(
+                    conn,
+                    task_id=task_id,
+                    session_key=session_key,
+                    request_id=request_id,
+                )
+            except Exception:
+                conn.rollback()
+                raise
+
+    def get_execution_attempt(self, attempt_id: str) -> TaskExecutionAttempt | None:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT * FROM task_execution_attempts WHERE attempt_id = ?",
+                (attempt_id,),
+            ).fetchone()
+        return None if row is None else row_to_execution_attempt(row)
+
+    def get_execution_attempt_by_request(
+        self, *, session_key: str, request_id: str
+    ) -> TaskExecutionAttempt | None:
+        with self._connect() as conn:
+            row = conn.execute(
+                """
+                SELECT * FROM task_execution_attempts
+                WHERE session_key = ? AND request_id = ?
+                """,
+                (session_key, request_id),
+            ).fetchone()
+        return None if row is None else row_to_execution_attempt(row)
+
+    def get_active_execution_attempt(self, task_id: str) -> TaskExecutionAttempt | None:
+        with self._connect() as conn:
+            row = self._fetch_active_execution_attempt(conn, task_id)
+        return None if row is None else row_to_execution_attempt(row)
+
+    def get_latest_execution_attempt_for_step(
+        self, step_id: str
+    ) -> TaskExecutionAttempt | None:
+        with self._connect() as conn:
+            row = conn.execute(
+                """
+                SELECT * FROM task_execution_attempts WHERE step_id = ?
+                ORDER BY attempt_no DESC LIMIT 1
+                """,
+                (step_id,),
+            ).fetchone()
+        return None if row is None else row_to_execution_attempt(row)
+
+    def list_execution_attempts(self, task_id: str) -> list[TaskExecutionAttempt]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT * FROM task_execution_attempts WHERE task_id = ?
+                ORDER BY step_id ASC, attempt_no ASC
+                """,
+                (task_id,),
+            ).fetchall()
+        return [row_to_execution_attempt(row) for row in rows]
+
+    def list_recoverable_execution_attempts(
+        self, session_key: str | None = None
+    ) -> list[TaskExecutionAttempt]:
+        with self._connect() as conn:
+            if session_key is None:
+                rows = conn.execute(
+                    """
+                    SELECT * FROM task_execution_attempts
+                    WHERE status IN ('pending', 'running') ORDER BY created_at ASC
+                    """
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    """
+                    SELECT * FROM task_execution_attempts
+                    WHERE session_key = ? AND status IN ('pending', 'running')
+                    ORDER BY created_at ASC
+                    """,
+                    (session_key,),
+                ).fetchall()
+        return [row_to_execution_attempt(row) for row in rows]
+
+    def renew_execution_attempt_lease(
+        self,
+        *,
+        attempt_id: str,
+        owner_instance_id: str,
+        now: datetime,
+        lease_expires_at: str,
+    ) -> TaskExecutionAttempt:
+        timestamp = _datetime_to_iso(now)
+        with self._lock, self._connect() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            try:
+                cur = conn.execute(
+                    """
+                    UPDATE task_execution_attempts
+                    SET lease_expires_at = ?, updated_at = ?
+                    WHERE attempt_id = ? AND owner_instance_id = ?
+                      AND status IN ('pending', 'running', 'waiting_authorization')
+                      AND lease_expires_at > ?
+                    """,
+                    (lease_expires_at, timestamp, attempt_id, owner_instance_id, timestamp),
+                )
+                if cur.rowcount != 1:
+                    raise ExecutionAttemptConflictError("execution attempt lease conflict")
+                attempt = self._require_execution_attempt(conn, attempt_id)
+                conn.commit()
+                return attempt
+            except Exception:
+                conn.rollback()
+                raise
+
+    def list_execution_events(self, attempt_id: str) -> list[TaskExecutionEvent]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT * FROM task_execution_events WHERE attempt_id = ?
+                ORDER BY sequence_no ASC
+                """,
+                (attempt_id,),
+            ).fetchall()
+        return [row_to_execution_event(row) for row in rows]
+
+    def start_execution_attempt(
+        self, *, attempt_id: str, owner_instance_id: str, now: datetime
+    ) -> TaskExecutionAttempt:
+        timestamp = _datetime_to_iso(now)
+        with self._lock, self._connect() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            try:
+                cur = conn.execute(
+                    """
+                    UPDATE task_execution_attempts
+                    SET status = 'running', started_at = ?, updated_at = ?
+                    WHERE attempt_id = ? AND owner_instance_id = ? AND status = 'pending'
+                      AND lease_expires_at > ?
+                    """,
+                    (timestamp, timestamp, attempt_id, owner_instance_id, timestamp),
+                )
+                if cur.rowcount != 1:
+                    raise ExecutionAttemptConflictError("execution attempt start conflict")
+                attempt = self._require_execution_attempt(conn, attempt_id)
+                cur = conn.execute(
+                    """
+                    UPDATE task_steps
+                    SET status = 'in_progress', started_at = COALESCE(started_at, ?)
+                    WHERE step_id = ? AND task_id = ? AND status = 'pending'
+                    """,
+                    (timestamp, attempt.step_id, attempt.task_id),
+                )
+                if cur.rowcount != 1:
+                    raise ExecutionAttemptConflictError("execution step start conflict")
+                self._after_execution_mutation("start_after_step_update")
+                self._append_execution_event_in_transaction(
+                    conn,
+                    attempt_id=attempt_id,
+                    event_type="attempt_started",
+                    created_at=timestamp,
+                )
+                conn.commit()
+                return self._require_execution_attempt(conn, attempt_id)
+            except Exception:
+                conn.rollback()
+                raise
+
+    def append_execution_event(
+        self,
+        *,
+        attempt_id: str,
+        owner_instance_id: str,
+        now: datetime,
+        event_type: ExecutionEventType,
+        tool_name: str = "",
+        tool_call_id: str = "",
+        source_turn_id: int | None = None,
+        tool_risk: str = "",
+        tool_capabilities: tuple[str, ...] = (),
+        counts_as_work: bool = False,
+        invoker_reached: bool = False,
+        invoker_succeeded: bool = False,
+        execution_status: str = "",
+        result_ok: bool | None = None,
+        error_code: str = "",
+        arguments_hash: str = "",
+        result_preview: str = "",
+        metadata: dict[str, Any] | None = None,
+    ) -> TaskExecutionEvent:
+        timestamp = _datetime_to_iso(now)
+        with self._lock, self._connect() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            try:
+                cur = conn.execute(
+                    """
+                    UPDATE task_execution_attempts SET updated_at = ?
+                    WHERE attempt_id = ? AND owner_instance_id = ? AND status = 'running'
+                      AND lease_expires_at > ?
+                    """,
+                    (timestamp, attempt_id, owner_instance_id, timestamp),
+                )
+                if cur.rowcount != 1:
+                    raise ExecutionAttemptConflictError("execution event conflict")
+                event = self._append_execution_event_in_transaction(
+                    conn,
+                    attempt_id=attempt_id,
+                    event_type=event_type,
+                    created_at=timestamp,
+                    tool_name=tool_name,
+                    tool_call_id=tool_call_id,
+                    source_turn_id=source_turn_id,
+                    tool_risk=tool_risk,
+                    tool_capabilities=tool_capabilities,
+                    counts_as_work=counts_as_work,
+                    invoker_reached=invoker_reached,
+                    invoker_succeeded=invoker_succeeded,
+                    execution_status=execution_status,
+                    result_ok=result_ok,
+                    error_code=error_code,
+                    arguments_hash=arguments_hash,
+                    result_preview=result_preview,
+                    metadata=metadata,
+                )
+                conn.commit()
+                return event
+            except Exception:
+                conn.rollback()
+                raise
+
+    def finalize_execution_attempt(
+        self,
+        *,
+        attempt_id: str,
+        owner_instance_id: str,
+        now: datetime,
+        success: bool,
+        result_summary: str = "",
+        error_code: str = "",
+        terminal_reason: str = "",
+    ) -> TaskExecutionAttempt:
+        timestamp = _datetime_to_iso(now)
+        status = "succeeded" if success else "failed"
+        step_status = "completed" if success else "failed"
+        event_type: ExecutionEventType = (
+            "attempt_succeeded" if success else "attempt_failed"
+        )
+        with self._lock, self._connect() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            try:
+                cur = conn.execute(
+                    """
+                    UPDATE task_execution_attempts
+                    SET status = ?, result_summary = ?, error_code = ?,
+                        terminal_reason = ?, updated_at = ?, finished_at = ?
+                    WHERE attempt_id = ? AND owner_instance_id = ? AND status = 'running'
+                      AND lease_expires_at > ?
+                    """,
+                    (
+                        status,
+                        result_summary,
+                        error_code,
+                        terminal_reason,
+                        timestamp,
+                        timestamp,
+                        attempt_id,
+                        owner_instance_id,
+                        timestamp,
+                    ),
+                )
+                if cur.rowcount != 1:
+                    raise ExecutionAttemptConflictError("execution attempt finalize conflict")
+                attempt = self._require_execution_attempt(conn, attempt_id)
+                cur = conn.execute(
+                    """
+                    UPDATE task_steps
+                    SET status = ?, result_summary = ?, completed_at = ?
+                    WHERE step_id = ? AND task_id = ? AND status = 'in_progress'
+                    """,
+                    (
+                        step_status,
+                        result_summary,
+                        timestamp,
+                        attempt.step_id,
+                        attempt.task_id,
+                    ),
+                )
+                if cur.rowcount != 1:
+                    raise ExecutionAttemptConflictError("execution step finalize conflict")
+                if success and self._task_steps_are_complete(conn, attempt.task_id):
+                    conn.execute(
+                        """
+                        UPDATE task_plans
+                        SET status = 'completed', updated_at = ?, completed_at = ?
+                        WHERE task_id = ? AND status = 'active'
+                        """,
+                        (timestamp, timestamp, attempt.task_id),
+                    )
+                    self._after_execution_mutation("finalize_after_plan_completion")
+                self._append_execution_event_in_transaction(
+                    conn,
+                    attempt_id=attempt_id,
+                    event_type=event_type,
+                    created_at=timestamp,
+                    error_code=error_code,
+                    result_preview=result_summary,
+                )
+                conn.commit()
+                return self._require_execution_attempt(conn, attempt_id)
+            except Exception:
+                conn.rollback()
+                raise
+
+    def block_execution_attempt(
+        self,
+        *,
+        attempt_id: str,
+        owner_instance_id: str,
+        now: datetime,
+        terminal_reason: str,
+    ) -> TaskExecutionAttempt:
+        timestamp = _datetime_to_iso(now)
+        with self._lock, self._connect() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            try:
+                cur = conn.execute(
+                    """
+                    UPDATE task_execution_attempts
+                    SET status = 'blocked', terminal_reason = ?, updated_at = ?,
+                        finished_at = ?
+                    WHERE attempt_id = ? AND owner_instance_id = ?
+                      AND status IN ('pending', 'running') AND lease_expires_at > ?
+                    """,
+                    (
+                        terminal_reason,
+                        timestamp,
+                        timestamp,
+                        attempt_id,
+                        owner_instance_id,
+                        timestamp,
+                    ),
+                )
+                if cur.rowcount != 1:
+                    raise ExecutionAttemptConflictError("execution attempt block conflict")
+                self._after_execution_mutation("block_after_attempt_update")
+                attempt = self._require_execution_attempt(conn, attempt_id)
+                self._reset_execution_step(conn, attempt.step_id, attempt.task_id)
+                self._after_execution_mutation("block_after_step_reset")
+                self._append_execution_event_in_transaction(
+                    conn,
+                    attempt_id=attempt_id,
+                    event_type="attempt_blocked",
+                    created_at=timestamp,
+                    error_code="",
+                    result_preview=terminal_reason,
+                )
+                conn.commit()
+                return self._require_execution_attempt(conn, attempt_id)
+            except Exception:
+                conn.rollback()
+                raise
+
+    def defer_execution_attempt(
+        self,
+        *,
+        attempt_id: str,
+        owner_instance_id: str,
+        now: datetime,
+        terminal_reason: str = "",
+    ) -> TaskExecutionAttempt:
+        timestamp = _datetime_to_iso(now)
+        with self._lock, self._connect() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            try:
+                cur = conn.execute(
+                    """
+                    UPDATE task_execution_attempts
+                    SET status = 'waiting_authorization', terminal_reason = ?,
+                        execution_mode = 'authorization_required', updated_at = ?
+                    WHERE attempt_id = ? AND owner_instance_id = ?
+                      AND status IN ('pending', 'running') AND lease_expires_at > ?
+                    """,
+                    (terminal_reason, timestamp, attempt_id, owner_instance_id, timestamp),
+                )
+                if cur.rowcount != 1:
+                    raise ExecutionAttemptConflictError("execution attempt defer conflict")
+                attempt = self._require_execution_attempt(conn, attempt_id)
+                self._reset_execution_step(conn, attempt.step_id, attempt.task_id)
+                self._append_execution_event_in_transaction(
+                    conn,
+                    attempt_id=attempt_id,
+                    event_type="authorization_deferred",
+                    created_at=timestamp,
+                    result_preview=terminal_reason,
+                )
+                conn.commit()
+                return self._require_execution_attempt(conn, attempt_id)
+            except Exception:
+                conn.rollback()
+                raise
+
+    def abort_execution_attempt(
+        self, *, attempt_id: str, terminal_reason: str = ""
+    ) -> TaskExecutionAttempt:
+        timestamp = utc_now_iso()
+        with self._lock, self._connect() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            try:
+                cur = conn.execute(
+                    """
+                    UPDATE task_execution_attempts
+                    SET status = 'cancelled', terminal_reason = ?, updated_at = ?,
+                        finished_at = ?
+                    WHERE attempt_id = ?
+                      AND status IN ('pending', 'running', 'waiting_authorization')
+                    """,
+                    (terminal_reason, timestamp, timestamp, attempt_id),
+                )
+                if cur.rowcount != 1:
+                    raise ExecutionAttemptConflictError("execution attempt abort conflict")
+                attempt = self._require_execution_attempt(conn, attempt_id)
+                self._reset_execution_step(conn, attempt.step_id, attempt.task_id)
+                self._append_execution_event_in_transaction(
+                    conn,
+                    attempt_id=attempt_id,
+                    event_type="attempt_cancelled",
+                    created_at=timestamp,
+                    result_preview=terminal_reason,
+                )
+                conn.commit()
+                return self._require_execution_attempt(conn, attempt_id)
+            except Exception:
+                conn.rollback()
+                raise
+
+    def reconcile_execution_attempts(
+        self,
+        *,
+        now: datetime,
+        session_key: str | None = None,
+    ) -> list[TaskExecutionAttempt]:
+        timestamp = _datetime_to_iso(now)
+        with self._lock, self._connect() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            try:
+                query = """
+                    SELECT * FROM task_execution_attempts
+                    WHERE status IN ('pending', 'running') AND lease_expires_at <= ?
+                """
+                params: tuple[object, ...] = (timestamp,)
+                if session_key is not None:
+                    query += " AND session_key = ?"
+                    params = (timestamp, session_key)
+                rows = conn.execute(query, params).fetchall()
+                reconciled: list[TaskExecutionAttempt] = []
+                for row in rows:
+                    attempt_id = str(row["attempt_id"])
+                    conn.execute(
+                        """
+                        UPDATE task_execution_attempts
+                        SET status = 'blocked', terminal_reason = ?, updated_at = ?,
+                            finished_at = ?
+                        WHERE attempt_id = ? AND status IN ('pending', 'running')
+                          AND lease_expires_at <= ?
+                        """,
+                        (
+                            "lease_expired_outcome_unknown",
+                            timestamp,
+                            timestamp,
+                            attempt_id,
+                            timestamp,
+                        ),
+                    )
+                    if row["status"] == "running":
+                        conn.execute(
+                            """
+                            UPDATE task_steps SET status = 'pending', started_at = NULL,
+                                completed_at = NULL
+                            WHERE step_id = ? AND task_id = ? AND status = 'in_progress'
+                            """,
+                            (row["step_id"], row["task_id"]),
+                        )
+                    self._append_execution_event_in_transaction(
+                        conn,
+                        attempt_id=attempt_id,
+                        event_type="recovery_reconciled",
+                        created_at=timestamp,
+                        result_preview="lease_expired_outcome_unknown",
+                    )
+                    reconciled.append(self._require_execution_attempt(conn, attempt_id))
+                conn.commit()
+                return reconciled
+            except Exception:
+                conn.rollback()
+                raise
+
+    def _after_execution_mutation(self, point: str) -> None:
+        del point
+
+    def _append_execution_event_in_transaction(
+        self,
+        conn: sqlite3.Connection,
+        *,
+        attempt_id: str,
+        event_type: ExecutionEventType,
+        created_at: str,
+        tool_name: str = "",
+        tool_call_id: str = "",
+        source_turn_id: int | None = None,
+        tool_risk: str = "",
+        tool_capabilities: tuple[str, ...] = (),
+        counts_as_work: bool = False,
+        invoker_reached: bool = False,
+        invoker_succeeded: bool = False,
+        execution_status: str = "",
+        result_ok: bool | None = None,
+        error_code: str = "",
+        arguments_hash: str = "",
+        result_preview: str = "",
+        metadata: dict[str, Any] | None = None,
+    ) -> TaskExecutionEvent:
+        sequence_no = int(
+            conn.execute(
+                """
+                SELECT COALESCE(MAX(sequence_no), 0) + 1
+                FROM task_execution_events WHERE attempt_id = ?
+                """,
+                (attempt_id,),
+            ).fetchone()[0]
+        )
+        event_id = new_execution_event_id()
+        conn.execute(
+            """
+            INSERT INTO task_execution_events (
+                event_id, attempt_id, sequence_no, event_type, tool_name,
+                tool_call_id, source_turn_id, tool_risk, tool_capabilities_json,
+                counts_as_work, invoker_reached, invoker_succeeded,
+                execution_status, result_ok, error_code, arguments_hash,
+                result_preview, created_at, metadata_json
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                event_id,
+                attempt_id,
+                sequence_no,
+                event_type,
+                tool_name,
+                tool_call_id,
+                source_turn_id,
+                tool_risk,
+                _execution_json_dump(list(tool_capabilities)),
+                int(counts_as_work),
+                int(invoker_reached),
+                int(invoker_succeeded),
+                execution_status,
+                None if result_ok is None else int(result_ok),
+                error_code,
+                arguments_hash,
+                result_preview,
+                created_at,
+                _execution_json_dump(metadata or {}),
+            ),
+        )
+        row = conn.execute(
+            "SELECT * FROM task_execution_events WHERE event_id = ?", (event_id,)
+        ).fetchone()
+        if row is None:
+            raise RuntimeError("execution event insert did not persist")
+        return row_to_execution_event(row)
+
+    def _claim_conflict_result(
+        self,
+        conn: sqlite3.Connection,
+        *,
+        task_id: str,
+        session_key: str,
+        request_id: str,
+    ) -> AttemptClaimResult:
+        replay = conn.execute(
+            """
+            SELECT * FROM task_execution_attempts
+            WHERE session_key = ? AND request_id = ?
+            """,
+            (session_key, request_id),
+        ).fetchone()
+        if replay is not None:
+            return AttemptClaimResult(
+                attempt=row_to_execution_attempt(replay), disposition="request_replay"
+            )
+        active = self._fetch_active_execution_attempt(conn, task_id)
+        if active is not None:
+            return AttemptClaimResult(
+                attempt=row_to_execution_attempt(active), disposition="active_conflict"
+            )
+        raise ExecutionAttemptConflictError("execution attempt claim conflict")
+
+    @staticmethod
+    def _fetch_active_execution_attempt(
+        conn: sqlite3.Connection, task_id: str
+    ) -> sqlite3.Row | None:
+        return conn.execute(
+            """
+            SELECT * FROM task_execution_attempts
+            WHERE task_id = ? AND status IN ('pending', 'running', 'waiting_authorization')
+            ORDER BY created_at DESC LIMIT 1
+            """,
+            (task_id,),
+        ).fetchone()
+
+    def _require_execution_attempt(
+        self, conn: sqlite3.Connection, attempt_id: str
+    ) -> TaskExecutionAttempt:
+        row = conn.execute(
+            "SELECT * FROM task_execution_attempts WHERE attempt_id = ?", (attempt_id,)
+        ).fetchone()
+        if row is None:
+            raise TaskExecutionAttemptNotFoundError(attempt_id)
+        return row_to_execution_attempt(row)
+
+    @staticmethod
+    def _task_steps_are_complete(conn: sqlite3.Connection, task_id: str) -> bool:
+        unfinished = conn.execute(
+            """
+            SELECT 1 FROM task_steps
+            WHERE task_id = ? AND status NOT IN ('completed', 'skipped') LIMIT 1
+            """,
+            (task_id,),
+        ).fetchone()
+        return unfinished is None
+
+    @staticmethod
+    def _reset_execution_step(
+        conn: sqlite3.Connection, step_id: str, task_id: str
+    ) -> None:
+        conn.execute(
+            """
+            UPDATE task_steps
+            SET status = 'pending', started_at = NULL, completed_at = NULL
+            WHERE step_id = ? AND task_id = ?
+            """,
+            (step_id, task_id),
+        )
+
+    def _require_no_active_execution_attempt(
+        self, conn: sqlite3.Connection, task_id: str
+    ) -> None:
+        if self._fetch_active_execution_attempt(conn, task_id) is not None:
+            raise ActiveExecutionAttemptExistsError(
+                "abort the active execution attempt first"
+            )
+
+    @staticmethod
+    def _has_active_execution_attempt_for_session(
+        conn: sqlite3.Connection, session_key: str
+    ) -> bool:
+        row = conn.execute(
+            """
+            SELECT 1 FROM task_execution_attempts AS attempts
+            JOIN task_plans AS plans ON plans.task_id = attempts.task_id
+            WHERE plans.session_key = ? AND plans.status = 'active'
+              AND attempts.status IN ('pending', 'running', 'waiting_authorization')
+            LIMIT 1
+            """,
+            (session_key,),
+        ).fetchone()
+        return row is not None
 
     @contextmanager
     def _connect(self) -> Iterator[sqlite3.Connection]:
@@ -405,3 +1224,9 @@ def _is_active_unique_error(exc: sqlite3.IntegrityError) -> bool:
         or "task_plans.session_key" in message
         or "UNIQUE constraint failed" in message
     )
+
+
+def _datetime_to_iso(value: datetime) -> str:
+    if value.tzinfo is None:
+        raise ValueError("execution attempt timestamps must be timezone-aware")
+    return value.isoformat()
