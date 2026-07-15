@@ -721,3 +721,23 @@ STAR 复盘：
 更新后的面试结论：
 
 我没有通过全禁 memory 来压低 TaskPlan 成本，而是把“是否需要上下文”建模为 typed turn contract，再由 capability scope、一次性预算和 action-aware completion 分层执行。这样纯计划与显式偏好/历史计划共享同一套模块，但权限和成本不同；工具失败或 hook 拒绝也不会获得额外预算。完整回归从实施前 `1481` 增长到 `1619` 个通过用例，且独立审阅确认没有剩余高优先级问题。隔离真实 smoke 进一步证明纯计划从 4 轮降到 2 轮，同时保留偏好/历史各一次合理召回；smoke 新发现的否定动作误匹配也通过 required/negated/positive 优先级在本轮完成 TDD 修复。
+
+### CASE-004 主服务复测与下一边界
+
+2026-07-15，用户使用当前仓库代码重启主服务后，在 session `taskplan-scope-test-20260715` 重跑基础 TaskPlan 链路。检查范围同时包括 `agent.log`、observe turn 和 `task_plans.db`，不是只依据 CLI 最终回答。
+
+新增 Result：
+
+- turn `389`：`create_task_plan -> final`，2 轮，纯计划没有 memory/history/RAG/local/spawn 调用。
+- turn `390`：`inspect_task_plan -> final`，2 轮。
+- turn `391`：`update_task_step -> final`，2 轮。
+- turn `392`：`spawn_manage -> final`，2 轮，background observe 仍是非严格 passthrough。
+- 四轮均为 `error=NULL`、`LRU preloaded=[]`，没有 Traceback 或 CLI 断连。
+- SQLite 任务包含三个步骤，第一步已持久化为 `completed`，结果摘要与工具参数一致。
+
+阶段结论：
+
+- LA-001 已解决“纯计划是否应召回上下文”的授权问题；今天基础 4/4 主服务复测没有发现回归。
+- 当天没有重复跑偏好、历史和否定意图，不把“本次未重复”写成“从未验证”；这些路径已有前一天隔离 live gate 和自动化证据。
+- 下一层不是继续增加 intent 词表，而是 `LA-002 TaskPlan Recovery and Execution Orchestration`：解决重启恢复、stale step、execution attempt、幂等单步推进和副作用待授权。
+- TaskPlan 当前是可靠的状态与授权模块，还不是可以任意执行本地副作用的自主任务执行器。

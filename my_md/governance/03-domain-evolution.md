@@ -825,11 +825,14 @@
 - TaskPlan 的边界从工具名 blocklist 演进为可复用的 typed capability contract。
 - runtime authorization 与 trace metadata 分离，降低模型输出或 trace 篡改改变权限的风险。
 - LA-001 已完成自动化和真实模型验收；后续只把同批重复候选作为跨工具域的模型生成成本问题观察，不重新打开本次执行授权问题。
+- 2026-07-15 主服务 turn `389-392` 再次验证 pure create、inspect、update、background observe 均为 2 轮且 `error=NULL`；主服务 SQLite 状态与工具链一致，基础复测 4/4 通过。
+- Local Agent 的问题边界由“任务状态与上下文授权”推进到下一层“任务恢复与受控执行”。后续 `LA-002` 应引入 execution attempt 和幂等恢复，而不是把执行状态塞进 LRU 或 AgentLoop。
 
 关联文档：
 
 - `docs/superpowers/plans/2026-07-14-task-plan-context-capability-scope.md`
 - `my_md/local_agent/02-task-plan-first-phase-design.md`
+- `my_md/local_agent/03-task-plan-recovery-execution-design.md`
 - `my_md/governance/06-star-log.md` CASE-004
 
 ## System

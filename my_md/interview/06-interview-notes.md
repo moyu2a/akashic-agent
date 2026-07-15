@@ -328,3 +328,8 @@ Web端自主任务编排：让Agent像人一样浏览网页、填表、提交数
 - 修复后纯计划：2 轮、`11605` prompt tokens，下降约 77.8%。
 - 偏好/历史计划：3 轮，各只有一次真实上下文召回。
 - 完整自动化：`1619 passed, 3 warnings in 38.10s`。
+- 2026-07-15 非隔离主服务复测：pure create、inspect、update、background observe 四条链路均为 2 轮、`error=NULL`，TaskPlan SQLite 第一步更新正确。
+
+下一阶段表达：
+
+TaskPlan 当前解决的是计划状态、上下文授权和工具边界。下一步不会直接放开自主 shell，而是增加可持久化的 execution attempt、重启恢复和单步幂等编排；本地副作用仍需经过权限确认与回滚边界。这能把“会列计划”推进为“可恢复地执行计划”，同时避免重复执行和不可逆修改。

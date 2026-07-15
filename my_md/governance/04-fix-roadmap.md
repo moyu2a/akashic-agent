@@ -295,6 +295,16 @@
 - inspect/update/background-job：保持 turn `383-385` 已验证行为。
 - 完整回归保持 Document RAG、Turn Trace、memory-after-doc-LRU 和 CLI session 行为不变。
 
+2026-07-15 主服务复测：
+
+- turn `389-392` 分别为 `create_task_plan`、`inspect_task_plan`、`update_task_step`、`spawn_manage` 后 final，全部 2 轮且 `error=NULL`。
+- 纯计划首轮只暴露 create provider；四轮没有 LRU 预加载污染，TaskPlan SQLite 第一步更新结果正确。
+- 基础 4/4 再次通过；偏好/历史/否定路径沿用 2026-07-14 隔离 live gate 和自动化证据，不因未在同一天重复运行而改变 LA-001 fixed 状态。
+
+下一阶段已登记 `LA-002`：任务恢复与受控执行编排。先实现 active task 重启恢复、stale step 判定、execution attempt、单步幂等推进和待授权状态；暂停/取消/重试、多任务视图以及任意本地副作用执行继续后置。
+
+设计文档：`my_md/local_agent/03-task-plan-recovery-execution-design.md`。交付拆为 `LA-002a Recovery Foundation` 与 `LA-002b Controlled Read-only Execution`；第一版只自动允许 registry `read-only` 工具，其他风险进入 waiting authorization。
+
 ## 暂不处理
 
 - 大规模重构 AgentLoop。

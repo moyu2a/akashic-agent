@@ -110,3 +110,5 @@ CapabilityScope
 - `TaskPlanAccessPolicy` 在一次召回后只退休 schema/tool search visibility，不修改 execution allow scope；重复硬调用仍由预算返回稳定 reason。
 - action-aware completion 同时要求 provider capability、`execution_status=success`、`result_ok=True` 和合法成功 payload。
 - TaskPlan turn state 不进入 LRU/ToolDiscoveryState，也未增加 AgentLoop 主循环分支。
+- 2026-07-15 主服务 turn `389-392` 复测 pure create/inspect/update/background observe 均为 2 轮且无 error，证明该决策在非隔离主服务上继续成立。
+- 下一阶段的任务恢复和 execution attempt 不改变本决策：上下文 capability contract 继续只负责当前 turn 授权，长期执行状态必须由 TaskPlan 持久化边界管理。

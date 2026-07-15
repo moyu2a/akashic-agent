@@ -24,3 +24,22 @@ Implement turn-local Document RAG tool intent preload without changing always-on
 
 | Error | Attempt | Resolution |
 | --- | --- | --- |
+
+## 2026-07-15 Documentation Addendum
+
+Goal: record the restarted main-service TaskPlan smoke, keep LA-001 evidence boundaries accurate, and register the next architectural gap without changing implementation.
+
+1. Verify main-service process, logs, observe turns, and TaskPlan SQLite state - complete
+2. Update Local Agent, governance, STAR, interview, findings, and progress documents - complete
+3. Register LA-002 recovery/execution orchestration as open planning work - complete
+4. Run documentation consistency and diff checks - complete
+
+## LA-002 Design Document
+
+Goal: produce a reviewable design for recoverable, idempotent, single-step TaskPlan execution without implementing runtime behavior.
+
+1. Inspect current TaskPlan, Tool Gateway, Boundary, Completion, channel identity, and runtime wiring - complete
+2. Define attempt state machine, transaction invariants, recovery semantics, and authorization boundary - complete
+3. Write `my_md/local_agent/03-task-plan-recovery-execution-design.md` and update indexes - complete
+4. Self-review placeholders, contradictions, scope, security claims, and acceptance criteria - complete
+5. Run documentation checks and commit the design - complete

@@ -871,3 +871,34 @@ context_requirement: none | long_term_memory | session_history
 history 同批重复只增加模型已生成的候选协议成本，不增加真实工具执行次数。它与 Document RAG 同批候选问题属于同类模型生成成本，当前边界按设计保证副作用和执行预算。
 
 smoke 还发现“先只记住讨论，不创建计划”因子串命中而误激活 create contract。新增 bounded required/negated action parser 后，真实复测显示 `reason=no_tool_access_policy`，执行 `recall_memory/memorize` 而没有 `create_task_plan`；“不要创建计划，把第一步标记完成”仍能进入 update。后续独立审阅进一步覆盖“请勿/不要再/不得不/不能不”以及 background start/observe 的正向、否定和双重否定优先级，最终无剩余 Critical/Important。
+
+### 2026-07-15 主服务复测
+
+用户重启 `/tmp/akashic.sock` 主服务后，在 session `taskplan-scope-test-20260715` 执行基础四条 smoke。Agent PID `372968` 从当前仓库启动，IPC socket 和 dashboard `2236` 正常监听，测试期间没有 Traceback、observe error 或 CLI 断连。
+
+| Turn | 场景 | 真实链路 | ReAct | Observe 结果 |
+| ---: | --- | --- | ---: | --- |
+| 389 | 纯计划创建 | `create_task_plan -> final` | 2 | `error=NULL`，首轮只暴露 create provider |
+| 390 | 查看当前任务 | `inspect_task_plan -> final` | 2 | `error=NULL` |
+| 391 | 更新第一步 | `update_task_step -> final` | 2 | `error=NULL` |
+| 392 | 查看后台状态 | `spawn_manage -> final` | 2 | `error=NULL`，保持 background passthrough |
+
+主服务证据进一步确认：
+
+- 纯计划没有执行 `recall_memory`、`search_messages`、Document RAG、本地文件或 spawn 工具。
+- create/inspect/update 均以 `task_plan_completion_capability_satisfied` 进入 final-only。
+- 四个 turn 的 `LRU preloaded=[]`，TaskPlan contract 和状态没有污染工具发现 LRU。
+- SQLite 任务 `task_feebe25a9a8c452cacf652af0c7bd29a` 包含三个步骤；Step 1 为 `completed`，`result_summary=已查看日志，诊断成本来源完成`，Step 2/3 为 `pending`。
+- 今天的主服务复测覆盖基础 4/4；偏好、历史和否定意图没有在这组 turn 中重跑，但 2026-07-14 隔离真实 smoke 已覆盖三者，自动化回归继续覆盖失败、拒绝、同批重复和双重否定。
+
+### 阶段结论与下一阶段边界
+
+TaskPlan 第一阶段和 `LA-001` 已完成，当前没有已知阻塞性功能问题。已实现的是任务状态、上下文 capability 授权和工具边界，不是自主任务执行器。
+
+下一阶段已登记为 `LA-002 TaskPlan Recovery and Execution Orchestration`，范围应保持为：
+
+- 重启后恢复 active task，并识别 stale `in_progress` 步骤。
+- 每次推进建立独立 execution attempt，保证重复请求和重连不会重复执行同一步。
+- “继续执行下一步”默认只推进一个步骤，结果写回 TaskPlan store。
+- 复用现有 Tool Access Gateway、Turn Tool Boundary 和 Turn Completion，不在 AgentLoop 主循环新增任务状态机。
+- 在权限模型和文件回滚完成前，涉及 shell、文件写入等副作用只能进入待授权状态，不能由编排器直接放行。

@@ -35,6 +35,7 @@
 - [rag/19-document-rag-p10-intent-preload-plan.md](./rag/19-document-rag-p10-intent-preload-plan.md): Document RAG 强文档意图 turn-local 工具预加载计划。
 - [local_agent/01-local-dev-workbench-agent-roadmap.md](./local_agent/01-local-dev-workbench-agent-roadmap.md): 本地开发工作台 Agent 演进路线，记录当前底座能力、能力缺口、建设优先级和面试表达。
 - [local_agent/02-task-plan-first-phase-design.md](./local_agent/02-task-plan-first-phase-design.md): TaskPlan 第一阶段、工具边界、completion 和真实 CLI smoke 记录。
+- [local_agent/03-task-plan-recovery-execution-design.md](./local_agent/03-task-plan-recovery-execution-design.md): LA-002 可恢复、幂等、受控的单步骤执行编排设计。
 - [governance/01-issue-index.md](./governance/01-issue-index.md): 全局问题总表。
 - [governance/02-current-issues.md](./governance/02-current-issues.md): 当前待解决问题。
 - [governance/03-domain-evolution.md](./governance/03-domain-evolution.md): 领域演进记录。

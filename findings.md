@@ -37,3 +37,26 @@
 - Recorded this as:
   - RAG-006 P10a.1 follow-up: strong document turns need non-RAG tool suppression/constraints.
   - CLI-001: CLI/IPC needed stable session ids and outbound metadata trimming; this is now fixed by CLI IPC v2 and user-confirmed default session inheritance on 2026-07-11.
+
+## 2026-07-15 TaskPlan Main-Service Verification
+
+- The current main service runs from `/home/jjh/git_work/akashic-agent`, listens on `/tmp/akashic.sock` and dashboard port `2236`, and remained connected during the smoke.
+- Observe turns `389-392` validate pure create, inspect, update, and background observe in exactly two iterations each with no error.
+- Pure create exposed only `create_task_plan` and did not execute memory, history, RAG, local-file, or spawn tools.
+- TaskPlan completion used `task_plan_completion_capability_satisfied`; all four turns had empty LRU preload.
+- SQLite task `task_feebe25a9a8c452cacf652af0c7bd29a` has three steps; Step 1 is completed with the expected result summary.
+- The same-day main-service run did not repeat preference, history, or no-create cases. Those remain covered by the 2026-07-14 isolated live smoke and automated regressions.
+- The next architectural gap is no longer context authorization. It is recoverable, idempotent single-step execution with explicit side-effect authorization, now registered as open issue `LA-002`.
+
+## LA-002 Design Findings
+
+- Current TaskPlan state is split into `task_plans` and `task_steps`; step status is business progress and should not absorb execution-attempt lifecycle.
+- `TaskPlanStore` already uses `BEGIN IMMEDIATE`, foreign keys, and partial uniqueness for active plans. LA-002 should preserve this transaction boundary and add a separate attempt/event schema.
+- `TaskPlanService` is the ownership boundary. New recovery and orchestration services must validate the protected session key through it rather than querying rows from tool adapters.
+- `TaskPlanTurnContract` is intentionally focused on create/inspect/update plus context retrieval. Execution needs a separate typed contract to avoid coupling planning-context authorization to durable execution state.
+- `AgentLoop` currently consumes turns serially, but attempt uniqueness and idempotency must be enforced by SQLite so future concurrency or duplicate transport delivery cannot violate invariants.
+- `InboundMessage` has metadata but no universal message ID. IPC v2 currently carries client/session identity but no per-request ID. LA-002 must use a runtime-owned request identity and add a stable transport request ID where available; content hashes are not valid idempotency keys.
+- Registry risk metadata already distinguishes `read-only`, `write`, and `external-side-effect`. The first execution scope can automatically allow only exact `read-only` tools and defer all other/unknown risk classes.
+- A database transaction cannot provide exactly-once behavior across an external side effect. If the process dies after a tool acts but before finalization, the attempt outcome is unknown and must not be automatically replayed.
+- Startup recovery should be complemented by session reconciliation before claim/inspect; waiting authorization can remain waiting, while stale running/pending attempts become blocked with an explicit recovery reason.
+- The safe read-only flow needs explicit begin and finish control operations. Arbitrary tool success alone must not mark a TaskPlan step complete.

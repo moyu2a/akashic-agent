@@ -318,3 +318,23 @@
   - history generated three same-batch search candidates, but only one executed and the other two were soft-stopped by `task_plan_context_budget_exhausted`;
   - live smoke exposed a no-create substring false positive; added bounded required/negated action parsing for plan creation and background start, then restarted the isolated instance and confirmed “不创建计划” no longer invokes `create_task_plan` while explicit update remains available;
   - independent adversarial review added coverage for common negations, double negatives, mixed no-create/update, background create/observe, runtime-status wording, negated background start, and later positive start; final review has no remaining Critical/Important findings.
+- 2026-07-15 reviewed the restarted main Agent service without stopping or modifying it:
+  - process `372968` runs the current repository, `/tmp/akashic.sock` and dashboard `2236` are listening, and the CLI remained connected;
+  - observe turn `389`: pure create used `create_task_plan -> final`, 2 iterations, no contextual retrieval or unrelated tools;
+  - turn `390`: `inspect_task_plan -> final`, 2 iterations;
+  - turn `391`: `update_task_step -> final`, 2 iterations;
+  - turn `392`: `spawn_manage -> final`, 2 iterations, preserving background passthrough;
+  - all four turns have `error=NULL`, empty LRU preload, and no Traceback/disconnect;
+  - `task_plans.db` confirms three steps and Step 1 completed with `result_summary=已查看日志，诊断成本来源完成`;
+  - same-day main-service coverage is 4/4 for the basic matrix; preference/history/no-create were not rerun that day but remain live-verified in the isolated 2026-07-14 smoke and covered by regressions.
+- Updated Local Agent, governance, STAR, interview, planning, and progress docs to preserve the evidence boundary:
+  - LA-001 remains fixed and is not reopened by same-batch generation or same-day non-repetition of already verified cases;
+  - the next open issue is registered as LA-002 TaskPlan Recovery and Execution Orchestration;
+  - planned scope is restart recovery, stale-step handling, persistent execution attempts, idempotent single-step advancement, and side-effect waiting-for-authorization, without moving execution state into AgentLoop or LRU.
+- 2026-07-15 drafted the formal LA-002 design at `my_md/local_agent/03-task-plan-recovery-execution-design.md`:
+  - chose persistent execution attempts plus controlled single-step ReAct instead of free model execution or fixed workflows;
+  - split delivery into LA-002a recovery foundation and LA-002b controlled read-only execution;
+  - defined request identity, SQLite uniqueness, attempt/event state machines, startup/session reconciliation, unknown-outcome handling, dynamic gateway scope, tool budgets, completion, and live smoke gates;
+  - first version auto-allows only exact registry `read-only`; write/external/unknown risks defer, destructive is core-denied, and shell never auto-executes;
+  - added explicit abort so a waiting-authorization attempt cannot permanently hold the active-attempt constraint;
+  - documented that database transactions cannot promise exactly-once external effects and stale running attempts must not auto-replay.
