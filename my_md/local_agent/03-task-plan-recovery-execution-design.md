@@ -2,7 +2,7 @@
 
 日期：2026-07-15
 
-状态：approved / implementation plan ready
+状态：approved / independently re-reviewed / implementation ready
 
 关联问题：`LA-002 local-agent/task-execution/recovery`
 
@@ -13,9 +13,9 @@
 2026-07-15 用户逐项确认以下决策：
 
 1. LA-002 第一版只自动执行 registry `read-only` 工具；write、external、unknown 和 shell 只进入 `waiting_authorization`，批准后执行留给 P2。
-2. stale running attempt 在重启或 lease 过期后转为 `blocked/outcome_unknown`，step 恢复 pending，但绝不自动重试。
+2. stale running attempt 在重启或 lease 过期后转为 `blocked/outcome_unknown`，step 恢复 pending；只要该 step 的 latest attempt 仍是 unknown/interrupted blocked，普通 continue 就不得重新 claim，必须显式 retry 或 skip。
 3. 相同 transport request ID 视为重投并返回原 attempt；两条独立“继续”视为两个有效操作，不使用文本 hash 去重。
-4. failed step 不能被普通“继续”跳过或自动重试；用户必须显式 retry 或 skip，retry 创建新 attempt。
+4. failed 或 recovery-blocked step 不能被普通“继续”跳过或自动重试；用户必须显式 retry 或 skip，retry 创建新 attempt 并保留旧 attempt/event 历史。
 5. 自动完成必须有至少一个成功真实工作工具 event，并通过 finish 合同；没有工具证据的纯思考步骤只能手动更新。
 
 ## 1. 背景
@@ -54,6 +54,8 @@ TaskPlan 第一阶段和 `LA-001` 已经完成以下能力：
 7. 任意工作工具成功都不能直接完成步骤；必须经过 attempt finish 合同。
 8. 复用 Tool Access Gateway、Turn Tool Boundary 和 Turn Completion，不改 AgentLoop 主循环。
 9. execution contract、attempt 和恢复状态不进入 LRU/ToolDiscoveryState。
+10. 任意 turn 正常或异常退出都必须由统一 finalizer 收口 active attempt，不能依赖下一次启动恢复来释放步骤。
+11. request replay 必须先于 active-plan/step 选择，原 task 已完成或被替换时仍返回原 attempt。
 
 ## 3. 非目标
 
@@ -130,6 +132,9 @@ TaskPlan 第一阶段和 `LA-001` 已经完成以下能力：
 Inbound request
       |
       v
+TaskControlIntentArbiter
+      |
+      v
 TaskExecutionTurnContract
       |
       v
@@ -146,6 +151,9 @@ ToolAccessGateway
 TurnToolBoundaryManager
       |
       v
+TaskExecutionRuntimeCoordinator
+      |
+      v
 ToolRegistry / ToolExecutor
       |
       +--> persistent attempt event
@@ -157,7 +165,15 @@ TaskExecutionCompletionPolicy
 final-only
 ```
 
-AgentLoop 只继续负责消费 inbound item 和运行 turn。执行状态转换位于 TaskPlan core/service/policy 边界，不加入 AgentLoop 的长期状态字段。
+AgentLoop 只继续负责消费 inbound item 和运行 turn。`DefaultReasoner` 调用一个窄职责、turn-local 的 `TaskExecutionRuntimeCoordinator`，由它把纯策略决策连接到 durable service；执行状态转换仍位于 TaskPlan store/service 边界，不加入 AgentLoop 的长期状态字段。
+
+边界约束：
+
+- Arbiter 只选择本 turn 唯一的 TaskPlan/TaskExecution 合同，不读写数据库。
+- Gateway/Boundary 只返回 typed allow/defer/deny/stop 决策，不直接写 SQLite。
+- RuntimeCoordinator 负责 request/attempt protected identity、lease guard、event 分类、defer 持久化和 turn 退出收口。
+- Service 校验 session、owner、lease、状态转换和完成证据。
+- Store 在同一事务中更新 attempt、event、step 和必要的 plan terminal 状态。
 
 ## 7. 模块划分
 
@@ -168,10 +184,12 @@ agent/task_plan/
   execution_models.py
   execution_store.py
   execution_service.py
+  execution_runtime.py
   recovery.py
   orchestrator.py
 
 agent/policies/
+  task_control_arbiter.py
   task_execution_contract.py
   task_execution_access.py
   task_execution_budget.py
@@ -188,8 +206,10 @@ agent/tools/
 | `execution_models.py` | attempt/event 类型、状态和转换校验 |
 | `execution_store.py` | 在既有 TaskPlan DB 事务中执行 attempt/event SQL |
 | `execution_service.py` | session ownership、claim、finish、defer、inspect 业务边界 |
+| `execution_runtime.py` | turn-local coordinator、ephemeral protected identity、lease guard、durable defer/event/finalizer 编排 |
 | `recovery.py` | startup/session reconcile、stale 判定、unknown outcome 处理 |
 | `orchestrator.py` | 选择一个步骤并返回确定性执行决策 |
+| `task_control_arbiter.py` | 在 LA-001 TaskPlan contract 与 execution contract 之间选择唯一 strict-active 合同 |
 | `task_execution_contract.py` | 当前 turn action/phase/capability/risk/budget 合同 |
 | `task_execution_access.py` | 将合同映射到工具 schema、tool search 和 execution block |
 | `task_execution_budget.py` | attempt 工作工具预算和重复调用控制 |
@@ -272,6 +292,11 @@ attempt_id
 sequence_no
 event_type
 tool_name
+tool_call_id
+source_turn_id
+tool_risk
+tool_capabilities_json
+counts_as_work
 execution_status
 result_ok
 error_code
@@ -280,6 +305,8 @@ result_preview
 created_at
 metadata_json
 ```
+
+`counts_as_work`、`tool_risk` 和 capability snapshot 只能由 runtime 根据当前 `ToolRegistry` 事实生成，模型和工具结果不能声明或覆盖。`tool_search`、TaskExecution control tools、被 gate 拦截而未到 executor 的调用都必须是 `counts_as_work=false`。
 
 第一版 event type：
 
@@ -343,7 +370,7 @@ cancelled
 | `waiting_authorization` | `pending` | 等待权限，不表示已经开始副作用 |
 | `succeeded` | `completed` | finish 合同验证成功 |
 | `failed` | `failed` | 需要显式 retry，不自动跳到下一步 |
-| `blocked` | `pending` | 结果未知或恢复受阻，需显式处理 |
+| `blocked` | `pending` | 结果未知或恢复受阻；latest-attempt gate 阻止普通 continue，需显式 retry/skip |
 | `cancelled` | `pending` | attempt 取消，不等于跳过步骤 |
 
 TaskPlan 仍只在所有步骤为 `completed/skipped` 时自动完成。单个 failed step 不自动把整个 TaskPlan 标记 failed。
@@ -383,12 +410,24 @@ WHERE status IN ('pending', 'running', 'waiting_authorization');
 
 所有 claim/finalize/reconcile 使用 `BEGIN IMMEDIATE`。claim 必须在一个事务内：
 
-1. 验证 task 属于当前 session 且为 active。
-2. 检查/处理已有 active attempt。
-3. 选择最低 index 的 pending step；failed step只允许显式 retry。
-4. 分配 `attempt_no`。
-5. 插入 attempt 和 `attempt_claimed` event。
-6. commit 后返回 typed attempt。
+1. 首先按 `(session_key, request_id)` 查询历史 attempt；命中即返回 `request_replay`，不依赖当前 task 是否仍 active。
+2. 验证 task 属于当前 session 且为 active。
+3. 检查/处理已有 active attempt。
+4. 选择最低 index 的 pending step；failed 或 latest attempt 为 unknown/interrupted blocked 的 step 只允许显式 retry/skip。
+5. 分配 `attempt_no`。
+6. 插入 attempt 和 `attempt_claimed` event。
+7. commit 后返回 typed attempt。
+
+Store 必须提供面向状态机的原子操作，而不是让 service 拼接多个独立提交：
+
+- `start_attempt`：验证 current owner + unexpired lease，attempt pending -> running、step pending -> in_progress、追加 event。
+- `finalize_attempt`：验证 owner/lease/evidence，更新 attempt、step、event；成功完成最后一步时在同一事务将 plan 置 completed。
+- `block_attempt`：对 current-owner unexpired pending/running attempt 原子写入 blocked event 并将 step 恢复 pending；lease 已过期时改由 recovery reconcile 执行同一结果。
+- `defer_attempt`：验证 owner/lease，保存 redacted authorization request、attempt -> waiting、step -> pending、追加 event。
+- `reconcile_attempts`：批量将 stale attempt blocked、必要时 step -> pending、追加 event。
+- `abort_attempt`：基于 session ownership 取消 active/waiting attempt；显式 abort 不要求旧 runtime owner 仍存活。
+
+现有手动 TaskPlan update/complete/cancel/replace 若遇到非终态 attempt，第一版统一拒绝并提示先 abort；failed/blocked 已是终态，因此用户仍可显式 skip。这样不会让 execution finalization 覆盖用户并发写入。
 
 `execution_store.py` 可以拆分 SQL helper，但事务和连接仍由同一个 TaskPlan persistence boundary 持有，不能让两个 repository 分别提交 step 与 attempt。
 
@@ -412,6 +451,8 @@ sha256(session_key + request_id + task_id + step_id + action)
 
 模型不能传入或覆盖 `_request_id`、`_idempotency_key`、`_attempt_id`。
 
+这些 protected identity 不写入 `ToolRegistry.set_context()` 的长期可变字典。Reasoner 每次调用工具时通过 ephemeral `ToolExecutionContext` 传递，registry 在单次 `execute()` 合并后立即丢弃，避免跨 turn/session 残留。
+
 保证范围：
 
 - 有稳定 transport request ID：可防止断线重投产生重复 attempt。
@@ -423,12 +464,13 @@ sha256(session_key + request_id + task_id + step_id + action)
 
 ```text
 action:
-  inactive | continue | retry | inspect | abort
+  inactive | replay | continue | retry | inspect | abort
 
 phase:
   inactive | claim | work | waiting_authorization | finish | terminal
 
 attempt_id
+target_step_id
 required_capabilities
 allowed_capabilities
 allowed_risks
@@ -455,6 +497,12 @@ task_execution.abort
 
 两个 contract 同一 turn 不得同时 strict-active。冲突时显式 update/inspect 优先于模糊“继续”。
 
+`TaskControlIntentArbiter` 是唯一仲裁点：显式 TaskPlan create/inspect/manual update/skip 优先；显式 execution retry/abort/continue 次之；LA-001 的泛化 `plan_update` 不得吞掉 execution continue。Arbiter 输出至多一个 strict-active contract，并覆盖否定、混合意图和 background passthrough 测试。
+
+`prepare_turn()` 从 owned active plan 中查询 lowest-index latest failed/recovery-blocked step，形成 typed `latest_retryable_step_id`；只有该 runtime 事实可以进入 retry contract 和 per-call protected target，模型参数不能指定任意 step ID。
+
+Runtime request replay 优先级高于文本意图：`prepare_turn()` 在 active-plan 查询和意图推断前按 `(session_key, request_id)` 查找 attempt；命中后直接生成 `action=replay, phase=terminal` 合同和 bounded snapshot，即使原 plan 已完成/替换也不重新 claim 或执行工具。
+
 ## 15. 工具适配器
 
 建议提供五个薄工具：
@@ -464,7 +512,8 @@ task_execution.abort
 - capability：`task_execution.begin`
 - risk：`write`
 - non-LRU
-- 使用 protected session/request identity claim 一个步骤。
+- 使用 ephemeral protected session/request/action/target identity claim 一个步骤。
+- `action=continue` 选择下一个可执行 pending step；`action=retry` 只选择 arbiter 已解析并经 service 验证的 failed/recovery-blocked step。
 - 返回 attempt、step、execution mode 和下一阶段提示。
 
 ### `finish_task_step_execution`
@@ -544,6 +593,24 @@ begin
 - failed step 不自动执行下一步。
 - retry 必须由显式用户意图创建新 attempt_no。
 
+### 16.4 Turn 退出收口
+
+RuntimeCoordinator 对 active attempt 使用统一 finalizer：
+
+| Turn 退出原因 | Attempt 动作 |
+| --- | --- |
+| finish/defer/abort 已持久化 | 保持 durable 状态，进入 final-only |
+| work phase 第一次出现无 tool 的 final text | 拒绝该 final，追加一次限额内 protocol correction，要求 finish/defer/fail |
+| correction 后仍无 finish | `failed/protocol_finish_missing`，step=failed |
+| work/tool-search 预算耗尽 | `failed/work_budget_exhausted`，step=failed |
+| provider/timeout/context/hook 异常或 asyncio cancellation | `blocked/turn_interrupted_outcome_unknown`，step=pending，后续需显式 retry/skip |
+| destructive core deny | `failed/destructive_tool_denied`，不创建授权请求 |
+| defer persistence 失败 | 绝不执行工具；尽力转 `blocked/defer_persistence_failed`，并返回稳定错误 |
+
+finalizer 在 `DefaultReasoner` 的 turn-local `try/finally` 边界调用，但状态转换仍通过 service/store。它不捕获或改变 AgentLoop 的消息调度职责。
+
+若 begin claim 已提交、但 adapter result 尚未被 coordinator 接收就发生取消/异常，finalizer 必须用 protected `(session_key, request_id)` 回查 attempt 并调用 `block_attempt()`。一旦同一 request 已 claim，外层 context/safety retry 不得再次进入 ReAct；它必须停止 retry 或重建 terminal/final-only 合同。
+
 ## 17. 授权边界
 
 第一版默认策略：
@@ -560,16 +627,22 @@ begin
 
 - `shell` 无论命令文本看似只读，第一版都不自动执行。
 - 风险分类来自 registry/runtime，不能相信模型参数声明。
+- “未显式登记 risk”必须保留为 `unknown`，不能因为 `ToolRegistry.register()` 的默认值被当成 read-only；现有 production toolset 在迁移中逐项显式标注。
 - tool_search 结果过滤、schema visibility 和 execution gate 必须使用同一风险结论。
 - 插件不能把 core deny 降级成 allow。
+- 对 active execution work phase，Boundary 在一般 schema visibility gate 前先检查“已注册工具的 authoritative risk”：destructive 直接 deny，shell/write/external/unknown 返回 typed defer；不存在的工具仍按 unknown-tool block，不能伪造授权请求。
+- Boundary 本身保持纯函数，只返回 typed decision。RuntimeCoordinator 必须先成功调用 `defer_attempt()`，然后才能向模型返回 authorization-required；无论持久化是否成功，真实 executor 都不得运行。
 
 ## 18. 工具事件与完成判定
 
 每次真实工作工具执行后，runtime 将以下事实立即追加到 attempt event：
 
 - tool name
+- tool call ID 与 source turn ID
 - registry capability/risk snapshot
+- runtime-derived `counts_as_work`
 - execution status
+- authoritative `invoker_reached` / `invoker_succeeded`
 - result ok/error code
 - arguments hash/redacted preview
 - bounded result preview
@@ -578,15 +651,19 @@ begin
 
 1. attempt 属于当前 session。
 2. attempt 为 running。
-3. 当前 turn/attempt 至少有一个成功工作 event。
+3. 当前 attempt 至少有一个 `tool_finished` event，同时满足 `counts_as_work=true`、registry risk 精确为 `read-only`、`invoker_reached=true`、`invoker_succeeded=true`、结构化 `result_ok=true`。
 4. 没有未解决的 deny/error 要求。
 5. finish payload 合法且 result summary 非空。
 
 工作工具成功不会自动结束 ReAct；只有 finish/defer/blocked 的持久化状态转换触发 `TaskExecutionCompletionPolicy`。
 
+`tool_search`、execution control tools、gate/hook 拒绝、batch skip 和 synthetic result 永远不能满足完成证据。`ToolExecutionResult` 提供 authoritative invoker facts；`ToolResult.ok` 或 JSON 顶层 `ok` 提供结构化业务结果。Legacy plain text 的 `result_ok` 为 unknown，不能完成步骤；LA-002 smoke 所需的 `read_file/list_dir` 必须迁移为明确 `ToolResult(ok=...)`。Execution-active registry 调用传播工具异常给 `ToolExecutor`，不能把异常文本包装成 success。
+
 ## 19. Recovery 设计
 
 Runtime 启动时生成 `runtime_instance_id`。Attempt running 时记录 owner 和 lease。
+
+所有 start/event/finish/defer mutation 使用 `(attempt_id, owner_instance_id, expected_status, lease_expires_at > now)` 原子 compare-and-set。RuntimeCoordinator 在 LLM 和 executor 等待期间以 `lease_seconds/3`（带最小间隔）续租；过期 owner 不能通过普通 mutation 复活 attempt。Inspect 和显式 abort 只依赖 session ownership，确保重启后 waiting attempt 仍可查看/取消。
 
 恢复入口：
 
@@ -608,6 +685,7 @@ stale attempt 对应 step：
 - 如果 step 仍为 `in_progress`，原子恢复为 `pending`。
 - attempt 保留 blocked 历史。
 - 不自动创建 retry attempt。
+- 普通 continue 检查 step 的 latest attempt；unknown/interrupted blocked 必须返回 `explicit_retry_or_skip_required`。
 - inspect 必须明确告诉用户“上次结果未知，需要检查后重试”。
 
 即使第一版只自动执行 read-only，也保留 unknown-outcome 语义，避免未来接入副作用工具后更改恢复协议。
@@ -679,7 +757,7 @@ lease_seconds = 300
 配置约束：
 
 - `auto_allowed_risks` 第一版不能配置 `write/external-side-effect/destructive`。
-- 非法高风险配置启动时拒绝或降级为只读，并输出明确日志。
+- 非法高风险配置在配置加载时明确拒绝；不静默降级，也不让错误配置看似生效。
 - 关闭 task execution 不影响现有 create/inspect/update TaskPlan。
 
 ## 24. 错误处理
@@ -690,12 +768,17 @@ lease_seconds = 300
 - `task_execution_no_active_task`
 - `task_execution_no_pending_step`
 - `task_execution_failed_step_requires_retry`
+- `task_execution_blocked_step_requires_retry_or_skip`
 - `task_execution_request_replayed`
 - `task_execution_attempt_already_active`
 - `task_execution_authorization_required`
 - `task_execution_work_budget_exhausted`
 - `task_execution_attempt_not_running`
 - `task_execution_result_evidence_missing`
+- `task_execution_protocol_finish_missing`
+- `task_execution_turn_interrupted_outcome_unknown`
+- `task_execution_defer_persistence_failed`
+- `task_execution_lease_owner_conflict`
 - `task_execution_runtime_restarted_outcome_unknown`
 - `task_execution_lease_expired_outcome_unknown`
 
@@ -741,17 +824,22 @@ Observe metadata 增加：
 - migration 幂等。
 - 一个 task 只有一个 active attempt。
 - 一个 step 只有一个 active attempt。
-- request ID replay 返回原 attempt。
+- request ID replay 在 task active/terminal/replaced、attempt success/failed/blocked 时均返回原 attempt。
 - claim/finalize/reconcile 原子性。
-- 并发 claim 只有一个成功。
+- 两个独立 `TaskPlanStore`/SQLite connection 并发 claim 只有一个 created，并覆盖 rollback/failure injection。
+- start/event/finish/defer 使用 owner + status + unexpired lease CAS。
+- 最后一步成功时 attempt/step/plan/event 同事务完成。
+- active attempt 存在时手动 update/complete/cancel/replace 被拒绝。
 
 ### Service/orchestrator tests
 
 - session ownership。
 - lowest pending step selection。
 - failed step 阻止普通 continue，显式 retry 创建新 attempt_no。
+- latest attempt 为 recovery-blocked 时普通 continue 不创建新 row，显式 retry 才创建新 attempt_no。
 - no active task/no pending step 稳定返回。
 - 同一 request replay 不推进下一步骤。
+- explicit retry 经 arbiter、contract、protected target 和 begin adapter 端到端可达。
 
 ### Recovery tests
 
@@ -759,6 +847,7 @@ Observe metadata 增加：
 - waiting authorization 跨重启保留。
 - step `in_progress` 在 unknown outcome 后恢复 pending。
 - recovery 不自动执行工具或创建 retry。
+- recovery 后普通 continue 仍不创建 retry。
 
 ### Gateway/boundary tests
 
@@ -768,13 +857,22 @@ Observe metadata 增加：
 - plugin allow 不能覆盖 core deny。
 - 工作预算和 same-batch skip。
 - execution 工具不写 LRU。
+- LA-001 `plan_update` 与 execution continue/retry/abort 由单一 arbiter 确定性仲裁。
+- ephemeral execution identity 不跨 turn/session 泄漏。
+- write/shell/external/unknown 的 typed defer 先持久化再返回，持久化失败也不执行工具。
 
 ### Completion tests
 
 - 工作工具成功但未 finish 时不完成。
+- `tool_search`/control/synthetic result 不能作为工作证据。
 - 无成功工作 event 的 finish success 被拒绝。
 - finish/defer/blocked 后 final-only。
 - denied/error payload 不能被误判 success。
+- model bare final 只有一次 protocol correction；再次缺少 finish 时 attempt failed。
+- max iteration、provider error、timeout、hook failure 和 cancellation 均由 finalizer 收口，不遗留 active attempt。
+- begin claim commit 后、adapter result 返回前的 fault 通过 request lookup 找回并 block。
+- claim 前的 safety/context retry 保持原行为；claim 后的 safety/context failure 停止外层 ReAct retry。
+- pre-hook deny、tool exception、legacy plain-text error 都不能形成成功工作证据。
 
 ### Compatibility tests
 
@@ -809,6 +907,8 @@ Observe metadata 增加：
 
 预期：attempt blocked，reason 为 outcome unknown，step 返回 pending，不自动重放。
 
+随后发送普通“继续执行下一步”，预期仍不创建 attempt；只有显式“重试刚才被中断的步骤”才创建新的 attempt_no。
+
 副作用 smoke：
 
 ```text
@@ -825,9 +925,11 @@ LA-002 完成必须同时满足：
 - 同一 task/step 同时只有一个 active attempt。
 - 一次 turn 最多推进一个步骤。
 - stale attempt 可恢复且不自动重放。
+- recovery-blocked step 不会被普通 continue 隐式 retry。
+- 每个 started attempt 在所有 normal/error/cancel turn exit 后都有 durable terminal/waiting 状态。
 - 第一版自动执行的真实工作工具全部为 registry `read-only`。
 - write/shell/external/unknown 真实执行次数为 0。
-- success step 有持久化成功工作 event 和 finish transition。
+- success step 有 runtime-classified `counts_as_work=true` 的 read-only event 和 finish transition；search/control 不能替代。
 - failed/denied/error 不会标记 completed。
 - execution contract/attempt 不进入 LRU/ToolDiscoveryState。
 - AgentLoop 主循环无执行状态机分支。
@@ -841,11 +943,15 @@ LA-002 完成必须同时满足：
 - 数据模型、migration、attempt/event store。
 - request identity 和幂等 claim。
 - recovery service 与 inspect。
+- replay-first、blocked explicit-retry gate、owner/lease CAS、atomic plan completion 和 manual-operation arbitration。
+- 两个独立 connection 的并发/rollback 测试。
 - 默认关闭，不执行工作工具。
 
 ### LA-002b Controlled Read-only Execution
 
 - execution contract、orchestrator 和 thin tools。
+- TaskControlIntentArbiter 与可达的 explicit retry 路径。
+- TaskExecutionRuntimeCoordinator、ephemeral protected context、lease guard 和全退出 finalizer。
 - 动态 gateway scope、只读 tool search、预算和 completion。
 - authorization defer，不执行副作用。
 - 自动化与真实 smoke。
