@@ -456,7 +456,11 @@ async def test_ipc_server_v2_hello_uses_stable_chat_id() -> None:
         [
             encode_frame(build_hello_payload("client-a", "rag-smoke")),
             encode_frame(
-                {"type": "user", "request_id": "req-v2", "content": "hello"}
+                {
+                    "type": "user",
+                    "request_id": "A1B2C3D4E5F60718293A4B5C6D7E8F90",
+                    "content": "hello",
+                }
             ),
         ]
     )
@@ -467,7 +471,9 @@ async def test_ipc_server_v2_hello_uses_stable_chat_id() -> None:
     inbound = await asyncio.wait_for(bus.consume_inbound(), timeout=1)
     assert inbound.chat_id == "cli-client-a-rag-smoke"
     assert inbound.content == "hello"
-    assert inbound.metadata == {"_transport_request_id": "req-v2"}
+    assert inbound.metadata == {
+        "_transport_request_id": "a1b2c3d4e5f60718293a4b5c6d7e8f90"
+    }
 
 
 @pytest.mark.asyncio
@@ -509,7 +515,7 @@ async def test_ipc_server_v2_client_without_request_id_still_works() -> None:
 
 
 @pytest.mark.asyncio
-async def test_ipc_server_bounds_v2_request_id_metadata() -> None:
+async def test_ipc_server_omits_malformed_v2_request_id_metadata() -> None:
     bus = MessageBus()
     channel = IPCServerChannel(bus, "/tmp/unused.sock", None)
     writes: list[bytes] = []
@@ -517,7 +523,7 @@ async def test_ipc_server_bounds_v2_request_id_metadata() -> None:
         [
             encode_frame(build_hello_payload("client-a", "default")),
             encode_frame(
-                {"type": "user", "request_id": "x" * 200, "content": "hello"}
+                {"type": "user", "request_id": "not-a-uuid", "content": "hello"}
             ),
         ]
     )
@@ -528,7 +534,54 @@ async def test_ipc_server_bounds_v2_request_id_metadata() -> None:
     )
 
     inbound = await asyncio.wait_for(bus.consume_inbound(), timeout=1)
-    assert inbound.metadata == {"_transport_request_id": "x" * 128}
+    assert inbound.metadata == {}
+
+
+@pytest.mark.asyncio
+async def test_ipc_server_omits_overlong_v2_request_id_metadata() -> None:
+    bus = MessageBus()
+    channel = IPCServerChannel(bus, "/tmp/unused.sock", None)
+    writes: list[bytes] = []
+    reader = _FrameReader(
+        [
+            encode_frame(build_hello_payload("client-a", "default")),
+            encode_frame(
+                {"type": "user", "request_id": "a" * 33, "content": "hello"}
+            ),
+        ]
+    )
+
+    await channel._handle_connection(
+        cast(asyncio.StreamReader, reader),
+        cast(asyncio.StreamWriter, _writer(writes)),
+    )
+
+    inbound = await asyncio.wait_for(bus.consume_inbound(), timeout=1)
+    assert inbound.metadata == {}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("request_id", [["a" * 32], {"id": "a" * 32}, 1, None])
+async def test_ipc_server_omits_non_string_v2_request_id_metadata(
+    request_id: object,
+) -> None:
+    bus = MessageBus()
+    channel = IPCServerChannel(bus, "/tmp/unused.sock", None)
+    writes: list[bytes] = []
+    reader = _FrameReader(
+        [
+            encode_frame(build_hello_payload("client-a", "default")),
+            encode_frame({"type": "user", "request_id": request_id, "content": "hello"}),
+        ]
+    )
+
+    await channel._handle_connection(
+        cast(asyncio.StreamReader, reader),
+        cast(asyncio.StreamWriter, _writer(writes)),
+    )
+
+    inbound = await asyncio.wait_for(bus.consume_inbound(), timeout=1)
+    assert inbound.metadata == {}
 
 
 @pytest.mark.asyncio
