@@ -45,6 +45,7 @@ from memory2.retriever import Retriever
 from memory2.rule_schema import build_procedure_rule_schema
 from memory2.store import MemoryStore2
 from plugins.default_memory.config import DefaultMemoryConfig, resolve_memory_db_path
+from plugins.default_memory.experiments import MemoryExperimentRunner
 
 if TYPE_CHECKING:
     from bus.event_bus import EventBus
@@ -507,12 +508,19 @@ class DefaultMemoryEngine:
                 s["name"] for s in skills_loader.list_skills(filter_unavailable=False)
             ],
         )
+        experiment_runner = None
+        if default_config.memory_experiments.enabled:
+            experiment_runner = MemoryExperimentRunner(
+                workspace=workspace,
+                config=default_config.memory_experiments,
+            )
         self._post_response_worker = PostResponseMemoryWorker(
             memorizer=self._memorizer,
             retriever=self._retriever,
             light_provider=self._light_provider,
             light_model=self._light_model,
             event_publisher=event_publisher,
+            experiment_runner=experiment_runner,
         )
         self._wire_memory2_events()
         self.closeables = [self._v2_store, self._embedder]

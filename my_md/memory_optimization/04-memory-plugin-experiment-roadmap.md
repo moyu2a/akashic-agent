@@ -1,0 +1,476 @@
+# Memory Plugin Experiment Roadmap
+
+## 目标
+
+这份文档把图片中提到的记忆能力，转成 `akashic-agent` memory 插件的可实验扩展路线。
+
+核心要求不是“直接宣称已经实现”，而是每个方向都必须满足：
+
+- 有独立配置开关。
+- 能先以 shadow / dry-run 方式运行，不影响真实对话。
+- 能同时记录 baseline 和 experimental 的结果。
+- 能输出可比较的测试数据。
+- 数据稳定后，再决定是否切到 active。
+
+## 总体原则
+
+### 1. 默认不影响真实链路
+
+新增能力默认不改变真实写入、真实召回和真实 prompt 注入。先把实验结果写入 observe 或 eval report。
+
+### 2. 每项能力都有对照数据
+
+不能只记录“新方案跑了什么”，还要记录“旧方案跑了什么”。否则无法判断优化是否有效。
+
+### 3. 先 shadow，再 active
+
+推荐模式：
+
+```text
+off
+  -> shadow
+  -> active
+  -> ab
+```
+
+- `off`：完全关闭。
+- `shadow`：实验逻辑旁路运行，只记录数据，不影响真实链路。
+- `active`：实验逻辑参与真实写入、召回或巩固。
+- `ab`：按 session 或 turn 分组，一部分走旧逻辑，一部分走新逻辑。
+
+## 建议配置
+
+```toml
+[memory_experiments]
+enabled = true
+mode = "shadow"   # off | shadow | active | ab
+trace_enabled = true
+dashboard_enabled = true
+eval_report_dir = "my_md/memory_optimization/eval_reports"
+
+[memory_experiments.version_chain]
+enabled = true
+mode = "shadow"
+
+[memory_experiments.write_value_score]
+enabled = true
+mode = "shadow"
+
+[memory_experiments.tri_retrieval]
+enabled = true
+mode = "shadow"
+
+[memory_experiments.rerank_injection]
+enabled = true
+mode = "shadow"
+
+[memory_experiments.sleep_consolidation]
+enabled = true
+dry_run = true
+interval_seconds = 10800
+
+[memory_experiments.provenance]
+enabled = true
+mode = "shadow"
+span_level = true
+```
+
+第一版可以先放在 `plugins/default_memory/config.local.toml` 或新增 memory governance 插件配置中。正式产品化后，再考虑并入主配置。
+
+## 方案选择
+
+推荐采用：
+
+```text
+memory_governance 实验插件
+  + default_memory / memory2 少量接口扩展
+```
+
+原因：
+
+- 实验开关、数据记录、Dashboard 展示放在独立插件里，边界清楚。
+- 真正影响写入、召回、重排的位置仍由 `default_memory` 和 `memory2` 承接。
+- 不需要改 `AgentLoop`，主循环仍只通过 `MemoryRuntime`、事件和工具使用记忆。
+
+不推荐一开始把所有逻辑直接塞进 `memory2`，否则很难区分当前能力、实验能力和已验证能力。
+
+## 1. 因果一致性版本链表
+
+### 目的
+
+把当前 `superseded` 和 `memory_replacements` 扩展成可追踪的记忆版本链，用于纠错、替换、回滚和解释。
+
+### 当前基础
+
+项目已经有：
+
+- `memory_items.status`
+- `memory_replacements`
+- `source_ref`
+- `forget_memory`
+
+这些能表示“旧记忆失效了”，但还不是完整版本链。
+
+### 扩展字段
+
+```text
+chain_id
+parent_item_id
+revision_no
+relation_type
+causal_source_ref
+decision_reason
+```
+
+示例：
+
+```text
+mem_v1 -> mem_v2 -> mem_v3
+```
+
+### 输出数据
+
+- `replacement_count`：替换次数。
+- `chain_count`：版本链数量。
+- `avg_chain_depth`：平均链深度。
+- `rollback_candidates`：可回滚候选数。
+- `stale_recalled_count`：旧版本被误召回次数。
+- `conflict_chain_count`：存在冲突的版本链数量。
+
+### 对照方式
+
+```text
+baseline：只看 active / superseded 状态
+experimental：使用完整 version chain 判断当前有效版本
+```
+
+## 2. 信息熵和内容价值评分
+
+### 目的
+
+写入长期记忆前，判断一轮对话值不值得记，减少临时信息、重复信息和 assistant 推断污染长期记忆。
+
+### 扩展模块
+
+```text
+MemoryWritePolicy
+MemoryValueScorer
+```
+
+### 评分信号
+
+- 是否用户明确表达。
+- 是否长期稳定。
+- 是否包含新实体、新偏好、新约束。
+- 是否和旧记忆重复。
+- 是否只是临时状态。
+- 是否只是 assistant 推断。
+- 是否有 `source_ref`。
+
+这里的信息熵可以理解为“新增信息量”：和已有记忆高度重复时分数低，改变长期偏好或重要事实时分数高。
+
+### 输出数据
+
+- `candidate_count`：候选记忆数。
+- `baseline_written_count`：旧逻辑写入数。
+- `policy_allow_count`：新策略建议写入数。
+- `policy_reject_count`：新策略建议拒绝数。
+- `reject_reason_distribution`：拒绝原因分布。
+- `avg_entropy_score`：平均信息价值分。
+- `duplicate_risk_count`：重复风险数量。
+- `temporary_reject_count`：临时信息拒写数量。
+- `assistant_inference_reject_count`：assistant 推断拒写数量。
+
+### 补充评测后可测
+
+- `memory_pollution_rate`：记忆污染率。
+- `useful_memory_precision`：有效记忆精度。
+- `write_reduction_rate`：写入减少比例。
+- `future_recall_usefulness`：后续召回有用率。
+
+## 3. 三路召回方案
+
+### 目的
+
+三路召回不是“多搜几次”，而是把不同证据来源分开记录、融合、评测。
+
+### 三路定义
+
+```text
+第一路：语义召回
+  -> memory2 vector
+
+第二路：关键词召回
+  -> memory2 keyword / search_messages
+
+第三路：溯源召回
+  -> source_ref / fetch_messages / 时间和 session 线索
+```
+
+当前项目已经有向量召回、关键词召回、RRF 融合、`recall_memory`、`search_messages`、`fetch_messages` 和 `source_ref` 回源。扩展重点是把三路的贡献显式记录下来，并统一进入重排和注入决策。
+
+### 输出数据
+
+- `semantic_hit_count`：语义召回数量。
+- `keyword_hit_count`：关键词召回数量。
+- `provenance_hit_count`：溯源召回数量。
+- `fused_hit_count`：融合后数量。
+- `lane_contribution`：每一路对最终结果的贡献。
+- `rerank_changed_count`：重排改变名次次数。
+- `dropped_by_reason`：候选被丢弃原因。
+- `injected_count`：最终注入数量。
+- `retrieval_latency_ms`：召回耗时。
+- `fetch_success_rate`：回源成功率。
+
+### 补充评测后可测
+
+- `recall_at_k`
+- `precision_at_k`
+- `wrong_recall_rate`
+- `evidence_hit_rate`
+- `answer_grounding_rate`
+
+### 对照方式
+
+```text
+baseline：当前 vector + keyword + RRF
+experimental：三路召回 + 质量重排 + 回源增强
+```
+
+## 4. 召回重排和注入治理
+
+### 目的
+
+三路召回只解决“候选从哪里来”，重排和注入治理解决“哪些候选真正进入 prompt”。
+
+### 重排信号
+
+```text
+semantic_score
+keyword_score
+scope_match
+source_ref_present
+confidence
+importance
+reinforcement
+recency
+staleness
+version_current
+conflict_penalty
+```
+
+### 输出数据
+
+- `raw_rank`
+- `experimental_rank`
+- `rank_delta`
+- `drop_reason`
+- `baseline_injected`
+- `experimental_injected`
+- `prompt_token_delta`
+- `low_confidence_injected_count`
+- `stale_dropped_count`
+
+### 对照方式
+
+```text
+baseline：当前注入筛选结果
+experimental：重排和治理后的建议注入结果
+```
+
+## 5. 离线异步睡眠巩固守护进程
+
+### 目的
+
+后台定期做长期记忆卫生，不阻塞用户对话。
+
+第一版必须是 dry-run：
+
+```text
+扫描 memory_items
+  -> 找重复
+  -> 找冲突
+  -> 找过期
+  -> 找可合并项
+  -> 生成候选报告
+  -> 写 observe
+```
+
+### 输出数据
+
+- `scanned_count`：扫描记忆数。
+- `duplicate_group_count`：重复组数量。
+- `merge_candidate_count`：可合并候选数量。
+- `stale_candidate_count`：过期候选数量。
+- `conflict_candidate_count`：冲突候选数量。
+- `estimated_token_saving`：预计节省 token。
+- `estimated_redundancy_drop`：预计冗余下降。
+- `job_latency_ms`：任务耗时。
+- `applied_change_count`：真实执行修改数。
+
+### active 后可测
+
+- `before_active_count`
+- `after_active_count`
+- `compression_ratio`
+- `post_consolidation_recall_precision`
+- `post_consolidation_wrong_recall_rate`
+
+## 6. 层级化溯源 scheme
+
+### 目的
+
+让每条记忆不仅能回到一个 `source_ref`，还可以逐层追到 session、turn、message，后续再扩展到原文片段。
+
+### 当前基础
+
+项目已经有：
+
+- `session_key`
+- message id
+- `source_ref`
+- `fetch_messages`
+- `scope_channel`
+- `scope_chat_id`
+
+### 扩展层级
+
+```text
+session_key
+  -> turn_id
+  -> message_id
+  -> span_start / span_end
+  -> memory_item_id
+  -> chain_id
+  -> derived_from
+```
+
+### 输出数据
+
+- `source_ref_coverage`：有 source_ref 的记忆比例。
+- `span_coverage`：能定位到原文片段的比例。
+- `fetch_success_rate`：回源成功率。
+- `evidence_precision`：回源证据是否支撑记忆。
+- `orphan_memory_count`：无来源记忆数量。
+- `cross_scope_risk_count`：跨 scope 风险数量。
+
+### 补充评测后可测
+
+- `citation_correctness`
+- `source_support_rate`
+- `unsupported_memory_rate`
+
+## 统一数据出口
+
+建议新增实验观测表或 jsonl：
+
+```text
+memory_experiment_runs
+memory_policy_traces
+memory_retrieval_comparisons
+memory_version_chain_traces
+memory_sleep_jobs
+memory_provenance_traces
+memory_eval_results
+```
+
+每条记录统一带：
+
+```text
+run_id
+session_key
+turn_id
+feature_name
+mode
+baseline_result
+experimental_result
+diff_json
+metrics_json
+created_at
+```
+
+这样 Dashboard 可以展示：
+
+- baseline 召回了什么。
+- experimental 召回了什么。
+- 两者差异是什么。
+- 实验方案是否更准。
+- 是否增加延迟。
+- 是否减少 token。
+- 是否存在误拒、误删、误召回。
+
+## 大致阶段
+
+### Phase 0：实验框架和开关
+
+- 增加 `memory_experiments` 配置。
+- 支持 `off / shadow / active / ab`。
+- 建立 baseline vs experimental 数据记录。
+
+## Phase 0 实施说明
+
+第一版实现范围限定为：
+
+- 解析 `memory_experiments` 配置。
+- 支持 `off` 和 `shadow`。
+- 写入 `workspace/observe/memory_experiments.jsonl`。
+- 在 post-response memory worker 中记录显式 `memorize` 的写入价值评分 shadow trace。
+
+第一版不改变真实写入、真实召回、真实 prompt 注入，也不启用 `active` 或 `ab` 行为。
+
+### 运行态验证
+
+Phase 0 需要通过 live smoke 验证：
+
+- 真实启动 `main.py`。
+- 通过 IPC v2 发送用户消息。
+- fake LLM 返回 `memorize` 工具调用。
+- 真实 `memorize` 工具完成写入。
+- post-response worker 写出 `write_value_score` trace。
+- 跨 session 场景下，只在发生显式 `memorize` 的 session 记录写入价值 trace。
+
+验证通过只能说明 shadow trace 链路可用，不代表写入价值评分已经参与真实写入决策。
+
+### Phase 1：写入价值评分 shadow
+
+- 增加信息熵、新颖度、稳定性、`source_ref` 可信度评分。
+- 只旁路打分，不影响真实写入。
+- 输出写入减少率、拒写原因和污染风险数据。
+
+### Phase 2：三路召回 shadow
+
+- 第一路：语义召回，`memory2 vector`。
+- 第二路：关键词召回，`memory2 keyword / search_messages`。
+- 第三路：溯源召回，`source_ref / fetch_messages / 时间和 session 线索`。
+- 同时跑旧召回和三路召回，对比命中、排序、注入差异。
+- 输出 `lane_contribution`、`precision_at_k`、`recall_at_k`、`wrong_recall_rate`、`evidence_hit_rate`、`latency_ms`。
+
+### Phase 3：召回重排和注入治理
+
+- 在三路召回候选上做统一重排。
+- 加入 scope、`source_ref`、质量分、版本链、过期状态。
+- 输出 `rerank_changed_count`、`drop_reason`、`injected_count`、prompt token 变化。
+
+### Phase 4：版本链和层级溯源
+
+- 建立记忆替换链、纠错链、回滚候选。
+- 把 `source_ref` 扩展到 session / turn / message / span。
+- 输出 `chain_depth`、`rollback_candidates`、`source_ref_coverage`、`fetch_success_rate`。
+
+### Phase 5：离线异步睡眠巩固
+
+- 后台 dry-run 扫描重复、冲突、过期、可合并记忆。
+- 先生成报告，不直接改库。
+- 输出 `redundancy_drop`、`compression_ratio`、`merge_candidate_count`、`conflict_candidate_count`。
+
+### Phase 6：评测集和 Dashboard
+
+- 固定 memory eval。
+- 展示 baseline / experimental 对照。
+- 输出准确率、召回率、污染率、压缩率、回源成功率。
+
+## 面试表达
+
+```text
+我会把图片里的记忆能力作为 memory 插件的实验扩展路线，而不是直接说已经实现。每个能力都有独立开关，先用 shadow 或 dry-run 跑旁路实验，不影响真实写入和召回，同时记录 baseline 和 experimental 的差异。比如写入价值评分会输出拒写原因和污染风险，三路召回会输出每一路贡献、准确率和回源命中，睡眠巩固会输出冗余下降和压缩率。等实验数据证明有效后，再把对应能力从 shadow 切到 active。
+```

@@ -36,9 +36,25 @@ class RetrievalConfig:
 
 
 @dataclass(frozen=True)
+class MemoryExperimentsConfig:
+    enabled: bool = False
+    mode: str = "off"
+    trace_enabled: bool = True
+    trace_path: str = "observe/memory_experiments.jsonl"
+
+    def __post_init__(self) -> None:
+        allowed = {"off", "shadow", "active", "ab"}
+        mode = self.mode if self.mode in allowed else "off"
+        object.__setattr__(self, "mode", mode)
+
+
+@dataclass(frozen=True)
 class DefaultMemoryConfig:
     db_path: str = ""
     retrieval: RetrievalConfig = field(default_factory=RetrievalConfig)
+    memory_experiments: MemoryExperimentsConfig = field(
+        default_factory=MemoryExperimentsConfig
+    )
 
 
 def load_default_memory_config(
@@ -53,6 +69,7 @@ def load_default_memory_config(
 def render_default_memory_config(config: DefaultMemoryConfig | None = None) -> str:
     cfg = config or DefaultMemoryConfig()
     retrieval = cfg.retrieval
+    memory_experiments = cfg.memory_experiments
     return "\n".join([
         f'db_path = "{cfg.db_path}"',
         "",
@@ -74,6 +91,12 @@ def render_default_memory_config(config: DefaultMemoryConfig | None = None) -> s
         f"procedure_preference = {retrieval.inject.procedure_preference}",
         f"event_profile = {retrieval.inject.event_profile}",
         f"line_max = {retrieval.inject.line_max}",
+        "",
+        "[memory_experiments]",
+        f"enabled = {str(memory_experiments.enabled).lower()}",
+        f'mode = "{memory_experiments.mode}"',
+        f"trace_enabled = {str(memory_experiments.trace_enabled).lower()}",
+        f'trace_path = "{memory_experiments.trace_path}"',
         "",
     ])
 
@@ -101,6 +124,7 @@ def _build_config(payload: dict[str, Any]) -> DefaultMemoryConfig:
     retrieval = _as_dict(payload.get("retrieval"))
     thresholds = _as_dict(retrieval.get("thresholds"))
     inject = _as_dict(retrieval.get("inject"))
+    experiments = _as_dict(payload.get("memory_experiments"))
     return DefaultMemoryConfig(
         db_path=str(payload.get("db_path", "")),
         retrieval=RetrievalConfig(
@@ -122,6 +146,14 @@ def _build_config(payload: dict[str, Any]) -> DefaultMemoryConfig:
                 procedure_preference=int(inject.get("procedure_preference", 4)),
                 event_profile=int(inject.get("event_profile", 4)),
                 line_max=int(inject.get("line_max", 600)),
+            ),
+        ),
+        memory_experiments=MemoryExperimentsConfig(
+            enabled=bool(experiments.get("enabled", False)),
+            mode=str(experiments.get("mode", "off")),
+            trace_enabled=bool(experiments.get("trace_enabled", True)),
+            trace_path=str(
+                experiments.get("trace_path", "observe/memory_experiments.jsonl")
             ),
         ),
     )

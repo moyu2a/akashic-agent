@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Protocol
 
 import json_repair
 
@@ -16,6 +16,16 @@ if TYPE_CHECKING:
     from bus.publisher import EventPublisher
 
 logger = logging.getLogger(__name__)
+
+
+class MemoryExperimentRecorder(Protocol):
+    def record_write_value_shadow(
+        self,
+        *,
+        session_key: str,
+        turn_id: str,
+        memorize_calls: list[dict[str, Any]],
+    ) -> object | None: ...
 
 
 class PostResponseMemoryWorker:
@@ -40,12 +50,14 @@ class PostResponseMemoryWorker:
         light_provider: LLMProvider,
         light_model: str,
         event_publisher: "EventPublisher | None" = None,
+        experiment_runner: MemoryExperimentRecorder | None = None,
     ) -> None:
         self._memorizer = memorizer
         self._retriever = retriever
         self._provider = light_provider
         self._model = light_model
         self._event_publisher = event_publisher
+        self._experiment_runner = experiment_runner
         self._current_run_session_key = ""
         self._current_run_channel = ""
         self._current_run_chat_id = ""
@@ -88,6 +100,12 @@ class PostResponseMemoryWorker:
             # 2. 先从本轮 tool_chain 里找显式 memorize 结果，后续 supersede 都要用。
             already_memorized, protected_ids = self._collect_explicit_memorized(
                 tool_chain
+            )
+            explicit_memorize_calls = self._collect_explicit_memorize_calls(tool_chain)
+            self._record_write_value_shadow(
+                memorize_calls=explicit_memorize_calls,
+                source_ref=source_ref,
+                session_key=session_key,
             )
             logger.debug(
                 "post_response_memorize explicit_memories session=%s summaries=%d protected_ids=%d",
@@ -170,6 +188,49 @@ class PostResponseMemoryWorker:
                 if m:
                     protected_ids.add(m.group(1))
         return summaries, protected_ids
+
+    def _collect_explicit_memorize_calls(
+        self,
+        tool_chain: list[dict],
+    ) -> list[dict[str, Any]]:
+        calls: list[dict[str, Any]] = []
+        for step in tool_chain:
+            if not isinstance(step, dict):
+                continue
+            for call in step.get("calls", []):
+                if not isinstance(call, dict) or call.get("name") != "memorize":
+                    continue
+                args = call.get("arguments")
+                summary = ""
+                if isinstance(args, dict):
+                    summary = str(args.get("summary") or "").strip()
+                calls.append(
+                    {
+                        "summary": summary,
+                        "result": str(call.get("result") or ""),
+                    }
+                )
+        return calls
+
+    def _record_write_value_shadow(
+        self,
+        *,
+        memorize_calls: list[dict[str, Any]],
+        source_ref: str,
+        session_key: str,
+    ) -> None:
+        if self._experiment_runner is None:
+            return
+        if not memorize_calls:
+            return
+        try:
+            self._experiment_runner.record_write_value_shadow(
+                session_key=session_key,
+                turn_id=source_ref,
+                memorize_calls=memorize_calls,
+            )
+        except Exception:
+            logger.debug("memory experiment shadow trace failed", exc_info=True)
 
     async def _handle_invalidations(
         self,

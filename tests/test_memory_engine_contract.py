@@ -225,6 +225,88 @@ async def test_default_memory_engine_ingest_delegates_to_post_worker():
     worker.run.assert_awaited_once()
 
 
+def test_default_memory_engine_constructs_experiment_runner_when_enabled(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from plugins.default_memory.config import (
+        DefaultMemoryConfig,
+        MemoryExperimentsConfig,
+    )
+
+    captured: dict[str, object] = {}
+
+    class _Store:
+        def __init__(self, path: Path) -> None:
+            self.path = path
+
+        def close(self) -> None:
+            pass
+
+    class _Embedder:
+        def __init__(self, **kwargs: object) -> None:
+            pass
+
+        def close(self) -> None:
+            pass
+
+    class _Memorizer:
+        def __init__(self, store: object, embedder: object) -> None:
+            pass
+
+    class _Retriever:
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            pass
+
+    class _Tagger:
+        def __init__(self, **kwargs: object) -> None:
+            pass
+
+    class _Worker:
+        def __init__(self, **kwargs: object) -> None:
+            captured.update(kwargs)
+
+    monkeypatch.setattr("plugins.default_memory.engine.MemoryStore2", _Store)
+    monkeypatch.setattr("plugins.default_memory.engine.Embedder", _Embedder)
+    monkeypatch.setattr("plugins.default_memory.engine.Memorizer", _Memorizer)
+    monkeypatch.setattr("plugins.default_memory.engine.Retriever", _Retriever)
+    monkeypatch.setattr("plugins.default_memory.engine.ProcedureTagger", _Tagger)
+    monkeypatch.setattr("plugins.default_memory.engine.PostResponseMemoryWorker", _Worker)
+
+    config = SimpleNamespace(
+        memory=SimpleNamespace(
+            embedding=SimpleNamespace(
+                base_url="",
+                api_key="",
+                model="text-embedding-v3",
+            )
+        ),
+        light_base_url="",
+        base_url="",
+        light_api_key="",
+        api_key="key",
+        light_model="",
+        model="model",
+    )
+    default_config = DefaultMemoryConfig(
+        memory_experiments=MemoryExperimentsConfig(enabled=True, mode="shadow")
+    )
+    http_resources = SimpleNamespace(external_default=object())
+    provider = SimpleNamespace()
+
+    DefaultMemoryEngine(
+        config=config,
+        default_config=default_config,
+        workspace=tmp_path,
+        provider=provider,
+        http_resources=http_resources,
+        event_publisher=None,
+    )
+
+    assert captured["experiment_runner"] is not None
+    assert captured["experiment_runner"].enabled is True
+
+
 async def test_default_memory_engine_handles_turn_committed_via_event_bus():
     event_bus = EventBus()
     worker = SimpleNamespace(run=AsyncMock(), handle=AsyncMock())
