@@ -422,9 +422,8 @@ class TaskPlanStore:
                         raise ExecutionAttemptConflictError(
                             "retry step is not failed or pending"
                         )
-                    if step["status"] == "failed":
-                        self._reset_execution_step(conn, step_id, task_id)
-                        self._after_execution_mutation("retry_after_step_reset")
+                    self._reset_execution_step(conn, step_id, task_id)
+                    self._after_execution_mutation("retry_after_step_reset")
                 normalized_lease_expires_at = normalize_execution_lease_timestamp(
                     lease_expires_at
                 )
@@ -994,19 +993,10 @@ class TaskPlanStore:
                     )
                     if cur.rowcount != 1:
                         continue
-                    step_reset = False
-                    if previous_status == "running":
-                        step_reset = (
-                            conn.execute(
-                            """
-                            UPDATE task_steps SET status = 'pending', started_at = NULL,
-                                completed_at = NULL
-                            WHERE step_id = ? AND task_id = ? AND status = 'in_progress'
-                            """,
-                            (row["step_id"], row["task_id"]),
-                            ).rowcount
-                            == 1
-                        )
+                    reset_applied = self._reset_execution_step(
+                        conn, str(row["step_id"]), str(row["task_id"])
+                    )
+                    step_reset = previous_status == "running" and reset_applied
                     self._append_execution_event_in_transaction(
                         conn,
                         attempt_id=attempt_id,
@@ -1185,17 +1175,19 @@ class TaskPlanStore:
     @staticmethod
     def _reset_execution_step(
         conn: sqlite3.Connection, step_id: str, task_id: str
-    ) -> None:
-        conn.execute(
+    ) -> bool:
+        cur = conn.execute(
             """
             UPDATE task_steps
             SET status = 'pending', result_summary = '', tool_names_json = '[]',
                 source_turn_id = NULL, started_at = NULL, completed_at = NULL,
                 metadata_json = '{}'
             WHERE step_id = ? AND task_id = ?
+              AND status IN ('pending', 'in_progress', 'failed')
             """,
             (step_id, task_id),
         )
+        return cur.rowcount == 1
 
     def _require_no_active_execution_attempt(
         self, conn: sqlite3.Connection, task_id: str

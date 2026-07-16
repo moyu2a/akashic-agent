@@ -141,7 +141,9 @@ def test_concurrent_claim_has_one_active_attempt(tmp_path: Path) -> None:
     }
 
 
-def test_retry_claim_is_atomic_against_ordinary_continue(tmp_path: Path) -> None:
+def test_concurrent_retry_and_continue_serialize_to_one_retry_attempt(
+    tmp_path: Path,
+) -> None:
     db_path = tmp_path / "task.db"
     setup_store, task_id, step_id, first_attempt_id = _create_claimed_attempt(tmp_path)
     setup_store.start_execution_attempt(
@@ -189,6 +191,53 @@ def test_retry_claim_is_atomic_against_ordinary_continue(tmp_path: Path) -> None
     assert len(attempts) == 2
     assert attempts[-1].attempt_no == 2
     assert attempts[-1].request_id == "req-retry"
+
+
+@pytest.mark.parametrize("first_action", ["continue", "retry"])
+def test_retry_and_continue_are_safe_in_both_serialized_orders(
+    tmp_path: Path, first_action: str
+) -> None:
+    store, task_id, step_id, first_attempt_id = _create_claimed_attempt(tmp_path)
+    store.start_execution_attempt(
+        attempt_id=first_attempt_id,
+        owner_instance_id="runtime-1",
+        now=NOW,
+    )
+    store.finalize_execution_attempt(
+        attempt_id=first_attempt_id,
+        owner_instance_id="runtime-1",
+        now=NOW,
+        success=False,
+        error_code="read_failed",
+    )
+
+    def claim(action: str):
+        return store.claim_execution_attempt(
+            task_id=task_id,
+            step_id=step_id,
+            session_key="cli:s1",
+            request_id=f"req-{action}",
+            idempotency_key=f"idem-{action}",
+            owner_instance_id="runtime-1",
+            lease_expires_at=LEASE_EXPIRES_AT,
+            retry_from_attempt_id=(
+                first_attempt_id if action == "retry" else None
+            ),
+        )
+
+    if first_action == "continue":
+        with pytest.raises(ExecutionAttemptConflictError):
+            claim("continue")
+        retry = claim("retry")
+        assert retry.disposition == "created"
+    else:
+        retry = claim("retry")
+        ordinary = claim("continue")
+        assert retry.disposition == "created"
+        assert ordinary.disposition == "active_conflict"
+
+    attempts = store.list_execution_attempts(task_id)
+    assert [attempt.request_id for attempt in attempts] == ["req-1", "req-retry"]
 
 
 def test_retry_claim_rolls_back_step_reset_and_attempt_on_failure(tmp_path: Path) -> None:
@@ -271,6 +320,51 @@ def test_retry_claim_clears_failed_step_result_fields(tmp_path: Path) -> None:
     assert step.result_summary == ""
     assert step.tool_names == []
     assert step.source_turn_id is None
+    assert step.metadata == {}
+
+
+def test_retry_claim_clears_recovery_blocked_pending_step_fields(tmp_path: Path) -> None:
+    store, task_id, step_id, first_attempt_id = _create_claimed_attempt(tmp_path)
+    store.block_execution_attempt(
+        attempt_id=first_attempt_id,
+        owner_instance_id="runtime-1",
+        now=NOW,
+        terminal_reason="runtime_restarted_outcome_unknown",
+    )
+    with sqlite3.connect(tmp_path / "task.db") as conn:
+        conn.execute(
+            """
+            UPDATE task_steps
+            SET result_summary = 'stale blocked result',
+                tool_names_json = '["read_file"]', source_turn_id = 22,
+                started_at = '2030-07-15T00:00:00+00:00',
+                completed_at = '2030-07-15T00:01:00+00:00',
+                metadata_json = '{"old": true}'
+            WHERE step_id = ?
+            """,
+            (step_id,),
+        )
+
+    store.claim_execution_attempt(
+        task_id=task_id,
+        step_id=step_id,
+        session_key="cli:s1",
+        request_id="req-retry",
+        idempotency_key="idem-retry",
+        owner_instance_id="runtime-1",
+        lease_expires_at=LEASE_EXPIRES_AT,
+        retry_from_attempt_id=first_attempt_id,
+    )
+
+    plan = store.get_plan(task_id)
+    assert plan is not None
+    step = plan.steps[0]
+    assert step.status == "pending"
+    assert step.result_summary == ""
+    assert step.tool_names == []
+    assert step.source_turn_id is None
+    assert step.started_at is None
+    assert step.completed_at is None
     assert step.metadata == {}
 
 

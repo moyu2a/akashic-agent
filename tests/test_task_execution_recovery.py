@@ -19,6 +19,7 @@ from agent.task_plan.store import TaskPlanStore
 
 @dataclass
 class RecoveryFixture:
+    db_path: Path
     store: TaskPlanStore
     plan_service: TaskPlanService
     execution_service: TaskExecutionService
@@ -37,7 +38,8 @@ def recovery_fixture(tmp_path: Path):
         now: str = "2026-07-15T00:00:00+00:00",
     ) -> RecoveryFixture:
         current_time = datetime.fromisoformat(now)
-        store = TaskPlanStore(tmp_path / f"{status}-{owner}.db")
+        db_path = tmp_path / f"{status}-{owner}.db"
+        store = TaskPlanStore(db_path)
         plan_service = TaskPlanService(store)
         plan = plan_service.create_task_plan(
             session_key="cli:s1",
@@ -98,6 +100,7 @@ def recovery_fixture(tmp_path: Path):
             clock=lambda: current_time,
         )
         return RecoveryFixture(
+            db_path=db_path,
             store=store,
             plan_service=plan_service,
             execution_service=execution_service,
@@ -114,6 +117,18 @@ def recovery_fixture(tmp_path: Path):
 
 def test_old_runtime_running_attempt_blocks_without_retry(recovery_fixture) -> None:
     fixture = recovery_fixture(status="running", owner="runtime-old")
+    with sqlite3.connect(fixture.db_path) as conn:
+        conn.execute(
+            """
+            UPDATE task_steps
+            SET result_summary = 'stale running result',
+                tool_names_json = '["read_file"]', source_turn_id = 22,
+                completed_at = '2026-07-14T23:59:30+00:00',
+                metadata_json = '{"old": true}'
+            WHERE task_id = ?
+            """,
+            (fixture.task_id,),
+        )
 
     results = fixture.recovery.reconcile_session("cli:s1")
 
@@ -128,6 +143,12 @@ def test_old_runtime_running_attempt_blocks_without_retry(recovery_fixture) -> N
     assert snapshot.attempt.status == "blocked"
     assert plan is not None
     assert plan.steps[0].status == "pending"
+    assert plan.steps[0].result_summary == ""
+    assert plan.steps[0].tool_names == []
+    assert plan.steps[0].source_turn_id is None
+    assert plan.steps[0].started_at is None
+    assert plan.steps[0].completed_at is None
+    assert plan.steps[0].metadata == {}
     assert len(fixture.store.list_execution_attempts(fixture.task_id)) == 1
 
 
