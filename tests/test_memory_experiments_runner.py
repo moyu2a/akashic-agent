@@ -144,6 +144,34 @@ def test_record_tri_retrieval_shadow_writes_trace(tmp_path: Path) -> None:
     assert row["metrics_json"]["retrieval_latency_ms"] == 4.2
 
 
+def test_record_graph_retrieval_shadow_writes_trace(tmp_path: Path) -> None:
+    runner = MemoryExperimentRunner(
+        workspace=tmp_path,
+        config=MemoryExperimentsConfig(enabled=True, mode="shadow"),
+    )
+
+    runner.record_graph_retrieval_shadow(
+        session_key="cli:local",
+        turn_id="cli:local@retrieve",
+        baseline_result={"baseline_ids": ["m1"]},
+        experimental_result={
+            "graph_hit_count": 2,
+            "graph_ids": ["m1", "m2"],
+            "graph_fused_ids": ["m1", "m2"],
+        },
+        metrics={
+            "graph_lane_contribution": {"graph": 2},
+            "graph_path_count": 2,
+            "avg_graph_path_length": 2.5,
+            "entity_match_count": 2,
+        },
+    )
+
+    row = _read_jsonl(tmp_path / "observe" / "memory_experiments.jsonl")[0]
+    assert row["feature_name"] == "graph_retrieval"
+    assert row["experimental_result"]["graph_fused_ids"] == ["m1", "m2"]
+
+
 def test_score_write_candidate_shadow_rejects_temporary_text() -> None:
     result = score_write_candidate_shadow("临时测试变量 value-a-012，不要写入长期记忆")
 
@@ -242,7 +270,9 @@ def test_score_write_candidate_shadow_scores_novel_existing_memory() -> None:
     assert "novel_information" in result["reasons"]
 
 
-def test_score_write_candidate_shadow_keeps_phase1b_shape_without_existing_memory() -> None:
+def test_score_write_candidate_shadow_keeps_phase1b_shape_without_existing_memory() -> (
+    None
+):
     result = score_write_candidate_shadow(
         "用户明确要求记住：以后代码示例优先使用 pytest",
         source_ref="cli:local@post_response",
@@ -337,7 +367,9 @@ def test_record_write_value_shadow_writes_detailed_metrics(tmp_path: Path) -> No
     assert candidates[1]["reason"] == "assistant_inference"
 
 
-def test_record_write_value_shadow_uses_existing_memory_snapshot(tmp_path: Path) -> None:
+def test_record_write_value_shadow_uses_existing_memory_snapshot(
+    tmp_path: Path,
+) -> None:
     runner = MemoryExperimentRunner(
         workspace=tmp_path,
         config=MemoryExperimentsConfig(enabled=True, mode="shadow"),

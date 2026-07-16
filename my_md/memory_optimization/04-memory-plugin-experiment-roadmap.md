@@ -409,7 +409,7 @@ Phase 0   已完成：实验框架、配置开关、shadow trace、运行态 smo
 Phase 1a  已完成：显式 memorize 的写入价值结构化 shadow scoring
 Phase 1b  已完成：信息熵 / 新颖度 / 重复度评分
 Phase 2a  已完成：三路召回 + RRF 融合 shadow
-Phase 2b  待做：NetworkX 实体图谱增强第三路召回
+Phase 2b  已完成：NetworkX 实体图谱 graph shadow
 Phase 3   待做：召回重排和注入治理
 Phase 4   待做：因果一致性版本链和层级化溯源
 Phase 5   待做：离线异步睡眠巩固
@@ -490,7 +490,7 @@ Phase 1b 验证结论：
 Phase 2 拆成两步推进：
 
 1. Phase 2a：先做三路召回 + RRF 融合 shadow。第三路只使用已有的 source_ref、scope、模糊指代和文本重叠线索，不引入图谱依赖，也不执行真实回源。输出每一路命中数、RRF 融合结果、lane contribution 和延迟。
-2. Phase 2b：在第三路中加入 NetworkX 实体图谱，把 MemoryItem、Entity、Session、Turn、SourceRef、Topic 连接起来，提升“那个、上次、之前说的方案”等模糊指代场景的召回准确率。
+2. Phase 2b：在第三路中加入 NetworkX 实体图谱，把 MemoryItem、Entity、Session、SourceRef、Topic 连接起来，提升“那个、上次、之前说的方案”等模糊指代场景的召回准确率。当前已按 shadow-only 落地，不改变真实召回和 prompt 注入。
 
 Phase 2a 已按 shadow-only 落地第一版：
 
@@ -500,12 +500,26 @@ Phase 2a 已按 shadow-only 落地第一版：
 - `DefaultMemoryEngine.retrieve()` 在实验开关启用时记录 `tri_retrieval` trace，但真实注入仍使用 baseline items。
 - trace 输出 `semantic_ids`、`keyword_ids`、`provenance_ids`、`fused_ids`、`lane_contribution`、`lane_count`、`rerank_changed_count`、`baseline_experimental_overlap_rate`、`source_ref_coverage`、`retrieval_latency_ms` 和 `rrf_weights`。
 
-Phase 2a 不改变真实召回结果，只记录 baseline 和 experimental 的差异；RRF 结果先用于观测，不参与 prompt 注入。NetworkX 实体图谱和真实 fetch 回源成功率统计留到 Phase 2b 或后续回源增强阶段。
+Phase 2a 不改变真实召回结果，只记录 baseline 和 experimental 的差异；RRF 结果先用于观测，不参与 prompt 注入。
+
+Phase 2b 已按 shadow-only 落地：
+
+- 新增 `memory_experiments.graph_retrieval_enabled`、`graph_retrieval_max_nodes`、`graph_retrieval_max_hops`。
+- 新增 NetworkX graph lane，从 active memory 的 summary、active topics、scope 和 source_ref 建实体图。
+- `DefaultMemoryEngine.retrieve()` 仍返回 baseline hits，只在启用 graph shadow 时额外记录 `graph_retrieval` trace。
+- `graph_retrieval` trace 输出 `graph_ids`、`graph_fused_ids`、`graph_fused_items`、`graph_path_count`、`avg_graph_path_length`、`entity_match_count`、`graph_score_distribution`、`retrieval_latency_ms` 和 `baseline_graph_overlap_rate`。
+- 真实 fetch 回源、`fetch_success_rate` 和 graph 结果 active 化仍留到后续阶段。
 
 Phase 2a 验证结论：
 
 - focused suite：`46 passed`。
 - broader memory experiment suite：`51 passed`。
+- `compileall` 和 `git diff --check` 通过。
+
+Phase 2b 验证结论：
+
+- focused suite：`56 passed`。
+- broader memory experiment suite：`77 passed`。
 - `compileall` 和 `git diff --check` 通过。
 
 ### Phase 3：召回重排和注入治理

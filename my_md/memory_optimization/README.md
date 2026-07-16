@@ -43,14 +43,14 @@
 - Phase 1a：显式 `memorize` 的写入价值 shadow 评分结构化输出。
 - Phase 1b：候选记忆和已有 active 记忆的只读对比，输出信息熵、新颖度、重复风险和写入减少率。
 - Phase 2a：三路召回 + RRF 融合 shadow，记录语义、关键词、溯源三路候选和实验融合结果，不改变真实召回和 prompt 注入。
+- Phase 2b：NetworkX 实体图谱 graph shadow，记录 graph lane、graph-augmented RRF 融合结果和图谱路径指标，不改变真实召回和 prompt 注入。
 
-后续还有 5 个主要子阶段：
+后续还有 4 个主要子阶段：
 
-1. Phase 2b：第三路加入 NetworkX 实体图谱召回。
-2. Phase 3：召回重排和注入治理。
-3. Phase 4：因果一致性版本链和层级化溯源。
-4. Phase 5：离线异步睡眠巩固。
-5. Phase 6：评测集、Dashboard 和 active 化决策。
+1. Phase 3：召回重排和注入治理。
+2. Phase 4：因果一致性版本链和层级化溯源。
+3. Phase 5：离线异步睡眠巩固。
+4. Phase 6：评测集、Dashboard 和 active 化决策。
 
 trace 汇总报告是这些阶段的数据出口，不应替代上述实验方向。
 
@@ -66,6 +66,13 @@ Phase 2a 的验证结论：
 
 - focused suite：`46 passed`。
 - broader memory experiment suite：`51 passed`。
+- `compileall`：通过。
+- `git diff --check`：通过。
+
+Phase 2b 的验证结论：
+
+- focused suite：`56 passed`。
+- broader memory experiment suite：`77 passed`。
 - `compileall`：通过。
 - `git diff --check`：通过。
 

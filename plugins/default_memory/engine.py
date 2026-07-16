@@ -46,6 +46,10 @@ from memory2.retrieval_experiments import (
     build_provenance_lane,
     build_tri_retrieval_shadow_result,
 )
+from memory2.retrieval_graph_experiments import (
+    build_graph_lane,
+    build_graph_retrieval_shadow_result,
+)
 from memory2.retriever import Retriever
 from memory2.rule_schema import build_procedure_rule_schema
 from memory2.store import MemoryStore2
@@ -525,6 +529,15 @@ class DefaultMemoryEngine:
                 )[0],
             )
         self._experiment_runner = experiment_runner
+        self._graph_retrieval_enabled = (
+            default_config.memory_experiments.graph_retrieval_enabled
+        )
+        self._graph_retrieval_max_nodes = (
+            default_config.memory_experiments.graph_retrieval_max_nodes
+        )
+        self._graph_retrieval_max_hops = (
+            default_config.memory_experiments.graph_retrieval_max_hops
+        )
         self._post_response_worker = PostResponseMemoryWorker(
             memorizer=self._memorizer,
             retriever=self._retriever,
@@ -665,6 +678,15 @@ class DefaultMemoryEngine:
             aux_queries=queries[1:],
         )
         await self._record_tri_retrieval_shadow(
+            request=request,
+            baseline_items=items,
+            semantic_items=semantic_items,
+            keyword_items=keyword_items,
+            memory_types=memory_types,
+            scope=scope,
+            started_at=started_at,
+        )
+        await self._record_graph_retrieval_shadow(
             request=request,
             baseline_items=items,
             semantic_items=semantic_items,
@@ -1244,6 +1266,76 @@ class DefaultMemoryEngine:
             )
         except Exception:
             logger.debug("tri retrieval shadow trace failed", exc_info=True)
+
+    async def _record_graph_retrieval_shadow(
+        self,
+        *,
+        request: MemoryEngineRetrieveRequest,
+        baseline_items: list[dict],
+        semantic_items: list[dict],
+        keyword_items: list[dict],
+        memory_types: list[str] | None,
+        scope: MemoryScope,
+        started_at: float,
+    ) -> None:
+        experiment_runner = getattr(self, "_experiment_runner", None)
+        if experiment_runner is None or self._v2_store is None:
+            return
+        if not getattr(experiment_runner, "enabled", False):
+            return
+        if not bool(getattr(self, "_graph_retrieval_enabled", False)):
+            return
+        try:
+            top_k = max(1, int(request.top_k or len(baseline_items) or 8))
+            max_nodes = max(1, int(getattr(self, "_graph_retrieval_max_nodes", 400)))
+            max_hops = max(1, int(getattr(self, "_graph_retrieval_max_hops", 2)))
+            active_items, _total = self._v2_store.list_items_for_dashboard(
+                status="active",
+                page_size=max(200, max_nodes),
+            )
+            active_items = self._filter_provenance_candidates(
+                active_items,
+                memory_types=memory_types,
+                scope=scope,
+                require_scope_match=bool(
+                    request.hints.get("require_scope_match", False)
+                ),
+            )
+            provenance_lane = build_provenance_lane(
+                request.query,
+                active_items,
+                scope_channel=scope.channel,
+                scope_chat_id=scope.chat_id,
+                limit=max(20, top_k * 2),
+            )
+            graph_lane = build_graph_lane(
+                request.query,
+                active_items,
+                scope_channel=scope.channel or "",
+                scope_chat_id=scope.chat_id or "",
+                limit=max(20, top_k * 2),
+                max_hops=max_hops,
+                max_nodes=max_nodes,
+            )
+            shadow = build_graph_retrieval_shadow_result(
+                query=request.query,
+                baseline_items=baseline_items,
+                semantic_items=semantic_items,
+                keyword_items=keyword_items,
+                provenance_items=provenance_lane.items,
+                graph_items=graph_lane.items,
+                latency_ms=(time.perf_counter() - started_at) * 1000.0,
+                top_n=top_k,
+            )
+            experiment_runner.record_graph_retrieval_shadow(
+                session_key=scope.session_key,
+                turn_id=f"{scope.session_key}@retrieve",
+                baseline_result=shadow.baseline_result,
+                experimental_result=shadow.experimental_result,
+                metrics=shadow.metrics,
+            )
+        except Exception:
+            logger.debug("graph retrieval shadow trace failed", exc_info=True)
 
     @staticmethod
     def _filter_provenance_candidates(

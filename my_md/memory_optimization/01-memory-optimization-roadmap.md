@@ -202,7 +202,8 @@ final_score =
 - Phase 1a 已完成：显式 `memorize` 的写入价值 shadow scoring 已输出结构化 signals。
 - Phase 1b 已完成：写入候选会和已有 active 记忆做只读对比，输出信息熵、新颖度、重复风险、相似记忆和写入减少率。
 - Phase 2a 已完成：三路召回 + RRF 融合 shadow 已输出三路候选、RRF 融合结果和排序差异 trace，不改变真实召回结果。
-- 后续下一步是 Phase 2b：第三路加入 NetworkX 实体图谱召回。
+- Phase 2b 已完成：NetworkX 实体图谱 graph shadow 已输出 graph lane、graph-augmented RRF 融合结果和路径指标，不改变真实召回结果。
+- 后续下一步是 Phase 3：召回重排和注入治理。
 
 ### Phase 0：实验框架和开关
 
@@ -240,7 +241,16 @@ Phase 2a 验证结论：
 - 同时跑旧召回和三路召回，对比命中、排序、注入差异。
 - 输出 `lane_contribution`、`lane_count`、`rerank_changed_count`、`baseline_experimental_overlap_rate`、`rrf_score_distribution`、`source_ref_coverage`、`retrieval_latency_ms`。
 - Phase 2a 已完成：先实现三路召回 shadow 和 RRF 融合排序，不改变真实召回结果。
-- Phase 2b：第三路再加入 NetworkX 实体图谱，用于提升“那个、上次、之前说的方案”等模糊指代场景的召回准确率。
+- Phase 2b 已完成：第三路加入 NetworkX 实体图谱，只记录 `graph_retrieval` trace，用于评估“那个、上次、之前说的方案”等模糊指代场景的召回变化。
+- Phase 2b 仍然是 shadow-only：真实 `retrieve()` 返回值、真实 `recall_memory` 工具结果和 prompt 注入都不使用 graph 结果。
+- Phase 2b 输出 `graph_ids`、`graph_fused_ids`、`graph_fused_items`、`graph_path_count`、`avg_graph_path_length`、`entity_match_count`、`graph_score_distribution`、`retrieval_latency_ms` 和 `baseline_graph_overlap_rate`。
+- 真实 `fetch_messages` 回源、`fetch_success_rate` 和 active 化决策仍留到后续阶段。
+
+Phase 2b 验证结论：
+
+- focused suite：`56 passed`。
+- broader memory experiment suite：`77 passed`。
+- `compileall` 和 `git diff --check` 通过。
 
 ### Phase 3：召回重排和注入治理
 

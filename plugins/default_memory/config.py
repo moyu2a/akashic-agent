@@ -41,11 +41,24 @@ class MemoryExperimentsConfig:
     mode: str = "off"
     trace_enabled: bool = True
     trace_path: str = "observe/memory_experiments.jsonl"
+    graph_retrieval_enabled: bool = False
+    graph_retrieval_max_nodes: int = 400
+    graph_retrieval_max_hops: int = 2
 
     def __post_init__(self) -> None:
         allowed = {"off", "shadow", "active", "ab"}
         mode = self.mode if self.mode in allowed else "off"
         object.__setattr__(self, "mode", mode)
+        object.__setattr__(
+            self,
+            "graph_retrieval_max_nodes",
+            max(1, int(self.graph_retrieval_max_nodes)),
+        )
+        object.__setattr__(
+            self,
+            "graph_retrieval_max_hops",
+            max(1, int(self.graph_retrieval_max_hops)),
+        )
 
 
 @dataclass(frozen=True)
@@ -70,35 +83,40 @@ def render_default_memory_config(config: DefaultMemoryConfig | None = None) -> s
     cfg = config or DefaultMemoryConfig()
     retrieval = cfg.retrieval
     memory_experiments = cfg.memory_experiments
-    return "\n".join([
-        f'db_path = "{cfg.db_path}"',
-        "",
-        "[retrieval]",
-        f"top_k_history = {retrieval.top_k_history}",
-        f"score_threshold = {retrieval.score_threshold}",
-        f"relative_delta = {retrieval.relative_delta}",
-        f"procedure_guard_enabled = {str(retrieval.procedure_guard_enabled).lower()}",
-        "",
-        "[retrieval.thresholds]",
-        f"procedure = {retrieval.thresholds.procedure}",
-        f"preference = {retrieval.thresholds.preference}",
-        f"event = {retrieval.thresholds.event}",
-        f"profile = {retrieval.thresholds.profile}",
-        "",
-        "[retrieval.inject]",
-        f"max_chars = {retrieval.inject.max_chars}",
-        f"forced = {retrieval.inject.forced}",
-        f"procedure_preference = {retrieval.inject.procedure_preference}",
-        f"event_profile = {retrieval.inject.event_profile}",
-        f"line_max = {retrieval.inject.line_max}",
-        "",
-        "[memory_experiments]",
-        f"enabled = {str(memory_experiments.enabled).lower()}",
-        f'mode = "{memory_experiments.mode}"',
-        f"trace_enabled = {str(memory_experiments.trace_enabled).lower()}",
-        f'trace_path = "{memory_experiments.trace_path}"',
-        "",
-    ])
+    return "\n".join(
+        [
+            f'db_path = "{cfg.db_path}"',
+            "",
+            "[retrieval]",
+            f"top_k_history = {retrieval.top_k_history}",
+            f"score_threshold = {retrieval.score_threshold}",
+            f"relative_delta = {retrieval.relative_delta}",
+            f"procedure_guard_enabled = {str(retrieval.procedure_guard_enabled).lower()}",
+            "",
+            "[retrieval.thresholds]",
+            f"procedure = {retrieval.thresholds.procedure}",
+            f"preference = {retrieval.thresholds.preference}",
+            f"event = {retrieval.thresholds.event}",
+            f"profile = {retrieval.thresholds.profile}",
+            "",
+            "[retrieval.inject]",
+            f"max_chars = {retrieval.inject.max_chars}",
+            f"forced = {retrieval.inject.forced}",
+            f"procedure_preference = {retrieval.inject.procedure_preference}",
+            f"event_profile = {retrieval.inject.event_profile}",
+            f"line_max = {retrieval.inject.line_max}",
+            "",
+            "[memory_experiments]",
+            f"enabled = {str(memory_experiments.enabled).lower()}",
+            f'mode = "{memory_experiments.mode}"',
+            f"trace_enabled = {str(memory_experiments.trace_enabled).lower()}",
+            f'trace_path = "{memory_experiments.trace_path}"',
+            f"graph_retrieval_enabled = {str(memory_experiments.graph_retrieval_enabled).lower()}",
+            f"graph_retrieval_max_nodes = {memory_experiments.graph_retrieval_max_nodes}",
+            f"graph_retrieval_max_hops = {memory_experiments.graph_retrieval_max_hops}",
+            "",
+        ]
+    )
 
 
 def ensure_default_memory_config_file(*, plugin_dir: Path | None = None) -> Path:
@@ -154,6 +172,15 @@ def _build_config(payload: dict[str, Any]) -> DefaultMemoryConfig:
             trace_enabled=bool(experiments.get("trace_enabled", True)),
             trace_path=str(
                 experiments.get("trace_path", "observe/memory_experiments.jsonl")
+            ),
+            graph_retrieval_enabled=bool(
+                experiments.get("graph_retrieval_enabled", False)
+            ),
+            graph_retrieval_max_nodes=int(
+                experiments.get("graph_retrieval_max_nodes", 400)
+            ),
+            graph_retrieval_max_hops=int(
+                experiments.get("graph_retrieval_max_hops", 2)
             ),
         ),
     )

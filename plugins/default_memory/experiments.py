@@ -154,8 +154,7 @@ class MemoryExperimentRunner:
         duplicate_risk_count = sum(
             1
             for item in scored
-            if float(item.get("signals", {}).get("duplicate_risk_score") or 0.0)
-            >= 0.5
+            if float(item.get("signals", {}).get("duplicate_risk_score") or 0.0) >= 0.5
         )
         avg_entropy_score = _average_signal(scored, "entropy_score")
         avg_novelty_score = _average_signal(scored, "novelty_score")
@@ -222,6 +221,24 @@ class MemoryExperimentRunner:
     ) -> MemoryExperimentTrace | None:
         return self.record(
             feature_name="tri_retrieval",
+            session_key=session_key,
+            turn_id=turn_id,
+            baseline_result=baseline_result,
+            experimental_result=experimental_result,
+            metrics=metrics,
+        )
+
+    def record_graph_retrieval_shadow(
+        self,
+        *,
+        session_key: str,
+        turn_id: str,
+        baseline_result: dict[str, Any],
+        experimental_result: dict[str, Any],
+        metrics: dict[str, Any],
+    ) -> MemoryExperimentTrace | None:
+        return self.record(
+            feature_name="graph_retrieval",
             session_key=session_key,
             turn_id=turn_id,
             baseline_result=baseline_result,

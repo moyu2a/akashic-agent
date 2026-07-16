@@ -352,7 +352,7 @@ Phase 0 首个落地点是 `write_value_score` shadow trace。它先记录显式
 | --- | --- | --- |
 | Phase 1b | 信息熵 / 新颖度 / 重复度评分 | `entropy_score`、`novelty_score`、`duplicate_risk_score`、`similar_memory_count`、`nearest_memory_ids`、`write_reduction_rate` |
 | Phase 2a | 三路召回 + RRF shadow | `semantic_hit_count`、`keyword_hit_count`、`provenance_hit_count`、`fused_hit_count`、`semantic_ids`、`keyword_ids`、`provenance_ids`、`fused_ids`、`lane_contribution`、`lane_count`、`rerank_changed_count`、`baseline_experimental_overlap_rate`、`rrf_score_distribution`、`source_ref_coverage`、`retrieval_latency_ms`、`rrf_weights` |
-| Phase 2b | NetworkX 实体图谱召回 | `graph_hit_count`、`graph_path_count`、`avg_graph_path_length`、`entity_match_count`、`graph_lane_contribution` |
+| Phase 2b | NetworkX 实体图谱召回 | `graph_hit_count`、`graph_ids`、`graph_fused_ids`、`graph_path_count`、`avg_graph_path_length`、`entity_match_count`、`graph_lane_contribution`、`graph_score_distribution`、`retrieval_latency_ms`、`baseline_graph_overlap_rate` |
 | Phase 3 | 召回重排和注入治理 | `raw_rank`、`experimental_rank`、`rank_delta`、`drop_reason`、`baseline_injected`、`experimental_injected`、`prompt_token_delta` |
 | Phase 4 | 因果一致性版本链和层级化溯源 | `chain_count`、`avg_chain_depth`、`rollback_candidates`、`stale_recalled_count`、`source_ref_coverage`、`fetch_success_rate` |
 | Phase 5 | 离线异步睡眠巩固 | `duplicate_group_count`、`merge_candidate_count`、`stale_candidate_count`、`conflict_candidate_count`、`estimated_token_saving`、`job_latency_ms` |
@@ -412,6 +412,31 @@ Phase 2a 的测试结论：
 
 - focused suite：`46 passed`。
 - broader memory experiment suite：`51 passed`。
+- `compileall`：通过。
+- `git diff --check`：通过。
+
+Phase 2b 已实现后，`graph_retrieval` trace 应包含：
+
+- `baseline_result.baseline_ids`
+- `baseline_result.baseline_fused_ids`
+- `experimental_result.graph_ids`
+- `experimental_result.graph_fused_ids`
+- `experimental_result.graph_fused_items[].graph_score`
+- `experimental_result.graph_fused_items[].graph_path_length`
+- `metrics_json.graph_lane_contribution`
+- `metrics_json.graph_path_count`
+- `metrics_json.avg_graph_path_length`
+- `metrics_json.entity_match_count`
+- `metrics_json.graph_score_distribution`
+- `metrics_json.retrieval_latency_ms`
+- `metrics_json.baseline_graph_overlap_rate`
+
+Phase 2b 只记录 graph shadow，不改变真实召回和 prompt 注入。真实 `fetch_messages` 回源、`fetch_success_rate` 和基于评测集的 active 化决策仍留到后续阶段。
+
+Phase 2b 的测试结论：
+
+- focused suite：`56 passed`。
+- broader memory experiment suite：`77 passed`。
 - `compileall`：通过。
 - `git diff --check`：通过。
 

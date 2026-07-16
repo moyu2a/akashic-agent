@@ -171,7 +171,9 @@ async def test_default_memory_engine_retrieve_falls_back_to_session_scope():
 
 
 @pytest.mark.asyncio
-async def test_default_memory_engine_records_tri_retrieval_shadow_without_changing_hits() -> None:
+async def test_default_memory_engine_records_tri_retrieval_shadow_without_changing_hits() -> (
+    None
+):
     records: list[dict[str, object]] = []
 
     class _Runner:
@@ -218,7 +220,7 @@ async def test_default_memory_engine_records_tri_retrieval_shadow_without_changi
                         "source_ref": "cli:other:1",
                         "scope_channel": "cli",
                         "scope_chat_id": "other",
-                    }
+                    },
                 ],
                 3,
             )
@@ -246,6 +248,72 @@ async def test_default_memory_engine_records_tri_retrieval_shadow_without_changi
     assert records[0]["experimental_result"]["provenance_ids"] == ["prov"]
 
 
+@pytest.mark.asyncio
+async def test_default_memory_engine_records_graph_retrieval_shadow_without_changing_hits() -> (
+    None
+):
+    records: list[dict[str, object]] = []
+
+    class _Runner:
+        enabled = True
+
+        def record_tri_retrieval_shadow(self, **kwargs: object) -> object:
+            return object()
+
+        def record_graph_retrieval_shadow(self, **kwargs: object) -> object:
+            records.append(kwargs)
+            return object()
+
+    retriever = SimpleNamespace(
+        retrieve_with_lanes=AsyncMock(
+            return_value=(
+                [{"id": "baseline", "summary": "base"}],
+                [{"id": "semantic", "summary": "sem"}],
+                [{"id": "keyword", "summary": "key"}],
+            )
+        ),
+        build_injection_block=MagicMock(return_value=("block", ["baseline"])),
+    )
+    store = SimpleNamespace(
+        list_items_for_dashboard=MagicMock(
+            return_value=(
+                [
+                    {
+                        "id": "g1",
+                        "memory_type": "event",
+                        "summary": "NetworkX 实体图谱可以提升上次方案找回",
+                        "source_ref": "cli:local:1",
+                        "scope_channel": "cli",
+                        "scope_chat_id": "local",
+                        "extra_json": {"active_topics": ["NetworkX 实体图谱"]},
+                    }
+                ],
+                1,
+            )
+        )
+    )
+    engine = _make_default_engine(retriever=cast(Any, retriever))
+    engine._experiment_runner = _Runner()
+    engine._graph_retrieval_enabled = True
+    engine._graph_retrieval_max_nodes = 200
+    engine._graph_retrieval_max_hops = 2
+    engine._v2_store = store
+
+    result = await engine.retrieve(
+        MemoryEngineRetrieveRequest(
+            query="上次那个图谱方案",
+            scope=MemoryScope(session_key="cli:local", channel="cli", chat_id="local"),
+            hints={"memory_types": ["event"], "require_scope_match": True},
+            top_k=3,
+        )
+    )
+
+    assert [hit.id for hit in result.hits] == ["baseline"]
+    assert records
+    assert records[0]["experimental_result"]["graph_hit_count"] >= 1
+    assert records[0]["experimental_result"]["graph_ids"] == ["g1"]
+
+
 async def test_default_engine_keeps_history_injected_ids():
     retriever = SimpleNamespace(
         retrieve=AsyncMock(
@@ -260,14 +328,19 @@ async def test_default_engine_keeps_history_injected_ids():
                 }
             ]
         ),
-        build_injection_block=lambda items: ("## 【相关历史】\n- 用户昨天提过 FitBit", ["e1"]),
+        build_injection_block=lambda items: (
+            "## 【相关历史】\n- 用户昨天提过 FitBit",
+            ["e1"],
+        ),
     )
     engine = _make_default_engine(retriever=cast(Any, retriever))
 
     history_result = await engine.retrieve(
         MemoryEngineRetrieveRequest(
             query="Fitbit 型号",
-            scope=MemoryScope(session_key="telegram:1", channel="telegram", chat_id="1"),
+            scope=MemoryScope(
+                session_key="telegram:1", channel="telegram", chat_id="1"
+            ),
             mode="episodic",
             hints={"memory_types": ["event"], "require_scope_match": True},
             top_k=8,
@@ -354,7 +427,9 @@ def test_default_memory_engine_constructs_experiment_runner_when_enabled(
     monkeypatch.setattr("plugins.default_memory.engine.Memorizer", _Memorizer)
     monkeypatch.setattr("plugins.default_memory.engine.Retriever", _Retriever)
     monkeypatch.setattr("plugins.default_memory.engine.ProcedureTagger", _Tagger)
-    monkeypatch.setattr("plugins.default_memory.engine.PostResponseMemoryWorker", _Worker)
+    monkeypatch.setattr(
+        "plugins.default_memory.engine.PostResponseMemoryWorker", _Worker
+    )
 
     config = SimpleNamespace(
         memory=SimpleNamespace(
@@ -396,7 +471,9 @@ def test_default_memory_engine_constructs_experiment_runner_when_enabled(
     assert store.calls == [{"status": "active", "page_size": 200}]
 
 
-def test_default_memory_engine_experiment_runner_accepts_existing_memory_provider() -> None:
+def test_default_memory_engine_experiment_runner_accepts_existing_memory_provider() -> (
+    None
+):
     from plugins.default_memory.config import MemoryExperimentsConfig
     from plugins.default_memory.experiments import MemoryExperimentRunner
 
@@ -573,7 +650,9 @@ async def test_default_memory_engine_consolidates_ready_session_from_lifecycle()
     await event_bus.aclose()
 
 
-async def test_markdown_consolidation_advances_window_when_consumer_fails(tmp_path: Path):
+async def test_markdown_consolidation_advances_window_when_consumer_fails(
+    tmp_path: Path,
+):
     event_bus = EventBus()
 
     async def _fail_consolidation(_event):
@@ -1037,4 +1116,6 @@ def test_build_memory_runtime_exposes_default_memory_engine(
 
     assert runtime.engine is not None
     assert runtime.engine.describe().name == "default"
-    assert MemoryCapability.SEMANTICS_RICH_MEMORY in runtime.engine.describe().capabilities
+    assert (
+        MemoryCapability.SEMANTICS_RICH_MEMORY in runtime.engine.describe().capabilities
+    )
