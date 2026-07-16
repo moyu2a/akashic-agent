@@ -55,6 +55,7 @@ lme_error_log_*.txt
 /AGENTS.md
 /memory_annotation_from_*.json
 .squad/
+.worktrees/
 /locks/reviewer.receive.lock
 /locks/worker.receive.lock
 /locks/
