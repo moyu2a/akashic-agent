@@ -54,6 +54,7 @@
 - Provider output limitation reproduced twice: replay final-only and successful retry final-only returned literal DSML tool syntax despite zero post-boundary execution. State/idempotency remained correct, but the issue is general final-only reply normalization rather than replay-only formatting.
 - Stopped only isolated PID `509279`; both isolated PIDs are absent, socket removed, port `2248` free. Protected PID `372968` still owns `/tmp/akashic.sock` and `0.0.0.0:2236`.
 - Observe verification initially queried nonexistent `turn_id/request_text` columns; inspected `PRAGMA table_info(turns)` and reran with `id/user_msg`. This was a smoke-query error, not an Agent error.
+- At 09:02 final environment recheck, protected PID `372968` and parent PID `372933` were no longer present; 2236 and `/tmp/akashic.sock` were also absent. PID `372968` had still been alive immediately after both isolated Ctrl-C cleanups. The protected file log has no graceful shutdown/traceback after its 08:00 optimizer entry, so current evidence does not attribute the later external terminal/process disappearance to the isolated smoke. The user Agent was not restarted automatically.
 
 ## 2026-07-11
 
