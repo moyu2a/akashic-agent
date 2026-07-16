@@ -25,12 +25,14 @@
 - `LA-001` 已完成：纯计划真实链路为 `create_task_plan -> final`，显式偏好/历史分别只临时授权一次真实 `recall_memory`/`search_messages`，inspect/update/background 行为保持不变。
 - 2026-07-15 主服务复测 turn `389-392` 再次验证纯创建、查看、更新和后台状态均为 2 轮且 `error=NULL`；TaskPlan SQLite 中第一步已持久化为 `completed`。今天这组主服务记录未重复执行偏好、历史和否定意图，但这些路径已由 2026-07-14 隔离真实 smoke 与自动化回归覆盖。
 - LA-002 隔离 live smoke 使用独立 PID/socket/workspace/SQLite/dashboard：同 request ID replay 只保留一个 attempt，新 request ID 同文本创建独立操作；running attempt 重启后 blocked/pending 且不自动重放；显式 retry 创建 attempt 2；文件修改步骤进入 waiting authorization，真实 write/edit/shell 为 0，abort 后 step 保持 pending。
+- 2026-07-16 最终独立复测再次使用全新服务器和两个 session 验证 happy/replay/new-ID/restart/ordinary-continue/explicit-retry：最终 `3 succeeded / 1 blocked / 0 active / 0 side-effect events`，observe 6/6 无 error。复测同时确认 literal DSML 是通用 final-only provider formatting 问题，已登记为 `LA-004`。
 
 ## 当前下一步
 
 - 先把 `LA-001` 视为已关闭能力边界，继续观察同批候选生成和 session context 增长，不把它们重新定义为执行授权失败。
 - `LA-002` 第一版范围已完成：重启恢复、stale step 判定、execution attempt、请求幂等和受控只读单步推进均有自动化与真实模型证据。
-- 下一步转向 P2 权限确认和请求详情规范化：waiting attempt 当前不会执行副作用；批准、拒绝、diff、回滚和写入执行尚未实现。
+- 下一步先处理 `LA-004` final-only reply normalization，确保 replay、成功、defer/blocked 等 terminal scope 都返回确定性用户文本；随后转向 `LA-003/P2` 权限确认和请求详情规范化。
+- waiting attempt 当前不会执行副作用；批准、拒绝、diff、回滚和写入执行尚未实现。
 - 在本地操作权限、用户确认和文件回滚完成前，执行编排不得直接放开任意 shell 或文件写入副作用。
 
 ## 后续可扩展文档

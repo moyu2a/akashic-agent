@@ -101,3 +101,10 @@ Constraints: do not reuse or signal PID `372968`, `/tmp/akashic.sock`, port `223
 Result: fresh PIDs `508645/509279`, socket `/tmp/akashic-la002-final-20260716.sock`, dashboard `2248`, and two new sessions produced `3 succeeded / 1 blocked / 0 active` attempts. Duplicate request `222...` executed zero tools and added no row; restart blocked attempt `555...`, ordinary continue added no attempt, and explicit retry `777...` created only attempt 2. Six observe turns had no error. Final-only literal DSML appeared on replay and after successful retry, confirming a provider reply-normalization follow-up beyond replay-only scope.
 
 Post-check note: the protected Agent PID `372968` was verified alive immediately after isolated cleanup, then disappeared together with parent PID `372933`, port 2236, and `/tmp/akashic.sock` before the 09:02 final check. Its file log contains no graceful shutdown or traceback after the 08:00 optimizer entry. No signal was sent to the protected process; cause is external/undetermined and it was not restarted automatically.
+
+## 2026-07-16 Publication And Documentation
+
+1. Verify task-owned commits and exclude user-owned dirty files - complete
+2. Push LA-002 implementation and smoke evidence through `c4d3d4c` - complete
+3. Update Local Agent status, roadmap order, and publication evidence - complete
+4. Commit and push the documentation update - complete

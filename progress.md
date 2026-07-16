@@ -55,6 +55,8 @@
 - Stopped only isolated PID `509279`; both isolated PIDs are absent, socket removed, port `2248` free. Protected PID `372968` still owns `/tmp/akashic.sock` and `0.0.0.0:2236`.
 - Observe verification initially queried nonexistent `turn_id/request_text` columns; inspected `PRAGMA table_info(turns)` and reran with `id/user_msg`. This was a smoke-query error, not an Agent error.
 - At 09:02 final environment recheck, protected PID `372968` and parent PID `372933` were no longer present; 2236 and `/tmp/akashic.sock` were also absent. PID `372968` had still been alive immediately after both isolated Ctrl-C cleanups. The protected file log has no graceful shutdown/traceback after its 08:00 optimizer entry, so current evidence does not attribute the later external terminal/process disappearance to the isolated smoke. The user Agent was not restarted automatically.
+- Pushed all LA-002 implementation, review hardening, and independent smoke commits through `c4d3d4c` to `origin/main` (`20b712c..c4d3d4c`). User-owned `findings.md`, interview diagram, `my_test_py/`, and unrelated untracked image remained excluded.
+- Updated publication status and next-order decision: resolve `LA-004` final-only reply normalization before `LA-003/P2` structured authorization, then proceed to P3 diff/snapshot/rollback.
 
 ## 2026-07-11
 
