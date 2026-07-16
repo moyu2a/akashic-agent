@@ -204,10 +204,11 @@ MemoryValueScorer
   -> memory2 keyword / search_messages
 
 第三路：溯源召回
-  -> source_ref / fetch_messages / 时间和 session 线索
+  -> Phase 2a: source_ref / scope / 模糊指代 / 文本重叠
+  -> 后续阶段: fetch_messages / 时间线索 / 图谱线索
 ```
 
-当前项目已经有向量召回、关键词召回、RRF 融合、`recall_memory`、`search_messages`、`fetch_messages` 和 `source_ref` 回源。扩展重点是把三路的贡献显式记录下来，并统一进入重排和注入决策。
+当前项目已经有向量召回、关键词召回、RRF 融合、`recall_memory`、`search_messages`、`fetch_messages` 和 `source_ref` 回源。Phase 2a 只把三路候选和 RRF 融合结果显式记录下来；真实 `fetch_messages` 回源、时间线索增强和注入决策治理留到后续阶段。
 
 ### 输出数据
 
@@ -220,7 +221,7 @@ MemoryValueScorer
 - `dropped_by_reason`：候选被丢弃原因。
 - `injected_count`：最终注入数量。
 - `retrieval_latency_ms`：召回耗时。
-- `fetch_success_rate`：回源成功率。
+- `fetch_success_rate`：回源成功率，Phase 2a 不统计，留到真实回源增强阶段。
 
 ### 补充评测后可测
 
@@ -234,7 +235,7 @@ MemoryValueScorer
 
 ```text
 baseline：当前 vector + keyword + RRF
-experimental：三路召回 + 质量重排 + 回源增强
+experimental：Phase 2a 为三路候选 + RRF shadow；质量重排和回源增强属于后续阶段
 ```
 
 ## 4. 召回重排和注入治理
@@ -401,6 +402,22 @@ created_at
 
 ## 大致阶段
 
+当前执行位置：
+
+```text
+Phase 0   已完成：实验框架、配置开关、shadow trace、运行态 smoke
+Phase 1a  已完成：显式 memorize 的写入价值结构化 shadow scoring
+Phase 1b  已完成：信息熵 / 新颖度 / 重复度评分
+Phase 2a  已完成：三路召回 + RRF 融合 shadow
+Phase 2b  待做：NetworkX 实体图谱增强第三路召回
+Phase 3   待做：召回重排和注入治理
+Phase 4   待做：因果一致性版本链和层级化溯源
+Phase 5   待做：离线异步睡眠巩固
+Phase 6   待做：评测集、Dashboard 和 active 化决策
+```
+
+后续计划按 6 个主要步骤推进。trace 汇总报告属于数据出口和验证手段，不单独替代某个 memory 能力阶段。
+
 ### Phase 0：实验框架和开关
 
 - 增加 `memory_experiments` 配置。
@@ -444,13 +461,52 @@ Phase 0 需要通过 live smoke 验证：
 - 记录临时信息风险、assistant 推断风险和重复风险。
 - 保持真实写入结果不变，等 trace 数据足够后再讨论 active。
 
+Phase 1b 要补的不是单纯报告，而是让评分真正参考已有记忆：
+
+- `entropy_score`：候选相对已有记忆的新增信息量。
+- `novelty_score`：是否包含新的偏好、实体、规则或长期约束。
+- `duplicate_risk_score`：和已有记忆重复或近似重复的风险。
+- `similar_memory_count`：相似已有记忆数量。
+- `nearest_memory_ids`：最相似的已有记忆 id。
+- `write_reduction_rate`：shadow 策略相对真实写入的预计减少比例。
+
+当前 Phase 1b 已按 shadow-only 落地第一版：`MemoryExperimentRunner` 只读 active memory summary 快照，用词元重叠近似计算信息熵、新颖度和重复风险，并从快照中排除本轮真实写入的 `item_id`，避免候选和自己匹配。这里的 `entropy_score` 和 `novelty_score` 当前同源，都是基于“最大词元重叠相似度”的近似值；`nearest_memory_ids` 只表示达到高相似阈值的近邻。Phase 1b 仍然只写实验 trace，不改变真实 `memorize` 写入。
+
+Phase 1b 验证结论：
+
+- focused suite：`30 passed`。
+- live smoke：`3 passed`。
+- `compileall` 和 `git diff --check` 通过。
+- live smoke 出现过 Python 3.14 asyncio transport 析构 warning，但测试结果通过。
+
 ### Phase 2：三路召回 shadow
 
 - 第一路：语义召回，`memory2 vector`。
 - 第二路：关键词召回，`memory2 keyword / search_messages`。
-- 第三路：溯源召回，`source_ref / fetch_messages / 时间和 session 线索`。
+- 第三路：溯源召回，Phase 2a 只使用 `source_ref`、scope、模糊指代和文本重叠线索；真实 `fetch_messages` 回源和时间线索留到后续阶段。
 - 同时跑旧召回和三路召回，对比命中、排序、注入差异。
 - 输出 `lane_contribution`、`precision_at_k`、`recall_at_k`、`wrong_recall_rate`、`evidence_hit_rate`、`latency_ms`。
+
+Phase 2 拆成两步推进：
+
+1. Phase 2a：先做三路召回 + RRF 融合 shadow。第三路只使用已有的 source_ref、scope、模糊指代和文本重叠线索，不引入图谱依赖，也不执行真实回源。输出每一路命中数、RRF 融合结果、lane contribution 和延迟。
+2. Phase 2b：在第三路中加入 NetworkX 实体图谱，把 MemoryItem、Entity、Session、Turn、SourceRef、Topic 连接起来，提升“那个、上次、之前说的方案”等模糊指代场景的召回准确率。
+
+Phase 2a 已按 shadow-only 落地第一版：
+
+- `Retriever.retrieve()` 仍返回当前 baseline 融合结果。
+- 新增 `retrieve_with_lanes()`，在同一次召回中暴露语义 lane 和关键词 lane，避免额外 embedding 调用。
+- 第三路 provenance lane 只使用 active memory 快照里的 `source_ref`、scope 和模糊指代线索，不引入 NetworkX。
+- `DefaultMemoryEngine.retrieve()` 在实验开关启用时记录 `tri_retrieval` trace，但真实注入仍使用 baseline items。
+- trace 输出 `semantic_ids`、`keyword_ids`、`provenance_ids`、`fused_ids`、`lane_contribution`、`lane_count`、`rerank_changed_count`、`baseline_experimental_overlap_rate`、`source_ref_coverage`、`retrieval_latency_ms` 和 `rrf_weights`。
+
+Phase 2a 不改变真实召回结果，只记录 baseline 和 experimental 的差异；RRF 结果先用于观测，不参与 prompt 注入。NetworkX 实体图谱和真实 fetch 回源成功率统计留到 Phase 2b 或后续回源增强阶段。
+
+Phase 2a 验证结论：
+
+- focused suite：`46 passed`。
+- broader memory experiment suite：`51 passed`。
+- `compileall` 和 `git diff --check` 通过。
 
 ### Phase 3：召回重排和注入治理
 

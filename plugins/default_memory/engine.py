@@ -31,6 +31,7 @@ from core.memory.engine import (
     MemoryHit,
     MemoryIngestRequest,
     MemoryIngestResult,
+    MemoryScope,
     RememberRequest,
     RememberResult,
 )
@@ -41,6 +42,10 @@ from memory2.memorizer import Memorizer
 from memory2.post_response_worker import PostResponseMemoryWorker
 from memory2.procedure_tagger import ProcedureTagger
 from memory2.query_builder import build_procedure_queries
+from memory2.retrieval_experiments import (
+    build_provenance_lane,
+    build_tri_retrieval_shadow_result,
+)
 from memory2.retriever import Retriever
 from memory2.rule_schema import build_procedure_rule_schema
 from memory2.store import MemoryStore2
@@ -458,6 +463,7 @@ class DefaultMemoryEngine:
         self._retriever: Retriever | None = None
         self._tagger: ProcedureTagger | None = None
         self._post_response_worker: PostResponseMemoryWorker | None = None
+        self._experiment_runner: MemoryExperimentRunner | None = None
         self._event_bus = event_publisher
         self.closeables: list[object] = []
 
@@ -513,7 +519,12 @@ class DefaultMemoryEngine:
             experiment_runner = MemoryExperimentRunner(
                 workspace=workspace,
                 config=default_config.memory_experiments,
+                existing_memory_provider=lambda store=self._v2_store: store.list_items_for_dashboard(
+                    status="active",
+                    page_size=200,
+                )[0],
             )
+        self._experiment_runner = experiment_runner
         self._post_response_worker = PostResponseMemoryWorker(
             memorizer=self._memorizer,
             retriever=self._retriever,
@@ -643,7 +654,8 @@ class DefaultMemoryEngine:
         scope = self._resolve_scope(request.scope)
         queries = self._resolve_queries(request)
         memory_types = self._resolve_memory_types(request)
-        items = await self._retrieve_related(
+        started_at = time.perf_counter()
+        items, semantic_items, keyword_items = await self._retrieve_related_with_lanes(
             request.query,
             memory_types=memory_types,
             top_k=request.top_k,
@@ -651,6 +663,15 @@ class DefaultMemoryEngine:
             scope_chat_id=scope.chat_id or None,
             require_scope_match=bool(request.hints.get("require_scope_match", False)),
             aux_queries=queries[1:],
+        )
+        await self._record_tri_retrieval_shadow(
+            request=request,
+            baseline_items=items,
+            semantic_items=semantic_items,
+            keyword_items=keyword_items,
+            memory_types=memory_types,
+            scope=scope,
+            started_at=started_at,
         )
         text_block, injected_ids = self._retriever.build_injection_block(items)
         hits = [
@@ -1120,6 +1141,130 @@ class DefaultMemoryEngine:
             time_end=time_end,
             keyword_enabled=keyword_enabled,
         )
+
+    async def _retrieve_related_with_lanes(
+        self,
+        query: str,
+        *,
+        memory_types: list[str] | None = None,
+        top_k: int | None = None,
+        scope_channel: str | None = None,
+        scope_chat_id: str | None = None,
+        require_scope_match: bool = False,
+        aux_queries: list[str] | None = None,
+        score_threshold: float | None = None,
+        time_start: datetime | None = None,
+        time_end: datetime | None = None,
+        keyword_enabled: bool = True,
+    ) -> tuple[list[dict], list[dict], list[dict]]:
+        if self._retriever is None:
+            return [], [], []
+        experiment_runner = getattr(self, "_experiment_runner", None)
+        if experiment_runner is not None and experiment_runner.enabled:
+            return await self._retriever.retrieve_with_lanes(
+                query,
+                memory_types=memory_types,
+                top_k=top_k,
+                scope_channel=scope_channel,
+                scope_chat_id=scope_chat_id,
+                require_scope_match=require_scope_match,
+                aux_queries=aux_queries,
+                score_threshold=score_threshold,
+                time_start=time_start,
+                time_end=time_end,
+                keyword_enabled=keyword_enabled,
+            )
+        items = await self._retriever.retrieve(
+            query,
+            memory_types=memory_types,
+            top_k=top_k,
+            scope_channel=scope_channel,
+            scope_chat_id=scope_chat_id,
+            require_scope_match=require_scope_match,
+            aux_queries=aux_queries,
+            score_threshold=score_threshold,
+            time_start=time_start,
+            time_end=time_end,
+            keyword_enabled=keyword_enabled,
+        )
+        return items, [], []
+
+    async def _record_tri_retrieval_shadow(
+        self,
+        *,
+        request: MemoryEngineRetrieveRequest,
+        baseline_items: list[dict],
+        semantic_items: list[dict],
+        keyword_items: list[dict],
+        memory_types: list[str] | None,
+        scope: MemoryScope,
+        started_at: float,
+    ) -> None:
+        experiment_runner = getattr(self, "_experiment_runner", None)
+        if experiment_runner is None or self._v2_store is None:
+            return
+        if not experiment_runner.enabled:
+            return
+        try:
+            top_k = max(1, int(request.top_k or len(baseline_items) or 8))
+            active_items, _total = self._v2_store.list_items_for_dashboard(
+                status="active",
+                page_size=200,
+            )
+            active_items = self._filter_provenance_candidates(
+                active_items,
+                memory_types=memory_types,
+                scope=scope,
+                require_scope_match=bool(
+                    request.hints.get("require_scope_match", False)
+                ),
+            )
+            provenance_lane = build_provenance_lane(
+                request.query,
+                active_items,
+                scope_channel=scope.channel,
+                scope_chat_id=scope.chat_id,
+                limit=max(20, top_k * 2),
+            )
+            shadow = build_tri_retrieval_shadow_result(
+                query=request.query,
+                baseline_items=baseline_items,
+                semantic_items=semantic_items,
+                keyword_items=keyword_items,
+                provenance_items=provenance_lane.items,
+                latency_ms=(time.perf_counter() - started_at) * 1000.0,
+                top_n=top_k,
+            )
+            experiment_runner.record_tri_retrieval_shadow(
+                session_key=scope.session_key,
+                turn_id=f"{scope.session_key}@retrieve",
+                baseline_result=shadow.baseline_result,
+                experimental_result=shadow.experimental_result,
+                metrics=shadow.metrics,
+            )
+        except Exception:
+            logger.debug("tri retrieval shadow trace failed", exc_info=True)
+
+    @staticmethod
+    def _filter_provenance_candidates(
+        items: list[dict[str, object]],
+        *,
+        memory_types: list[str] | None,
+        scope: MemoryScope,
+        require_scope_match: bool,
+    ) -> list[dict[str, object]]:
+        allowed_types = {str(item) for item in memory_types or [] if str(item).strip()}
+        filtered: list[dict[str, object]] = []
+        for item in items:
+            if allowed_types and str(item.get("memory_type") or "") not in allowed_types:
+                continue
+            if require_scope_match and (
+                str(item.get("scope_channel") or "") != str(scope.channel or "")
+                or str(item.get("scope_chat_id") or "") != str(scope.chat_id or "")
+            ):
+                continue
+            filtered.append(item)
+        return filtered
 
     async def _gen_hypothesis(self, query: str, style: str) -> str | None:
         prompt = _explicit_hypothesis_prompt(query, style)

@@ -527,8 +527,12 @@ async def test_memory_experiment_trace_is_written_from_real_agent_runtime(
     assert candidate["final_score"] <= 1.0
     assert "signals" in candidate
     assert "reasons" in candidate
+    assert "entropy_score" in candidate["signals"]
+    assert "similar_memory_count" in candidate
+    assert "nearest_memory_ids" in candidate
     assert trace["metrics_json"]["policy_review_count"] == 0
     assert trace["metrics_json"]["avg_final_score"] >= 0.0
+    assert "write_reduction_rate" in trace["metrics_json"]
 
     memory_db = workspace / "memory" / "memory2.db"
     assert memory_db.exists()

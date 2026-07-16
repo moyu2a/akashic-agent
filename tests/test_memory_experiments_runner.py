@@ -114,6 +114,36 @@ def test_runner_ab_mode_records_as_shadow_for_phase0(tmp_path: Path) -> None:
     assert rows[0]["mode"] == "shadow"
 
 
+def test_record_tri_retrieval_shadow_writes_trace(tmp_path: Path) -> None:
+    runner = MemoryExperimentRunner(
+        workspace=tmp_path,
+        config=MemoryExperimentsConfig(enabled=True, mode="shadow"),
+    )
+
+    runner.record_tri_retrieval_shadow(
+        session_key="cli:local",
+        turn_id="cli:local@retrieve",
+        baseline_result={"baseline_hit_count": 1, "baseline_ids": ["m1"]},
+        experimental_result={
+            "semantic_hit_count": 1,
+            "keyword_hit_count": 1,
+            "provenance_hit_count": 0,
+            "fused_hit_count": 2,
+            "fused_ids": ["m1", "m2"],
+        },
+        metrics={
+            "lane_contribution": {"semantic": 1, "keyword": 1, "provenance": 0},
+            "retrieval_latency_ms": 4.2,
+        },
+    )
+
+    row = _read_jsonl(tmp_path / "observe" / "memory_experiments.jsonl")[0]
+    assert row["feature_name"] == "tri_retrieval"
+    assert row["baseline_result"]["baseline_ids"] == ["m1"]
+    assert row["experimental_result"]["fused_ids"] == ["m1", "m2"]
+    assert row["metrics_json"]["retrieval_latency_ms"] == 4.2
+
+
 def test_score_write_candidate_shadow_rejects_temporary_text() -> None:
     result = score_write_candidate_shadow("临时测试变量 value-a-012，不要写入长期记忆")
 
@@ -172,6 +202,56 @@ def test_score_write_candidate_shadow_marks_review_for_ambiguous_stable_text() -
     assert result["reason"] == "moderate_value_signal"
     assert 0.45 <= result["final_score"] < 0.7
     assert "moderate_information_value" in result["reasons"]
+
+
+def test_score_write_candidate_shadow_detects_duplicate_existing_memory() -> None:
+    result = score_write_candidate_shadow(
+        "用户明确要求记住：以后都用中文回答",
+        source_ref="cli:local@post_response",
+        existing_memories=[
+            {"id": "mem_1", "summary": "用户明确要求记住：以后都用中文回答"},
+            {"id": "mem_2", "summary": "用户喜欢 Python 自动化"},
+        ],
+    )
+
+    assert result["signals"]["duplicate_risk_score"] >= 0.8
+    assert result["signals"]["novelty_score"] <= 0.3
+    assert result["signals"]["entropy_score"] <= 0.3
+    assert result["similar_memory_count"] == 1
+    assert result["nearest_memory_ids"] == ["mem_1"]
+    assert "duplicate_existing_memory" in result["reasons"]
+    assert result["decision"] == "reject"
+    assert result["reason"] == "duplicate_existing_memory"
+
+
+def test_score_write_candidate_shadow_scores_novel_existing_memory() -> None:
+    result = score_write_candidate_shadow(
+        "用户明确要求记住：以后代码示例优先使用 pytest",
+        source_ref="cli:local@post_response",
+        existing_memories=[
+            {"id": "mem_1", "summary": "用户喜欢中文回答"},
+            {"id": "mem_2", "summary": "用户使用 Linux 处理本地项目"},
+        ],
+    )
+
+    assert result["signals"]["duplicate_risk_score"] < 0.5
+    assert result["signals"]["novelty_score"] >= 0.6
+    assert result["signals"]["entropy_score"] >= 0.6
+    assert result["similar_memory_count"] == 0
+    assert result["nearest_memory_ids"] == []
+    assert "novel_information" in result["reasons"]
+
+
+def test_score_write_candidate_shadow_keeps_phase1b_shape_without_existing_memory() -> None:
+    result = score_write_candidate_shadow(
+        "用户明确要求记住：以后代码示例优先使用 pytest",
+        source_ref="cli:local@post_response",
+        existing_memories=[],
+    )
+
+    assert "entropy_score" in result["signals"]
+    assert result["similar_memory_count"] == 0
+    assert result["nearest_memory_ids"] == []
 
 
 def test_extract_explicit_memorize_baseline_counts_successful_results() -> None:
@@ -255,3 +335,106 @@ def test_record_write_value_shadow_writes_detailed_metrics(tmp_path: Path) -> No
     assert candidates[0]["summary"] == "用户明确要求记住：以后都用中文回答"
     assert candidates[0]["signals"]["explicit_user_intent_score"] >= 0.8
     assert candidates[1]["reason"] == "assistant_inference"
+
+
+def test_record_write_value_shadow_uses_existing_memory_snapshot(tmp_path: Path) -> None:
+    runner = MemoryExperimentRunner(
+        workspace=tmp_path,
+        config=MemoryExperimentsConfig(enabled=True, mode="shadow"),
+        existing_memory_provider=lambda: [
+            {"id": "mem_existing", "summary": "用户明确要求记住：以后都用中文回答"},
+        ],
+    )
+
+    runner.record_write_value_shadow(
+        session_key="cli:local",
+        turn_id="cli:local@post_response",
+        memorize_calls=[
+            {
+                "summary": "用户明确要求记住：以后都用中文回答",
+                "result": "ok item_id=mem_1 status=new",
+            },
+            {
+                "summary": "用户明确要求记住：以后代码示例优先使用 pytest",
+                "result": "ok item_id=mem_2 status=new",
+            },
+        ],
+    )
+
+    row = _read_jsonl(tmp_path / "observe" / "memory_experiments.jsonl")[0]
+    metrics = row["metrics_json"]
+    assert metrics["existing_memory_count"] == 1
+    assert metrics["similar_memory_count"] == 1
+    assert metrics["duplicate_risk_count"] == 1
+    assert 0.0 <= metrics["avg_entropy_score"] <= 1.0
+    assert 0.0 <= metrics["avg_novelty_score"] <= 1.0
+    assert metrics["write_reduction_rate"] == 0.5
+
+    candidates = row["experimental_result"]["candidates"]
+    assert candidates[0]["nearest_memory_ids"] == ["mem_existing"]
+    assert candidates[0]["similar_memory_count"] == 1
+    assert candidates[1]["similar_memory_count"] == 0
+
+
+def test_record_write_value_shadow_excludes_current_turn_written_ids(
+    tmp_path: Path,
+) -> None:
+    runner = MemoryExperimentRunner(
+        workspace=tmp_path,
+        config=MemoryExperimentsConfig(enabled=True, mode="shadow"),
+        existing_memory_provider=lambda: [
+            {"id": "mem_1", "summary": "用户明确要求记住：以后都用中文回答"},
+        ],
+    )
+
+    runner.record_write_value_shadow(
+        session_key="cli:local",
+        turn_id="cli:local@post_response",
+        memorize_calls=[
+            {
+                "summary": "用户明确要求记住：以后都用中文回答",
+                "result": "ok item_id=mem_1 status=new",
+            },
+        ],
+    )
+
+    row = _read_jsonl(tmp_path / "observe" / "memory_experiments.jsonl")[0]
+    candidate = row["experimental_result"]["candidates"][0]
+    assert row["metrics_json"]["existing_memory_count"] == 0
+    assert candidate["similar_memory_count"] == 0
+    assert candidate["nearest_memory_ids"] == []
+
+
+def test_record_write_value_shadow_reduction_rate_uses_written_candidates_only(
+    tmp_path: Path,
+) -> None:
+    runner = MemoryExperimentRunner(
+        workspace=tmp_path,
+        config=MemoryExperimentsConfig(enabled=True, mode="shadow"),
+        existing_memory_provider=lambda: [
+            {"id": "mem_existing", "summary": "用户明确要求记住：以后都用中文回答"},
+        ],
+    )
+
+    runner.record_write_value_shadow(
+        session_key="cli:local",
+        turn_id="cli:local@post_response",
+        memorize_calls=[
+            {
+                "summary": "用户明确要求记住：以后都用中文回答",
+                "result": "ok item_id=mem_1 status=new",
+            },
+            {
+                "summary": "用户明确要求记住：以后代码示例优先使用 pytest",
+                "result": '{"ok": false, "error": "denied"}',
+            },
+        ],
+    )
+
+    row = _read_jsonl(tmp_path / "observe" / "memory_experiments.jsonl")[0]
+    assert row["metrics_json"]["baseline_written_count"] == 1
+    assert row["metrics_json"]["policy_allow_count"] == 1
+    assert row["metrics_json"]["policy_reject_count"] == 1
+    assert row["metrics_json"]["write_reduction_rate"] == 1.0
+    assert row["metrics_json"]["written_candidate_allow_count"] == 0
+    assert row["metrics_json"]["existing_memory_snapshot_count"] == 1

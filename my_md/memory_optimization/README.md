@@ -33,6 +33,42 @@
 - 长期运行后要做去重、冲突检测、过期降权和压缩。
 - 用 observe、Dashboard 和评测集验证优化是否真的有效。
 
+## 当前执行位置
+
+当前 memory 实验路线不是单点功能，而是一组按阶段推进的插件化实验能力。
+
+已经完成：
+
+- Phase 0：`memory_experiments` 实验配置、shadow trace 和运行态 smoke。
+- Phase 1a：显式 `memorize` 的写入价值 shadow 评分结构化输出。
+- Phase 1b：候选记忆和已有 active 记忆的只读对比，输出信息熵、新颖度、重复风险和写入减少率。
+- Phase 2a：三路召回 + RRF 融合 shadow，记录语义、关键词、溯源三路候选和实验融合结果，不改变真实召回和 prompt 注入。
+
+后续还有 5 个主要子阶段：
+
+1. Phase 2b：第三路加入 NetworkX 实体图谱召回。
+2. Phase 3：召回重排和注入治理。
+3. Phase 4：因果一致性版本链和层级化溯源。
+4. Phase 5：离线异步睡眠巩固。
+5. Phase 6：评测集、Dashboard 和 active 化决策。
+
+trace 汇总报告是这些阶段的数据出口，不应替代上述实验方向。
+
+Phase 1b 的验证结论：
+
+- focused suite：`30 passed`。
+- live smoke：`3 passed`。
+- `compileall`：通过。
+- `git diff --check`：通过。
+- live smoke 在 Python 3.14 环境下出现过 asyncio transport 析构 warning，但测试结果为通过，当前未作为 Phase 1b 功能失败处理。
+
+Phase 2a 的验证结论：
+
+- focused suite：`46 passed`。
+- broader memory experiment suite：`51 passed`。
+- `compileall`：通过。
+- `git diff --check`：通过。
+
 ## 实验扩展原则
 
 图片中的高级能力进入本项目时，应先作为 memory 插件实验能力，而不是直接写成已实现能力。每项实验都需要：

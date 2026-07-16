@@ -73,6 +73,10 @@ async def test_post_response_worker_emits_write_value_shadow_trace(tmp_path):
     assert '"signals"' in content
     assert '"explicit_user_intent_score"' in content
     assert '"source_ref_confidence_score"' in content
+    assert '"entropy_score"' in content
+    assert '"similar_memory_count"' in content
+    assert '"nearest_memory_ids"' in content
+    assert '"write_reduction_rate"' in content
 
 
 @pytest.mark.asyncio

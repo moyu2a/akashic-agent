@@ -196,6 +196,14 @@ final_score =
 
 ## 阶段计划
 
+当前状态：
+
+- Phase 0 已完成：实验配置、shadow trace、运行态 smoke 均已落地。
+- Phase 1a 已完成：显式 `memorize` 的写入价值 shadow scoring 已输出结构化 signals。
+- Phase 1b 已完成：写入候选会和已有 active 记忆做只读对比，输出信息熵、新颖度、重复风险、相似记忆和写入减少率。
+- Phase 2a 已完成：三路召回 + RRF 融合 shadow 已输出三路候选、RRF 融合结果和排序差异 trace，不改变真实召回结果。
+- 后续下一步是 Phase 2b：第三路加入 NetworkX 实体图谱召回。
+
 ### Phase 0：实验框架和开关
 
 - 增加 `memory_experiments` 配置。
@@ -207,14 +215,32 @@ final_score =
 - 增加信息熵、新颖度、稳定性、`source_ref` 可信度评分。
 - 只旁路打分，不影响真实写入。
 - 输出写入减少率、拒写原因和污染风险数据。
+- Phase 1a 已完成：结构化记录 `final_score`、`decision`、`reason`、`signals` 和风险计数。
+- Phase 1b 已完成：候选记忆和已有记忆对比，补充信息熵、新颖度、重复度、相似记忆和写入减少率。
+
+Phase 1b 验证结论：
+
+- focused suite：`30 passed`。
+- live smoke：`3 passed`。
+- `compileall` 和 `git diff --check` 通过。
+- 仍然是 shadow-only，不改变真实 `memorize` 写入。
+
+Phase 2a 验证结论：
+
+- focused suite：`46 passed`。
+- broader memory experiment suite：`51 passed`。
+- `compileall` 和 `git diff --check` 通过。
+- 仍然是 shadow-only，不改变真实召回和 prompt 注入。
 
 ### Phase 2：三路召回 shadow
 
 - 第一路：语义召回，`memory2 vector`。
 - 第二路：关键词召回，`memory2 keyword / search_messages`。
-- 第三路：溯源召回，`source_ref / fetch_messages / 时间和 session 线索`。
+- 第三路：溯源召回，Phase 2a 只使用 `source_ref`、scope、模糊指代和文本重叠线索；真实 `fetch_messages` 回源和时间线索留到后续阶段。
 - 同时跑旧召回和三路召回，对比命中、排序、注入差异。
-- 输出 `lane_contribution`、`precision_at_k`、`recall_at_k`、`wrong_recall_rate`、`evidence_hit_rate`、`latency_ms`。
+- 输出 `lane_contribution`、`lane_count`、`rerank_changed_count`、`baseline_experimental_overlap_rate`、`rrf_score_distribution`、`source_ref_coverage`、`retrieval_latency_ms`。
+- Phase 2a 已完成：先实现三路召回 shadow 和 RRF 融合排序，不改变真实召回结果。
+- Phase 2b：第三路再加入 NetworkX 实体图谱，用于提升“那个、上次、之前说的方案”等模糊指代场景的召回准确率。
 
 ### Phase 3：召回重排和注入治理
 

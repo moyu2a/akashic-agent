@@ -344,6 +344,77 @@ Phase 0 首个落地点是 `write_value_score` shadow trace。它先记录显式
 - `memory_provenance_traces`
 - `memory_eval_results`
 
+### 后续 6 步的测试数据
+
+后续实验阶段必须能输出对比数据，不能只说明实现了某个能力：
+
+| 阶段 | 主要能力 | 必须输出的数据 |
+| --- | --- | --- |
+| Phase 1b | 信息熵 / 新颖度 / 重复度评分 | `entropy_score`、`novelty_score`、`duplicate_risk_score`、`similar_memory_count`、`nearest_memory_ids`、`write_reduction_rate` |
+| Phase 2a | 三路召回 + RRF shadow | `semantic_hit_count`、`keyword_hit_count`、`provenance_hit_count`、`fused_hit_count`、`semantic_ids`、`keyword_ids`、`provenance_ids`、`fused_ids`、`lane_contribution`、`lane_count`、`rerank_changed_count`、`baseline_experimental_overlap_rate`、`rrf_score_distribution`、`source_ref_coverage`、`retrieval_latency_ms`、`rrf_weights` |
+| Phase 2b | NetworkX 实体图谱召回 | `graph_hit_count`、`graph_path_count`、`avg_graph_path_length`、`entity_match_count`、`graph_lane_contribution` |
+| Phase 3 | 召回重排和注入治理 | `raw_rank`、`experimental_rank`、`rank_delta`、`drop_reason`、`baseline_injected`、`experimental_injected`、`prompt_token_delta` |
+| Phase 4 | 因果一致性版本链和层级化溯源 | `chain_count`、`avg_chain_depth`、`rollback_candidates`、`stale_recalled_count`、`source_ref_coverage`、`fetch_success_rate` |
+| Phase 5 | 离线异步睡眠巩固 | `duplicate_group_count`、`merge_candidate_count`、`stale_candidate_count`、`conflict_candidate_count`、`estimated_token_saving`、`job_latency_ms` |
+| Phase 6 | 评测集、Dashboard 和 active 化决策 | `recall_at_k`、`precision_at_k`、`wrong_recall_rate`、`memory_pollution_rate`、`compression_ratio`、`source_support_rate` |
+
+其中 Phase 1b 到 Phase 5 默认仍然是 shadow 或 dry-run。只有 Phase 6 的评测数据稳定后，才讨论把某些策略切到 active。
+
+Phase 1b 已补充写入候选和已有 active 记忆的只读对比。当前实现先使用词元重叠近似计算，不调用 embedding 或外部服务：
+
+- `signals.entropy_score`
+- `signals.novelty_score`
+- `signals.duplicate_risk_score`
+- `similar_memory_count`
+- `nearest_memory_ids`
+- `metrics_json.existing_memory_count`
+- `metrics_json.existing_memory_snapshot_count`
+- `metrics_json.avg_entropy_score`
+- `metrics_json.avg_novelty_score`
+- `metrics_json.written_candidate_allow_count`
+- `metrics_json.write_reduction_rate`
+
+这些字段仍然只用于 shadow 实验，不影响真实 `memorize` 写入。本轮真实写入产生的 `item_id` 会从已有记忆快照里排除，避免候选和自己匹配导致重复风险失真。
+
+当前 `entropy_score` 和 `novelty_score` 都来自“候选和已有记忆最大词元重叠相似度”的近似计算，可先用于实验对比，不等价于真正的信息论熵。`nearest_memory_ids` 只记录达到高相似阈值的近邻 id，用于解释重复风险；低相似候选不会进入该列表。`existing_memory_count` / `existing_memory_snapshot_count` 表示本次 shadow scoring 实际读取并参与比较的 active 记忆快照数量，不代表库中全部 active 记忆总数。
+
+Phase 1b 的测试结论：
+
+- focused suite：`30 passed`。
+- live smoke：`3 passed`。
+- `compileall`：通过。
+- `git diff --check`：通过。
+- live smoke 出现的 Python 3.14 asyncio transport 析构 warning 不影响测试通过结论，但后续如果要收敛测试噪音，可以单独处理。
+
+Phase 2a 的指标重点会从“写入候选质量”转向“召回候选来源”。其中 RRF 融合适合三路分数不可直接相加的情况：语义召回有向量相似度，关键词召回有关键词命中分，溯源召回有 source_ref、scope、模糊指代和文本重叠线索，统一用每一路内部排名做融合更稳。
+
+Phase 2a 已实现后，`tri_retrieval` trace 应包含：
+
+- `baseline_result.baseline_ids`
+- `experimental_result.semantic_ids`
+- `experimental_result.keyword_ids`
+- `experimental_result.provenance_ids`
+- `experimental_result.fused_ids`
+- `experimental_result.fused_items[].rrf_score`
+- `experimental_result.fused_items[].lane_hits`
+- `metrics_json.lane_contribution`
+- `metrics_json.lane_count`
+- `metrics_json.rerank_changed_count`
+- `metrics_json.baseline_experimental_overlap_rate`
+- `metrics_json.rrf_score_distribution`
+- `metrics_json.source_ref_coverage`
+- `metrics_json.retrieval_latency_ms`
+- `metrics_json.rrf_weights`
+
+Phase 2a 不使用 NetworkX，不调用真实 fetch 回源，不改变真实召回和 prompt 注入。`fetch_success_rate` 留到后续真正执行回源增强时再统计。
+
+Phase 2a 的测试结论：
+
+- focused suite：`46 passed`。
+- broader memory experiment suite：`51 passed`。
+- `compileall`：通过。
+- `git diff --check`：通过。
+
 ### P0：直接建立基线
 
 - active / superseded 数量。
