@@ -38,6 +38,14 @@ ExecutionEventType = Literal[
 
 ACTIVE_ATTEMPT_STATUSES = frozenset({"pending", "running", "waiting_authorization"})
 TERMINAL_ATTEMPT_STATUSES = frozenset({"succeeded", "failed", "blocked", "cancelled"})
+RETRYABLE_BLOCK_REASONS = frozenset(
+    {
+        "dispatch_interrupted",
+        "lease_expired_outcome_unknown",
+        "runtime_restarted_outcome_unknown",
+        "turn_interrupted_outcome_unknown",
+    }
+)
 _TRANSITIONS = {
     "pending": frozenset({"running", "waiting_authorization", "blocked", "cancelled"}),
     "running": frozenset(
@@ -75,6 +83,12 @@ def validate_attempt_transition(current: str, target: str) -> AttemptStatus:
     if destination not in _TRANSITIONS[source]:
         raise ValueError(f"invalid attempt transition: {source} -> {destination}")
     return destination
+
+
+def is_retryable_attempt_state(status: str, terminal_reason: str) -> bool:
+    return status == "failed" or (
+        status == "blocked" and terminal_reason in RETRYABLE_BLOCK_REASONS
+    )
 
 
 @dataclass(frozen=True)

@@ -10,6 +10,7 @@ from agent.task_plan.execution_models import (
     TaskExecutionAttempt,
     TaskExecutionEvent,
     TaskExecutionSnapshot,
+    is_retryable_attempt_state,
 )
 from agent.task_plan.execution_redaction import (
     bounded_execution_preview,
@@ -28,16 +29,6 @@ from agent.task_plan.store import (
     ExecutionAttemptConflictError,
     TaskExecutionAttemptNotFoundError,
     TaskPlanStore,
-)
-
-
-_RETRYABLE_BLOCK_REASONS = frozenset(
-    {
-        "dispatch_interrupted",
-        "lease_expired_outcome_unknown",
-        "runtime_restarted_outcome_unknown",
-        "turn_interrupted_outcome_unknown",
-    }
 )
 
 
@@ -114,14 +105,14 @@ class TaskExecutionService:
                 "failed_step_requires_explicit_retry: explicit retry required"
             )
 
-        blocked_pending = False
         for step in sorted(plan.steps, key=lambda item: item.index):
             if step.status != "pending":
                 continue
             latest = self._store.get_latest_execution_attempt_for_step(step.step_id)
             if latest is not None and self._is_retryable_block(latest):
-                blocked_pending = True
-                continue
+                raise TaskExecutionConflictError(
+                    "blocked_step_requires_explicit_retry"
+                )
             return self._claim_step(
                 plan=plan,
                 step=step,
@@ -130,8 +121,6 @@ class TaskExecutionService:
                 source_turn_id=source_turn_id,
                 action="continue",
             )
-        if blocked_pending:
-            raise TaskExecutionConflictError("blocked_step_requires_explicit_retry")
         raise TaskExecutionConflictError("no_pending_task_step")
 
     def retry_step(
@@ -463,14 +452,13 @@ class TaskExecutionService:
 
     @staticmethod
     def _is_retryable_block(attempt: TaskExecutionAttempt) -> bool:
-        return (
-            attempt.status == "blocked"
-            and attempt.terminal_reason in _RETRYABLE_BLOCK_REASONS
+        return attempt.status == "blocked" and is_retryable_attempt_state(
+            attempt.status, attempt.terminal_reason
         )
 
-    @classmethod
-    def _is_retryable_attempt(cls, attempt: TaskExecutionAttempt) -> bool:
-        return attempt.status == "failed" or cls._is_retryable_block(attempt)
+    @staticmethod
+    def _is_retryable_attempt(attempt: TaskExecutionAttempt) -> bool:
+        return is_retryable_attempt_state(attempt.status, attempt.terminal_reason)
 
     def _has_successful_work_event(self, attempt_id: str) -> bool:
         return any(

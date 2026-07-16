@@ -246,6 +246,32 @@ def test_retry_accepts_approved_recovery_block_and_creates_next_attempt(
     assert retry.attempt.status == "pending"
 
 
+def test_continue_does_not_skip_recovery_blocked_step_for_later_pending_step(
+    execution_service: TaskExecutionService,
+) -> None:
+    plan = execution_service.plan_service.create_task_plan(
+        session_key="cli:s1", title="Two steps", steps=["Read", "Summarize"]
+    )
+    first = execution_service.begin_next_step(
+        session_key="cli:s1", request_id="req-blocked-first"
+    )
+    execution_service.block_attempt(
+        session_key="cli:s1",
+        attempt_id=first.attempt.attempt_id,
+        terminal_reason="runtime_restarted_outcome_unknown",
+    )
+
+    with pytest.raises(
+        TaskExecutionConflictError, match="blocked_step_requires_explicit_retry"
+    ):
+        execution_service.begin_next_step(
+            session_key="cli:s1", request_id="req-ordinary-continue"
+        )
+
+    attempts = execution_service.store.list_execution_attempts(plan.task_id)
+    assert [attempt.step_id for attempt in attempts] == [plan.steps[0].step_id]
+
+
 def test_finish_success_requires_successful_work_event(
     execution_service: TaskExecutionService,
 ) -> None:

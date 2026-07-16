@@ -227,6 +227,75 @@ def test_retry_claim_rolls_back_step_reset_and_attempt_on_failure(tmp_path: Path
     assert len(store.list_execution_attempts(task_id)) == 1
 
 
+def test_retry_claim_clears_failed_step_result_fields(tmp_path: Path) -> None:
+    store, task_id, step_id, first_attempt_id = _create_claimed_attempt(tmp_path)
+    store.start_execution_attempt(
+        attempt_id=first_attempt_id,
+        owner_instance_id="runtime-1",
+        now=NOW,
+    )
+    store.finalize_execution_attempt(
+        attempt_id=first_attempt_id,
+        owner_instance_id="runtime-1",
+        now=NOW,
+        success=False,
+        result_summary="stale failure",
+        error_code="read_failed",
+    )
+    with sqlite3.connect(tmp_path / "task.db") as conn:
+        conn.execute(
+            """
+            UPDATE task_steps
+            SET tool_names_json = '["read_file"]', source_turn_id = 22,
+                metadata_json = '{"old": true}'
+            WHERE step_id = ?
+            """,
+            (step_id,),
+        )
+
+    store.claim_execution_attempt(
+        task_id=task_id,
+        step_id=step_id,
+        session_key="cli:s1",
+        request_id="req-retry",
+        idempotency_key="idem-retry",
+        owner_instance_id="runtime-1",
+        lease_expires_at=LEASE_EXPIRES_AT,
+        retry_from_attempt_id=first_attempt_id,
+    )
+
+    plan = store.get_plan(task_id)
+    assert plan is not None
+    step = plan.steps[0]
+    assert step.status == "pending"
+    assert step.result_summary == ""
+    assert step.tool_names == []
+    assert step.source_turn_id is None
+    assert step.metadata == {}
+
+
+def test_retry_claim_rejects_non_retryable_blocked_attempt(tmp_path: Path) -> None:
+    store, task_id, step_id, first_attempt_id = _create_claimed_attempt(tmp_path)
+    store.block_execution_attempt(
+        attempt_id=first_attempt_id,
+        owner_instance_id="runtime-1",
+        now=NOW,
+        terminal_reason="policy_denied",
+    )
+
+    with pytest.raises(ExecutionAttemptConflictError, match="retry source"):
+        store.claim_execution_attempt(
+            task_id=task_id,
+            step_id=step_id,
+            session_key="cli:s1",
+            request_id="req-retry",
+            idempotency_key="idem-retry",
+            owner_instance_id="runtime-1",
+            lease_expires_at=LEASE_EXPIRES_AT,
+            retry_from_attempt_id=first_attempt_id,
+        )
+
+
 def test_claim_persists_initial_event_and_query_helpers(tmp_path: Path) -> None:
     store, task_id, step_id, attempt_id = _create_claimed_attempt(tmp_path)
 

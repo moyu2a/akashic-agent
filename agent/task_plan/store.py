@@ -14,6 +14,7 @@ from agent.task_plan.execution_models import (
     ExecutionEventType,
     TaskExecutionAttempt,
     TaskExecutionEvent,
+    is_retryable_attempt_state,
 )
 from agent.task_plan.execution_store import (
     EXECUTION_SCHEMA_SQL,
@@ -409,7 +410,10 @@ class TaskPlanStore:
                     if (
                         latest is None
                         or latest["attempt_id"] != retry_from_attempt_id
-                        or latest["status"] not in {"failed", "blocked"}
+                        or not is_retryable_attempt_state(
+                            str(latest["status"]),
+                            str(latest["terminal_reason"] or ""),
+                        )
                     ):
                         raise ExecutionAttemptConflictError(
                             "retry source attempt conflict"
@@ -1185,7 +1189,9 @@ class TaskPlanStore:
         conn.execute(
             """
             UPDATE task_steps
-            SET status = 'pending', started_at = NULL, completed_at = NULL
+            SET status = 'pending', result_summary = '', tool_names_json = '[]',
+                source_turn_id = NULL, started_at = NULL, completed_at = NULL,
+                metadata_json = '{}'
             WHERE step_id = ? AND task_id = ?
             """,
             (step_id, task_id),
