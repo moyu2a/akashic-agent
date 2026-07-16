@@ -522,6 +522,13 @@ async def test_memory_experiment_trace_is_written_from_real_agent_runtime(
     assert trace["metrics_json"]["candidate_count"] == 1
     assert trace["metrics_json"]["policy_allow_count"] == 1
     assert trace["metrics_json"]["policy_reject_count"] == 0
+    candidate = trace["experimental_result"]["candidates"][0]
+    assert candidate["final_score"] >= 0.0
+    assert candidate["final_score"] <= 1.0
+    assert "signals" in candidate
+    assert "reasons" in candidate
+    assert trace["metrics_json"]["policy_review_count"] == 0
+    assert trace["metrics_json"]["avg_final_score"] >= 0.0
 
     memory_db = workspace / "memory" / "memory2.db"
     assert memory_db.exists()

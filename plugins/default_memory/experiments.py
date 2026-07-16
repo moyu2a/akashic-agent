@@ -94,13 +94,48 @@ class MemoryExperimentRunner:
             return None
         baseline = extract_explicit_memorize_baseline(memorize_calls)
         summaries = [str(call.get("summary") or "") for call in memorize_calls]
-        scored = [score_write_candidate_shadow(summary) for summary in summaries]
+        scored = [
+            {
+                "summary": summary,
+                **score_write_candidate_shadow(summary, source_ref=turn_id),
+            }
+            for summary in summaries
+        ]
         allow_count = sum(1 for item in scored if item.get("decision") == "allow")
         reject_count = sum(1 for item in scored if item.get("decision") == "reject")
+        review_count = sum(1 for item in scored if item.get("decision") == "review")
         reasons: dict[str, int] = {}
         for item in scored:
             reason = str(item.get("reason") or "unknown")
             reasons[reason] = reasons.get(reason, 0) + 1
+        avg_score = (
+            round(
+                sum(float(item.get("final_score") or 0.0) for item in scored)
+                / len(scored),
+                4,
+            )
+            if scored
+            else 0.0
+        )
+        temporary_risk_count = sum(
+            1
+            for item in scored
+            if float(item.get("signals", {}).get("temporary_risk_score") or 0.0) >= 0.5
+        )
+        assistant_inference_risk_count = sum(
+            1
+            for item in scored
+            if float(
+                item.get("signals", {}).get("assistant_inference_risk_score") or 0.0
+            )
+            >= 0.5
+        )
+        duplicate_risk_count = sum(
+            1
+            for item in scored
+            if float(item.get("signals", {}).get("duplicate_risk_score") or 0.0)
+            >= 0.5
+        )
 
         return self.record(
             feature_name="write_value_score",
@@ -111,6 +146,7 @@ class MemoryExperimentRunner:
                 "candidate_count": len(summaries),
                 "policy_allow_count": allow_count,
                 "policy_reject_count": reject_count,
+                "policy_review_count": review_count,
                 "candidates": scored,
             },
             metrics={
@@ -118,6 +154,11 @@ class MemoryExperimentRunner:
                 "baseline_written_count": baseline["baseline_written_count"],
                 "policy_allow_count": allow_count,
                 "policy_reject_count": reject_count,
+                "policy_review_count": review_count,
+                "avg_final_score": avg_score,
+                "temporary_risk_count": temporary_risk_count,
+                "assistant_inference_risk_count": assistant_inference_risk_count,
+                "duplicate_risk_count": duplicate_risk_count,
                 "reject_reason_distribution": reasons,
             },
         )
@@ -136,34 +177,146 @@ def _diff_dicts(
     return changed
 
 
-def score_write_candidate_shadow(summary: str) -> dict[str, Any]:
-    text = str(summary or "").strip()
+def _clamp_score(value: float) -> float:
+    return max(0.0, min(1.0, round(value, 4)))
+
+
+def _contains_any(text: str, markers: tuple[str, ...]) -> bool:
     lowered = text.lower()
+    return any(marker in lowered or marker in text for marker in markers)
+
+
+def score_write_candidate_shadow(
+    summary: str,
+    *,
+    source_ref: str = "",
+) -> dict[str, Any]:
+    text = str(summary or "").strip()
+    explicit_markers = (
+        "记住",
+        "以后",
+        "下次",
+        "长期记忆",
+        "用户明确要求",
+        "remember",
+        "always",
+    )
+    stable_markers = (
+        "偏好",
+        "习惯",
+        "规则",
+        "流程",
+        "以后",
+        "长期",
+        "always",
+        "prefer",
+    )
     temporary_markers = (
         "临时",
         "测试",
+        "今天这次",
+        "本次",
         "不要写入长期记忆",
         "不要记",
         "temporary",
         "do not remember",
     )
-    explicit_markers = (
-        "记住",
-        "长期记忆",
-        "用户明确要求",
-        "remember",
+    assistant_inference_markers = (
+        "助手推断",
+        "可能喜欢",
+        "看起来",
+        "应该是",
+        "猜测",
+        "seems",
+        "probably",
+        "maybe",
     )
-    if not text:
-        return {"decision": "reject", "reason": "empty", "score": 0.0}
-    if any(marker in lowered or marker in text for marker in temporary_markers):
-        return {"decision": "reject", "reason": "temporary_state", "score": 0.2}
-    if any(marker in lowered or marker in text for marker in explicit_markers):
-        return {"decision": "allow", "reason": "explicit_memory_signal", "score": 0.8}
 
-    score = 0.55 if len(text) >= 12 else 0.35
-    decision = "allow" if score >= 0.5 else "reject"
-    reason = "basic_value_signal" if decision == "allow" else "low_information"
-    return {"decision": decision, "reason": reason, "score": score}
+    if not text:
+        return {
+            "decision": "reject",
+            "reason": "empty",
+            "score": 0.0,
+            "final_score": 0.0,
+            "reasons": ["empty"],
+            "signals": {
+                "explicit_user_intent_score": 0.0,
+                "long_term_stability_score": 0.0,
+                "novelty_score": 0.0,
+                "temporary_risk_score": 0.0,
+                "assistant_inference_risk_score": 0.0,
+                "duplicate_risk_score": 0.0,
+                "source_ref_confidence_score": 0.0,
+            },
+        }
+
+    explicit = _contains_any(text, explicit_markers)
+    stable = explicit or _contains_any(text, stable_markers) or len(text) >= 16
+    temporary = _contains_any(text, temporary_markers)
+    assistant_inference = _contains_any(text, assistant_inference_markers)
+    source_ref_confident = bool(str(source_ref or "").strip())
+
+    signals = {
+        "explicit_user_intent_score": 1.0 if explicit else 0.2,
+        "long_term_stability_score": 0.75 if stable else 0.35,
+        "novelty_score": 0.5,
+        "temporary_risk_score": 0.9 if temporary else 0.0,
+        "assistant_inference_risk_score": 0.9 if assistant_inference else 0.0,
+        "duplicate_risk_score": 0.0,
+        "source_ref_confidence_score": 0.85 if source_ref_confident else 0.5,
+    }
+
+    final_score = (
+        signals["explicit_user_intent_score"] * 0.40
+        + signals["long_term_stability_score"] * 0.25
+        + signals["novelty_score"] * 0.15
+        + signals["source_ref_confidence_score"] * 0.15
+        - signals["temporary_risk_score"] * 0.35
+        - signals["assistant_inference_risk_score"] * 0.30
+        - signals["duplicate_risk_score"] * 0.20
+    )
+    final_score = _clamp_score(final_score)
+
+    reasons: list[str] = []
+    if explicit:
+        reasons.append("explicit_user_intent")
+    if stable:
+        reasons.append("long_term_stability")
+    if temporary:
+        reasons.append("temporary_state")
+    if assistant_inference:
+        reasons.append("assistant_inference")
+    if source_ref_confident:
+        reasons.append("source_ref_present")
+    if not reasons:
+        reasons.append("low_information")
+
+    if temporary:
+        decision = "reject"
+        reason = "temporary_state"
+    elif assistant_inference:
+        decision = "reject"
+        reason = "assistant_inference"
+    elif final_score >= 0.7:
+        decision = "allow"
+        reason = "explicit_memory_signal" if explicit else "high_value_signal"
+    elif final_score >= 0.45:
+        decision = "review"
+        reason = "moderate_value_signal"
+        if "moderate_information_value" not in reasons:
+            reasons.append("moderate_information_value")
+    else:
+        decision = "reject"
+        reason = "low_information"
+
+    return {
+        "decision": decision,
+        "reason": reason,
+        "score": final_score,
+        "final_score": final_score,
+        "reasons": reasons,
+        "signals": {key: _clamp_score(value) for key, value in signals.items()},
+    }
 
 
 def extract_explicit_memorize_baseline(

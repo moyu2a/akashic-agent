@@ -69,6 +69,10 @@ async def test_post_response_worker_emits_write_value_shadow_trace(tmp_path):
     assert '"baseline_written_count": 1' in content
     assert '"written_item_ids": ["mem_1"]' in content
     assert '"policy_allow_count": 1' in content
+    assert '"final_score"' in content
+    assert '"signals"' in content
+    assert '"explicit_user_intent_score"' in content
+    assert '"source_ref_confidence_score"' in content
 
 
 @pytest.mark.asyncio

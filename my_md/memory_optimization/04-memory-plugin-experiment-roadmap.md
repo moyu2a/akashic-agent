@@ -437,6 +437,13 @@ Phase 0 需要通过 live smoke 验证：
 - 只旁路打分，不影响真实写入。
 - 输出写入减少率、拒写原因和污染风险数据。
 
+第一步先增强显式 `memorize` 的 shadow scoring：
+
+- 对每条候选记忆输出结构化 signals。
+- 汇总 allow / reject / review 数量。
+- 记录临时信息风险、assistant 推断风险和重复风险。
+- 保持真实写入结果不变，等 trace 数据足够后再讨论 active。
+
 ### Phase 2：三路召回 shadow
 
 - 第一路：语义召回，`memory2 vector`。

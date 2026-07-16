@@ -130,6 +130,50 @@ def test_score_write_candidate_shadow_allows_explicit_memory() -> None:
     assert result["score"] >= 0.7
 
 
+def test_score_write_candidate_shadow_outputs_structured_signals() -> None:
+    result = score_write_candidate_shadow(
+        "用户明确要求记住：以后都用中文回答",
+        source_ref="cli:local@post_response",
+    )
+
+    assert result["decision"] == "allow"
+    assert result["reason"] == "explicit_memory_signal"
+    assert result["final_score"] >= 0.7
+    assert result["score"] == result["final_score"]
+    assert "explicit_user_intent" in result["reasons"]
+    signals = result["signals"]
+    assert signals["explicit_user_intent_score"] >= 0.8
+    assert signals["long_term_stability_score"] >= 0.6
+    assert signals["source_ref_confidence_score"] >= 0.8
+    assert signals["temporary_risk_score"] == 0.0
+    assert signals["assistant_inference_risk_score"] == 0.0
+
+
+def test_score_write_candidate_shadow_rejects_assistant_inference() -> None:
+    result = score_write_candidate_shadow(
+        "助手推断用户可能喜欢极简风格",
+        source_ref="cli:local@post_response",
+    )
+
+    assert result["decision"] == "reject"
+    assert result["reason"] == "assistant_inference"
+    assert result["final_score"] < 0.5
+    assert "assistant_inference" in result["reasons"]
+    assert result["signals"]["assistant_inference_risk_score"] >= 0.8
+
+
+def test_score_write_candidate_shadow_marks_review_for_ambiguous_stable_text() -> None:
+    result = score_write_candidate_shadow(
+        "用户常用 Linux 环境处理本地项目",
+        source_ref="cli:local@post_response",
+    )
+
+    assert result["decision"] == "review"
+    assert result["reason"] == "moderate_value_signal"
+    assert 0.45 <= result["final_score"] < 0.7
+    assert "moderate_information_value" in result["reasons"]
+
+
 def test_extract_explicit_memorize_baseline_counts_successful_results() -> None:
     calls = [
         {
@@ -172,3 +216,42 @@ def test_runner_appends_multiple_records(tmp_path: Path) -> None:
 
     rows = _read_jsonl(tmp_path / "observe" / "memory_experiments.jsonl")
     assert [row["turn_id"] for row in rows] == ["turn-0", "turn-1"]
+
+
+def test_record_write_value_shadow_writes_detailed_metrics(tmp_path: Path) -> None:
+    runner = MemoryExperimentRunner(
+        workspace=tmp_path,
+        config=MemoryExperimentsConfig(enabled=True, mode="shadow"),
+    )
+
+    runner.record_write_value_shadow(
+        session_key="cli:local",
+        turn_id="cli:local@post_response",
+        memorize_calls=[
+            {
+                "summary": "用户明确要求记住：以后都用中文回答",
+                "result": "ok item_id=mem_1 status=new",
+            },
+            {
+                "summary": "助手推断用户可能喜欢极简风格",
+                "result": "ok item_id=mem_2 status=new",
+            },
+        ],
+    )
+
+    row = _read_jsonl(tmp_path / "observe" / "memory_experiments.jsonl")[0]
+    metrics = row["metrics_json"]
+    assert metrics["candidate_count"] == 2
+    assert metrics["baseline_written_count"] == 2
+    assert metrics["policy_allow_count"] == 1
+    assert metrics["policy_reject_count"] == 1
+    assert metrics["policy_review_count"] == 0
+    assert metrics["assistant_inference_risk_count"] == 1
+    assert metrics["temporary_risk_count"] == 0
+    assert metrics["duplicate_risk_count"] == 0
+    assert 0.0 < metrics["avg_final_score"] <= 1.0
+
+    candidates = row["experimental_result"]["candidates"]
+    assert candidates[0]["summary"] == "用户明确要求记住：以后都用中文回答"
+    assert candidates[0]["signals"]["explicit_user_intent_score"] >= 0.8
+    assert candidates[1]["reason"] == "assistant_inference"

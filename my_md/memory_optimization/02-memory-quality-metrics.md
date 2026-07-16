@@ -307,6 +307,22 @@ Phase 0 首个落地点是 `write_value_score` shadow trace。它先记录显式
 
 这只是实验数据，不代表真实写入策略已经改变。
 
+增强后的写入价值 shadow 评分会为每个候选输出：
+
+- `final_score`
+- `decision`
+- `reason`
+- `reasons`
+- `signals.explicit_user_intent_score`
+- `signals.long_term_stability_score`
+- `signals.novelty_score`
+- `signals.temporary_risk_score`
+- `signals.assistant_inference_risk_score`
+- `signals.duplicate_risk_score`
+- `signals.source_ref_confidence_score`
+
+这些字段只用于实验观测，不参与真实 `memorize` 写入决策。
+
 运行态 smoke 重点检查：
 
 - `session_key`
