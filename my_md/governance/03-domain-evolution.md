@@ -851,11 +851,13 @@
 
 结果：
 
-- 最终复审自动化 baseline `1838 passed, 3 warnings in 49.91s`；LA-002 focused `189 passed`，finalizer 注入集成 `10 passed`。
+- 最终复审自动化 baseline `1844 passed, 3 warnings in 48.12s`；LA-002 focused `195 passed`，finalizer 注入集成 `10 passed`。
 - 真实模型 replay 使用同 request ID 时只保留 attempt `attempt_366f8c1f90d1449b83b272a0cbab50de`，重复 turn 0 tools；新 request 同文本创建独立 Step 2 attempt。
 - controlled restart 将 running attempt 变为 `runtime_restarted_outcome_unknown` blocked/pending，不自动重放；普通 continue 不新建，显式 retry 创建 attempt 2。
 - 文件修改计划只进入 waiting authorization，目标未变且 write/edit/shell event 为 0；abort 后 step pending、历史保留。
 - 整体 review 发现 failed retry 曾跨两个事务执行 step reset 与 attempt claim；修复后 retry claim 在 Store 内原子验证 exact latest attempt，并与普通 continue 竞争时只允许 retry attempt 2 创建。
+- follow-up review 将顺序约束扩展到多步骤：最低序号 recovery-blocked pending step 会立即阻止 ordinary continue，且 retry 前会清除旧 step 结果字段并在事务内复核 recovery reason。
+- 最终统一 retry/reconcile reset 后，recovery-blocked pending 与 running recovery 都清除旧展示字段，同时通过状态 CAS 保留 completed/skipped durable 事实；序列化测试显式覆盖 continue-first 和 retry-first。
 
 影响：
 

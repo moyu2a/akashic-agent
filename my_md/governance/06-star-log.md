@@ -764,8 +764,10 @@ Action：
 
 Result：
 
-- 最终复审 Focused `189 passed`、compatibility `278 passed`、full `1838 passed, 3 warnings in 49.91s`；finalizer injected integration `10 passed`。同时强化 CLI request UUID/frame 契约，并用回归测试固化 waiting authorization 在 owner 重启和 lease 过期后仍可由同 session 显式 abort 的设计例外。
+- 最终复审 Focused `195 passed`、compatibility `278 passed`、full `1844 passed, 3 warnings in 48.12s`；finalizer injected integration `10 passed`。同时强化 CLI request UUID/frame 契约，并用回归测试固化 waiting authorization 在 owner 重启和 lease 过期后仍可由同 session 显式 abort 的设计例外。
 - 整体 review 进一步复现 failed retry 的双事务竞争窗口。治理从“service 先 reset、再 claim”升级为 Store 原子 retry claim，并用两个独立 connection 的 retry/continue 竞争与 failure injection 证明只创建 retry attempt 且失败时完整回滚。
+- follow-up review 继续发现“跨过前置 blocked step”“reset 残留旧结果”“Store 未复核 blocked reason”三项细节；统一 retryable-state predicate 和完整 reset 后，多步骤顺序与持久化展示保持一致。
+- 最终窄复审把 blocked/pending retry 与 reconcile 的 partial reset 也合并到带状态 CAS 的统一 helper，并用 deterministic continue-first/retry-first + concurrent 三组证据覆盖调度顺序。
 - replay request `5050...` 只有 attempt `attempt_366f8c1f90d1449b83b272a0cbab50de` 和一组 work events；重复 turn 0 tools，new request `6060...` 创建独立 Step 2 attempt。
 - running attempt 重启后 blocked/pending、无 tool replay；ordinary continue 无新 row，explicit retry 恰好创建 attempt 2。
 - side-effect attempt waiting authorization 时目标 hash/content 不变、write/edit/shell 为 0；abort 后 cancelled、step pending、history retained。

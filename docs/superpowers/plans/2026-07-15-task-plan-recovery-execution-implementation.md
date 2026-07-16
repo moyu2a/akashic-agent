@@ -28,6 +28,7 @@
 - Runtime authorization comes from typed contracts and registry metadata, never serialized trace metadata or model arguments.
 - Request replay lookup precedes active-plan and step selection, including terminal/replaced plans.
 - Start/event/finish/defer mutations require current runtime owner and unexpired lease through atomic compare-and-set.
+- Retry and recovery reconciliation share one full step-reset helper. It clears stale result/tool/source-turn/timestamp/metadata fields only when the durable step is pending, in-progress, or failed; completed/skipped steps are never overwritten.
 - Every normal/error/cancel turn exit deterministically transitions or preserves the attempt; no active attempt may be stranded until restart recovery.
 - Existing manual update/complete/cancel/replace rejects a nonterminal execution attempt and directs the caller to abort first.
 - Default `[task_execution] enabled=false`; existing TaskPlan create/inspect/update must work unchanged.

@@ -970,11 +970,15 @@ LA-002 完成必须同时满足：
 
 ## 31. 2026-07-15 Task 10 验证结果
 
-最终复审自动化基线：LA-002 focused `189 passed in 9.70s`，compatibility `278 passed in 9.61s`；完整 pytest `1838 passed, 3 warnings in 49.91s`，规定的 compileall 与 `git diff --check` 均为 exit 0。注入式 finalizer 集成另有 `10 passed in 1.27s`。
+最终复审自动化基线：LA-002 focused `195 passed in 9.34s`，compatibility `278 passed in 9.18s`；完整 pytest `1844 passed, 3 warnings in 48.12s`，规定的 compileall 与 `git diff --check` 均为 exit 0。注入式 finalizer 集成另有 `10 passed in 1.27s`。
 
 最终审阅强化了 CLI user frame 的完整 key set 与 canonical UUID hex 断言。审阅提出的 abort owner/lease CAS 问题经权威设计复核后不成立：start/event/finish/defer 属于 runtime-owned mutation，显式 abort 则故意只依赖 session ownership，保证旧 owner 重启且 lease 过期后的 `waiting_authorization` 仍可取消；新增 recovery regression 固化了这一例外。
 
 整体 review 随后复现了 failed retry 的真实并发窗口：旧实现先经 TaskPlanService 独立提交 `failed -> pending`，再创建 retry attempt，期间 ordinary continue 可以把该 step 当作普通 pending claim。最终实现改为 Store 原子 retry claim：同一 `BEGIN IMMEDIATE` 内验证 exact latest failed/recovery-blocked attempt、必要时 reset step、插入 attempt 2 和 `attempt_claimed` event；normal claim 对 terminal latest 保持拒绝。两个独立 connection 的竞争测试覆盖 continue 先到和 retry 先到，failure injection 证明 reset、attempt 和 event 同步回滚。
+
+follow-up review 补齐了原子 claim 外的顺序与展示不变量：`begin_next_step()` 遇到最低序号 recovery-blocked pending step 立即要求显式 retry/skip，不再扫描并 claim 后续步骤；retry reset 清空旧 `result_summary/tool_names/source_turn_id/timestamps/metadata`；`is_retryable_attempt_state()` 作为 Service/Store 唯一判定，并在事务内复核 blocked reason，非 recovery block 不能通过 Store 直接 retry。
+
+最终窄复审发现 recovery-blocked pending retry 和 reconcile 仍可能绕过完整 reset。最终实现让 retry 与 reconcile 共用 `_reset_execution_step()`，并给 helper 增加 `pending/in_progress/failed` 状态 CAS，既清理 stale fields，又绝不覆盖 completed/skipped durable facts。测试同时保留并发连接竞争，并新增 continue-first、retry-first 两种确定性序列化断言。
 
 隔离真实模型 runtime 使用 PID `444596`，重启后 PID `445782`，socket `/tmp/akashic-task10-20260715.sock`、workspace `/tmp/akashic-task10-20260715/workspace`、SQLite `task_plans.db`、dashboard `127.0.0.1:2247`。原有 PID `372968`、`/tmp/akashic.sock` 和 `2236` 未被停止、替换或复用。
 

@@ -138,8 +138,10 @@ CapabilityScope
 - 同 raw request replay 只有一个 Step 1 attempt 和一组 work events；new-ID same-text 创建独立 Step 2 attempt。
 - controlled restart 得到 `runtime_restarted_outcome_unknown`，普通 continue 无新 row，显式 retry 只有 attempt 2。
 - side-effect target 未变化，write/edit/shell event 为 0，abort 后 history 保留。
-- 最终复审 Full pytest baseline `1838 passed, 3 warnings in 49.91s`；finalizer injected integration `10 passed`。
+- 最终复审 Full pytest baseline `1844 passed, 3 warnings in 48.12s`；finalizer injected integration `10 passed`。
 - 显式 retry 不能先通过 TaskPlanService 单独提交 failed -> pending；Store 必须在同一 `BEGIN IMMEDIATE` 中校验 exact latest failed/recovery-blocked attempt、重置 step、创建 attempt 和 claim event，普通 continue 只得到 terminal/active conflict。
+- 普通 continue 必须在最低序号 recovery-blocked pending step 处停止；retry reset 必须清除旧 step 结果字段；retryable blocked reason 使用 Service/Store 共享判定并在事务内复核。
+- retry 与 reconcile 必须调用同一完整 reset helper；helper 只对 pending/in_progress/failed CAS 生效，绝不能覆盖 completed/skipped durable step。
 
 影响与限制：
 
