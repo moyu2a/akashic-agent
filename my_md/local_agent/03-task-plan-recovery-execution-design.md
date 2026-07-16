@@ -997,3 +997,14 @@ follow-up review 补齐了原子 claim 外的顺序与展示不变量：`begin_n
 - replay turn `6` 安全地没有工具执行，但 provider 在 `tools=[]` 时输出了 literal DSML tool-call 文本，属于回答格式问题，不影响 request replay 状态。
 - defer 的 bounded terminal reason/event 已持久化 tool、argument hash 和 capability；专用 `requested_*` attempt columns 当前仍为空，需要在 P2 approval UI/协议接入前规范化。
 - LA-002 不实现授权批准后的 write/shell/external 执行，也不实现 diff、snapshot 或 rollback。
+
+## 32. 2026-07-16 最终独立服务器与 Session Smoke
+
+在最终 review 通过后，重新创建完全独立的 runtime，而不是复用 Task 10 数据：PID `508645`，重启 PID `509279`，socket `/tmp/akashic-la002-final-20260716.sock`，dashboard `127.0.0.1:2248`，workspace/SQLite `/tmp/akashic-la002-final-20260716/workspace`。用户 PID `372968`、`/tmp/akashic.sock`、2236 全程未被复用或发信号。
+
+- 新 session 创建两步计划；request `222...` 通过 `begin -> read_file -> finish` 完成 Step 1，exact duplicate request 暴露/执行 0 tools 且不增加 attempt/event；new request `333...` 完成 Step 2。
+- 第二个新 session 的 controlled running attempt `555...` 在重启后变为 `blocked/runtime_restarted_outcome_unknown`；ordinary continue `666...` 只返回 `blocked_step_requires_explicit_retry`，不建 row；explicit retry `777...` 只创建 attempt 2 并成功 finish。
+- 最终 SQLite 为 `3 succeeded / 1 blocked / 0 active`，成功 attempt 均有 `counts_as_work=1` 的 read-only event，write/edit/shell real event 为 0。Observe turns 1-6 均 `error=none`，执行 turn 持续 `LRU preloaded=[]`。
+- 隔离 PID、socket 和 2248 均已清理，用户 Agent 仍正常监听。
+
+新证据扩大了一个已知限制的范围：literal DSML 不仅出现在 replay final-only，也出现在 explicit retry 已成功 finish 后的 final-only reply。工具边界和 durable state 均正确，但 provider 输出归一化应作为通用 terminal/final-only adapter 问题治理，不能只做 replay 特判。

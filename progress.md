@@ -42,6 +42,19 @@
 - Final fresh post-review gates: focused `195 passed in 9.34s`; compatibility `278 passed in 9.18s`; full pytest `1844 passed, 3 warnings in 48.12s`; prescribed compileall exit `0`; `git diff --check` exit `0`. The warning set is unchanged: one `StarletteDeprecationWarning` and two `PytestRemovedIn10Warning` instances.
 - Final cleanup recheck: isolated PIDs `444596`/`445782` absent, `/tmp/akashic-task10-20260715.sock` absent, port `2247` free; protected PID `372968` still owns `/tmp/akashic.sock` and `0.0.0.0:2236`. No user, unknown, or reviewer process was signalled.
 
+## 2026-07-16 Independent Isolated Live Smoke
+
+- User requested a fresh autonomous server/session test after final review.
+- Reserved `/tmp/akashic-la002-final-20260716`, socket `/tmp/akashic-la002-final-20260716.sock`, dashboard `127.0.0.1:2248`, and a new IPC client/session identity. Existing PID `372968`, `/tmp/akashic.sock`, and `2236` remain protected.
+- Started isolated PID `508645`; startup recovery was 0. Fresh session `la002-final-live-20260716` created task `task_e05d0cbed69b4a04b19b1dbbff762d78` in 2 iterations.
+- Request `222...` executed `begin -> read_file -> finish` in 4 iterations and succeeded attempt `attempt_c430f47491db45389440c0b05a9a6448`. Replaying the exact request exposed zero tools, executed zero tools, and added no attempt/event. New request `333...` independently completed Step 2 as attempt `attempt_04d4cf95a6b643e780770b2c77439709`.
+- Stopped only isolated PID `508645`, created controlled running attempt `attempt_79f0a9209b6242c0aa84567d41d8e9a3` for a second fresh session, and restarted as PID `509279`. Startup recovery reconciled exactly one `runtime_restarted_outcome_unknown` attempt.
+- Ordinary continue request `666...` received `blocked_step_requires_explicit_retry` and created no attempt. Explicit retry `777...` created only attempt 2, `attempt_936941c533e84324b3d3c5499b400754`, and completed through `list_dir -> read_file -> finish`.
+- Final TaskPlan SQLite: `3 succeeded`, `1 blocked`, `0 active`, `0` real write/edit/shell events. Observe turns 1-6 all had `error=none`; all execution turns logged `LRU preloaded=[]`.
+- Provider output limitation reproduced twice: replay final-only and successful retry final-only returned literal DSML tool syntax despite zero post-boundary execution. State/idempotency remained correct, but the issue is general final-only reply normalization rather than replay-only formatting.
+- Stopped only isolated PID `509279`; both isolated PIDs are absent, socket removed, port `2248` free. Protected PID `372968` still owns `/tmp/akashic.sock` and `0.0.0.0:2236`.
+- Observe verification initially queried nonexistent `turn_id/request_text` columns; inspected `PRAGMA table_info(turns)` and reran with `id/user_msg`. This was a smoke-query error, not an Agent error.
+
 ## 2026-07-11
 
 - Read required planning and governance documents:

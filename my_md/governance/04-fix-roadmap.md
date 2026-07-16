@@ -307,6 +307,8 @@
 
 Task 10 最终复审结果：focused `195 passed`，compatibility `278 passed`，full `1844 passed, 3 warnings`；真实 replay/restart/defer/abort 通过，write/edit/shell 真实事件为 0；failed retry 与 ordinary continue 的竞争、前置 blocked 顺序、统一 recovery reset、durable terminal 防覆盖和 blocked reason 复核均已治理。下一阶段 `LA-003/P2` 先规范化 structured authorization request 和批准/拒绝协议，再由 P3 diff/snapshot/rollback 决定是否开放文件写入。
 
+2026-07-16 独立复测新增 `LA-004`：final-only literal DSML 已从 replay 特例扩大为通用 terminal provider formatting 问题。它不阻塞 LA-002 durable execution，但应在进入 LA-003 副作用批准前先实现 final-only reply normalization，避免用户误判 Agent 仍在执行工具。
+
 ## 暂不处理
 
 - 大规模重构 AgentLoop。

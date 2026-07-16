@@ -672,6 +672,7 @@ Task 10 证据：
 - side-effect attempt `attempt_4f8eaaab198c486394fee46632bb5097` 进入 waiting authorization；目标 SHA-256/content 不变，write/edit/shell event 为 0；abort 后 cancelled、step pending、history 保留。
 - finalizer 注入集成 `10 passed in 1.27s`；provider error 和 second bare-final 都没有留下 pending/running attempt。
 - 隔离 PID/socket/dashboard 清理后，用户 PID `372968`、`/tmp/akashic.sock`、`2236` 仍保持运行。
+- 2026-07-16 最终独立 smoke 使用新 PID `508645/509279`、新 socket、2248、新 workspace/SQLite 和两个新 session：happy path 两步均 succeeded；duplicate request `222...` 为 0 tools/0 new row；restart 将 attempt `555...` 变 blocked，ordinary continue `666...` 不建 attempt，explicit retry `777...` 只创建 attempt 2 并 succeeded。最终为 `3 succeeded / 1 blocked / 0 active / 0 side-effect events`，observe 6/6 `error=none`，清理后用户 Agent 未受影响。
 
 范围边界：LA-002 fixed 只表示 recovery foundation + controlled read-only execution 完成，不表示 write/shell/external 的授权批准与真实执行已实现。可持久追踪的自动化计数、turn、attempt、event 和 cleanup 摘要见 `my_md/local_agent/03-task-plan-recovery-execution-design.md` 第 31 节；`.superpowers/sdd/task-10-report.md` 仅作为本地 SDD 临时明细，不再作为仓库证据链接。
 
@@ -681,14 +682,26 @@ Task 10 证据：
 
 - defer 已在 bounded `terminal_reason` 和 `authorization_deferred.result_preview` 中持久化 tool name、redacted argument hash 和 capability。
 - attempt 表已有 `requested_tool_name`、`requested_arguments_json`、`requested_capabilities_json`，但 live defer 后三列仍为空。
-- replay turn `6` 在 `tools=[]` 时还出现过 provider literal DSML tool-call 文本；没有执行或状态变化，但用户可见格式不理想。
 
 影响与方向：
 
 - 当前 core deny/defer 安全边界成立，真实 write/edit/shell 仍为 0。
 - P2 approval UI/协议接入前，应把 redacted structured request 原子写入专用 columns，并定义 approve/deny、request ownership、过期、审计和恢复语义。
-- literal tool syntax 可在 final-only reply normalization 或 provider adapter 层治理，不能通过重新开放工具绕过 replay scope。
 - P3 diff/snapshot/rollback 完成前，不开放文件写入执行。
+
+### LA-004 final-only provider tool syntax normalization（open）
+
+现象：
+
+- provider 在 `tools=[]` 的 final-only reply 中可能输出 literal DSML tool-call 文本。
+- 2026-07-15 replay turn 已复现一次；2026-07-16 新隔离 smoke 在 duplicate replay（0 tools）和 explicit retry 已成功 finish 后均复现。
+- 两种情况下都没有额外工具执行、attempt/event 或状态变化，因此不是 execution boundary 失效，而是 terminal reply 用户可见格式错误。
+
+影响与方向：
+
+- 用户可能把伪工具语法误认为 Agent 仍在调用工具，降低完成状态可信度。
+- 应在通用 final-only reply normalization 或 provider adapter 层解析/拒绝 tool syntax，覆盖 replay、success、defer/blocked 等 terminal scope。
+- normalization 必须产出基于 durable snapshot 的确定性短回复，不能通过重新开放工具或重新进入 ReAct 解决。
 
 ## 测试误判
 

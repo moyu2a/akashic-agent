@@ -772,11 +772,12 @@ Result：
 - running attempt 重启后 blocked/pending、无 tool replay；ordinary continue 无新 row，explicit retry 恰好创建 attempt 2。
 - side-effect attempt waiting authorization 时目标 hash/content 不变、write/edit/shell 为 0；abort 后 cancelled、step pending、history retained。
 - 最终 live DB 为 4 succeeded、1 blocked、1 cancelled、0 active attempt；用户原 Agent PID/socket/port 全程保持运行。
+- 2026-07-16 又以完全新 PID/socket/port/workspace/SQLite 和两个 session 独立复测：happy/replay/new-ID/restart/ordinary-continue/explicit-retry 均保持同样状态不变量；最终 `3 succeeded / 1 blocked / 0 active / 0 side-effect events`，observe 6/6 无 error，隔离资源全部清理。
 
 限制：
 
 - 不能把结果表述为完整自主本地执行器；授权批准、拒绝、写入执行、diff 和 rollback 尚未实现。
-- defer 的 structured `requested_*` columns 尚为空；replay final-only 曾出现 provider literal DSML tool syntax，作为 LA-003/P2 与 provider formatting 后续项记录。
+- defer 的 structured `requested_*` columns 尚为空；literal DSML 已确认可发生于 replay final-only 和成功 retry final-only，应拆成通用 terminal reply normalization/provider formatting 后续项，而非 replay 特判。
 
 面试表达：
 

@@ -85,3 +85,17 @@ Final post-review gates: focused `195 passed in 9.34s`; compatibility `278 passe
 | `codex exec` rejected subcommand-local `-a never` | 1 | No review ran; place the approval policy before the `exec` subcommand for this CLI build. |
 | First read-only reviewer stayed idle without producing a final assessment | 1 | Terminated only owned reviewer PID `447772` after bounded wait; rerun with stdin explicitly closed and a bounded command timeout. |
 | Second reviewer inspected the diff but timed out before writing a final verdict | 1 | Preserve its requested-column scope question; run a smaller read-only review over a generated in-scope patch plus brief/report. |
+
+## 2026-07-16 Independent Isolated Live Smoke
+
+Goal: start a fresh isolated Agent and IPC session from the final LA-002 code, verify real-provider execution and replay behavior, then clean up only isolated resources.
+
+1. Create fresh config/workspace/socket/dashboard/client/session identities - complete
+2. Start isolated server and verify protected Agent isolation - complete
+3. Run create/continue/replay/new-request and restart/retry session flows - complete
+4. Validate logs and SQLite attempts/events - complete
+5. Stop isolated server, verify cleanup, and record measured evidence - complete
+
+Constraints: do not reuse or signal PID `372968`, `/tmp/akashic.sock`, port `2236`, or the prior Task 10 database/session; do not modify or stage user-owned dirty files.
+
+Result: fresh PIDs `508645/509279`, socket `/tmp/akashic-la002-final-20260716.sock`, dashboard `2248`, and two new sessions produced `3 succeeded / 1 blocked / 0 active` attempts. Duplicate request `222...` executed zero tools and added no row; restart blocked attempt `555...`, ordinary continue added no attempt, and explicit retry `777...` created only attempt 2. Six observe turns had no error. Final-only literal DSML appeared on replay and after successful retry, confirming a provider reply-normalization follow-up beyond replay-only scope.
