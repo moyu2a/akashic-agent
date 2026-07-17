@@ -52,10 +52,11 @@
 - Phase 6a-1：记忆评测集 schema 和第一批静态 fixture，定义 `off`、`phase1`、`phase2`、`phase3`、`phase4`、`phase5`、`all` 配置矩阵，以及 9 个覆盖 Phase 1-5 的离线 case；本阶段只做 loader、schema 校验和 fixture 校验，不运行 Agent，不调用 LLM，不写真实 memory DB。
 - Phase 6a-2：离线 eval runner 和 JSON report writer，读取同一批 fixture，按 `off`、单阶段 profile 和 `all` 跑 deterministic profile 对照，校验 required / forbidden trace、metric key、should recall / should-not recall；不启动 Agent，不调用 LLM/embedding，不写真实 memory DB 或 observe DB。
 - Phase 6b-1：真实 memory 数据只读采样器、真实样本到 EvalCase 的转换、unforced candidate 指标和 CLI 报告；严格使用 raw sqlite read-only + `PRAGMA query_only=ON`，不启动 Agent，不调用 LLM/embedding，不写真实 DB，报告默认不包含真实记忆正文。
+- Phase 6b-2：真实 `AgentLoop` dry-run，使用临时 workspace、真实 `SessionManager`、真实 `DefaultMemoryRetrievalPipeline`、真实 `EventBus` / `TurnCommitted`，但 LLM 是 fake provider，memory engine 是受控测试 engine；不调用真实 LLM/embedding，不写真实 workspace，不代表最终回答质量。
 
 后续还有 1 个主要子阶段：
 
-1. Phase 6：继续补真实 Agent dry-run、真实 LLM 小样本、答案级准确率指标、Dashboard 和 active 化决策。
+1. Phase 6：继续补真实 LLM 小样本、答案级准确率指标、Dashboard 和 active 化决策。
 
 trace 汇总报告是这些阶段的数据出口，不应替代上述实验方向。
 
@@ -133,6 +134,16 @@ Phase 6b-1 的验证结论：
 - 降级报告路径：`my_md/memory_optimization/eval_reports/memory_real_sample_eval.json` 和 `memory_real_sample_eval.md`。
 - 降级报告摘要：`sample_count = 0`、`memory_item_count = 0`、`missing_table_count = 1`、`profile_count = 0`、`trace_count = 0`、`sample_records = []`、`profile_records = []`、`label_forced_recall = False`、`llm_calls_enabled = False`、`answer_quality_available = False`。
 - 当前结论是“真实样本评测代码和报告链路已经具备；本机缺少真实 memory DB，所以还没有真实样本效果数据”。要得到真实数值，需要先提供或生成 `workspace/memory/memory2.db`。
+
+Phase 6b-2 的验证结论：
+
+- 新增 `memory2/eval_agent_dry_run.py`，通过真实 `AgentLoop.process_direct()` 跑 eval case。
+- 新增 `scripts/run_memory_agent_dry_run_eval.py`，输出 `memory_agent_dry_run_eval.json` 和 `.md`。
+- 本阶段使用 fake LLM 和受控 memory engine，只验证真实 turn pipeline 接线，不评估最终回答质量。
+- 本地 dry-run 跑完 9 个 fixture case：`case_count = 9`、`passed_case_count = 9`、`failed_case_count = 0`。
+- 集成指标：`agent_turn_count = 9`、`retrieval_request_count = 9`、`fake_llm_call_count = 9`、`turn_committed_count = 9`、`session_message_count = 18`。
+- 隐私边界：`raw_query_included = False`、`raw_memory_summary_included = False`、`prompt_included = False`、`session_text_included = False`。
+- 报告路径：`my_md/memory_optimization/eval_reports/memory_agent_dry_run_eval.json` 和 `memory_agent_dry_run_eval.md`。
 
 ## 实验扩展原则
 

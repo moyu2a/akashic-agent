@@ -428,7 +428,8 @@ Phase 5   已完成第一版：离线睡眠巩固 shadow dry-run
 Phase 6a-1 已完成第一版：评测集 schema 和 9 个静态 fixture
 Phase 6a-2 已完成第一版：离线 eval runner 和 JSON report
 Phase 6b-1 已完成第一版：真实 memory 只读采样、真实样本 EvalCase 转换、unforced candidate 指标和报告 CLI
-Phase 6   待做：真实 Agent dry-run、真实 LLM 小样本、答案级指标、Dashboard 和 active 化决策
+Phase 6b-2 已完成第一版：真实 AgentLoop dry-run，fake LLM，临时 workspace
+Phase 6   待做：真实 LLM 小样本、答案级指标、Dashboard 和 active 化决策
 ```
 
 后续计划按 6 个主要步骤推进。trace 汇总报告属于数据出口和验证手段，不单独替代某个 memory 能力阶段。
@@ -694,10 +695,51 @@ Phase 6b-1 验证结论：
 
 Phase 6 后续建议拆分：
 
-1. Phase 6b-2：真实 Agent dry-run，使用 fake LLM 和临时 workspace 验证评测链路能穿过真实 Agent 组件，但仍不消费真实 LLM token。
-2. Phase 6b-3：真实 LLM 小样本评测，在显式开关开启后记录 token、费用、延迟、答案使用记忆情况和 source support。
-3. Phase 6c：把 eval report 接入 Dashboard 或 observe 查询界面。
-4. Phase 6d：基于连续评测结果决定哪些策略可以从 shadow 切到 active。
+Phase 6b-2 已完成第一版：真实 AgentLoop dry-run。
+
+- 新增 `memory2/eval_agent_dry_run.py`，构造真实 `AgentLoop`、真实 `SessionManager`、真实 `DefaultMemoryRetrievalPipeline`、真实 `EventBus` 和受控 fake LLM / memory engine。
+- 新增 `scripts/run_memory_agent_dry_run_eval.py`，读取 Phase 6a fixture，写出 `memory_agent_dry_run_eval.json` 和 `.md`。
+- 每个 case 通过 `AgentLoop.process_direct()` 进入真实被动 turn pipeline。
+- dry-run 会检查 retrieval request 的 query、scope 和 history 字段，并观察 `TurnCommitted`。
+- 所有 session 写入只发生在显式传入的临时 workspace。
+- 报告默认不包含 raw query、memory summary、prompt、session text 或 fake LLM response。
+
+Phase 6b-2 可输出的数据：
+
+- `agent_loop_enabled`
+- `fake_llm_enabled`
+- `llm_calls_enabled`
+- `embedding_calls_enabled`
+- `answer_quality_available`
+- `case_count`
+- `passed_case_count`
+- `failed_case_count`
+- `agent_turn_count`
+- `retrieval_request_count`
+- `fake_llm_call_count`
+- `turn_committed_count`
+- `session_message_count`
+- `retrieval_query_matched`
+- `retrieval_history_seen`
+- `raw_query_included`
+- `raw_memory_summary_included`
+- `prompt_included`
+- `session_text_included`
+
+Phase 6b-2 验证结论：
+
+- harness tests：`3 passed`。
+- CLI tests：`2 passed`。
+- 本地 CLI dry-run：9 个 fixture case 全部通过。
+- dry-run report：`case_count = 9`、`passed_case_count = 9`、`failed_case_count = 0`。
+- 集成指标：`agent_turn_count = 9`、`retrieval_request_count = 9`、`fake_llm_call_count = 9`、`turn_committed_count = 9`、`session_message_count = 18`。
+- 当前结论是“评测集已经能穿过真实 Agent turn pipeline”。它仍然不代表真实 LLM 回答质量、真实召回准确率、source support 或 token 成本。
+
+后续建议拆分：
+
+1. Phase 6b-3：真实 LLM 小样本评测，在显式开关开启后记录 token、费用、延迟、答案使用记忆情况和 source support。
+2. Phase 6c：把 eval report 接入 Dashboard 或 observe 查询界面。
+3. Phase 6d：基于连续评测结果决定哪些策略可以从 shadow 切到 active。
 
 ## 面试表达
 

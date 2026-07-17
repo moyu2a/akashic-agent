@@ -468,6 +468,61 @@ answer_quality_available = false
 
 当前能得出的结论是：真实样本评测代码和报告链路已经具备；本机缺少真实 memory DB，所以还没有真实样本效果数据。要得到真实数值，需要先提供或生成 `workspace/memory/memory2.db`。
 
+### Phase 6b-2 已建立的 Agent dry-run 链路
+
+Phase 6b-2 把 Phase 6a fixture 接入真实 `AgentLoop.process_direct()`，用于验证 eval case 能否穿过真实被动 turn pipeline。它比 Phase 6a-2 更接近真实运行链路，但仍然不是线上 Agent 评测。
+
+第一版实现边界：
+
+- 使用真实 `AgentLoop`。
+- 使用真实 `SessionManager`，但只写入显式传入的临时 workspace。
+- 使用真实 `DefaultMemoryRetrievalPipeline`，把 case query、session scope 和 history 转换成 `MemoryEngineRetrieveRequest`。
+- 使用真实 `EventBus`，观察 `TurnCommitted`。
+- LLM 使用 fake provider，固定返回 deterministic response。
+- memory engine 使用受控测试 engine，只返回 memory id，不返回真实 summary。
+- 不启动 `main.py`、IPC、Dashboard 或任何长驻服务。
+- 不调用真实 LLM、embedding、网络或外部服务。
+- 不写真实 `workspace/memory/memory2.db`、`workspace/sessions.db` 或 `workspace/observe/observe.db`。
+
+当前 Phase 6b-2 可输出的集成指标：
+
+- `agent_loop_enabled`：是否经过真实 `AgentLoop`。
+- `fake_llm_enabled`：是否使用 fake LLM。
+- `llm_calls_enabled`：固定为 `false`，表示没有真实 LLM 调用。
+- `embedding_calls_enabled`：固定为 `false`。
+- `answer_quality_available`：固定为 `false`，表示不评估最终回答质量。
+- `case_count`：dry-run case 数量。
+- `passed_case_count` / `failed_case_count`：通过和失败 case 数量。
+- `agent_turn_count`：真实 Agent turn 数量。
+- `retrieval_request_count`：进入 memory retrieval pipeline 的请求数量。
+- `fake_llm_call_count`：fake provider 被调用次数。
+- `turn_committed_count`：观察到的 `TurnCommitted` 数量。
+- `session_message_count`：临时 session 中写入的消息数量。
+- `retrieval_query_matched`：检索请求 query 是否来自当前 case。
+- `retrieval_history_seen`：检索请求是否带 history 字段。
+
+隐私和正文输出边界：
+
+- `raw_query_included = false`
+- `raw_memory_summary_included = false`
+- `prompt_included = false`
+- `session_text_included = false`
+
+本轮本地 dry-run 结果：
+
+```text
+case_count = 9
+passed_case_count = 9
+failed_case_count = 0
+agent_turn_count = 9
+retrieval_request_count = 9
+fake_llm_call_count = 9
+turn_committed_count = 9
+session_message_count = 18
+```
+
+当前能得出的结论是：评测集已经能穿过真实 Agent turn pipeline，并能观察到检索请求、会话写入和 `TurnCommitted`。但由于 LLM 是 fake provider，memory engine 是受控测试 engine，它仍然不能说明真实回答质量、真实召回准确率、source support 或 token 成本。
+
 ## 指标优先级
 
 ### P-1：实验对照输出
@@ -555,6 +610,7 @@ Phase 0 首个落地点是 `write_value_score` shadow trace。它先记录显式
 | Phase 6a-1 | 评测集 schema 和静态 fixture | `phase_targets`、`config_profiles`、`should_recall_ids`、`should_not_recall_ids`、`expected_trace_features`、`expected_metric_keys`、`profile_expectations` |
 | Phase 6a-2 | 离线 runner 和 profile 对照报告 | `case_count`、`profile_count`、`passed_case_count`、`failed_case_count`、`failed_profile_count`、`trace_count`、`trace_count_by_feature`、`profile_pass_rate` |
 | Phase 6b-1 | 真实 memory 只读采样和候选指标 | `sample_count`、`memory_item_count`、`replacement_count`、`category_counts`、`labelled_contract_pass_rate`、`candidate_hit_rate_without_label_forcing`、`candidate_wrong_scope_count`、`candidate_labelled_wrong_scope_count`、`sample_records`、`profile_records`、`candidate_records`、`failure_records`、`invalid_extra_json_count`、`missing_scope_count`、`missing_table_count` |
+| Phase 6b-2 | 真实 AgentLoop dry-run | `agent_loop_enabled`、`fake_llm_enabled`、`llm_calls_enabled`、`embedding_calls_enabled`、`answer_quality_available`、`agent_turn_count`、`retrieval_request_count`、`fake_llm_call_count`、`turn_committed_count`、`session_message_count`、`retrieval_query_matched`、`retrieval_history_seen` |
 | Phase 6 后续 | 答案级评测、Dashboard 和 active 化决策 | `recall_at_k`、`precision_at_k`、`wrong_recall_rate`、`memory_pollution_rate`、`compression_ratio`、`source_support_rate` |
 
 其中 Phase 1b 到 Phase 5 默认仍然是 shadow 或 dry-run。只有 Phase 6 的评测数据稳定后，才讨论把某些策略切到 active。
