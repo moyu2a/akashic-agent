@@ -425,7 +425,10 @@ Phase 3b  已完成：注入治理 shadow
 Phase 4a  已完成：因果一致性版本链 shadow
 Phase 4b  已完成：层级化溯源 shadow
 Phase 5   已完成第一版：离线睡眠巩固 shadow dry-run
-Phase 6   待做：评测集、Dashboard 和 active 化决策
+Phase 6a-1 已完成第一版：评测集 schema 和 9 个静态 fixture
+Phase 6a-2 已完成第一版：离线 eval runner 和 JSON report
+Phase 6b-1 已完成第一版：真实 memory 只读采样、真实样本 EvalCase 转换、unforced candidate 指标和报告 CLI
+Phase 6   待做：真实 Agent dry-run、真实 LLM 小样本、答案级指标、Dashboard 和 active 化决策
 ```
 
 后续计划按 6 个主要步骤推进。trace 汇总报告属于数据出口和验证手段，不单独替代某个 memory 能力阶段。
@@ -593,6 +596,108 @@ Phase 5 验证结论：
 - 固定 memory eval。
 - 展示 baseline / experimental 对照。
 - 输出准确率、召回率、污染率、压缩率、回源成功率。
+
+Phase 6a-1 已完成第一版：评测集 schema 和静态 fixture。
+
+- 新增 `memory2/eval_cases.py`，包含 `EvalCase`、`load_eval_case()`、`load_eval_cases()` 和 `validate_eval_case_payload()`。
+- 固定 `EVAL_PHASE_TARGETS`：`phase1`、`phase2a`、`phase2b`、`phase3a`、`phase3b`、`phase4a`、`phase4b`、`phase5`。
+- 固定 `EVAL_CONFIG_PROFILES`：`off`、`phase1`、`phase2`、`phase3`、`phase4`、`phase5`、`all`。
+- 新增 `EVAL_CONFIG_MATRIX`，把 profile 映射到真实 `memory_experiments` 配置开关，后续 runner 可以基于同一个 case 跑关闭、单阶段开启和全量开启对照。
+- 新增 `tests/fixtures/memory_eval_cases/`，第一批 9 个 case 覆盖偏好召回、临时信息污染、重复记忆、冲突记忆、图谱模糊召回、注入治理、跨 scope 隔离、过期记忆睡眠巩固和层级溯源。
+- 新增 schema / fixture 校验测试，确保 case id 与文件名一致、phase target 与 profile 对应、期望召回 id 能在 setup 中找到、指标字段挂在已声明 trace feature 上。
+
+当前 Phase 6a-1 不做这些事：
+
+- 不实现 eval runner。
+- 不启动 Agent。
+- 不调用 LLM 或 embedding。
+- 不写真实 memory DB。
+- 不生成正式 eval report。
+- 不改变真实写入、真实召回、真实 `recall_memory` 工具结果和 prompt 注入。
+
+Phase 6a-1 验证结论：
+
+- focused suite：`14 passed`。
+- 当前结论是“评测 schema 和 fixture 可以稳定加载和校验”。真正的 off/on A/B 指标要等后续 runner 把同一批 case 跑过 `EVAL_CONFIG_MATRIX` 后才能产出。
+
+Phase 6a-2 已完成第一版：离线 eval runner 和 JSON report。
+
+- 新增 `memory2/eval_runner.py`，包含 `EvalTrace`、`EvalProfileResult`、`EvalCaseResult`、`EvalRunReport`。
+- 新增 `run_eval_case()`、`run_eval_cases()`、`run_eval_case_files()` 和 `write_eval_report()`。
+- runner 只消费 fixture 和已有 shadow 纯函数，不启动 Agent，不调用 LLM，不调用 embedding，不写真实 memory DB，也不写 observe DB。
+- `off` profile 不产生 trace；单阶段 profile 和 `all` profile 只运行当前 case 声明过的 trace，避免无关 trace 噪音。
+- runner 校验 required / forbidden trace、profile metric key、全局 expected metric key、应召回 id、不应召回 / 不应注入 id。
+- `tri_retrieval`、`graph_retrieval`、`injection_governance_shadow` 的输出会归一化到 `EvalTrace.metrics`，让 fixture 可以统一校验指标字段。
+- `sleep_consolidation_shadow` 使用固定时间并归一化 `job_latency_ms`，保证离线 report 可重复。
+
+Phase 6a-2 验证结论：
+
+- focused suite：`21 passed`。
+- fixture 全量 report：`case_count = 9`、`profile_count = 30`、`passed_case_count = 9`、`failed_case_count = 0`、`failed_profile_count = 0`、`trace_count = 30`、`profile_pass_rate = 1.0`。
+- 当前结论是“Phase 1-5 的 shadow trace 已经能在同一批离线 fixture 上做 off/on 对照”。这还不是生产准确率评测，也不能替代答案级 `recall_at_k`、`precision_at_k`、answer grounding 或 source support。
+
+Phase 6b-1 已完成第一版：真实 memory 只读采样和真实样本报告。
+
+- 新增 `memory2/eval_real_samples.py`，使用 raw sqlite read-only 连接读取真实 `workspace/memory/memory2.db`，并启用 `PRAGMA query_only=ON`。
+- 不实例化 `MemoryStore2` 或 `SessionStore`，避免真实 DB 在评测过程中被初始化、迁移或写入。
+- 采样 preference、procedure、cross_scope、version_chain 类真实 memory 样本，并转换成 Phase 6a-2 runner 可消费的 `EvalCase`。
+- 新增 `memory2/eval_real_candidates.py`，计算 unforced candidate 指标，不把 `should_recall_ids` 强制注入候选结果。
+- 新增 `memory2/eval_real_report.py` 和 `scripts/run_memory_real_sample_eval.py`，输出 `memory_real_sample_eval.json` 和 `memory_real_sample_eval.md`。
+- 报告默认不包含真实 memory summary 或 session 原文，只输出 id、类别、scope、指标和失败原因。
+
+Phase 6b-1 可输出的数据：
+
+- `sample_count`
+- `memory_item_count`
+- `replacement_count`
+- `category_counts`
+- `labelled_contract_pass_rate`
+- `labelled_should_not_violation_count`
+- `candidate_hit_rate_without_label_forcing`
+- `candidate_wrong_scope_count`
+- `candidate_labelled_wrong_scope_count`
+- `candidate_count_by_category`
+- `sample_records`
+- `profile_records`
+- `candidate_records`
+- `failure_records`
+- `invalid_extra_json_count`
+- `missing_scope_count`
+- `missing_table_count`
+- `cross_scope_sample_unavailable`
+
+Phase 6b-1 不做这些事：
+
+- 不启动 Agent。
+- 不调用 LLM。
+- 不调用 embedding。
+- 不写真实 memory DB、session DB 或 observe DB。
+- 不统计最终回答质量、answer grounding 或 source support。
+
+Phase 6b-1 验证结论：
+
+- 初版 focused Phase6b suite：`16 passed`。
+- 初版 Phase6a + Phase6b focused suite：`37 passed`。
+- 本机实跑时当前工作区和主仓库都没有 `workspace/memory/memory2.db`，CLI 按预期生成降级报告并返回 exit code 1。
+- 降级报告路径：`my_md/memory_optimization/eval_reports/memory_real_sample_eval.json` 和 `memory_real_sample_eval.md`。
+- 降级报告摘要：`sample_count = 0`、`memory_item_count = 0`、`replacement_count = 0`、`missing_table_count = 1`、`cross_scope_sample_unavailable = 1`、`profile_count = 0`、`trace_count = 0`、`label_forced_recall = false`、`llm_calls_enabled = false`、`answer_quality_available = false`。
+- 当前结论是“真实样本评测代码和报告链路已经具备；本机缺少真实 memory DB，所以还没有真实样本效果数据”。
+
+审阅后修订：
+
+- 报告已增加脱敏审计明细：`sample_records`、`profile_records`、`candidate_records`、`failure_records`。
+- `cross_scope_sample_unavailable` 和 `version_chain_sample_unavailable` 改为按真实数据是否具备可采样对象计算，不再因为 `--limit-per-category 0` 误报 unavailable。
+- `candidate_wrong_scope_count` 统计所有跨 scope 候选数量，`candidate_labelled_wrong_scope_count` 单独统计跨 scope 候选命中 `should_not_recall_ids` 的数量。
+- 有真实 DB 且显式 `--limit-per-category 0` 时，CLI 作为 dry-run 返回 0；缺少真实 DB 时仍返回 1。
+- 修订后 focused Phase6b suite：`19 passed`。
+- 修订后 Phase6a + Phase6b focused suite：`40 passed`。
+
+Phase 6 后续建议拆分：
+
+1. Phase 6b-2：真实 Agent dry-run，使用 fake LLM 和临时 workspace 验证评测链路能穿过真实 Agent 组件，但仍不消费真实 LLM token。
+2. Phase 6b-3：真实 LLM 小样本评测，在显式开关开启后记录 token、费用、延迟、答案使用记忆情况和 source support。
+3. Phase 6c：把 eval report 接入 Dashboard 或 observe 查询界面。
+4. Phase 6d：基于连续评测结果决定哪些策略可以从 shadow 切到 active。
 
 ## 面试表达
 

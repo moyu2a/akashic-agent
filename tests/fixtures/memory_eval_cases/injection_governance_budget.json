@@ -1,0 +1,75 @@
+{
+  "id": "injection_governance_budget",
+  "title": "Injection governance should expose budget and drop decisions",
+  "category": "injection_governance",
+  "phase_targets": ["phase3a", "phase3b"],
+  "config_profiles": ["off", "phase3", "all"],
+  "setup": {
+    "scope": {"session_key": "cli:local", "channel": "cli", "chat_id": "local"},
+    "memory_items": [
+      {
+        "id": "m_rule",
+        "memory_type": "procedure",
+        "summary": "回答代码问题时优先给出可运行测试",
+        "status": "active",
+        "source_ref": "cli:local@post_response",
+        "scope_channel": "cli",
+        "scope_chat_id": "local",
+        "score": 0.91
+      },
+      {
+        "id": "m_low_conf",
+        "memory_type": "event",
+        "summary": "用户曾经临时提到一个很长的低置信背景，需要谨慎注入",
+        "status": "active",
+        "source_ref": "",
+        "scope_channel": "cli",
+        "scope_chat_id": "local",
+        "score": 0.21
+      }
+    ],
+    "query": "帮我设计测试方案。"
+  },
+  "expectations": {
+    "should_recall_ids": ["m_rule"],
+    "should_not_recall_ids": ["m_low_conf"],
+    "expected_trace_features": [
+      "rerank_shadow",
+      "injection_governance_shadow"
+    ],
+    "expected_metric_keys": {
+      "rerank_shadow": ["rerank_changed_count"],
+      "injection_governance_shadow": [
+        "prompt_token_delta",
+        "dropped_by_reason"
+      ]
+    },
+    "profile_expectations": {
+      "off": {
+        "forbidden_trace_features": [
+          "rerank_shadow",
+          "injection_governance_shadow"
+        ]
+      },
+      "phase3": {
+        "required_trace_features": [
+          "rerank_shadow",
+          "injection_governance_shadow"
+        ],
+        "metric_keys": {
+          "rerank_shadow": ["rerank_changed_count"],
+          "injection_governance_shadow": [
+            "prompt_token_delta",
+            "dropped_by_reason"
+          ]
+        }
+      },
+      "all": {
+        "required_trace_features": [
+          "rerank_shadow",
+          "injection_governance_shadow"
+        ]
+      }
+    }
+  }
+}
