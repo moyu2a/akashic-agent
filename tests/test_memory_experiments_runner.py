@@ -172,6 +172,95 @@ def test_record_graph_retrieval_shadow_writes_trace(tmp_path: Path) -> None:
     assert row["experimental_result"]["graph_fused_ids"] == ["m1", "m2"]
 
 
+def test_record_rerank_shadow_writes_trace(tmp_path: Path) -> None:
+    trace_path = tmp_path / "observe" / "memory_experiments.jsonl"
+    runner = MemoryExperimentRunner(
+        workspace=tmp_path,
+        config=MemoryExperimentsConfig(
+            enabled=True,
+            mode="shadow",
+            trace_path=str(trace_path),
+        ),
+    )
+
+    runner.record_rerank_shadow(
+        session_key="cli:local",
+        turn_id="cli:local@retrieve",
+        baseline_result={"baseline_ids": ["m1"]},
+        experimental_result={"reranked_ids": ["m2", "m1"]},
+        metrics={"rerank_changed_count": 2},
+    )
+
+    row = _read_jsonl(trace_path)[0]
+    assert row["feature_name"] == "rerank_shadow"
+    assert row["experimental_result"]["reranked_ids"] == ["m2", "m1"]
+    assert row["metrics_json"]["rerank_changed_count"] == 2
+
+
+def test_record_injection_governance_shadow_writes_trace(tmp_path: Path) -> None:
+    trace_path = tmp_path / "observe" / "memory_experiments.jsonl"
+    runner = MemoryExperimentRunner(
+        workspace=tmp_path,
+        config=MemoryExperimentsConfig(
+            enabled=True,
+            mode="shadow",
+            trace_path=str(trace_path),
+        ),
+    )
+
+    runner.record_injection_governance_shadow(
+        session_key="cli:local",
+        turn_id="cli:local@retrieve",
+        baseline_result={"baseline_injected_ids": ["m1"]},
+        experimental_result={"experimental_injected_ids": ["m2"]},
+        metrics={"prompt_token_delta": -12},
+    )
+
+    row = _read_jsonl(trace_path)[0]
+    assert row["feature_name"] == "injection_governance_shadow"
+    assert row["experimental_result"]["experimental_injected_ids"] == ["m2"]
+    assert row["metrics_json"]["prompt_token_delta"] == -12
+
+
+def test_record_version_chain_shadow_writes_trace(tmp_path: Path) -> None:
+    runner = MemoryExperimentRunner(
+        workspace=tmp_path,
+        config=MemoryExperimentsConfig(enabled=True, mode="shadow"),
+    )
+
+    runner.record_version_chain_shadow(
+        session_key="cli:local",
+        turn_id="cli:local@retrieve",
+        baseline_result={"baseline_recalled_ids": ["old"]},
+        experimental_result={"chain_count": 1, "active_leaf_ids": ["new"]},
+        metrics={"stale_recalled_count": 1, "max_chain_depth": 2},
+    )
+
+    row = _read_jsonl(tmp_path / "observe" / "memory_experiments.jsonl")[0]
+    assert row["feature_name"] == "version_chain_shadow"
+    assert row["experimental_result"]["active_leaf_ids"] == ["new"]
+    assert row["metrics_json"]["stale_recalled_count"] == 1
+
+
+def test_record_provenance_shadow_writes_trace(tmp_path: Path) -> None:
+    runner = MemoryExperimentRunner(
+        workspace=tmp_path,
+        config=MemoryExperimentsConfig(enabled=True, mode="shadow"),
+    )
+
+    runner.record_provenance_shadow(
+        session_key="cli:local",
+        turn_id="cli:local@retrieve",
+        baseline_result={"baseline_recalled_ids": ["m1"]},
+        experimental_result={"parsed_source_refs": [{"item_id": "m1"}]},
+        metrics={"source_ref_coverage": 1.0, "parse_success_rate": 1.0},
+    )
+
+    row = _read_jsonl(tmp_path / "observe" / "memory_experiments.jsonl")[0]
+    assert row["feature_name"] == "provenance_shadow"
+    assert row["metrics_json"]["source_ref_coverage"] == 1.0
+
+
 def test_score_write_candidate_shadow_rejects_temporary_text() -> None:
     result = score_write_candidate_shadow("临时测试变量 value-a-012，不要写入长期记忆")
 

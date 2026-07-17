@@ -353,8 +353,8 @@ Phase 0 首个落地点是 `write_value_score` shadow trace。它先记录显式
 | Phase 1b | 信息熵 / 新颖度 / 重复度评分 | `entropy_score`、`novelty_score`、`duplicate_risk_score`、`similar_memory_count`、`nearest_memory_ids`、`write_reduction_rate` |
 | Phase 2a | 三路召回 + RRF shadow | `semantic_hit_count`、`keyword_hit_count`、`provenance_hit_count`、`fused_hit_count`、`semantic_ids`、`keyword_ids`、`provenance_ids`、`fused_ids`、`lane_contribution`、`lane_count`、`rerank_changed_count`、`baseline_experimental_overlap_rate`、`rrf_score_distribution`、`source_ref_coverage`、`retrieval_latency_ms`、`rrf_weights` |
 | Phase 2b | NetworkX 实体图谱召回 | `graph_hit_count`、`graph_ids`、`graph_fused_ids`、`graph_path_count`、`avg_graph_path_length`、`entity_match_count`、`graph_lane_contribution`、`graph_score_distribution`、`retrieval_latency_ms`、`baseline_graph_overlap_rate` |
-| Phase 3 | 召回重排和注入治理 | `raw_rank`、`experimental_rank`、`rank_delta`、`drop_reason`、`baseline_injected`、`experimental_injected`、`prompt_token_delta` |
-| Phase 4 | 因果一致性版本链和层级化溯源 | `chain_count`、`avg_chain_depth`、`rollback_candidates`、`stale_recalled_count`、`source_ref_coverage`、`fetch_success_rate` |
+| Phase 3 | 召回重排和注入治理 | `raw_rank`、`experimental_rank`、`rank_delta`、`score_breakdown`、`rerank_changed_count`、`baseline_experimental_overlap_rate`、`drop_reason`、`inject_reason`、`baseline_injected_ids`、`experimental_injected_ids`、`prompt_token_delta` |
+| Phase 4 | 因果一致性版本链和层级化溯源 | `replacement_count`、`chain_count`、`avg_chain_depth`、`max_chain_depth`、`active_leaf_count`、`stale_recalled_count`、`superseded_recalled_count`、`rollback_candidate_count`、`conflict_chain_count`、`orphan_replacement_count`、`source_ref_coverage`、`parse_success_rate`、`source_ref_parse_success_rate`、`session_level_source_count`、`message_level_source_count`、`span_level_source_count`、`malformed_source_ref_count`、`orphan_memory_count`、`cross_scope_memory_count`、`cross_scope_risk_count` |
 | Phase 5 | 离线异步睡眠巩固 | `duplicate_group_count`、`merge_candidate_count`、`stale_candidate_count`、`conflict_candidate_count`、`estimated_token_saving`、`job_latency_ms` |
 | Phase 6 | 评测集、Dashboard 和 active 化决策 | `recall_at_k`、`precision_at_k`、`wrong_recall_rate`、`memory_pollution_rate`、`compression_ratio`、`source_support_rate` |
 
@@ -377,6 +377,19 @@ Phase 1b 已补充写入候选和已有 active 记忆的只读对比。当前实
 这些字段仍然只用于 shadow 实验，不影响真实 `memorize` 写入。本轮真实写入产生的 `item_id` 会从已有记忆快照里排除，避免候选和自己匹配导致重复风险失真。
 
 当前 `entropy_score` 和 `novelty_score` 都来自“候选和已有记忆最大词元重叠相似度”的近似计算，可先用于实验对比，不等价于真正的信息论熵。`nearest_memory_ids` 只记录达到高相似阈值的近邻 id，用于解释重复风险；低相似候选不会进入该列表。`existing_memory_count` / `existing_memory_snapshot_count` 表示本次 shadow scoring 实际读取并参与比较的 active 记忆快照数量，不代表库中全部 active 记忆总数。
+
+Phase 4a/4b 已补充版本链和层级溯源 shadow 指标：
+
+- `stale_recalled_count > 0` 表示 baseline 可能召回了已经被替换的旧记忆。
+- `conflict_chain_count > 0` 表示同一 replacement 图存在多个 active 叶子，后续 active 化前必须审查。
+- `rollback_candidate_count` 表示当前 active leaf 背后可以回退的旧版本数量。
+- `source_ref_coverage` 越低，说明记忆可解释性越差。
+- `parse_success_rate` / `source_ref_parse_success_rate` 衡量现有 `source_ref` 是否能解析成 session/message/span 层级。
+- `orphan_memory_count` 表示缺少来源的记忆数量。
+- `cross_scope_memory_count` 表示扫描快照里存在其他 channel/chat 的来源。
+- `cross_scope_risk_count` 表示当前会话真实召回项可能混入其他 channel/chat 的来源。
+
+当前 Phase 4b 不执行真实 `fetch_messages` 回源，所以 `fetch_success_rate`、`evidence_precision`、`source_support_rate` 仍然不能由本阶段 trace 直接给出，需要后续回源评测或标注集。
 
 Phase 1b 的测试结论：
 
@@ -439,6 +452,36 @@ Phase 2b 的测试结论：
 - broader memory experiment suite：`77 passed`。
 - `compileall`：通过。
 - `git diff --check`：通过。
+
+## Phase 3 可输出的指标
+
+### 召回重排
+
+- `baseline_ids`
+- `reranked_ids`
+- `raw_rank`
+- `experimental_rank`
+- `rank_delta`
+- `score_breakdown`
+- `rerank_changed_count`
+- `baseline_experimental_overlap_rate`
+- `avg_experimental_score`
+- `scope_match_count`
+- `source_ref_count`
+
+### 注入治理
+
+- `baseline_injected_ids`
+- `baseline_injected_count`
+- `experimental_injected_ids`
+- `experimental_injected_count`
+- `drop_reasons`
+- `inject_reasons`
+- `prompt_token_delta`
+- `low_confidence_injected_count`
+- `dropped_count`
+- `newly_injected_count`
+- `removed_from_injection_count`
 
 ### P0：直接建立基线
 

@@ -44,13 +44,15 @@
 - Phase 1b：候选记忆和已有 active 记忆的只读对比，输出信息熵、新颖度、重复风险和写入减少率。
 - Phase 2a：三路召回 + RRF 融合 shadow，记录语义、关键词、溯源三路候选和实验融合结果，不改变真实召回和 prompt 注入。
 - Phase 2b：NetworkX 实体图谱 graph shadow，记录 graph lane、graph-augmented RRF 融合结果和图谱路径指标，不改变真实召回和 prompt 注入。
+- Phase 3a：召回质量重排 shadow，记录 rerank 后的候选顺序、分数拆解和名次变化，不改变真实召回和 prompt 注入。
+- Phase 3b：注入治理 shadow，记录 baseline 与 experimental 的注入差异、丢弃原因和 prompt 预算变化，不改变真实召回和 prompt 注入。
+- Phase 4a：因果一致性版本链 shadow，基于 `memory_items.status`、`memory_replacements` 和本轮 baseline recalled items 构建 replacement-only 版本链，记录旧版本误召回、当前叶子、冲突链和回滚候选，不改变真实召回和 prompt 注入。
+- Phase 4b：层级化溯源 shadow，解析现有 `source_ref` 和 scope 字段，记录来源覆盖、解析成功率、孤儿记忆、扫描级跨 scope 数量和本轮召回级跨 scope 风险；第一版不执行真实 `fetch_messages` 回源。
 
-后续还有 4 个主要子阶段：
+后续还有 2 个主要子阶段：
 
-1. Phase 3：召回重排和注入治理。
-2. Phase 4：因果一致性版本链和层级化溯源。
-3. Phase 5：离线异步睡眠巩固。
-4. Phase 6：评测集、Dashboard 和 active 化决策。
+1. Phase 5：离线异步睡眠巩固。
+2. Phase 6：评测集、Dashboard 和 active 化决策。
 
 trace 汇总报告是这些阶段的数据出口，不应替代上述实验方向。
 
@@ -75,6 +77,22 @@ Phase 2b 的验证结论：
 - broader memory experiment suite：`77 passed`。
 - `compileall`：通过。
 - `git diff --check`：通过。
+
+Phase 3a/3b 的验证结论：
+
+- focused rerank / injection tests：通过。
+- engine contract 回归：通过。
+- full pytest：`1915 passed, 3 skipped, 3 warnings`。
+- `compileall` 和 `git diff --check`：通过。
+
+Phase 4a/4b 的验证结论：
+
+- focused Phase 4 suite：`45 passed`。
+- 版本链纯函数、溯源纯函数、实验 trace writer 和 engine contract 回归均通过。
+- 仍然是 shadow-only，不改变真实写入、真实召回、真实 `recall_memory` 工具结果和 prompt 注入。
+- broader memory suite：`136 passed, 3 skipped, 1 warning`。
+- full pytest：`1915 passed, 3 skipped, 3 warnings`。
+- `compileall` 和 `git diff --check`：通过。
 
 ## 实验扩展原则
 

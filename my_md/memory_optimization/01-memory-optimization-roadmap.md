@@ -203,7 +203,11 @@ final_score =
 - Phase 1b 已完成：写入候选会和已有 active 记忆做只读对比，输出信息熵、新颖度、重复风险、相似记忆和写入减少率。
 - Phase 2a 已完成：三路召回 + RRF 融合 shadow 已输出三路候选、RRF 融合结果和排序差异 trace，不改变真实召回结果。
 - Phase 2b 已完成：NetworkX 实体图谱 graph shadow 已输出 graph lane、graph-augmented RRF 融合结果和路径指标，不改变真实召回结果。
-- 后续下一步是 Phase 3：召回重排和注入治理。
+- Phase 3a 已完成：召回质量重排 shadow 已输出 rerank 后的候选顺序、分数拆解和名次变化，不改变真实召回结果。
+- Phase 3b 已完成：注入治理 shadow 已输出 baseline 与 experimental 的注入差异、丢弃原因和 prompt 预算变化，不改变真实召回结果。
+- Phase 4a 已完成：因果一致性版本链 shadow 已输出 replacement-only 版本链、当前 active leaf、旧版本误召回、冲突链和回滚候选，不改变真实召回结果。
+- Phase 4b 已完成：层级化溯源 shadow 已输出 source_ref 解析、来源覆盖、孤儿记忆、扫描级跨 scope 数量和本轮召回级跨 scope 风险；第一版不执行真实回源。
+- 后续下一步是 Phase 5：离线异步睡眠巩固。
 
 ### Phase 0：实验框架和开关
 
@@ -252,7 +256,25 @@ Phase 2b 验证结论：
 - broader memory experiment suite：`77 passed`。
 - `compileall` 和 `git diff --check` 通过。
 
+Phase 3a/3b 验证结论：
+
+- focused rerank / injection tests：通过。
+- engine contract 回归：通过。
+
+Phase 4a/4b 验证结论：
+
+- focused Phase 4 suite：`45 passed`。
+- 版本链和层级溯源仍然是 shadow-only。
+- 不改变真实写入、真实召回、真实 `recall_memory` 工具结果和 prompt 注入。
+- 真实 `fetch_messages` 回源、`fetch_success_rate`、`evidence_precision` 和 active 化决策留到后续评测阶段。
+- broader memory suite：`136 passed, 3 skipped, 1 warning`。
+- full pytest：`1915 passed, 3 skipped, 3 warnings`。
+- `compileall` 和 `git diff --check`：通过。
+
 ### Phase 3：召回重排和注入治理
+
+- Phase 3a 已完成：在三路召回候选上做质量重排 shadow，输出 rerank 顺序、分数拆解和名次变化。
+- Phase 3b 已完成：在真实注入块之上做注入治理 shadow，输出 baseline / experimental 注入差异和预算变化。
 
 - 在三路召回候选上做统一重排。
 - 加入 scope、`source_ref`、质量分、版本链、过期状态。
@@ -260,9 +282,10 @@ Phase 2b 验证结论：
 
 ### Phase 4：版本链和层级溯源
 
-- 建立记忆替换链、纠错链、回滚候选。
-- 把 `source_ref` 扩展到 session / turn / message / span。
-- 输出 `chain_depth`、`rollback_candidates`、`source_ref_coverage`、`fetch_success_rate`。
+- Phase 4a 已完成：建立 replacement-only 版本链、旧版本误召回检测、冲突链检测和回滚候选 shadow。
+- Phase 4b 已完成：解析现有 `source_ref` 到 session/message/span 层级，记录来源覆盖、解析成功率、孤儿记忆和跨 scope 风险 shadow。
+- 第一版不执行真实 `fetch_messages` 回源，因此 `fetch_success_rate`、`evidence_precision` 和 `source_support_rate` 留到后续回源评测阶段。
+- 输出 `replacement_count`、`chain_count`、`avg_chain_depth`、`max_chain_depth`、`active_leaf_count`、`stale_recalled_count`、`rollback_candidate_count`、`conflict_chain_count`、`source_ref_coverage`、`parse_success_rate`、`orphan_memory_count`、`cross_scope_memory_count`、`cross_scope_risk_count`。
 
 ### Phase 5：离线异步睡眠巩固
 

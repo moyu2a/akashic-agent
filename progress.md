@@ -1,5 +1,36 @@
 # Document RAG P10a Progress
 
+## 2026-07-17 Memory Phase 4 Plan
+
+- User requested using the plan skill to prepare the next memory phase.
+- Reviewed current worktree state, existing Phase 3 plan, memory experiment config/runner, `DefaultMemoryEngine.retrieve()`, `MemoryStore2.list_replacements()`, `list_items_for_dashboard()`, and memory optimization roadmap.
+- Created `docs/superpowers/plans/2026-07-17-memory-phase4-version-provenance-shadow.md`.
+- Plan scope: Phase 4a version chain shadow and Phase 4b provenance shadow only; no AgentLoop, Reasoner, ToolExecutor, real recall, real write, prompt injection, database schema, or `uv.lock` changes.
+- The plan defines new config flags, trace writer methods, pure function modules, engine shadow wiring, focused tests, broader memory verification, and documentation updates.
+- Ordinary `git status --short` does not show the new plan because `/docs/` is ignored; use `git add -f docs/superpowers/plans/2026-07-17-memory-phase4-version-provenance-shadow.md` if the plan should be committed.
+- Reviewed and revised the Phase 4 plan:
+  - version chains now count only replacement-linked graphs, not standalone active memories;
+  - recalled baseline items are merged into the version-chain snapshot to avoid false stale-recall metrics when the dashboard snapshot is incomplete;
+  - provenance now distinguishes scanned-memory cross-scope count from current-recall cross-scope risk;
+  - engine wiring now includes a bounded paginated shadow item reader and a direct pagination contract test.
+- Executed the Phase 4 plan in shadow-only mode:
+  - added `version_chain_shadow_enabled` and `provenance_shadow_enabled` config flags;
+  - added `record_version_chain_shadow()` and `record_provenance_shadow()` trace writers;
+  - added `memory2/version_chain_experiments.py` and `memory2/provenance_experiments.py`;
+  - wired `DefaultMemoryEngine.retrieve()` to record Phase 4 shadows after real injection without changing returned hits, raw items, or text block;
+  - updated memory optimization docs with Phase 4a/4b scope, metrics, and verification.
+- Verification:
+  - focused Phase 4 suite: `45 passed`;
+  - broader memory suite: `136 passed, 3 skipped, 1 warning`;
+  - full pytest: `1915 passed, 3 skipped, 3 warnings`;
+  - `compileall plugins/default_memory memory2 tests -q`: passed;
+  - `git diff --check`: passed.
+- Commit was intentionally not created in this step because Phase 3 changes are still uncommitted in the same files; committing now would mix Phase 3 and Phase 4 changes. `uv.lock` remains dirty and excluded.
+- Documentation follow-up:
+  - updated memory optimization README and roadmap to replace stale "pending compileall/diff" wording with measured verification results;
+  - replaced the old Phase 4 `fetch_success_rate` wording with the actual shadow-only metrics;
+  - added execution status to `docs/superpowers/plans/2026-07-17-memory-phase4-version-provenance-shadow.md` so future sessions can recover both the plan and the completed verification state.
+
 ## 2026-07-15 LA-002 Task 10 Verification
 
 - Started from `main` at `26b2b70`; branch is 22 commits ahead of `origin/main`.

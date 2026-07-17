@@ -54,6 +54,56 @@ def test_memory_experiments_config_loads_from_plugin_toml(tmp_path: Path) -> Non
     assert cfg.memory_experiments.graph_retrieval_max_hops == 3
 
 
+def test_memory_experiments_phase3_flags_load_from_plugin_toml(
+    tmp_path: Path,
+) -> None:
+    plugin_dir = tmp_path / "default_memory"
+    plugin_dir.mkdir()
+    (plugin_dir / "config.local.toml").write_text(
+        "\n".join(
+            [
+                "[memory_experiments]",
+                "enabled = true",
+                'mode = "shadow"',
+                "rerank_shadow_enabled = true",
+                "injection_governance_shadow_enabled = true",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    cfg = load_default_memory_config(plugin_dir=plugin_dir)
+
+    assert cfg.memory_experiments.rerank_shadow_enabled is True
+    assert cfg.memory_experiments.injection_governance_shadow_enabled is True
+
+
+def test_memory_experiments_phase4_flags_load_from_plugin_toml(
+    tmp_path: Path,
+) -> None:
+    plugin_dir = tmp_path / "default_memory"
+    plugin_dir.mkdir()
+    (plugin_dir / "config.local.toml").write_text(
+        "\n".join(
+            [
+                "[memory_experiments]",
+                "enabled = true",
+                'mode = "shadow"',
+                "version_chain_shadow_enabled = true",
+                "provenance_shadow_enabled = true",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    cfg = load_default_memory_config(plugin_dir=plugin_dir)
+
+    assert cfg.memory_experiments.version_chain_shadow_enabled is True
+    assert cfg.memory_experiments.provenance_shadow_enabled is True
+
+
 def test_memory_experiments_mode_is_safely_coerced(tmp_path: Path) -> None:
     plugin_dir = tmp_path / "default_memory"
     plugin_dir.mkdir()
@@ -113,3 +163,17 @@ def test_render_default_memory_config_includes_graph_retrieval_block() -> None:
     assert "graph_retrieval_enabled = false" in rendered
     assert "graph_retrieval_max_nodes = 400" in rendered
     assert "graph_retrieval_max_hops = 2" in rendered
+
+
+def test_render_default_memory_config_includes_phase3_flags() -> None:
+    rendered = render_default_memory_config()
+
+    assert "rerank_shadow_enabled = false" in rendered
+    assert "injection_governance_shadow_enabled = false" in rendered
+
+
+def test_render_default_memory_config_includes_phase4_flags() -> None:
+    rendered = render_default_memory_config()
+
+    assert "version_chain_shadow_enabled = false" in rendered
+    assert "provenance_shadow_enabled = false" in rendered

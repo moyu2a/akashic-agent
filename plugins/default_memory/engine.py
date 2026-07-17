@@ -50,9 +50,15 @@ from memory2.retrieval_graph_experiments import (
     build_graph_lane,
     build_graph_retrieval_shadow_result,
 )
+from memory2.rerank_experiments import (
+    RerankShadowResult,
+    build_rerank_shadow_result,
+)
+from memory2.provenance_experiments import build_provenance_shadow_result
 from memory2.retriever import Retriever
 from memory2.rule_schema import build_procedure_rule_schema
 from memory2.store import MemoryStore2
+from memory2.version_chain_experiments import build_version_chain_shadow_result
 from plugins.default_memory.config import DefaultMemoryConfig, resolve_memory_db_path
 from plugins.default_memory.experiments import MemoryExperimentRunner
 
@@ -538,6 +544,18 @@ class DefaultMemoryEngine:
         self._graph_retrieval_max_hops = (
             default_config.memory_experiments.graph_retrieval_max_hops
         )
+        self._rerank_shadow_enabled = (
+            default_config.memory_experiments.rerank_shadow_enabled
+        )
+        self._injection_governance_shadow_enabled = (
+            default_config.memory_experiments.injection_governance_shadow_enabled
+        )
+        self._version_chain_shadow_enabled = (
+            default_config.memory_experiments.version_chain_shadow_enabled
+        )
+        self._provenance_shadow_enabled = (
+            default_config.memory_experiments.provenance_shadow_enabled
+        )
         self._post_response_worker = PostResponseMemoryWorker(
             memorizer=self._memorizer,
             retriever=self._retriever,
@@ -695,7 +713,24 @@ class DefaultMemoryEngine:
             scope=scope,
             started_at=started_at,
         )
+        rerank_shadow = await self._record_rerank_shadow(
+            request=request,
+            baseline_items=items,
+            semantic_items=semantic_items,
+            keyword_items=keyword_items,
+            memory_types=memory_types,
+            scope=scope,
+        )
         text_block, injected_ids = self._retriever.build_injection_block(items)
+        self._record_injection_governance_shadow(
+            scope=scope,
+            baseline_items=items,
+            baseline_text_block=text_block,
+            baseline_injected_ids=injected_ids,
+            rerank_shadow=rerank_shadow,
+        )
+        self._record_version_chain_shadow(scope=scope, baseline_items=items)
+        self._record_provenance_shadow(scope=scope, baseline_items=items)
         hits = [
             self._build_hit(item, injected_ids=injected_ids)
             for item in items
@@ -1336,6 +1371,231 @@ class DefaultMemoryEngine:
             )
         except Exception:
             logger.debug("graph retrieval shadow trace failed", exc_info=True)
+
+    async def _build_rerank_shadow(
+        self,
+        *,
+        request: MemoryEngineRetrieveRequest,
+        baseline_items: list[dict],
+        semantic_items: list[dict],
+        keyword_items: list[dict],
+        memory_types: list[str] | None,
+        scope: MemoryScope,
+    ) -> RerankShadowResult | None:
+        if self._v2_store is None:
+            return None
+        top_k = max(1, int(request.top_k or len(baseline_items) or 8))
+        active_items, _total = self._v2_store.list_items_for_dashboard(
+            status="active",
+            page_size=max(200, top_k * 20),
+        )
+        active_items = self._filter_provenance_candidates(
+            active_items,
+            memory_types=memory_types,
+            scope=scope,
+            require_scope_match=bool(request.hints.get("require_scope_match", False)),
+        )
+        provenance_lane = build_provenance_lane(
+            request.query,
+            active_items,
+            scope_channel=scope.channel,
+            scope_chat_id=scope.chat_id,
+            limit=max(20, top_k * 2),
+        )
+        graph_items: list[dict[str, object]] = []
+        if bool(getattr(self, "_graph_retrieval_enabled", False)):
+            graph_lane = build_graph_lane(
+                request.query,
+                active_items,
+                scope_channel=scope.channel or "",
+                scope_chat_id=scope.chat_id or "",
+                limit=max(20, top_k * 2),
+                max_hops=max(1, int(getattr(self, "_graph_retrieval_max_hops", 2))),
+                max_nodes=max(1, int(getattr(self, "_graph_retrieval_max_nodes", 400))),
+            )
+            graph_items = graph_lane.items
+        return build_rerank_shadow_result(
+            query=request.query,
+            baseline_items=baseline_items,
+            semantic_items=semantic_items,
+            keyword_items=keyword_items,
+            provenance_items=provenance_lane.items,
+            graph_items=graph_items,
+            scope_channel=scope.channel,
+            scope_chat_id=scope.chat_id,
+            top_n=top_k,
+        )
+
+    async def _record_rerank_shadow(
+        self,
+        *,
+        request: MemoryEngineRetrieveRequest,
+        baseline_items: list[dict],
+        semantic_items: list[dict],
+        keyword_items: list[dict],
+        memory_types: list[str] | None,
+        scope: MemoryScope,
+    ) -> RerankShadowResult | None:
+        experiment_runner = getattr(self, "_experiment_runner", None)
+        if experiment_runner is None or not getattr(experiment_runner, "enabled", False):
+            return None
+        if not bool(getattr(self, "_rerank_shadow_enabled", False)):
+            return None
+        try:
+            shadow = await self._build_rerank_shadow(
+                request=request,
+                baseline_items=baseline_items,
+                semantic_items=semantic_items,
+                keyword_items=keyword_items,
+                memory_types=memory_types,
+                scope=scope,
+            )
+            if shadow is None:
+                return None
+            experiment_runner.record_rerank_shadow(
+                session_key=scope.session_key,
+                turn_id=f"{scope.session_key}@retrieve",
+                baseline_result=shadow.baseline_result,
+                experimental_result=shadow.experimental_result,
+                metrics=shadow.metrics,
+            )
+            return shadow
+        except Exception:
+            logger.debug("rerank shadow trace failed", exc_info=True)
+            return None
+
+    def _record_injection_governance_shadow(
+        self,
+        *,
+        scope: MemoryScope,
+        baseline_items: list[dict],
+        baseline_text_block: str,
+        baseline_injected_ids: list[str],
+        rerank_shadow: RerankShadowResult | None,
+    ) -> None:
+        experiment_runner = getattr(self, "_experiment_runner", None)
+        if experiment_runner is None or not getattr(experiment_runner, "enabled", False):
+            return
+        if not bool(getattr(self, "_injection_governance_shadow_enabled", False)):
+            return
+        try:
+            from memory2.injection_governance_experiments import (
+                build_injection_governance_shadow_result,
+            )
+
+            candidate_items = baseline_items
+            if rerank_shadow is not None:
+                ranked = rerank_shadow.experimental_result.get("ranked_items")
+                if isinstance(ranked, list):
+                    candidate_items = [item for item in ranked if isinstance(item, dict)]
+            shadow = build_injection_governance_shadow_result(
+                baseline_items=baseline_items,
+                baseline_injected_ids=baseline_injected_ids,
+                baseline_text_block=baseline_text_block,
+                candidate_items=candidate_items,
+                max_chars=getattr(self._retriever, "_inject_max_chars", 1200),
+                max_items=(
+                    getattr(self._retriever, "_inject_max_procedure_preference", 4)
+                    + getattr(self._retriever, "_inject_max_event_profile", 2)
+                    + getattr(self._retriever, "_inject_max_forced", 3)
+                ),
+            )
+            experiment_runner.record_injection_governance_shadow(
+                session_key=scope.session_key,
+                turn_id=f"{scope.session_key}@retrieve",
+                baseline_result=shadow.baseline_result,
+                experimental_result=shadow.experimental_result,
+                metrics=shadow.metrics,
+            )
+        except Exception:
+            logger.debug("injection governance shadow trace failed", exc_info=True)
+
+    def _record_version_chain_shadow(
+        self,
+        *,
+        scope: MemoryScope,
+        baseline_items: list[dict[str, object]],
+    ) -> None:
+        experiment_runner = getattr(self, "_experiment_runner", None)
+        if (
+            experiment_runner is None
+            or not getattr(experiment_runner, "enabled", False)
+            or not bool(getattr(self, "_version_chain_shadow_enabled", False))
+            or self._v2_store is None
+        ):
+            return
+        try:
+            memory_items = self._list_shadow_memory_items(status="")
+            replacements = self._v2_store.list_replacements()
+            shadow = build_version_chain_shadow_result(
+                memory_items=memory_items,
+                replacements=replacements,
+                recalled_items=baseline_items,
+            )
+            experiment_runner.record_version_chain_shadow(
+                session_key=scope.session_key,
+                turn_id=f"{scope.session_key}@retrieve",
+                baseline_result=shadow.baseline_result,
+                experimental_result=shadow.experimental_result,
+                metrics=shadow.metrics,
+            )
+        except Exception:
+            logger.debug("version chain shadow trace failed", exc_info=True)
+
+    def _record_provenance_shadow(
+        self,
+        *,
+        scope: MemoryScope,
+        baseline_items: list[dict[str, object]],
+    ) -> None:
+        experiment_runner = getattr(self, "_experiment_runner", None)
+        if (
+            experiment_runner is None
+            or not getattr(experiment_runner, "enabled", False)
+            or not bool(getattr(self, "_provenance_shadow_enabled", False))
+            or self._v2_store is None
+        ):
+            return
+        try:
+            memory_items = self._list_shadow_memory_items(status="")
+            shadow = build_provenance_shadow_result(
+                memory_items=memory_items,
+                recalled_items=baseline_items,
+                scope_channel=scope.channel or "",
+                scope_chat_id=scope.chat_id or "",
+            )
+            experiment_runner.record_provenance_shadow(
+                session_key=scope.session_key,
+                turn_id=f"{scope.session_key}@retrieve",
+                baseline_result=shadow.baseline_result,
+                experimental_result=shadow.experimental_result,
+                metrics=shadow.metrics,
+            )
+        except Exception:
+            logger.debug("provenance shadow trace failed", exc_info=True)
+
+    def _list_shadow_memory_items(
+        self,
+        *,
+        status: str = "",
+        page_size: int = 200,
+        max_pages: int = 20,
+    ) -> list[dict[str, object]]:
+        if self._v2_store is None:
+            return []
+        all_items: list[dict[str, object]] = []
+        safe_page_size = max(1, min(int(page_size), 200))
+        safe_max_pages = max(1, int(max_pages))
+        for page in range(1, safe_max_pages + 1):
+            rows, total = self._v2_store.list_items_for_dashboard(
+                status=status,
+                page=page,
+                page_size=safe_page_size,
+            )
+            all_items.extend(rows)
+            if len(all_items) >= int(total) or not rows:
+                break
+        return all_items
 
     @staticmethod
     def _filter_provenance_candidates(

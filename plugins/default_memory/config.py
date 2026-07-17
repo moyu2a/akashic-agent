@@ -44,6 +44,10 @@ class MemoryExperimentsConfig:
     graph_retrieval_enabled: bool = False
     graph_retrieval_max_nodes: int = 400
     graph_retrieval_max_hops: int = 2
+    rerank_shadow_enabled: bool = False
+    injection_governance_shadow_enabled: bool = False
+    version_chain_shadow_enabled: bool = False
+    provenance_shadow_enabled: bool = False
 
     def __post_init__(self) -> None:
         allowed = {"off", "shadow", "active", "ab"}
@@ -114,6 +118,10 @@ def render_default_memory_config(config: DefaultMemoryConfig | None = None) -> s
             f"graph_retrieval_enabled = {str(memory_experiments.graph_retrieval_enabled).lower()}",
             f"graph_retrieval_max_nodes = {memory_experiments.graph_retrieval_max_nodes}",
             f"graph_retrieval_max_hops = {memory_experiments.graph_retrieval_max_hops}",
+            f"rerank_shadow_enabled = {str(memory_experiments.rerank_shadow_enabled).lower()}",
+            f"injection_governance_shadow_enabled = {str(memory_experiments.injection_governance_shadow_enabled).lower()}",
+            f"version_chain_shadow_enabled = {str(memory_experiments.version_chain_shadow_enabled).lower()}",
+            f"provenance_shadow_enabled = {str(memory_experiments.provenance_shadow_enabled).lower()}",
             "",
         ]
     )
@@ -181,6 +189,18 @@ def _build_config(payload: dict[str, Any]) -> DefaultMemoryConfig:
             ),
             graph_retrieval_max_hops=int(
                 experiments.get("graph_retrieval_max_hops", 2)
+            ),
+            rerank_shadow_enabled=bool(
+                experiments.get("rerank_shadow_enabled", False)
+            ),
+            injection_governance_shadow_enabled=bool(
+                experiments.get("injection_governance_shadow_enabled", False)
+            ),
+            version_chain_shadow_enabled=bool(
+                experiments.get("version_chain_shadow_enabled", False)
+            ),
+            provenance_shadow_enabled=bool(
+                experiments.get("provenance_shadow_enabled", False)
             ),
         ),
     )

@@ -349,14 +349,17 @@ session_key
 ### 输出数据
 
 - `source_ref_coverage`：有 source_ref 的记忆比例。
-- `span_coverage`：能定位到原文片段的比例。
-- `fetch_success_rate`：回源成功率。
-- `evidence_precision`：回源证据是否支撑记忆。
+- `parse_success_rate`：现有 source_ref 可解析比例。
+- `session_level_source_count` / `message_level_source_count` / `span_level_source_count`：来源层级数量。
 - `orphan_memory_count`：无来源记忆数量。
-- `cross_scope_risk_count`：跨 scope 风险数量。
+- `cross_scope_memory_count`：扫描快照里的跨 scope 来源数量。
+- `cross_scope_risk_count`：本轮真实召回项里的跨 scope 风险数量。
 
 ### 补充评测后可测
 
+- `span_coverage`
+- `fetch_success_rate`
+- `evidence_precision`
 - `citation_correctness`
 - `source_support_rate`
 - `unsupported_memory_rate`
@@ -410,8 +413,10 @@ Phase 1a  已完成：显式 memorize 的写入价值结构化 shadow scoring
 Phase 1b  已完成：信息熵 / 新颖度 / 重复度评分
 Phase 2a  已完成：三路召回 + RRF 融合 shadow
 Phase 2b  已完成：NetworkX 实体图谱 graph shadow
-Phase 3   待做：召回重排和注入治理
-Phase 4   待做：因果一致性版本链和层级化溯源
+Phase 3a  已完成：召回质量重排 shadow
+Phase 3b  已完成：注入治理 shadow
+Phase 4a  已完成：因果一致性版本链 shadow
+Phase 4b  已完成：层级化溯源 shadow
 Phase 5   待做：离线异步睡眠巩固
 Phase 6   待做：评测集、Dashboard 和 active 化决策
 ```
@@ -524,15 +529,35 @@ Phase 2b 验证结论：
 
 ### Phase 3：召回重排和注入治理
 
+- Phase 3a 已完成：召回质量重排 shadow。
+- Phase 3b 已完成：注入治理 shadow。
+
 - 在三路召回候选上做统一重排。
 - 加入 scope、`source_ref`、质量分、版本链、过期状态。
 - 输出 `rerank_changed_count`、`drop_reason`、`injected_count`、prompt token 变化。
 
 ### Phase 4：版本链和层级溯源
 
-- 建立记忆替换链、纠错链、回滚候选。
-- 把 `source_ref` 扩展到 session / turn / message / span。
-- 输出 `chain_depth`、`rollback_candidates`、`source_ref_coverage`、`fetch_success_rate`。
+Phase 4a 已完成：因果一致性版本链 shadow。
+
+- 只读取 `memory_items.status`、`memory_replacements` 和本轮 baseline recalled items。
+- 版本链只统计参与 replacement 图的条目，不把普通 active 单点记忆计入 `chain_count`。
+- 输出 `replacement_count`、`chain_count`、`avg_chain_depth`、`max_chain_depth`、`active_leaf_count`、`stale_recalled_count`、`superseded_recalled_count`、`rollback_candidate_count`、`conflict_chain_count`、`orphan_replacement_count`。
+- 不改变真实写入、真实召回和真实 prompt 注入。
+
+Phase 4b 已完成：层级化溯源 shadow。
+
+- 第一版只解析现有 `source_ref`，不执行真实 `fetch_messages` 回源。
+- 支持解析 message id JSON、`@post_response` session ref、`channel:chat:message` 和 `channel:chat` 这几类现有格式。
+- 输出 `source_ref_coverage`、`parse_success_rate`、`source_ref_parse_success_rate`、`message_level_source_count`、`session_level_source_count`、`span_level_source_count`、`malformed_source_ref_count`、`orphan_memory_count`、`cross_scope_memory_count`、`cross_scope_risk_count`。
+- `cross_scope_memory_count` 面向扫描快照，`cross_scope_risk_count` 面向本轮真实召回项。
+- `fetch_success_rate`、`evidence_precision` 和 `source_support_rate` 留到后续带回源评测阶段。
+
+Phase 4a/4b 验证结论：
+
+- focused Phase 4 suite：`45 passed`。
+- 版本链纯函数、溯源纯函数、实验 trace writer 和 engine contract 回归均通过。
+- 仍然是 shadow-only，不改变真实写入、真实召回、真实 `recall_memory` 工具结果和 prompt 注入。
 
 ### Phase 5：离线异步睡眠巩固
 
