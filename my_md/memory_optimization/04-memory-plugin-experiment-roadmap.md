@@ -579,8 +579,13 @@ Phase 5 已完成第一版：离线睡眠巩固 shadow dry-run。
 
 Phase 5 验证结论：
 
-- sleep consolidation 纯函数测试覆盖重复、可合并、过期、低价值、冲突、缺失来源和 trace 截断。
+- 提交：`3492cf2 feat: add memory sleep consolidation shadow experiment`。
+- sleep consolidation 纯函数测试覆盖重复、可合并、过期、低价值、冲突、缺失来源、trace 截断，以及“两个负向偏好不误判为冲突”的场景。
 - 配置、trace writer 和 engine shadow 挂点测试通过。
+- focused suite：`49 passed`。
+- broader memory suite：`151 passed, 3 skipped, 1 warning`。
+- full pytest：`1930 passed, 3 skipped, 3 warnings`。
+- `compileall` 和 `git diff --check`：通过。
 - 当前仍是 shadow-only / dry-run，不改变真实写入、真实召回、真实 `recall_memory` 工具结果和 prompt 注入。
 
 ### Phase 6：评测集和 Dashboard

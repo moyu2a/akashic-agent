@@ -96,8 +96,12 @@ Phase 4a/4b 的验证结论：
 
 Phase 5 的验证结论：
 
-- sleep consolidation 纯函数测试：通过。
-- 配置、trace writer 和 engine shadow 挂点测试：通过。
+- 提交：`3492cf2 feat: add memory sleep consolidation shadow experiment`。
+- focused suite：`49 passed`。
+- broader memory suite：`151 passed, 3 skipped, 1 warning`。
+- full pytest：`1930 passed, 3 skipped, 3 warnings`。
+- `compileall` 和 `git diff --check`：通过。
+- 代码审阅发现的 stale / low-value 候选未截断问题已修复，当前所有 trace 候选输出都有上限和截断计数。
 - 仍然是 shadow-only / dry-run，不改变真实写入、真实召回、真实 `recall_memory` 工具结果和 prompt 注入。
 
 ## 实验扩展原则

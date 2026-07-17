@@ -297,6 +297,15 @@ Phase 4a/4b 验证结论：
 - 第一版不合并、不删除、不 supersede、不修改真实召回和 prompt 注入。
 - 常驻 scheduler / daemon、真实压缩率和 active 清理留到 Phase 6 评测后再判断。
 
+Phase 5 验证结论：
+
+- 提交：`3492cf2 feat: add memory sleep consolidation shadow experiment`。
+- focused suite：`49 passed`。
+- broader memory suite：`151 passed, 3 skipped, 1 warning`。
+- full pytest：`1930 passed, 3 skipped, 3 warnings`。
+- `compileall` 和 `git diff --check`：通过。
+- 当前仍是 shadow-only / dry-run，不改变真实写入、真实召回、真实 `recall_memory` 工具结果和 prompt 注入。
+
 ### Phase 6：评测集和 Dashboard
 
 - 构造偏好召回、历史回源、纠错、跨 session、临时信息污染等测试集。
