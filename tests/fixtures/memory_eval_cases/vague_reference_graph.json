@@ -40,6 +40,13 @@
         "baseline_graph_overlap_rate"
       ]
     },
+    "answer_expectations": {
+      "expected_answer_contains": ["RRF", "三路召回"],
+      "forbidden_answer_contains": [],
+      "expected_memory_ids": ["m_graph_1", "m_graph_2"],
+      "expected_language": "zh",
+      "grounding_required": true
+    },
     "profile_expectations": {
       "off": {
         "forbidden_trace_features": ["tri_retrieval", "graph_retrieval"]

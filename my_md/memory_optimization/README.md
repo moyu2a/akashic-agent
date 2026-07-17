@@ -53,10 +53,11 @@
 - Phase 6a-2：离线 eval runner 和 JSON report writer，读取同一批 fixture，按 `off`、单阶段 profile 和 `all` 跑 deterministic profile 对照，校验 required / forbidden trace、metric key、should recall / should-not recall；不启动 Agent，不调用 LLM/embedding，不写真实 memory DB 或 observe DB。
 - Phase 6b-1：真实 memory 数据只读采样器、真实样本到 EvalCase 的转换、unforced candidate 指标和 CLI 报告；严格使用 raw sqlite read-only + `PRAGMA query_only=ON`，不启动 Agent，不调用 LLM/embedding，不写真实 DB，报告默认不包含真实记忆正文。
 - Phase 6b-2：真实 `AgentLoop` dry-run，使用临时 workspace、真实 `SessionManager`、真实 `DefaultMemoryRetrievalPipeline`、真实 `EventBus` / `TurnCommitted`，但 LLM 是 fake provider，memory engine 是受控测试 engine；不调用真实 LLM/embedding，不写真实 workspace，不代表最终回答质量。
+- Phase 6b-3：显式门控的 LLM 小样本答案级评测，复用真实 `AgentLoop.process_direct()`、临时 workspace 和受控 memory engine；默认禁止真实 LLM，必须通过 `--enable-real-llm` 才能构造真实 `LLMProvider`。本轮已用 fake provider 跑通 3 个稳定答案级 case，报告记录答案规则命中、记忆 ID 使用、延迟、token 元数据和脱敏审计。
 
-后续还有 1 个主要子阶段：
+后续还有 1 个主要方向：
 
-1. Phase 6：继续补真实 LLM 小样本、答案级准确率指标、Dashboard 和 active 化决策。
+1. Phase 6：在真实 LLM 小样本稳定后，继续补 Dashboard 展示、连续评测和 active 化决策。
 
 trace 汇总报告是这些阶段的数据出口，不应替代上述实验方向。
 
@@ -144,6 +145,17 @@ Phase 6b-2 的验证结论：
 - 集成指标：`agent_turn_count = 9`、`retrieval_request_count = 9`、`fake_llm_call_count = 9`、`turn_committed_count = 9`、`session_message_count = 18`。
 - 隐私边界：`raw_query_included = False`、`raw_memory_summary_included = False`、`prompt_included = False`、`session_text_included = False`。
 - 报告路径：`my_md/memory_optimization/eval_reports/memory_agent_dry_run_eval.json` 和 `memory_agent_dry_run_eval.md`。
+
+Phase 6b-3 的验证结论：
+
+- 新增 `memory2/eval_llm_sample.py`，提供答案期望解析、确定性答案评分、真实 `AgentLoop` 小样本 harness 和脱敏报告 writer。
+- 新增 `scripts/run_memory_llm_sample_eval.py`，默认 gate 真实 LLM；未传 `--enable-real-llm` 且未传 `--fake-provider` 时返回 exit code 1 并只写 gated report。
+- 首批答案级 case 只包含 3 个稳定样例：`cross_scope_isolation`、`preference_recall`、`vague_reference_graph`。`conflict_memory` 因当前存在两个互相冲突的 active 记忆，暂不进入答案质量评分。
+- fake-provider 本地报告：`case_count = 3`、`passed_case_count = 3`、`failed_case_count = 0`、`answer_contains_pass_count = 5`、`expected_memory_used_count = 3`、`forbidden_contains_violation_count = 0`、`provider_error_count = 0`、`timeout_count = 0`。
+- token 和延迟指标：`token_metrics_available = True`、`prompt_token_count = 60`、`completion_token_count = 30`、`total_token_count = 90`、`total_latency_ms = 56`、`avg_latency_ms = 18`。这些 token 数来自 fake provider，用于验证报告链路，不代表真实费用。
+- 隐私边界：`raw_query_included = False`、`raw_memory_summary_included = False`、`prompt_included = False`、`session_text_included = False`、`full_answer_included = False`。
+- 报告路径：`my_md/memory_optimization/eval_reports/memory_llm_sample_eval.json` 和 `memory_llm_sample_eval.md`。
+- 当前结论是“答案级小样本评测链路已经具备，并且真实 LLM 调用有显式门控”。要得到真实模型质量和费用数据，需要人工确认后运行带 `--enable-real-llm` 的命令。
 
 ## 实验扩展原则
 

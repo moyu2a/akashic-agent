@@ -523,6 +523,60 @@ session_message_count = 18
 
 当前能得出的结论是：评测集已经能穿过真实 Agent turn pipeline，并能观察到检索请求、会话写入和 `TurnCommitted`。但由于 LLM 是 fake provider，memory engine 是受控测试 engine，它仍然不能说明真实回答质量、真实召回准确率、source support 或 token 成本。
 
+### Phase 6b-3 已建立的答案级小样本评测链路
+
+Phase 6b-3 在 Phase 6b-2 的真实 `AgentLoop` dry-run 基础上增加答案级评分。它仍然默认不调用真实 LLM；真实 provider 只有在 CLI 显式传入 `--enable-real-llm` 后才会构造。自动化测试和本轮提交报告都使用 fake provider。
+
+第一版实现边界：
+
+- 只选择带 `expectations.answer_expectations` 的 fixture。
+- 首批运行 3 个稳定 case：`cross_scope_isolation`、`preference_recall`、`vague_reference_graph`。
+- 使用受控 memory engine 注入 fixture memory summary，但报告只保留 memory id 和指标，不写 summary 原文。
+- 使用确定性规则评分答案：期望关键词、禁止关键词、期望 memory id 是否被使用、中文检测。
+- token 统计是 best-effort；如果 provider 没有返回 usage 字段，报告会标记 `token_metrics_available = false`。
+- provider 异常只记录为脱敏类别，例如 `provider_error`，不写原始异常文本。
+- 不写真实 `workspace/memory/memory2.db`、真实 `workspace/sessions.db` 或真实 `workspace/observe/observe.db`。
+
+当前可输出的答案级指标：
+
+- `answer_quality_available`
+- `answer_contains_pass_count`
+- `answer_contains_miss_count`
+- `forbidden_contains_violation_count`
+- `expected_memory_used_count`
+- `language_pass_count`
+- `provider_error_count`
+- `timeout_count`
+- `prompt_token_count`
+- `completion_token_count`
+- `total_token_count`
+- `token_metrics_available`
+- `total_latency_ms`
+- `avg_latency_ms`
+
+本轮 fake-provider 报告结果：
+
+```text
+case_count = 3
+passed_case_count = 3
+failed_case_count = 0
+answer_contains_pass_count = 5
+answer_contains_miss_count = 0
+forbidden_contains_violation_count = 0
+expected_memory_used_count = 3
+language_pass_count = 3
+provider_error_count = 0
+timeout_count = 0
+token_metrics_available = true
+prompt_token_count = 60
+completion_token_count = 30
+total_token_count = 90
+total_latency_ms = 56
+avg_latency_ms = 18
+```
+
+这些数据证明答案级评测、token 元数据采集和脱敏报告链路已经跑通。由于本轮使用 fake provider，token 数和延迟只用于验证链路，不代表真实模型费用或真实响应性能。真实质量数据需要后续人工确认后运行 `--enable-real-llm`。
+
 ## 指标优先级
 
 ### P-1：实验对照输出
@@ -611,7 +665,8 @@ Phase 0 首个落地点是 `write_value_score` shadow trace。它先记录显式
 | Phase 6a-2 | 离线 runner 和 profile 对照报告 | `case_count`、`profile_count`、`passed_case_count`、`failed_case_count`、`failed_profile_count`、`trace_count`、`trace_count_by_feature`、`profile_pass_rate` |
 | Phase 6b-1 | 真实 memory 只读采样和候选指标 | `sample_count`、`memory_item_count`、`replacement_count`、`category_counts`、`labelled_contract_pass_rate`、`candidate_hit_rate_without_label_forcing`、`candidate_wrong_scope_count`、`candidate_labelled_wrong_scope_count`、`sample_records`、`profile_records`、`candidate_records`、`failure_records`、`invalid_extra_json_count`、`missing_scope_count`、`missing_table_count` |
 | Phase 6b-2 | 真实 AgentLoop dry-run | `agent_loop_enabled`、`fake_llm_enabled`、`llm_calls_enabled`、`embedding_calls_enabled`、`answer_quality_available`、`agent_turn_count`、`retrieval_request_count`、`fake_llm_call_count`、`turn_committed_count`、`session_message_count`、`retrieval_query_matched`、`retrieval_history_seen` |
-| Phase 6 后续 | 答案级评测、Dashboard 和 active 化决策 | `recall_at_k`、`precision_at_k`、`wrong_recall_rate`、`memory_pollution_rate`、`compression_ratio`、`source_support_rate` |
+| Phase 6b-3 | 答案级小样本评测和真实 LLM 显式门控 | `answer_quality_available`、`answer_contains_pass_count`、`answer_contains_miss_count`、`forbidden_contains_violation_count`、`expected_memory_used_count`、`language_pass_count`、`provider_error_count`、`timeout_count`、`token_metrics_available`、`prompt_token_count`、`completion_token_count`、`total_token_count`、`total_latency_ms`、`avg_latency_ms` |
+| Phase 6 后续 | Dashboard、连续真实样本评测和 active 化决策 | `recall_at_k`、`precision_at_k`、`wrong_recall_rate`、`memory_pollution_rate`、`compression_ratio`、`source_support_rate` |
 
 其中 Phase 1b 到 Phase 5 默认仍然是 shadow 或 dry-run。只有 Phase 6 的评测数据稳定后，才讨论把某些策略切到 active。
 

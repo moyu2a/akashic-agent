@@ -41,6 +41,13 @@
       "rerank_shadow": ["rerank_changed_count"],
       "injection_governance_shadow": ["prompt_token_delta"]
     },
+    "answer_expectations": {
+      "expected_answer_contains": ["中文"],
+      "forbidden_answer_contains": ["英文回答", "English"],
+      "expected_memory_ids": ["m_pref_cn"],
+      "expected_language": "zh",
+      "grounding_required": true
+    },
     "profile_expectations": {
       "off": {
         "forbidden_trace_features": [

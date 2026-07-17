@@ -429,7 +429,8 @@ Phase 6a-1 已完成第一版：评测集 schema 和 9 个静态 fixture
 Phase 6a-2 已完成第一版：离线 eval runner 和 JSON report
 Phase 6b-1 已完成第一版：真实 memory 只读采样、真实样本 EvalCase 转换、unforced candidate 指标和报告 CLI
 Phase 6b-2 已完成第一版：真实 AgentLoop dry-run，fake LLM，临时 workspace
-Phase 6   待做：真实 LLM 小样本、答案级指标、Dashboard 和 active 化决策
+Phase 6b-3 已完成第一版：显式门控的 LLM 小样本答案级评测，fake-provider 报告链路
+Phase 6   待做：真实 LLM 人工确认运行、Dashboard、连续评测和 active 化决策
 ```
 
 后续计划按 6 个主要步骤推进。trace 汇总报告属于数据出口和验证手段，不单独替代某个 memory 能力阶段。
@@ -735,9 +736,28 @@ Phase 6b-2 验证结论：
 - 集成指标：`agent_turn_count = 9`、`retrieval_request_count = 9`、`fake_llm_call_count = 9`、`turn_committed_count = 9`、`session_message_count = 18`。
 - 当前结论是“评测集已经能穿过真实 Agent turn pipeline”。它仍然不代表真实 LLM 回答质量、真实召回准确率、source support 或 token 成本。
 
+Phase 6b-3 已完成第一版：显式门控的 LLM 小样本答案级评测。
+
+- 新增 `answer_expectations`，当前只放入 3 个稳定答案级 case：`cross_scope_isolation`、`preference_recall`、`vague_reference_graph`。
+- 新增答案评分器，检查期望关键词、禁止关键词、期望 memory id、中文输出。
+- 新增 `memory2/eval_llm_sample.py`，复用真实 `AgentLoop.process_direct()`，使用临时 workspace 和受控 memory engine。
+- 新增 `scripts/run_memory_llm_sample_eval.py`，默认禁止真实 LLM；只有显式传入 `--enable-real-llm` 才允许构造真实 `LLMProvider`。
+- CLI 支持 `--fake-provider`，用于不消耗 token 的链路验证。
+- 报告不包含原始 query、memory summary、prompt、session text 或完整答案。
+
+Phase 6b-3 fake-provider 验证结论：
+
+- harness tests：`8 passed`。
+- CLI tests：`5 passed`。
+- 默认 gate 命令返回 exit code 1，并写出 `real_llm_enabled = false` 的 gated report。
+- fake-provider CLI 本地跑完 3 个稳定 case：`case_count = 3`、`passed_case_count = 3`、`failed_case_count = 0`。
+- 答案指标：`answer_contains_pass_count = 5`、`answer_contains_miss_count = 0`、`expected_memory_used_count = 3`、`forbidden_contains_violation_count = 0`、`language_pass_count = 3`。
+- 运行指标：`provider_error_count = 0`、`timeout_count = 0`、`token_metrics_available = true`、`total_token_count = 90`、`total_latency_ms = 56`。
+- 当前结论是“答案级小样本评测链路和真实 LLM 显式门控已经具备”。本轮还没有消耗真实 token，真实模型质量、真实费用和真实延迟需要后续人工确认运行。
+
 后续建议拆分：
 
-1. Phase 6b-3：真实 LLM 小样本评测，在显式开关开启后记录 token、费用、延迟、答案使用记忆情况和 source support。
+1. Phase 6b-4：人工确认后运行真实 LLM 小样本，记录真实 token、延迟、provider 错误和答案规则通过率。
 2. Phase 6c：把 eval report 接入 Dashboard 或 observe 查询界面。
 3. Phase 6d：基于连续评测结果决定哪些策略可以从 shadow 切到 active。
 
