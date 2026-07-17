@@ -318,6 +318,24 @@ class MemoryExperimentRunner:
             metrics=metrics,
         )
 
+    def record_sleep_consolidation_shadow(
+        self,
+        *,
+        session_key: str,
+        turn_id: str,
+        baseline_result: dict[str, Any],
+        experimental_result: dict[str, Any],
+        metrics: dict[str, Any],
+    ) -> MemoryExperimentTrace | None:
+        return self.record(
+            feature_name="sleep_consolidation_shadow",
+            session_key=session_key,
+            turn_id=turn_id,
+            baseline_result=baseline_result,
+            experimental_result=experimental_result,
+            metrics=metrics,
+        )
+
     def _existing_memory_snapshot(self) -> list[dict[str, object]]:
         if self._existing_memory_provider is None:
             return []

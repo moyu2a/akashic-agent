@@ -57,6 +57,9 @@ from memory2.rerank_experiments import (
 from memory2.provenance_experiments import build_provenance_shadow_result
 from memory2.retriever import Retriever
 from memory2.rule_schema import build_procedure_rule_schema
+from memory2.sleep_consolidation_experiments import (
+    build_sleep_consolidation_shadow_result,
+)
 from memory2.store import MemoryStore2
 from memory2.version_chain_experiments import build_version_chain_shadow_result
 from plugins.default_memory.config import DefaultMemoryConfig, resolve_memory_db_path
@@ -78,6 +81,19 @@ def _build_entry_source_ref(base_source_ref: str, entry: str) -> str:
     text = (entry or "").strip()
     digest = hashlib.sha1(text.encode("utf-8")).hexdigest()[:12] if text else "empty"
     return f"{base_source_ref}#h:{digest}"
+
+
+def _session_key_from_source_ref(
+    source_ref: str,
+    *,
+    channel: str,
+    chat_id: str,
+) -> str:
+    raw = str(source_ref or "").strip()
+    if raw.endswith("@post_response") and raw.count("@") == 1:
+        return raw.split("@", 1)[0]
+    fallback = f"{channel}:{chat_id}".strip(":")
+    return fallback or "unknown:unknown"
 
 
 def _source_ref_message_ids(source_ref: str) -> list[str]:
@@ -556,6 +572,12 @@ class DefaultMemoryEngine:
         self._provenance_shadow_enabled = (
             default_config.memory_experiments.provenance_shadow_enabled
         )
+        self._sleep_consolidation_shadow_enabled = (
+            default_config.memory_experiments.sleep_consolidation_shadow_enabled
+        )
+        self._sleep_consolidation_max_items = (
+            default_config.memory_experiments.sleep_consolidation_max_items
+        )
         self._post_response_worker = PostResponseMemoryWorker(
             memorizer=self._memorizer,
             retriever=self._retriever,
@@ -637,6 +659,7 @@ class DefaultMemoryEngine:
                 scope_channel=event.scope_channel,
                 scope_chat_id=event.scope_chat_id,
             )
+        self._record_sleep_consolidation_shadow_from_event(event)
 
     async def _extract_implicit_long_term(
         self,
@@ -1573,6 +1596,46 @@ class DefaultMemoryEngine:
             )
         except Exception:
             logger.debug("provenance shadow trace failed", exc_info=True)
+
+    def _record_sleep_consolidation_shadow_from_event(
+        self,
+        event: ConsolidationCommitted,
+    ) -> None:
+        experiment_runner = getattr(self, "_experiment_runner", None)
+        if (
+            experiment_runner is None
+            or not getattr(experiment_runner, "enabled", False)
+            or not bool(getattr(self, "_sleep_consolidation_shadow_enabled", False))
+            or self._v2_store is None
+        ):
+            return
+        try:
+            max_items = max(
+                1,
+                int(getattr(self, "_sleep_consolidation_max_items", 500)),
+            )
+            memory_items = self._list_shadow_memory_items(
+                status="active",
+                page_size=min(max_items, 200),
+                max_pages=max(1, (max_items + 199) // 200),
+            )[:max_items]
+            shadow = build_sleep_consolidation_shadow_result(
+                memory_items=memory_items,
+            )
+            session_key = _session_key_from_source_ref(
+                event.source_ref,
+                channel=event.scope_channel,
+                chat_id=event.scope_chat_id,
+            )
+            experiment_runner.record_sleep_consolidation_shadow(
+                session_key=session_key,
+                turn_id=f"{event.source_ref}@sleep_consolidation",
+                baseline_result=shadow.baseline_result,
+                experimental_result=shadow.experimental_result,
+                metrics=shadow.metrics,
+            )
+        except Exception:
+            logger.debug("sleep consolidation shadow trace failed", exc_info=True)
 
     def _list_shadow_memory_items(
         self,

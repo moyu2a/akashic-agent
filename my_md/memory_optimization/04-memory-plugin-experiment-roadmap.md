@@ -303,11 +303,18 @@ experimental：重排和治理后的建议注入结果
 - `duplicate_group_count`：重复组数量。
 - `merge_candidate_count`：可合并候选数量。
 - `stale_candidate_count`：过期候选数量。
+- `low_value_candidate_count`：低价值候选数量。
 - `conflict_candidate_count`：冲突候选数量。
+- `missing_source_ref_count`：缺少来源引用数量。
 - `estimated_token_saving`：预计节省 token。
 - `estimated_redundancy_drop`：预计冗余下降。
 - `job_latency_ms`：任务耗时。
-- `applied_change_count`：真实执行修改数。
+- `applied_change_count`：真实执行修改数，第一版固定为 0。
+- `duplicate_group_truncated_count`：因 trace 输出上限被截断的重复组数量。
+- `merge_candidate_truncated_count`：因 trace 输出上限被截断的可合并候选数量。
+- `conflict_candidate_truncated_count`：因 trace 输出上限被截断的冲突候选数量。
+- `stale_candidate_truncated_count`：因 trace 输出上限被截断的过期候选数量。
+- `low_value_candidate_truncated_count`：因 trace 输出上限被截断的低价值候选数量。
 
 ### active 后可测
 
@@ -417,7 +424,7 @@ Phase 3a  已完成：召回质量重排 shadow
 Phase 3b  已完成：注入治理 shadow
 Phase 4a  已完成：因果一致性版本链 shadow
 Phase 4b  已完成：层级化溯源 shadow
-Phase 5   待做：离线异步睡眠巩固
+Phase 5   已完成第一版：离线睡眠巩固 shadow dry-run
 Phase 6   待做：评测集、Dashboard 和 active 化决策
 ```
 
@@ -561,9 +568,20 @@ Phase 4a/4b 验证结论：
 
 ### Phase 5：离线异步睡眠巩固
 
-- 后台 dry-run 扫描重复、冲突、过期、可合并记忆。
-- 先生成报告，不直接改库。
-- 输出 `redundancy_drop`、`compression_ratio`、`merge_candidate_count`、`conflict_candidate_count`。
+Phase 5 已完成第一版：离线睡眠巩固 shadow dry-run。
+
+- 在 `ConsolidationCommitted` 事件处理后执行有界 active memory 扫描。
+- 输出重复组、可合并候选、过期候选、低价值候选、冲突候选和缺失 `source_ref` 数量。
+- 输出预计 token 节省、预计冗余下降、任务耗时和候选截断数量。
+- 只写 `sleep_consolidation_shadow` trace，不合并、不删除、不 supersede、不修改真实召回和 prompt 注入。
+- 冲突候选会先于重复/合并候选识别，避免“喜欢”和“不喜欢”这类相反偏好被误当成可合并重复项。
+- 第一版不是常驻后台守护进程；是否做 scheduler / daemon 留到 active 化前评估。
+
+Phase 5 验证结论：
+
+- sleep consolidation 纯函数测试覆盖重复、可合并、过期、低价值、冲突、缺失来源和 trace 截断。
+- 配置、trace writer 和 engine shadow 挂点测试通过。
+- 当前仍是 shadow-only / dry-run，不改变真实写入、真实召回、真实 `recall_memory` 工具结果和 prompt 注入。
 
 ### Phase 6：评测集和 Dashboard
 

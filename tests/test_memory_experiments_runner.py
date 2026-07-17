@@ -261,6 +261,27 @@ def test_record_provenance_shadow_writes_trace(tmp_path: Path) -> None:
     assert row["metrics_json"]["source_ref_coverage"] == 1.0
 
 
+def test_record_sleep_consolidation_shadow_writes_trace(tmp_path: Path) -> None:
+    runner = MemoryExperimentRunner(
+        workspace=tmp_path,
+        config=MemoryExperimentsConfig(enabled=True, mode="shadow"),
+    )
+
+    runner.record_sleep_consolidation_shadow(
+        session_key="cli:local",
+        turn_id="cli:local@sleep_consolidation",
+        baseline_result={"active_memory_count": 2},
+        experimental_result={"duplicate_groups": [{"item_ids": ["m1", "m2"]}]},
+        metrics={"duplicate_group_count": 1, "applied_change_count": 0},
+    )
+
+    row = _read_jsonl(tmp_path / "observe" / "memory_experiments.jsonl")[0]
+    assert row["feature_name"] == "sleep_consolidation_shadow"
+    assert row["baseline_result"]["active_memory_count"] == 2
+    assert row["metrics_json"]["duplicate_group_count"] == 1
+    assert row["metrics_json"]["applied_change_count"] == 0
+
+
 def test_score_write_candidate_shadow_rejects_temporary_text() -> None:
     result = score_write_candidate_shadow("临时测试变量 value-a-012，不要写入长期记忆")
 

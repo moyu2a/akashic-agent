@@ -177,3 +177,35 @@ def test_render_default_memory_config_includes_phase4_flags() -> None:
 
     assert "version_chain_shadow_enabled = false" in rendered
     assert "provenance_shadow_enabled = false" in rendered
+
+
+def test_memory_experiments_phase5_flags_load_from_plugin_toml(
+    tmp_path: Path,
+) -> None:
+    plugin_dir = tmp_path / "default_memory"
+    plugin_dir.mkdir()
+    (plugin_dir / "config.local.toml").write_text(
+        "\n".join(
+            [
+                "[memory_experiments]",
+                "enabled = true",
+                'mode = "shadow"',
+                "sleep_consolidation_shadow_enabled = true",
+                "sleep_consolidation_max_items = 123",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    cfg = load_default_memory_config(plugin_dir=plugin_dir)
+
+    assert cfg.memory_experiments.sleep_consolidation_shadow_enabled is True
+    assert cfg.memory_experiments.sleep_consolidation_max_items == 123
+
+
+def test_render_default_memory_config_includes_phase5_flags() -> None:
+    rendered = render_default_memory_config()
+
+    assert "sleep_consolidation_shadow_enabled = false" in rendered
+    assert "sleep_consolidation_max_items = 500" in rendered

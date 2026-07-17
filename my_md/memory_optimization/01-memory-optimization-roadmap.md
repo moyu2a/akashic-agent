@@ -207,7 +207,8 @@ final_score =
 - Phase 3b 已完成：注入治理 shadow 已输出 baseline 与 experimental 的注入差异、丢弃原因和 prompt 预算变化，不改变真实召回结果。
 - Phase 4a 已完成：因果一致性版本链 shadow 已输出 replacement-only 版本链、当前 active leaf、旧版本误召回、冲突链和回滚候选，不改变真实召回结果。
 - Phase 4b 已完成：层级化溯源 shadow 已输出 source_ref 解析、来源覆盖、孤儿记忆、扫描级跨 scope 数量和本轮召回级跨 scope 风险；第一版不执行真实回源。
-- 后续下一步是 Phase 5：离线异步睡眠巩固。
+- Phase 5 已完成第一版：离线睡眠巩固 shadow dry-run 已输出重复、可合并、过期、低价值、冲突、缺失来源和预计 token 节省，不改变真实记忆库。
+- 后续下一步是 Phase 6：评测集、Dashboard 和 active 化决策。
 
 ### Phase 0：实验框架和开关
 
@@ -289,9 +290,12 @@ Phase 4a/4b 验证结论：
 
 ### Phase 5：离线异步睡眠巩固
 
-- 后台 dry-run 扫描重复、冲突、过期、可合并记忆。
-- 先生成报告，不直接改库。
-- 输出 `redundancy_drop`、`compression_ratio`、`merge_candidate_count`、`conflict_candidate_count`。
+- Phase 5 已完成第一版 shadow dry-run。
+- 在 `ConsolidationCommitted` 事件后有界扫描 active memory。
+- 输出重复组、可合并候选、过期候选、低价值候选、冲突候选、缺失 `source_ref` 数量、预计 token 节省、预计冗余下降和任务耗时。
+- 候选 trace 有输出上限，并记录截断数量，避免 shadow trace 过大。
+- 第一版不合并、不删除、不 supersede、不修改真实召回和 prompt 注入。
+- 常驻 scheduler / daemon、真实压缩率和 active 清理留到 Phase 6 评测后再判断。
 
 ### Phase 6：评测集和 Dashboard
 

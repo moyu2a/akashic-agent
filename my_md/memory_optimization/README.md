@@ -48,11 +48,11 @@
 - Phase 3b：注入治理 shadow，记录 baseline 与 experimental 的注入差异、丢弃原因和 prompt 预算变化，不改变真实召回和 prompt 注入。
 - Phase 4a：因果一致性版本链 shadow，基于 `memory_items.status`、`memory_replacements` 和本轮 baseline recalled items 构建 replacement-only 版本链，记录旧版本误召回、当前叶子、冲突链和回滚候选，不改变真实召回和 prompt 注入。
 - Phase 4b：层级化溯源 shadow，解析现有 `source_ref` 和 scope 字段，记录来源覆盖、解析成功率、孤儿记忆、扫描级跨 scope 数量和本轮召回级跨 scope 风险；第一版不执行真实 `fetch_messages` 回源。
+- Phase 5：离线睡眠巩固 shadow dry-run，在 `ConsolidationCommitted` 事件后有界扫描 active memory，记录重复、可合并、过期、低价值、冲突、缺失 source_ref 和预计 token 节省；不合并、不删除、不修改真实召回和 prompt 注入。
 
-后续还有 2 个主要子阶段：
+后续还有 1 个主要子阶段：
 
-1. Phase 5：离线异步睡眠巩固。
-2. Phase 6：评测集、Dashboard 和 active 化决策。
+1. Phase 6：评测集、Dashboard 和 active 化决策。
 
 trace 汇总报告是这些阶段的数据出口，不应替代上述实验方向。
 
@@ -93,6 +93,12 @@ Phase 4a/4b 的验证结论：
 - broader memory suite：`136 passed, 3 skipped, 1 warning`。
 - full pytest：`1915 passed, 3 skipped, 3 warnings`。
 - `compileall` 和 `git diff --check`：通过。
+
+Phase 5 的验证结论：
+
+- sleep consolidation 纯函数测试：通过。
+- 配置、trace writer 和 engine shadow 挂点测试：通过。
+- 仍然是 shadow-only / dry-run，不改变真实写入、真实召回、真实 `recall_memory` 工具结果和 prompt 注入。
 
 ## 实验扩展原则
 

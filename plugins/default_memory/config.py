@@ -48,6 +48,8 @@ class MemoryExperimentsConfig:
     injection_governance_shadow_enabled: bool = False
     version_chain_shadow_enabled: bool = False
     provenance_shadow_enabled: bool = False
+    sleep_consolidation_shadow_enabled: bool = False
+    sleep_consolidation_max_items: int = 500
 
     def __post_init__(self) -> None:
         allowed = {"off", "shadow", "active", "ab"}
@@ -62,6 +64,11 @@ class MemoryExperimentsConfig:
             self,
             "graph_retrieval_max_hops",
             max(1, int(self.graph_retrieval_max_hops)),
+        )
+        object.__setattr__(
+            self,
+            "sleep_consolidation_max_items",
+            max(1, min(int(self.sleep_consolidation_max_items), 5000)),
         )
 
 
@@ -122,6 +129,8 @@ def render_default_memory_config(config: DefaultMemoryConfig | None = None) -> s
             f"injection_governance_shadow_enabled = {str(memory_experiments.injection_governance_shadow_enabled).lower()}",
             f"version_chain_shadow_enabled = {str(memory_experiments.version_chain_shadow_enabled).lower()}",
             f"provenance_shadow_enabled = {str(memory_experiments.provenance_shadow_enabled).lower()}",
+            f"sleep_consolidation_shadow_enabled = {str(memory_experiments.sleep_consolidation_shadow_enabled).lower()}",
+            f"sleep_consolidation_max_items = {memory_experiments.sleep_consolidation_max_items}",
             "",
         ]
     )
@@ -201,6 +210,12 @@ def _build_config(payload: dict[str, Any]) -> DefaultMemoryConfig:
             ),
             provenance_shadow_enabled=bool(
                 experiments.get("provenance_shadow_enabled", False)
+            ),
+            sleep_consolidation_shadow_enabled=bool(
+                experiments.get("sleep_consolidation_shadow_enabled", False)
+            ),
+            sleep_consolidation_max_items=int(
+                experiments.get("sleep_consolidation_max_items", 500)
             ),
         ),
     )

@@ -355,7 +355,7 @@ Phase 0 首个落地点是 `write_value_score` shadow trace。它先记录显式
 | Phase 2b | NetworkX 实体图谱召回 | `graph_hit_count`、`graph_ids`、`graph_fused_ids`、`graph_path_count`、`avg_graph_path_length`、`entity_match_count`、`graph_lane_contribution`、`graph_score_distribution`、`retrieval_latency_ms`、`baseline_graph_overlap_rate` |
 | Phase 3 | 召回重排和注入治理 | `raw_rank`、`experimental_rank`、`rank_delta`、`score_breakdown`、`rerank_changed_count`、`baseline_experimental_overlap_rate`、`drop_reason`、`inject_reason`、`baseline_injected_ids`、`experimental_injected_ids`、`prompt_token_delta` |
 | Phase 4 | 因果一致性版本链和层级化溯源 | `replacement_count`、`chain_count`、`avg_chain_depth`、`max_chain_depth`、`active_leaf_count`、`stale_recalled_count`、`superseded_recalled_count`、`rollback_candidate_count`、`conflict_chain_count`、`orphan_replacement_count`、`source_ref_coverage`、`parse_success_rate`、`source_ref_parse_success_rate`、`session_level_source_count`、`message_level_source_count`、`span_level_source_count`、`malformed_source_ref_count`、`orphan_memory_count`、`cross_scope_memory_count`、`cross_scope_risk_count` |
-| Phase 5 | 离线异步睡眠巩固 | `duplicate_group_count`、`merge_candidate_count`、`stale_candidate_count`、`conflict_candidate_count`、`estimated_token_saving`、`job_latency_ms` |
+| Phase 5 | 离线睡眠巩固 shadow dry-run | `scanned_count`、`duplicate_group_count`、`duplicate_item_count`、`merge_candidate_count`、`stale_candidate_count`、`low_value_candidate_count`、`conflict_candidate_count`、`missing_source_ref_count`、`estimated_token_saving`、`estimated_redundancy_drop`、`job_latency_ms`、`applied_change_count`、`duplicate_group_truncated_count`、`merge_candidate_truncated_count`、`conflict_candidate_truncated_count`、`stale_candidate_truncated_count`、`low_value_candidate_truncated_count` |
 | Phase 6 | 评测集、Dashboard 和 active 化决策 | `recall_at_k`、`precision_at_k`、`wrong_recall_rate`、`memory_pollution_rate`、`compression_ratio`、`source_support_rate` |
 
 其中 Phase 1b 到 Phase 5 默认仍然是 shadow 或 dry-run。只有 Phase 6 的评测数据稳定后，才讨论把某些策略切到 active。
@@ -388,6 +388,28 @@ Phase 4a/4b 已补充版本链和层级溯源 shadow 指标：
 - `orphan_memory_count` 表示缺少来源的记忆数量。
 - `cross_scope_memory_count` 表示扫描快照里存在其他 channel/chat 的来源。
 - `cross_scope_risk_count` 表示当前会话真实召回项可能混入其他 channel/chat 的来源。
+
+Phase 5 已补充离线睡眠巩固 shadow dry-run 指标：
+
+- `scanned_count`：本次扫描的 active memory 数量。
+- `duplicate_group_count`：高度相似的重复组数量。
+- `duplicate_item_count`：参与重复组的记忆数量。
+- `merge_candidate_count`：同类、同 scope、语义接近但未达到重复阈值的候选数量。
+- `stale_candidate_count`：更新时间较久、强化次数低、情绪权重低的候选数量。
+- `low_value_candidate_count`：过期且偏临时/事件型的候选数量。
+- `conflict_candidate_count`：同一偏好方向存在相反表达的候选数量。
+- `missing_source_ref_count`：缺少来源引用的记忆数量。
+- `estimated_token_saving`：如果后续合并/清理候选，预计可减少的 token 量。
+- `estimated_redundancy_drop`：重复项占扫描集合的比例。
+- `job_latency_ms`：本次 shadow job 耗时。
+- `applied_change_count`：第一版固定为 0，表示没有真实副作用。
+- `duplicate_group_truncated_count`：因 trace 输出上限被截断的重复组数量。
+- `merge_candidate_truncated_count`：因 trace 输出上限被截断的可合并候选数量。
+- `conflict_candidate_truncated_count`：因 trace 输出上限被截断的冲突候选数量。
+- `stale_candidate_truncated_count`：因 trace 输出上限被截断的过期候选数量。
+- `low_value_candidate_truncated_count`：因 trace 输出上限被截断的低价值候选数量。
+
+这些字段由 `sleep_consolidation_shadow` trace 输出。第一版只在 memory consolidation 事件后做有界扫描，不执行合并、删除、supersede 或 active 清理。
 
 当前 Phase 4b 不执行真实 `fetch_messages` 回源，所以 `fetch_success_rate`、`evidence_precision`、`source_support_rate` 仍然不能由本阶段 trace 直接给出，需要后续回源评测或标注集。
 
