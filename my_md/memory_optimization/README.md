@@ -161,6 +161,20 @@ Phase 6b-3 的验证结论：
 - 后续需要修订：答案期望应支持同义词 / 任一命中组，避免把“Telegram”“三路召回”这类表达方式当成唯一正确表述；token usage 解析也需要兼容 provider 只返回 prompt/total 或 input/output 字段的情况。
 - 修订后真实 LLM 复测结论：答案评分器已支持“必须命中项 + 同义词任一命中组”，`LLMProvider` 已把标准 usage 写入 `provider_fields["usage"]`，所以 completion token 可以记录。复测结果为 `case_count = 3`、`passed_case_count = 2`、`failed_case_count = 1`、`memory_grounding_pass_count = 3`、`answer_rule_pass_count = 2`、`completion_token_count = 602`、`total_token_count = 17098`。仍失败的 `vague_reference_graph` 缺少 `RRF` 和第三路相关同义词，说明该 case 当前暴露的是模型未稳定使用具体排序证据，而不只是评分规则过窄。
 
+当前存在的问题：
+
+- `vague_reference_graph` 仍未通过。报告显示期望 memory id 已命中，但最终回答没有出现 `RRF` 或“第三路 / 三路召回 / 融合排序”相关表达。
+- 真实 LLM 样本仍然很小，当前只有 3 个 case，不能代表整体长期记忆质量。
+- 本阶段 memory 数据仍是 fixture 受控数据，不是真实 `workspace/memory/memory2.db`，所以还不能说明真实用户记忆库上的召回和回答效果。
+- 当前答案评分仍以关键词和同义词组为主，尚不能覆盖所有语义等价表达，也不能证明 source support 完整可靠。
+
+可能原因：
+
+- 记忆虽然被检索并注入，但 prompt 中没有强约束模型必须使用或复述关键证据，导致模型可能给出泛化回答。
+- `vague_reference_graph` 是模糊指代场景，问题短、上下文依赖强，模型可能没有把“第三路方案”稳定映射到 `RRF 融合排序` 这条记忆。
+- 受控 memory engine 只保证注入 memory summary，并不模拟真实三路召回、图谱路径、source_ref 回源后的证据强化。
+- 答案评测没有保存完整回答正文，隐私边界更安全，但排查语义等价失败时可观测性较弱；后续可增加显式手动开关，把答案 debug 写到临时目录且不提交。
+
 ## 实验扩展原则
 
 图片中的高级能力进入本项目时，应先作为 memory 插件实验能力，而不是直接写成已实现能力。每项实验都需要：

@@ -641,6 +641,19 @@ avg_latency_ms = 3142
 - token usage 通过 provider 层标准 usage 暴露后，`completion_token_count` 从 0 变为 602。
 - `vague_reference_graph` 仍失败：回答没有命中 `RRF`，也没有命中 `三路召回 / 第三路 / 第三路方案 / 融合排序` 任一同义词组。这个失败应保留为真实答案质量信号，后续需要加强 memory evidence 使用或增加显式引用要求，而不是继续无约束放宽评分。
 
+当前问题和可能原因：
+
+| 问题 | 当前证据 | 可能原因 |
+| --- | --- | --- |
+| 模糊指代图谱 case 未通过 | `vague_reference_graph` 的 `memory_grounding_passed = true`，但 `answer_rule_passed = false` | 模型拿到了 memory id，但没有稳定使用 `RRF / 第三路 / 融合排序` 这类关键排序证据 |
+| 真实样本覆盖不足 | 真实 LLM 只跑了 3 个受控 case | 当前阶段目标是验证链路和指标，不足以统计整体准确率 |
+| 真实 memory DB 未参与 | memory 来自 fixture，不读取 `workspace/memory/memory2.db` | 为了隔离变量，Phase 6b-3 先固定 memory 输入；真实库评测需要后续样本采集和召回链路组合 |
+| 语义等价判断有限 | 评分器使用固定词和同义词组 | 简单规则可解释、可重复，但无法替代人工标注或 LLM-as-judge |
+| 答案正文不可见 | 报告只记录长度和脱敏失败原因 | 隐私边界优先，排查复杂语义失败时需要显式 debug 开关写临时文件 |
+| prompt 可能没有足够证据约束 | memory id 命中但关键术语未出现在答案规则中 | 注入内容没有要求模型引用 memory id、复述关键事实或说明依据 |
+
+下一步优化方向不是继续放宽 `vague_reference_graph` 的评分，而是验证模型为什么没有使用关键证据。可选方案包括：给答案级 eval 增加显式引用要求、在 prompt 中标注“回答必须使用相关记忆证据”、增加 answer debug 手动开关，或把真实三路召回 / 图谱路径证据接入该小样本评测。
+
 ## 指标优先级
 
 ### P-1：实验对照输出

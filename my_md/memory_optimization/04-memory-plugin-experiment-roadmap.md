@@ -771,9 +771,24 @@ Phase 6b-3 修订后真实 LLM 复测结论：
 - 复测结果：`case_count = 3`、`passed_case_count = 2`、`failed_case_count = 1`、`memory_grounding_pass_count = 3`、`answer_rule_pass_count = 2`、`total_token_count = 17098`、`total_latency_ms = 9427`。
 - `vague_reference_graph` 仍失败，原因是没有命中 `RRF` 和第三路相关同义词。该结果说明模型对模糊指代下的具体排序证据使用仍不稳定，后续应优化证据注入、提示约束或增加显式引用检测。
 
+当前存在的问题和可能原因：
+
+- 问题 1：`vague_reference_graph` 记忆命中但答案未命中关键证据。
+  - 证据：`memory_grounding_pass_count = 3`，但 `answer_rule_pass_count = 2`。
+  - 可能原因：模型没有被强制引用或复述注入记忆中的 `RRF 融合排序`，模糊指代问题也增加了证据使用难度。
+- 问题 2：真实 LLM 评测样本太少。
+  - 证据：当前仅 3 个 case。
+  - 可能原因：Phase 6b-3 先验证链路和指标，没有扩展到真实 memory DB 样本集。
+- 问题 3：评测 memory 仍是受控 fixture。
+  - 证据：harness 使用受控 memory engine，不读取真实 memory2 DB。
+  - 可能原因：当前阶段为了隔离 LLM 行为和报告链路，先固定 memory 输入；后续需要把 Phase 6b-1 的真实样本和 Phase 6b-3 的答案级评测联动。
+- 问题 4：答案质量判断仍偏规则化。
+  - 证据：评分依赖关键词和同义词组。
+  - 可能原因：规则评测可重复、低成本、无额外 LLM 调用，但对复杂语义等价表达覆盖有限。
+
 后续建议拆分：
 
-1. Phase 6b-4：修订答案评分规则和 token usage 解析后，重新运行真实 LLM 小样本，记录修订前后对比。
+1. Phase 6b-4：定位 `vague_reference_graph` 的证据使用失败原因，尝试显式引用要求、证据注入增强或 answer debug 手动开关。
 2. Phase 6c：把 eval report 接入 Dashboard 或 observe 查询界面。
 3. Phase 6d：基于连续评测结果决定哪些策略可以从 shadow 切到 active。
 
