@@ -577,6 +577,40 @@ avg_latency_ms = 18
 
 这些数据证明答案级评测、token 元数据采集和脱敏报告链路已经跑通。由于本轮使用 fake provider，token 数和延迟只用于验证链路，不代表真实模型费用或真实响应性能。真实质量数据需要后续人工确认后运行 `--enable-real-llm`。
 
+真实 LLM 人工确认运行结果：
+
+```text
+real_llm_enabled = true
+case_count = 3
+passed_case_count = 1
+failed_case_count = 2
+answer_contains_pass_count = 3
+answer_contains_miss_count = 2
+forbidden_contains_violation_count = 0
+expected_memory_used_count = 3
+language_pass_count = 3
+provider_error_count = 0
+timeout_count = 0
+token_metrics_available = true
+prompt_token_count = 14911
+completion_token_count = 0
+total_token_count = 14911
+total_latency_ms = 10114
+avg_latency_ms = 3371
+```
+
+失败明细：
+
+- `cross_scope_isolation`：缺少固定期望词 `Telegram`。
+- `vague_reference_graph`：缺少固定期望词 `三路召回`。
+
+这次真实运行可以得出两个分层结论：
+
+- 记忆注入 / grounding 链路是通的：3 个 case 都记录到了期望 memory id。
+- 答案规则需要修订：当前 `expected_answer_contains` 要求每个固定词都出现，容易把合理同义表达误判为失败。
+
+因此下一步不应简单放宽为“全部通过”，而应把答案期望结构扩展成“必须命中项 + 同义词任一命中组”，并增强 token usage 解析。
+
 ## 指标优先级
 
 ### P-1：实验对照输出

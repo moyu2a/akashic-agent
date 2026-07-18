@@ -156,6 +156,9 @@ Phase 6b-3 的验证结论：
 - 隐私边界：`raw_query_included = False`、`raw_memory_summary_included = False`、`prompt_included = False`、`session_text_included = False`、`full_answer_included = False`。
 - 报告路径：`my_md/memory_optimization/eval_reports/memory_llm_sample_eval.json` 和 `memory_llm_sample_eval.md`。
 - 当前结论是“答案级小样本评测链路已经具备，并且真实 LLM 调用有显式门控”。要得到真实模型质量和费用数据，需要人工确认后运行带 `--enable-real-llm` 的命令。
+- 真实 LLM 人工确认运行结论：本轮使用主 checkout 的 `config.toml` 跑通真实 provider，`real_llm_enabled = True`，没有 provider error，也没有 timeout。3 个 case 中 `preference_recall` 通过，`cross_scope_isolation` 和 `vague_reference_graph` 因固定关键词缺失未通过；但 `expected_memory_used_count = 3`，说明受控 memory id 注入和记录链路是通的。当前失败更像答案规则过窄，而不是记忆未召回。
+- 真实 LLM 本轮指标：`case_count = 3`、`passed_case_count = 1`、`failed_case_count = 2`、`answer_contains_pass_count = 3`、`answer_contains_miss_count = 2`、`expected_memory_used_count = 3`、`provider_error_count = 0`、`timeout_count = 0`、`token_metrics_available = True`、`total_token_count = 14911`、`total_latency_ms = 10114`、`avg_latency_ms = 3371`。
+- 后续需要修订：答案期望应支持同义词 / 任一命中组，避免把“Telegram”“三路召回”这类表达方式当成唯一正确表述；token usage 解析也需要兼容 provider 只返回 prompt/total 或 input/output 字段的情况。
 
 ## 实验扩展原则
 

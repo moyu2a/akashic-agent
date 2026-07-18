@@ -755,9 +755,18 @@ Phase 6b-3 fake-provider 验证结论：
 - 运行指标：`provider_error_count = 0`、`timeout_count = 0`、`token_metrics_available = true`、`total_token_count = 90`、`total_latency_ms = 56`。
 - 当前结论是“答案级小样本评测链路和真实 LLM 显式门控已经具备”。本轮还没有消耗真实 token，真实模型质量、真实费用和真实延迟需要后续人工确认运行。
 
+Phase 6b-3 真实 LLM 人工确认运行结论：
+
+- 使用主 checkout 的 `config.toml` 跑通真实 provider，报告 `real_llm_enabled = true`。
+- 没有 provider error，也没有 timeout：`provider_error_count = 0`、`timeout_count = 0`。
+- 3 个稳定 case 中 1 个通过、2 个失败：`case_count = 3`、`passed_case_count = 1`、`failed_case_count = 2`。
+- 失败原因不是 memory id 未命中：`expected_memory_used_count = 3`。失败来自固定关键词规则，分别缺少 `Telegram` 和 `三路召回`。
+- 本轮真实 token/延迟指标：`token_metrics_available = true`、`total_token_count = 14911`、`total_latency_ms = 10114`、`avg_latency_ms = 3371`。
+- 当前修订方向：答案评分器增加同义词任一命中组，fixture 不再把平台名或某个中文术语作为唯一正确表达；token usage 解析兼容更多 provider 字段。
+
 后续建议拆分：
 
-1. Phase 6b-4：人工确认后运行真实 LLM 小样本，记录真实 token、延迟、provider 错误和答案规则通过率。
+1. Phase 6b-4：修订答案评分规则和 token usage 解析后，重新运行真实 LLM 小样本，记录修订前后对比。
 2. Phase 6c：把 eval report 接入 Dashboard 或 observe 查询界面。
 3. Phase 6d：基于连续评测结果决定哪些策略可以从 shadow 切到 active。
 
