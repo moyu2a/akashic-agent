@@ -5,21 +5,23 @@
 
 ## Summary
 
-- `answer_contains_miss_count`: `2`
-- `answer_contains_pass_count`: `3`
+- `answer_contains_miss_count`: `1`
+- `answer_contains_pass_count`: `2`
 - `answer_quality_available`: `True`
-- `avg_latency_ms`: `3371`
+- `answer_rule_pass_count`: `2`
+- `avg_latency_ms`: `3142`
 - `case_count`: `3`
-- `completion_token_count`: `0`
+- `completion_token_count`: `602`
 - `expected_memory_used_count`: `3`
-- `failed_case_count`: `2`
+- `failed_case_count`: `1`
 - `forbidden_contains_violation_count`: `0`
 - `full_answer_included`: `False`
 - `language_pass_count`: `3`
-- `passed_case_count`: `1`
+- `memory_grounding_pass_count`: `3`
+- `passed_case_count`: `2`
 - `phase6b_level`: `real_llm_small_sample`
 - `prompt_included`: `False`
-- `prompt_token_count`: `14911`
+- `prompt_token_count`: `16496`
 - `provider_error_count`: `0`
 - `raw_memory_summary_included`: `False`
 - `raw_query_included`: `False`
@@ -27,16 +29,16 @@
 - `session_text_included`: `False`
 - `timeout_count`: `0`
 - `token_metrics_available`: `True`
-- `total_latency_ms`: `10114`
-- `total_token_count`: `14911`
+- `total_latency_ms`: `9427`
+- `total_token_count`: `17098`
 
 ## Case Records
 
-- `cross_scope_isolation`: `{"answer_length": 3, "case_id": "cross_scope_isolation", "category": "scope_isolation", "channel": "telegram", "chat_id": "123", "completion_token_count": 0, "expected_contains_miss_count": 1, "expected_contains_pass_count": 1, "expected_memory_used": true, "failures": ["missing expected answer term: Telegram"], "forbidden_contains_violation_count": 0, "language_passed": true, "latency_ms": 2065, "passed": false, "prompt_token_count": 5052, "provider_error": false, "session_key": "telegram:123", "timeout": false, "token_metrics_available": true, "total_token_count": 5052, "used_memory_ids": ["m_tg_pref"]}`
-- `preference_recall`: `{"answer_length": 3, "case_id": "preference_recall", "category": "preference_recall", "channel": "cli", "chat_id": "local", "completion_token_count": 0, "expected_contains_miss_count": 0, "expected_contains_pass_count": 1, "expected_memory_used": true, "failures": [], "forbidden_contains_violation_count": 0, "language_passed": true, "latency_ms": 1065, "passed": true, "prompt_token_count": 4910, "provider_error": false, "session_key": "cli:local", "timeout": false, "token_metrics_available": true, "total_token_count": 4910, "used_memory_ids": ["m_pref_cn"]}`
-- `vague_reference_graph`: `{"answer_length": 241, "case_id": "vague_reference_graph", "category": "vague_reference", "channel": "cli", "chat_id": "local", "completion_token_count": 0, "expected_contains_miss_count": 1, "expected_contains_pass_count": 1, "expected_memory_used": true, "failures": ["missing expected answer term: 三路召回"], "forbidden_contains_violation_count": 0, "language_passed": true, "latency_ms": 6984, "passed": false, "prompt_token_count": 4949, "provider_error": false, "session_key": "cli:local", "timeout": false, "token_metrics_available": true, "total_token_count": 4949, "used_memory_ids": ["m_graph_1", "m_graph_2"]}`
+- `cross_scope_isolation`: `{"answer_length": 26, "answer_rule_passed": true, "case_id": "cross_scope_isolation", "category": "scope_isolation", "channel": "telegram", "chat_id": "123", "completion_token_count": 89, "expected_contains_miss_count": 0, "expected_contains_pass_count": 1, "expected_memory_used": true, "failures": [], "forbidden_contains_violation_count": 0, "language_passed": true, "latency_ms": 2253, "memory_grounding_passed": true, "passed": true, "prompt_token_count": 5460, "provider_error": false, "session_key": "telegram:123", "timeout": false, "token_metrics_available": true, "total_token_count": 5549, "used_memory_ids": ["m_tg_pref"]}`
+- `preference_recall`: `{"answer_length": 3, "answer_rule_passed": true, "case_id": "preference_recall", "category": "preference_recall", "channel": "cli", "chat_id": "local", "completion_token_count": 329, "expected_contains_miss_count": 0, "expected_contains_pass_count": 1, "expected_memory_used": true, "failures": [], "forbidden_contains_violation_count": 0, "language_passed": true, "latency_ms": 4125, "memory_grounding_passed": true, "passed": true, "prompt_token_count": 5314, "provider_error": false, "session_key": "cli:local", "timeout": false, "token_metrics_available": true, "total_token_count": 5643, "used_memory_ids": ["m_pref_cn"]}`
+- `vague_reference_graph`: `{"answer_length": 44, "answer_rule_passed": false, "case_id": "vague_reference_graph", "category": "vague_reference", "channel": "cli", "chat_id": "local", "completion_token_count": 184, "expected_contains_miss_count": 1, "expected_contains_pass_count": 0, "expected_memory_used": true, "failures": ["missing expected answer term: RRF", "missing expected answer term group: 三路召回|第三路|第三路方案|融合排序"], "forbidden_contains_violation_count": 0, "language_passed": true, "latency_ms": 3049, "memory_grounding_passed": true, "passed": false, "prompt_token_count": 5722, "provider_error": false, "session_key": "cli:local", "timeout": false, "token_metrics_available": true, "total_token_count": 5906, "used_memory_ids": ["m_graph_1", "m_graph_2"]}`
 
 ## Failure Records
 
-- `{"case_id": "cross_scope_isolation", "failure": "missing expected answer term: Telegram"}`
-- `{"case_id": "vague_reference_graph", "failure": "missing expected answer term: 三路召回"}`
+- `{"case_id": "vague_reference_graph", "failure": "missing expected answer term: RRF"}`
+- `{"case_id": "vague_reference_graph", "failure": "missing expected answer term group: 三路召回|第三路|第三路方案|融合排序"}`

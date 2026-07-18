@@ -290,6 +290,9 @@ class LLMProvider:
         cache_prompt_tokens, cache_hit_tokens = _extract_cache_usage(
             getattr(resp, "usage", None)
         )
+        usage_fields = _extract_standard_usage(getattr(resp, "usage", None))
+        if usage_fields:
+            provider_fields = {**provider_fields, "usage": usage_fields}
         if tool_calls:
             provider_fields = strategy.provider_fields_for_tool_call(
                 provider_fields,
@@ -525,6 +528,33 @@ def _extract_cache_usage(usage: Any) -> tuple[int | None, int | None]:
     hit = hit_tokens or 0
     miss = miss_tokens or 0
     return hit + miss, hit
+
+
+def _extract_standard_usage(usage: Any) -> dict[str, int]:
+    prompt_tokens = _coerce_int(_get_field(usage, "prompt_tokens"))
+    completion_tokens = _coerce_int(_get_field(usage, "completion_tokens"))
+    total_tokens = _coerce_int(_get_field(usage, "total_tokens"))
+    if prompt_tokens is None:
+        input_tokens = _coerce_int(_get_field(usage, "input_tokens"))
+        if input_tokens is not None:
+            prompt_tokens = input_tokens
+    if completion_tokens is None:
+        output_tokens = _coerce_int(_get_field(usage, "output_tokens"))
+        if output_tokens is not None:
+            completion_tokens = output_tokens
+    if prompt_tokens is None:
+        cache_prompt_tokens, _ = _extract_cache_usage(usage)
+        prompt_tokens = cache_prompt_tokens
+    if total_tokens is None and prompt_tokens is not None and completion_tokens is not None:
+        total_tokens = prompt_tokens + completion_tokens
+    fields: dict[str, int] = {}
+    if prompt_tokens is not None:
+        fields["prompt_tokens"] = prompt_tokens
+    if completion_tokens is not None:
+        fields["completion_tokens"] = completion_tokens
+    if total_tokens is not None:
+        fields["total_tokens"] = total_tokens
+    return fields
 
 
 def _iter_tool_call_deltas(delta: Any) -> list[dict[str, str | int]]:

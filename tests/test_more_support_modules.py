@@ -143,6 +143,29 @@ async def test_provider_chat_and_retry_paths(monkeypatch: pytest.MonkeyPatch):
     )
     assert result.cache_prompt_tokens == 40
     assert result.cache_hit_tokens == 12
+    assert result.provider_fields["usage"] == {
+        "prompt_tokens": 40,
+    }
+
+    fake = _FakeClient(
+        [
+            _Response(
+                content="usage-ok",
+                usage=SimpleNamespace(
+                    prompt_tokens=40,
+                    completion_tokens=6,
+                    total_tokens=46,
+                ),
+            )
+        ]
+    )
+    monkeypatch.setattr("agent.provider.AsyncOpenAI", lambda **_: fake)
+    result = await LLMProvider(api_key="k").chat([], [], "m", 1)
+    assert result.provider_fields["usage"] == {
+        "prompt_tokens": 40,
+        "completion_tokens": 6,
+        "total_tokens": 46,
+    }
 
     fake = _FakeClient(
         [

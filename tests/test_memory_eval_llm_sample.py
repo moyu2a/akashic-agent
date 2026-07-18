@@ -79,6 +79,8 @@ def test_score_answer_text_passes_expected_and_forbidden_rules() -> None:
     assert result.expected_contains_pass_count == 1
     assert result.forbidden_contains_violation_count == 0
     assert result.expected_memory_used is True
+    assert result.memory_grounding_passed is True
+    assert result.answer_rule_passed is True
 
 
 def test_score_answer_text_fails_forbidden_and_missing_memory() -> None:
@@ -95,6 +97,46 @@ def test_score_answer_text_fails_forbidden_and_missing_memory() -> None:
     assert result.passed is False
     assert result.forbidden_contains_violation_count == 1
     assert result.expected_memory_used is False
+    assert result.memory_grounding_passed is False
+    assert result.answer_rule_passed is False
+
+
+def test_score_answer_text_accepts_any_expected_term_group() -> None:
+    expectation = AnswerExpectation(
+        expected_answer_contains=("RRF",),
+        expected_answer_contains_any=(("三路召回", "第三路", "融合排序"),),
+        expected_memory_ids=("m_graph_1", "m_graph_2"),
+        expected_language="zh",
+        grounding_required=True,
+    )
+
+    result = score_answer_text(
+        "这个第三路方案采用 RRF 排序。",
+        expectation,
+        ["m_graph_1", "m_graph_2"],
+    )
+
+    assert result.passed is True
+    assert result.expected_any_pass_count == 1
+    assert result.expected_any_miss_count == 0
+    assert result.memory_grounding_passed is True
+    assert result.answer_rule_passed is True
+
+
+def test_score_answer_text_separates_memory_grounding_from_answer_rules() -> None:
+    expectation = AnswerExpectation(
+        expected_answer_contains=("RRF",),
+        expected_answer_contains_any=(("三路召回", "第三路"),),
+        expected_memory_ids=("m_graph_1",),
+        expected_language="zh",
+        grounding_required=True,
+    )
+
+    result = score_answer_text("我会用中文回答。", expectation, ["m_graph_1"])
+
+    assert result.passed is False
+    assert result.memory_grounding_passed is True
+    assert result.answer_rule_passed is False
 
 
 @pytest.mark.asyncio
@@ -115,6 +157,8 @@ async def test_run_llm_sample_case_scores_fake_provider_answer(
     assert result.case_id == "preference_recall"
     assert result.answer_length == len("我应该用中文回答你。")
     assert result.expected_memory_used is True
+    assert result.memory_grounding_passed is True
+    assert result.answer_rule_passed is True
     assert result.expected_contains_pass_count == 1
     assert result.forbidden_contains_violation_count == 0
     assert result.language_passed is True
@@ -170,6 +214,58 @@ async def test_run_llm_sample_report_marks_missing_token_metadata(
 
     assert report.metrics["token_metrics_available"] is False
     assert report.case_records[0]["token_metrics_available"] is False
+
+
+@pytest.mark.asyncio
+async def test_run_llm_sample_report_derives_completion_tokens_from_total(
+    tmp_path: Path,
+) -> None:
+    case = load_eval_case(FIXTURE_ROOT / "preference_recall.json")
+    provider = _FakeLLMProvider(
+        response=LLMResponse(
+            content="我应该用中文回答你。",
+            tool_calls=[],
+            provider_fields={"usage": {"prompt_tokens": 80, "total_tokens": 95}},
+        ),
+    )
+
+    report = await run_llm_sample_cases(
+        [case],
+        tmp_path / "workspace",
+        provider,
+        model="fake-model",
+        real_llm_enabled=False,
+    )
+
+    assert report.metrics["prompt_token_count"] == 80
+    assert report.metrics["completion_token_count"] == 15
+    assert report.metrics["total_token_count"] == 95
+
+
+@pytest.mark.asyncio
+async def test_run_llm_sample_report_accepts_input_output_token_names(
+    tmp_path: Path,
+) -> None:
+    case = load_eval_case(FIXTURE_ROOT / "preference_recall.json")
+    provider = _FakeLLMProvider(
+        response=LLMResponse(
+            content="我应该用中文回答你。",
+            tool_calls=[],
+            provider_fields={"usage": {"input_tokens": 80, "output_tokens": 15}},
+        ),
+    )
+
+    report = await run_llm_sample_cases(
+        [case],
+        tmp_path / "workspace",
+        provider,
+        model="fake-model",
+        real_llm_enabled=False,
+    )
+
+    assert report.metrics["prompt_token_count"] == 80
+    assert report.metrics["completion_token_count"] == 15
+    assert report.metrics["total_token_count"] == 95
 
 
 @pytest.mark.asyncio

@@ -764,6 +764,13 @@ Phase 6b-3 真实 LLM 人工确认运行结论：
 - 本轮真实 token/延迟指标：`token_metrics_available = true`、`total_token_count = 14911`、`total_latency_ms = 10114`、`avg_latency_ms = 3371`。
 - 当前修订方向：答案评分器增加同义词任一命中组，fixture 不再把平台名或某个中文术语作为唯一正确表达；token usage 解析兼容更多 provider 字段。
 
+Phase 6b-3 修订后真实 LLM 复测结论：
+
+- 答案期望已支持同义词任一命中组，报告新增 `answer_rule_pass_count` 和 `memory_grounding_pass_count`，可以区分“记忆命中”与“回答规则命中”。
+- `LLMProvider` 已暴露标准 usage，真实报告可以记录 completion token：`completion_token_count = 602`。
+- 复测结果：`case_count = 3`、`passed_case_count = 2`、`failed_case_count = 1`、`memory_grounding_pass_count = 3`、`answer_rule_pass_count = 2`、`total_token_count = 17098`、`total_latency_ms = 9427`。
+- `vague_reference_graph` 仍失败，原因是没有命中 `RRF` 和第三路相关同义词。该结果说明模型对模糊指代下的具体排序证据使用仍不稳定，后续应优化证据注入、提示约束或增加显式引用检测。
+
 后续建议拆分：
 
 1. Phase 6b-4：修订答案评分规则和 token usage 解析后，重新运行真实 LLM 小样本，记录修订前后对比。

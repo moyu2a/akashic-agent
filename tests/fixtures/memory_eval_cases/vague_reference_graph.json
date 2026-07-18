@@ -41,7 +41,8 @@
       ]
     },
     "answer_expectations": {
-      "expected_answer_contains": ["RRF", "三路召回"],
+      "expected_answer_contains": ["RRF"],
+      "expected_answer_contains_any": [["三路召回", "第三路", "第三路方案", "融合排序"]],
       "forbidden_answer_contains": [],
       "expected_memory_ids": ["m_graph_1", "m_graph_2"],
       "expected_language": "zh",

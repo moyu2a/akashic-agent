@@ -611,6 +611,36 @@ avg_latency_ms = 3371
 
 因此下一步不应简单放宽为“全部通过”，而应把答案期望结构扩展成“必须命中项 + 同义词任一命中组”，并增强 token usage 解析。
 
+修订后真实 LLM 复测结果：
+
+```text
+real_llm_enabled = true
+case_count = 3
+passed_case_count = 2
+failed_case_count = 1
+answer_rule_pass_count = 2
+memory_grounding_pass_count = 3
+answer_contains_pass_count = 2
+answer_contains_miss_count = 1
+forbidden_contains_violation_count = 0
+expected_memory_used_count = 3
+language_pass_count = 3
+provider_error_count = 0
+timeout_count = 0
+token_metrics_available = true
+prompt_token_count = 16496
+completion_token_count = 602
+total_token_count = 17098
+total_latency_ms = 9427
+avg_latency_ms = 3142
+```
+
+修订效果：
+
+- `cross_scope_isolation` 通过：不再要求回答必须出现平台名 `Telegram`，而是用 memory id 命中和禁止出现 `QQ` / `更短` 验证 scope 隔离。
+- token usage 通过 provider 层标准 usage 暴露后，`completion_token_count` 从 0 变为 602。
+- `vague_reference_graph` 仍失败：回答没有命中 `RRF`，也没有命中 `三路召回 / 第三路 / 第三路方案 / 融合排序` 任一同义词组。这个失败应保留为真实答案质量信号，后续需要加强 memory evidence 使用或增加显式引用要求，而不是继续无约束放宽评分。
+
 ## 指标优先级
 
 ### P-1：实验对照输出

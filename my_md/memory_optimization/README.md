@@ -159,6 +159,7 @@ Phase 6b-3 的验证结论：
 - 真实 LLM 人工确认运行结论：本轮使用主 checkout 的 `config.toml` 跑通真实 provider，`real_llm_enabled = True`，没有 provider error，也没有 timeout。3 个 case 中 `preference_recall` 通过，`cross_scope_isolation` 和 `vague_reference_graph` 因固定关键词缺失未通过；但 `expected_memory_used_count = 3`，说明受控 memory id 注入和记录链路是通的。当前失败更像答案规则过窄，而不是记忆未召回。
 - 真实 LLM 本轮指标：`case_count = 3`、`passed_case_count = 1`、`failed_case_count = 2`、`answer_contains_pass_count = 3`、`answer_contains_miss_count = 2`、`expected_memory_used_count = 3`、`provider_error_count = 0`、`timeout_count = 0`、`token_metrics_available = True`、`total_token_count = 14911`、`total_latency_ms = 10114`、`avg_latency_ms = 3371`。
 - 后续需要修订：答案期望应支持同义词 / 任一命中组，避免把“Telegram”“三路召回”这类表达方式当成唯一正确表述；token usage 解析也需要兼容 provider 只返回 prompt/total 或 input/output 字段的情况。
+- 修订后真实 LLM 复测结论：答案评分器已支持“必须命中项 + 同义词任一命中组”，`LLMProvider` 已把标准 usage 写入 `provider_fields["usage"]`，所以 completion token 可以记录。复测结果为 `case_count = 3`、`passed_case_count = 2`、`failed_case_count = 1`、`memory_grounding_pass_count = 3`、`answer_rule_pass_count = 2`、`completion_token_count = 602`、`total_token_count = 17098`。仍失败的 `vague_reference_graph` 缺少 `RRF` 和第三路相关同义词，说明该 case 当前暴露的是模型未稳定使用具体排序证据，而不只是评分规则过窄。
 
 ## 实验扩展原则
 

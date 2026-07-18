@@ -36,7 +36,7 @@
       "provenance_shadow": ["cross_scope_memory_count", "cross_scope_risk_count"]
     },
     "answer_expectations": {
-      "expected_answer_contains": ["Telegram", "中文"],
+      "expected_answer_contains": ["中文"],
       "forbidden_answer_contains": ["QQ", "更短"],
       "expected_memory_ids": ["m_tg_pref"],
       "expected_language": "zh",

@@ -39,6 +39,7 @@ _CJK_RE = re.compile(r"[\u3400-\u9fff]")
 @dataclass(frozen=True)
 class AnswerExpectation:
     expected_answer_contains: tuple[str, ...] = ()
+    expected_answer_contains_any: tuple[tuple[str, ...], ...] = ()
     forbidden_answer_contains: tuple[str, ...] = ()
     expected_memory_ids: tuple[str, ...] = ()
     expected_language: str = ""
@@ -48,8 +49,12 @@ class AnswerExpectation:
 @dataclass(frozen=True)
 class AnswerScoreResult:
     passed: bool
+    answer_rule_passed: bool
+    memory_grounding_passed: bool
     expected_contains_pass_count: int
     expected_contains_miss_count: int
+    expected_any_pass_count: int
+    expected_any_miss_count: int
     forbidden_contains_violation_count: int
     expected_memory_used: bool
     language_passed: bool
@@ -75,6 +80,8 @@ class LLMSampleCaseResult:
     completion_token_count: int
     total_token_count: int
     token_metrics_available: bool
+    answer_rule_passed: bool
+    memory_grounding_passed: bool
     provider_error: bool
     timeout: bool
     used_memory_ids: tuple[str, ...]
@@ -194,6 +201,9 @@ def answer_expectation_from_case(case: EvalCase) -> AnswerExpectation:
         return AnswerExpectation()
     return AnswerExpectation(
         expected_answer_contains=_string_tuple(raw.get("expected_answer_contains")),
+        expected_answer_contains_any=_string_groups(
+            raw.get("expected_answer_contains_any")
+        ),
         forbidden_answer_contains=_string_tuple(raw.get("forbidden_answer_contains")),
         expected_memory_ids=_string_tuple(raw.get("expected_memory_ids")),
         expected_language=str(raw.get("expected_language") or ""),
@@ -216,6 +226,17 @@ def score_answer_text(
             expected_miss_count += 1
             failures.append(f"missing expected answer term: {term}")
 
+    expected_any_pass_count = 0
+    expected_any_miss_count = 0
+    for group in expectation.expected_answer_contains_any:
+        if any(_contains_term(answer, term) for term in group):
+            expected_any_pass_count += 1
+        else:
+            expected_any_miss_count += 1
+            failures.append(
+                "missing expected answer term group: " + "|".join(group)
+            )
+
     forbidden_violation_count = 0
     for term in expectation.forbidden_answer_contains:
         if _contains_term(answer, term):
@@ -232,16 +253,27 @@ def score_answer_text(
     if missing_memory_ids:
         failures.append(f"missing expected memory ids: {','.join(missing_memory_ids)}")
 
+    memory_grounding_passed = expected_memory_used
     language_passed = True
     if expectation.expected_language == "zh":
         language_passed = bool(_CJK_RE.search(answer))
         if not language_passed:
             failures.append("answer is not detected as Chinese")
 
+    answer_rule_passed = (
+        expected_miss_count == 0
+        and expected_any_miss_count == 0
+        and forbidden_violation_count == 0
+        and language_passed
+    )
     return AnswerScoreResult(
-        passed=not failures,
+        passed=answer_rule_passed and memory_grounding_passed,
+        answer_rule_passed=answer_rule_passed,
+        memory_grounding_passed=memory_grounding_passed,
         expected_contains_pass_count=expected_pass_count,
         expected_contains_miss_count=expected_miss_count,
+        expected_any_pass_count=expected_any_pass_count,
+        expected_any_miss_count=expected_any_miss_count,
         forbidden_contains_violation_count=forbidden_violation_count,
         expected_memory_used=expected_memory_used,
         language_passed=language_passed,
@@ -334,6 +366,8 @@ async def run_llm_sample_case(
         completion_token_count=token_counts["completion_token_count"],
         total_token_count=token_counts["total_token_count"],
         token_metrics_available=bool(token_counts["token_metrics_available"]),
+        answer_rule_passed=score.answer_rule_passed,
+        memory_grounding_passed=score.memory_grounding_passed,
         provider_error=provider_error,
         timeout=timeout,
         used_memory_ids=tuple(memory.used_memory_ids),
@@ -447,6 +481,17 @@ def _string_tuple(value: Any) -> tuple[str, ...]:
     return tuple(str(item) for item in value if str(item))
 
 
+def _string_groups(value: Any) -> tuple[tuple[str, ...], ...]:
+    if not isinstance(value, list | tuple):
+        return ()
+    groups: list[tuple[str, ...]] = []
+    for group in value:
+        terms = _string_tuple(group)
+        if terms:
+            groups.append(terms)
+    return tuple(groups)
+
+
 def _contains_term(text: str, term: str) -> bool:
     if _CJK_RE.search(term):
         return term in text
@@ -485,6 +530,12 @@ def _build_llm_sample_report(
         "expected_memory_used_count": sum(
             1 for result in results if result.expected_memory_used
         ),
+        "answer_rule_pass_count": sum(
+            1 for result in results if result.answer_rule_passed
+        ),
+        "memory_grounding_pass_count": sum(
+            1 for result in results if result.memory_grounding_passed
+        ),
         "language_pass_count": sum(1 for result in results if result.language_passed),
         "provider_error_count": sum(1 for result in results if result.provider_error),
         "timeout_count": sum(1 for result in results if result.timeout),
@@ -520,6 +571,8 @@ def _llm_sample_case_record(result: LLMSampleCaseResult) -> dict[str, object]:
         "answer_length": result.answer_length,
         "latency_ms": result.latency_ms,
         "expected_memory_used": result.expected_memory_used,
+        "memory_grounding_passed": result.memory_grounding_passed,
+        "answer_rule_passed": result.answer_rule_passed,
         "expected_contains_pass_count": result.expected_contains_pass_count,
         "expected_contains_miss_count": result.expected_contains_miss_count,
         "forbidden_contains_violation_count": result.forbidden_contains_violation_count,
@@ -564,13 +617,26 @@ def _extract_token_counts(response: LLMResponse | None) -> dict[str, object]:
         }
     usage = response.provider_fields.get("usage")
     usage_dict = usage if isinstance(usage, dict) else {}
-    prompt = _optional_int(usage_dict.get("prompt_tokens"))
-    completion = _optional_int(usage_dict.get("completion_tokens"))
-    total = _optional_int(usage_dict.get("total_tokens"))
+    prompt = _first_int(
+        usage_dict,
+        ("prompt_tokens", "input_tokens", "prompt_token_count", "input_token_count"),
+    )
+    completion = _first_int(
+        usage_dict,
+        (
+            "completion_tokens",
+            "output_tokens",
+            "completion_token_count",
+            "output_token_count",
+        ),
+    )
+    total = _first_int(usage_dict, ("total_tokens", "total_token_count"))
     if prompt is None:
         prompt = _optional_int(response.cache_prompt_tokens)
     available = any(value is not None for value in (prompt, completion, total))
     prompt_count = prompt or 0
+    if completion is None and total is not None and prompt is not None:
+        completion = max(0, total - prompt)
     completion_count = completion or 0
     total_count = total if total is not None else prompt_count + completion_count
     return {
@@ -588,6 +654,14 @@ def _optional_int(value: object) -> int | None:
         return int(value)
     except (TypeError, ValueError):
         return None
+
+
+def _first_int(payload: dict[str, object], keys: tuple[str, ...]) -> int | None:
+    for key in keys:
+        value = _optional_int(payload.get(key))
+        if value is not None:
+            return value
+    return None
 
 
 def _memory_summaries_by_id(case: EvalCase) -> dict[str, str]:
