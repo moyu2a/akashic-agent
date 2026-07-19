@@ -281,20 +281,22 @@ main_score = 0.7 * answer_rule_pass_rate
 - `common_case_count = 40`
 - `hard_case_count = 40`
 - `baseline_main_score = 10.0`
-- `all_on_main_score = 68.9767`
-- `total_uplift_points = 58.9767`
-- `total_uplift_pct = 589.767`
+- `all_on_main_score = 69.6017`
+- `total_uplift_points = 59.6017`
+- `total_uplift_pct = 596.017`
 
 单项 uplift：
 
 - `tri_retrieval_only = 87.4997`
 - `graph_only = 68.5001`
 - `rerank_only = 60.9109`
-- `version_provenance_only = 55.278`
+- `version_provenance_only = 57.778`
 - `write_value_only = 48.3345`
 - `sleep_only = 35.1014`
 
-这里的 `token_cost` 只汇总真正以 token 计量的 trace 信号，比如 injection 的 `prompt_token_delta` 和 sleep 的 `estimated_token_saving`；`latency_ms` 只汇总真正以毫秒计量的 trace 信号，比如 retrieval 和 sleep 的耗时。没有统一单位的 family 直接标成 `unavailable`，不再硬填。
+这里的 token 相关字段改为 `token_signal_kind`、`token_signal_value` 和 `token_signal_delta`。`token_signal_kind` 会说明该值来自 `prompt_token_delta` 还是 `estimated_token_saving`；如果组合态同时包含成本和节省两类信号，就标记为 `mixed`，`token_signal_value` 和 `token_signal_delta` 不硬拼成一个总数。`latency_ms` 只汇总真正以毫秒计量的 trace 信号，比如 retrieval 和 sleep 的耗时；基线不可比时，delta 直接标成 `unavailable`。
+
+本轮还修正了溯源治理分的口径：`provenance_shadow` 的 forbidden rate 只看实际观测到的 `cross_scope_risk_count`，不会因为样本里存在跨 scope 记忆就直接罚成 100%。
 
 `tri_retrieval_only` 和 `graph_only` 仍然来自同一轮 phase2 runtime 的不同家族视角，读数是为了比较两条检索路径的贡献，不要把它们理解成两个独立启动的 profile。
 

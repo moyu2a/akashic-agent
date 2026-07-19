@@ -833,7 +833,7 @@ Phase 6c-1 已完成第一版：离线 uplift report。
 后续建议拆分：
 
 1. Phase 6c：把 eval report 接入 Dashboard 或 observe 查询界面。
-2. Phase 6d：已经完成 80 case 量化 uplift 总表，输出 common/hard 双集和单项 / 总增益 JSON + Markdown，当前结果为 `baseline_main_score = 10.0`、`all_on_main_score = 68.9767`、`total_uplift_points = 58.9767`，报表路径见 `my_md/memory_optimization/eval_reports/memory_quantitative_uplift_eval.json`。
+2. Phase 6d：已经完成 80 case 量化 uplift 总表，输出 common/hard 双集和单项 / 总增益 JSON + Markdown，当前结果为 `baseline_main_score = 10.0`、`all_on_main_score = 69.6017`、`total_uplift_points = 59.6017`。本轮修正后，token 输出使用 `token_signal_kind/value/delta`，混合成本与节省的组合态标记为 `mixed`；溯源 forbidden rate 只按实际 `cross_scope_risk_count` 计算。报表路径见 `my_md/memory_optimization/eval_reports/memory_quantitative_uplift_eval.json`。
 3. Phase 6e：基于连续评测结果决定哪些策略可以从 shadow 切到 active。
 
 ## 面试表达

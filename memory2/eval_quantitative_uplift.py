@@ -41,6 +41,9 @@ from plugins.default_memory.experiments import (
 )
 
 
+_FIXED_REPORT_TIME = datetime(2026, 7, 17, tzinfo=timezone.utc)
+
+
 REPORT_PROFILES: tuple[str, ...] = (
     "off",
     "write_value_only",
@@ -100,8 +103,9 @@ class QuantitativeProfileSummary:
     baseline_score: float
     uplift_points: float
     uplift_pct: float | None
-    token_cost: float | str
-    token_cost_delta: float | str
+    token_signal_kind: str
+    token_signal_value: float | str
+    token_signal_delta: float | str
     latency_ms: float | str
     latency_delta_ms: float | str
     unavailable: tuple[str, ...]
@@ -134,6 +138,16 @@ def calculate_main_score(
 
 def build_quantitative_uplift_report(cases: Sequence[EvalCase]) -> QuantitativeUpliftReport:
     eval_report = run_eval_cases(cases)
+    if not eval_report.passed:
+        failures = "\n".join(
+            f"- {case.case_id}: {', '.join(case.failures) or 'unknown failure'}"
+            for case in eval_report.cases
+            if not case.passed
+        )
+        raise RuntimeError(
+            "eval runner failed before uplift report generation:\n"
+            f"{failures or '- unknown failure'}"
+        )
     case_results = {case.case_id: case for case in eval_report.cases}
     case_records: list[dict[str, object]] = []
     per_case_rows: list[dict[str, object]] = []
@@ -153,7 +167,7 @@ def build_quantitative_uplift_report(cases: Sequence[EvalCase]) -> QuantitativeU
     run_id = _deterministic_run_id(cases, REPORT_PROFILES)
     return QuantitativeUpliftReport(
         run_id=run_id,
-        generated_at=datetime.now(timezone.utc).isoformat(),
+        generated_at=_FIXED_REPORT_TIME.isoformat(),
         score_formula=(
             "main_score = 0.7 * answer_rule_pass_rate + "
             "0.2 * memory_grounding_pass_rate + "
@@ -204,8 +218,8 @@ def write_quantitative_uplift_markdown(report: QuantitativeUpliftReport, path: P
         "",
         "## 单项提升",
         "",
-        "| profile | case_set | main_score | uplift_points | uplift_pct | answer | grounding | forbidden | token_cost | token_cost_delta | latency_ms | latency_delta_ms |",
-        "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- | --- | --- | --- |",
+        "| profile | case_set | main_score | uplift_points | uplift_pct | answer | grounding | forbidden | token_signal_kind | token_signal_value | token_signal_delta | latency_ms | latency_delta_ms |",
+        "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- | --- | --- | --- | --- |",
     ]
     for row in overall_rows:
         if row.profile_name == "off":
@@ -216,8 +230,8 @@ def write_quantitative_uplift_markdown(report: QuantitativeUpliftReport, path: P
             "",
             "## common / hard 对比",
             "",
-            "| case_set | profile | main_score | uplift_points | answer | grounding | forbidden | token_cost_delta | latency_delta_ms |",
-            "| --- | --- | ---: | ---: | ---: | ---: | ---: | --- | --- |",
+            "| case_set | profile | main_score | uplift_points | answer | grounding | forbidden | token_signal_kind | token_signal_value | token_signal_delta | latency_delta_ms |",
+            "| --- | --- | ---: | ---: | ---: | ---: | ---: | --- | --- | --- | --- |",
         ]
     )
     for row in common_rows + hard_rows:
@@ -234,7 +248,9 @@ def write_quantitative_uplift_markdown(report: QuantitativeUpliftReport, path: P
                     _fmt(row.answer_rule_pass_rate),
                     _fmt(row.memory_grounding_pass_rate),
                     _fmt(row.forbidden_violation_rate),
-                    _fmt(row.token_cost_delta),
+                    _fmt(row.token_signal_kind),
+                    _fmt(row.token_signal_value),
+                    _fmt(row.token_signal_delta),
                     _fmt(row.latency_delta_ms),
                 ]
             )
@@ -254,9 +270,10 @@ def write_quantitative_uplift_markdown(report: QuantitativeUpliftReport, path: P
             "",
             "## 说明",
             "",
-            "- `token_cost` / `latency_ms` 若无直接可用值，会标记为 `unavailable`。",
+            "- `token_signal_value` / `latency_ms` 若无直接可用值，会标记为 `unavailable`。",
+            "- `token_signal_kind` 区分 `prompt_token_delta`、`estimated_token_saving`、`mixed` 和 `unavailable`。",
             "- `tri_retrieval_only` 和 `graph_only` 是同一轮 phase2 runtime 的两条家族视角，不是两个独立开关运行。",
-            "- `all_on` 行展示组合态的原始聚合，不额外加成。",
+            "- `all_on` 若同时包含成本和节省两类 token 信号，会标记为 `mixed`，不会强行合并成一个 token 数。",
             "- `feature_contributions` 只展示 overall 视角，便于看单项开关的净增益。",
             "- `off` 作为 baseline，只用于对比，不应单独解读为生产结论。",
         ]
@@ -469,9 +486,10 @@ def _score_case_profile(
                 "answer_rule_pass_rate": 0.0,
                 "memory_grounding_pass_rate": 0.0,
                 "forbidden_violation_rate": 0.0,
-                "token_cost": "unavailable",
+                "token_signal_kind": "unavailable",
+                "token_signal_value": "unavailable",
                 "latency_ms": "unavailable",
-                "unavailable": ("token_cost", "latency_ms"),
+                "unavailable": ("token_signal_value", "latency_ms"),
             },
         )
     answer_rule_pass_rate = _avg(
@@ -491,7 +509,13 @@ def _score_case_profile(
     unavailable = tuple(
         sorted({item for row in family_scores for item in row["unavailable"]})
     )
-    token_cost = _sum_numeric(row["token_cost"] for row in family_scores)
+    token_signal_kind, token_signal_value = _aggregate_token_signal(family_scores)
+    token_signal_delta = _delta_value(
+        token_signal_value,
+        "unavailable",
+        profile_kind=token_signal_kind,
+        baseline_kind="unavailable",
+    )
     latency_ms = _sum_numeric(row["latency_ms"] for row in family_scores)
     return {
         "case_id": case.id,
@@ -506,7 +530,9 @@ def _score_case_profile(
         "memory_grounding_pass_rate": memory_grounding_pass_rate,
         "forbidden_violation_rate": forbidden_violation_rate,
         "main_score": main_score,
-        "token_cost": token_cost,
+        "token_signal_kind": token_signal_kind,
+        "token_signal_value": token_signal_value,
+        "token_signal_delta": token_signal_delta,
         "latency_ms": latency_ms,
         "unavailable": unavailable,
     }
@@ -525,9 +551,10 @@ def _score_family(
             "answer_rule_pass_rate": 0.0,
             "memory_grounding_pass_rate": 0.0,
             "forbidden_violation_rate": 0.0,
-            "token_cost": "unavailable",
+            "token_signal_kind": "unavailable",
+            "token_signal_value": "unavailable",
             "latency_ms": "unavailable",
-            "unavailable": ("token_cost", "latency_ms"),
+            "unavailable": ("token_signal_value", "latency_ms"),
         }
 
     if trace is None:
@@ -536,9 +563,10 @@ def _score_family(
             "answer_rule_pass_rate": 0.0,
             "memory_grounding_pass_rate": 0.0,
             "forbidden_violation_rate": 0.0,
-            "token_cost": "unavailable",
+            "token_signal_kind": "unavailable",
+            "token_signal_value": "unavailable",
             "latency_ms": "unavailable",
-            "unavailable": (family_name, "token_cost", "latency_ms"),
+            "unavailable": (family_name, "token_signal_value", "latency_ms"),
         }
     expected_ids = tuple(
         str(item) for item in case.expectations.get("should_recall_ids", [])
@@ -577,10 +605,7 @@ def _score_family(
             forbidden_ids=forbidden_ids,
         )
     if family_name == "provenance_shadow":
-        return _score_provenance_family(
-            trace,
-            forbidden_ids=forbidden_ids,
-        )
+        return _score_provenance_family(trace)
     if family_name == "sleep_consolidation_shadow":
         return _score_sleep_family(trace)
     return {
@@ -588,9 +613,10 @@ def _score_family(
         "answer_rule_pass_rate": 0.0,
         "memory_grounding_pass_rate": 0.0,
         "forbidden_violation_rate": 0.0,
-        "token_cost": "unavailable",
+        "token_signal_kind": "unavailable",
+        "token_signal_value": "unavailable",
         "latency_ms": "unavailable",
-        "unavailable": (family_name, "token_cost", "latency_ms"),
+        "unavailable": (family_name, "token_signal_value", "latency_ms"),
     }
 
 
@@ -612,9 +638,10 @@ def _score_write_family(trace: Any) -> dict[str, object]:
         "answer_rule_pass_rate": answer * 100.0,
         "memory_grounding_pass_rate": grounding * 100.0,
         "forbidden_violation_rate": forbidden * 100.0,
-        "token_cost": "unavailable",
+        "token_signal_kind": "unavailable",
+        "token_signal_value": "unavailable",
         "latency_ms": "unavailable",
-        "unavailable": ("token_cost", "latency_ms"),
+        "unavailable": ("token_signal_value", "latency_ms"),
     }
 
 
@@ -635,9 +662,10 @@ def _score_retrieval_family(
         "answer_rule_pass_rate": recall * 100.0,
         "memory_grounding_pass_rate": grounding,
         "forbidden_violation_rate": forbidden * 100.0,
-        "token_cost": "unavailable",
+        "token_signal_kind": "unavailable",
+        "token_signal_value": "unavailable",
         "latency_ms": latency,
-        "unavailable": ("token_cost",) if latency != "unavailable" else ("token_cost",),
+        "unavailable": ("token_signal_value",),
     }
 
 
@@ -663,7 +691,8 @@ def _score_rerank_family(
         "answer_rule_pass_rate": recall * 100.0,
         "memory_grounding_pass_rate": grounding * 100.0,
         "forbidden_violation_rate": forbidden * 100.0,
-        "token_cost": prompt_token_delta,
+        "token_signal_kind": "prompt_token_delta",
+        "token_signal_value": prompt_token_delta,
         "latency_ms": "unavailable",
         "unavailable": ("latency_ms",),
     }
@@ -686,7 +715,8 @@ def _score_injection_family(trace: Any) -> dict[str, object]:
         "answer_rule_pass_rate": answer * 100.0,
         "memory_grounding_pass_rate": grounding * 100.0,
         "forbidden_violation_rate": forbidden * 100.0,
-        "token_cost": prompt_token_delta,
+        "token_signal_kind": "prompt_token_delta",
+        "token_signal_value": prompt_token_delta,
         "latency_ms": "unavailable",
         "unavailable": ("latency_ms",),
     }
@@ -719,13 +749,14 @@ def _score_version_family(
         "answer_rule_pass_rate": recall * 100.0,
         "memory_grounding_pass_rate": grounding,
         "forbidden_violation_rate": forbidden * 100.0,
-        "token_cost": "unavailable",
+        "token_signal_kind": "unavailable",
+        "token_signal_value": "unavailable",
         "latency_ms": "unavailable",
-        "unavailable": ("token_cost", "latency_ms"),
+        "unavailable": ("token_signal_value", "latency_ms"),
     }
 
 
-def _score_provenance_family(trace: Any, *, forbidden_ids: tuple[str, ...]) -> dict[str, object]:
+def _score_provenance_family(trace: Any) -> dict[str, object]:
     source_ref_coverage = float(trace.metrics.get("source_ref_coverage", 0.0) or 0.0) * 100.0
     parse_success_rate = float(trace.metrics.get("parse_success_rate", 0.0) or 0.0) * 100.0
     cross_scope_risk_count = max(0, int(trace.metrics.get("cross_scope_risk_count", 0) or 0))
@@ -734,16 +765,15 @@ def _score_provenance_family(trace: Any, *, forbidden_ids: tuple[str, ...]) -> d
     )
     grounding = _avg([source_ref_coverage, parse_success_rate])
     forbidden = _ratio(cross_scope_risk_count, max(1, cross_scope_memory_count))
-    if forbidden_ids:
-        forbidden = max(forbidden, _ratio(cross_scope_memory_count, max(1, cross_scope_memory_count)))
     return {
         "family_name": "provenance_shadow",
         "answer_rule_pass_rate": source_ref_coverage,
         "memory_grounding_pass_rate": grounding,
         "forbidden_violation_rate": forbidden * 100.0,
-        "token_cost": "unavailable",
+        "token_signal_kind": "unavailable",
+        "token_signal_value": "unavailable",
         "latency_ms": "unavailable",
-        "unavailable": ("token_cost", "latency_ms"),
+        "unavailable": ("token_signal_value", "latency_ms"),
     }
 
 
@@ -774,13 +804,13 @@ def _score_sleep_family(trace: Any) -> dict[str, object]:
     )
     grounding = (1.0 - min(1.0, missing_source_ref_count / scanned_count)) * 100.0
     forbidden = 0.0
-    token_cost = estimated_token_saving
     return {
         "family_name": "sleep_consolidation_shadow",
         "answer_rule_pass_rate": answer,
         "memory_grounding_pass_rate": grounding,
         "forbidden_violation_rate": forbidden,
-        "token_cost": token_cost,
+        "token_signal_kind": "estimated_token_saving",
+        "token_signal_value": estimated_token_saving,
         "latency_ms": job_latency_ms,
         "unavailable": (),
     }
@@ -822,11 +852,17 @@ def _build_profile_summaries(rows: Sequence[dict[str, object]]) -> tuple[Quantit
                 if baseline_score
                 else None
             )
-            token_cost_delta = _delta_value(
-                aggregate["token_cost"], baseline.get("token_cost") if baseline else "unavailable",
+            token_signal_delta = _delta_value(
+                aggregate["token_signal_value"],
+                baseline.get("token_signal_value") if baseline else "unavailable",
+                profile_kind=str(aggregate["token_signal_kind"]),
+                baseline_kind=str(
+                    baseline.get("token_signal_kind") if baseline else "unavailable"
+                ),
             )
             latency_delta_ms = _delta_value(
-                aggregate["latency_ms"], baseline.get("latency_ms") if baseline else "unavailable",
+                aggregate["latency_ms"],
+                baseline.get("latency_ms") if baseline else "unavailable",
             )
             result.append(
                 QuantitativeProfileSummary(
@@ -846,8 +882,9 @@ def _build_profile_summaries(rows: Sequence[dict[str, object]]) -> tuple[Quantit
                     baseline_score=float(baseline_score),
                     uplift_points=uplift_points,
                     uplift_pct=uplift_pct,
-                    token_cost=aggregate["token_cost"],
-                    token_cost_delta=token_cost_delta,
+                    token_signal_kind=str(aggregate["token_signal_kind"]),
+                    token_signal_value=aggregate["token_signal_value"],
+                    token_signal_delta=token_signal_delta,
                     latency_ms=aggregate["latency_ms"],
                     latency_delta_ms=latency_delta_ms,
                     unavailable=tuple(aggregate["unavailable"]),
@@ -861,7 +898,7 @@ def _aggregate_case_rows(rows: Sequence[dict[str, object]]) -> dict[str, object]
     grounding = _avg(float(row["memory_grounding_pass_rate"]) for row in rows)
     forbidden = _avg(float(row["forbidden_violation_rate"]) for row in rows)
     main_score = _avg(float(row["main_score"]) for row in rows)
-    token_cost_values = [row["token_cost"] for row in rows if isinstance(row["token_cost"], (int, float))]
+    token_signal_kind, token_signal_value = _aggregate_token_signal(rows)
     latency_values = [row["latency_ms"] for row in rows if isinstance(row["latency_ms"], (int, float))]
     return {
         "case_count": len(rows),
@@ -869,7 +906,8 @@ def _aggregate_case_rows(rows: Sequence[dict[str, object]]) -> dict[str, object]
         "memory_grounding_pass_rate": grounding,
         "forbidden_violation_rate": forbidden,
         "main_score": main_score,
-        "token_cost": _maybe_sum(token_cost_values),
+        "token_signal_kind": token_signal_kind,
+        "token_signal_value": token_signal_value,
         "latency_ms": _maybe_sum(latency_values),
         "unavailable": _aggregate_unavailable(rows),
     }
@@ -953,8 +991,9 @@ def _summary_row_to_md(row: QuantitativeProfileSummary) -> str:
         f"| {row.profile_name} | {row.case_set} | {_fmt(row.main_score)} | "
         f"{_fmt(row.uplift_points)} | {_fmt(row.uplift_pct)} | "
         f"{_fmt(row.answer_rule_pass_rate)} | {_fmt(row.memory_grounding_pass_rate)} | "
-        f"{_fmt(row.forbidden_violation_rate)} | {_fmt(row.token_cost)} | "
-        f"{_fmt(row.token_cost_delta)} | {_fmt(row.latency_ms)} | "
+        f"{_fmt(row.forbidden_violation_rate)} | {_fmt(row.token_signal_kind)} | "
+        f"{_fmt(row.token_signal_value)} | {_fmt(row.token_signal_delta)} | "
+        f"{_fmt(row.latency_ms)} | "
         f"{_fmt(row.latency_delta_ms)} |"
     )
 
@@ -992,11 +1031,23 @@ def _maybe_sum(values: Sequence[int | float]) -> float | str:
     return round(sum(float(value) for value in values), 4)
 
 
-def _first_available(values: Iterable[object]) -> float | str:
-    for value in values:
-        if isinstance(value, (int, float)):
-            return round(float(value), 4)
-    return "unavailable"
+def _aggregate_token_signal(rows: Sequence[dict[str, object]]) -> tuple[str, float | str]:
+    kinds_seen: set[str] = set()
+    signals: list[tuple[str, float]] = []
+    for row in rows:
+        value = row.get("token_signal_value", "unavailable")
+        kind = str(row.get("token_signal_kind") or "unavailable")
+        if kind == "unavailable":
+            continue
+        kinds_seen.add(kind)
+        if kind == "mixed" or not isinstance(value, (int, float)):
+            continue
+        signals.append((kind, float(value)))
+    if "mixed" in kinds_seen or len(kinds_seen) > 1:
+        return "mixed", "unavailable"
+    if not signals:
+        return "unavailable", "unavailable"
+    return next(iter(kinds_seen)), round(sum(value for _, value in signals), 4)
 
 
 def _sum_numeric(values: Iterable[object]) -> float | str:
@@ -1009,14 +1060,24 @@ def _sum_numeric(values: Iterable[object]) -> float | str:
 def _delta_value(
     profile_value: float | str,
     baseline_value: float | str,
+    *,
+    profile_kind: str | None = None,
+    baseline_kind: str | None = None,
 ) -> float | str:
-    if isinstance(profile_value, (int, float)):
-        if isinstance(baseline_value, (int, float)):
-            return round(float(profile_value) - float(baseline_value), 4)
-        return round(float(profile_value), 4)
-    if isinstance(baseline_value, (int, float)):
-        return round(-float(baseline_value), 4)
-    return "unavailable"
+    if not isinstance(profile_value, (int, float)) or not isinstance(
+        baseline_value, (int, float)
+    ):
+        return "unavailable"
+    if profile_kind is not None or baseline_kind is not None:
+        if (
+            not profile_kind
+            or not baseline_kind
+            or profile_kind != baseline_kind
+            or profile_kind in {"mixed", "unavailable"}
+            or baseline_kind in {"mixed", "unavailable"}
+        ):
+            return "unavailable"
+    return round(float(profile_value) - float(baseline_value), 4)
 
 
 def _aggregate_unavailable(rows: Sequence[dict[str, object]]) -> tuple[str, ...]:
