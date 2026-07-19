@@ -133,13 +133,15 @@ def calculate_main_score(
 
 
 def build_quantitative_uplift_report(cases: Sequence[EvalCase]) -> QuantitativeUpliftReport:
+    eval_report = run_eval_cases(cases)
+    case_results = {case.case_id: case for case in eval_report.cases}
     case_records: list[dict[str, object]] = []
     per_case_rows: list[dict[str, object]] = []
 
     for case in cases:
         case_set = _case_set(case)
         for profile_name in REPORT_PROFILES:
-            row = _score_case_profile(case, case_set, profile_name)
+            row = _score_case_profile(case, case_results[case.id], case_set, profile_name)
             per_case_rows.append(row)
             case_records.append(row)
 
@@ -253,6 +255,7 @@ def write_quantitative_uplift_markdown(report: QuantitativeUpliftReport, path: P
             "## 说明",
             "",
             "- `token_cost` / `latency_ms` 若无直接可用值，会标记为 `unavailable`。",
+            "- `tri_retrieval_only` 和 `graph_only` 是同一轮 phase2 runtime 的两条家族视角，不是两个独立开关运行。",
             "- `all_on` 行展示组合态的原始聚合，不额外加成。",
             "- `feature_contributions` 只展示 overall 视角，便于看单项开关的净增益。",
             "- `off` 作为 baseline，只用于对比，不应单独解读为生产结论。",
@@ -445,12 +448,15 @@ def _family_trace_for_case(case: EvalCase, family_name: str) -> EvalTrace | None
 
 def _score_case_profile(
     case: EvalCase,
+    case_result: EvalCaseResult,
     case_set: str,
     profile_name: str,
 ) -> dict[str, object]:
+    runtime_profile = case_result.profiles[PROFILE_RUNTIME_MAP[profile_name]]
     family_scores = tuple(
         _score_family(
             case=case,
+            trace=runtime_profile.traces.get(family_name),
             profile_name=profile_name,
             family_name=family_name,
         )
@@ -485,8 +491,8 @@ def _score_case_profile(
     unavailable = tuple(
         sorted({item for row in family_scores for item in row["unavailable"]})
     )
-    token_cost = _first_available(row["token_cost"] for row in family_scores)
-    latency_ms = _first_available(row["latency_ms"] for row in family_scores)
+    token_cost = _sum_numeric(row["token_cost"] for row in family_scores)
+    latency_ms = _sum_numeric(row["latency_ms"] for row in family_scores)
     return {
         "case_id": case.id,
         "category": case.category,
@@ -509,6 +515,7 @@ def _score_case_profile(
 def _score_family(
     *,
     case: EvalCase,
+    trace: EvalTrace | None,
     profile_name: str,
     family_name: str,
 ) -> dict[str, object]:
@@ -523,7 +530,6 @@ def _score_family(
             "unavailable": ("token_cost", "latency_ms"),
         }
 
-    trace = _family_trace_for_case(case, family_name)
     if trace is None:
         return {
             "family_name": family_name,
@@ -606,9 +612,9 @@ def _score_write_family(trace: Any) -> dict[str, object]:
         "answer_rule_pass_rate": answer * 100.0,
         "memory_grounding_pass_rate": grounding * 100.0,
         "forbidden_violation_rate": forbidden * 100.0,
-        "token_cost": candidate_count,
+        "token_cost": "unavailable",
         "latency_ms": "unavailable",
-        "unavailable": ("latency_ms",),
+        "unavailable": ("token_cost", "latency_ms"),
     }
 
 
@@ -991,6 +997,13 @@ def _first_available(values: Iterable[object]) -> float | str:
         if isinstance(value, (int, float)):
             return round(float(value), 4)
     return "unavailable"
+
+
+def _sum_numeric(values: Iterable[object]) -> float | str:
+    numbers = [float(value) for value in values if isinstance(value, (int, float))]
+    if not numbers:
+        return "unavailable"
+    return round(sum(numbers), 4)
 
 
 def _delta_value(

@@ -62,7 +62,7 @@ def test_full_report_has_expected_totals() -> None:
 
     assert round(overall[("overall", "all_on")].main_score, 4) == 68.9767
     assert round(overall[("overall", "all_on")].uplift_points, 4) == 58.9767
-    assert overall[("overall", "all_on")].token_cost_delta == 240.0
+    assert overall[("overall", "all_on")].token_cost_delta == 6460.0
     assert overall[("overall", "tri_retrieval_only")].latency_delta_ms == 0.0
     assert report.metrics["total_uplift_points"] == 58.9767
     assert report.metrics["total_uplift_pct"] == 589.767

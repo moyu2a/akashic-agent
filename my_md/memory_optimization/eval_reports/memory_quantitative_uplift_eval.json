@@ -34,9 +34,10 @@
       "profile_name": "write_value_only",
       "repeat_count": 1,
       "target_profile": "tri_retrieval_only",
-      "token_cost": 3.0,
+      "token_cost": "unavailable",
       "unavailable": [
-        "latency_ms"
+        "latency_ms",
+        "token_cost"
       ]
     },
     {
@@ -91,7 +92,7 @@
       "profile_name": "rerank_only",
       "repeat_count": 1,
       "target_profile": "tri_retrieval_only",
-      "token_cost": 0.0,
+      "token_cost": 94.0,
       "unavailable": [
         "latency_ms"
       ]
@@ -147,7 +148,7 @@
       "profile_name": "all_on",
       "repeat_count": 1,
       "target_profile": "tri_retrieval_only",
-      "token_cost": 3.0,
+      "token_cost": 105.0,
       "unavailable": [
         "latency_ms",
         "token_cost"
@@ -187,9 +188,10 @@
       "profile_name": "write_value_only",
       "repeat_count": 1,
       "target_profile": "tri_retrieval_only",
-      "token_cost": 3.0,
+      "token_cost": "unavailable",
       "unavailable": [
-        "latency_ms"
+        "latency_ms",
+        "token_cost"
       ]
     },
     {
@@ -244,7 +246,7 @@
       "profile_name": "rerank_only",
       "repeat_count": 1,
       "target_profile": "tri_retrieval_only",
-      "token_cost": 0.0,
+      "token_cost": 68.0,
       "unavailable": [
         "latency_ms"
       ]
@@ -300,7 +302,7 @@
       "profile_name": "all_on",
       "repeat_count": 1,
       "target_profile": "tri_retrieval_only",
-      "token_cost": 3.0,
+      "token_cost": 82.0,
       "unavailable": [
         "latency_ms",
         "token_cost"
@@ -340,9 +342,10 @@
       "profile_name": "write_value_only",
       "repeat_count": 1,
       "target_profile": "tri_retrieval_only",
-      "token_cost": 3.0,
+      "token_cost": "unavailable",
       "unavailable": [
-        "latency_ms"
+        "latency_ms",
+        "token_cost"
       ]
     },
     {
@@ -397,7 +400,7 @@
       "profile_name": "rerank_only",
       "repeat_count": 1,
       "target_profile": "tri_retrieval_only",
-      "token_cost": 0.0,
+      "token_cost": 102.0,
       "unavailable": [
         "latency_ms"
       ]
@@ -453,7 +456,7 @@
       "profile_name": "all_on",
       "repeat_count": 1,
       "target_profile": "tri_retrieval_only",
-      "token_cost": 3.0,
+      "token_cost": 108.0,
       "unavailable": [
         "latency_ms",
         "token_cost"
@@ -493,9 +496,10 @@
       "profile_name": "write_value_only",
       "repeat_count": 1,
       "target_profile": "tri_retrieval_only",
-      "token_cost": 3.0,
+      "token_cost": "unavailable",
       "unavailable": [
-        "latency_ms"
+        "latency_ms",
+        "token_cost"
       ]
     },
     {
@@ -550,7 +554,7 @@
       "profile_name": "rerank_only",
       "repeat_count": 1,
       "target_profile": "tri_retrieval_only",
-      "token_cost": 0.0,
+      "token_cost": 59.0,
       "unavailable": [
         "latency_ms"
       ]
@@ -606,7 +610,7 @@
       "profile_name": "all_on",
       "repeat_count": 1,
       "target_profile": "tri_retrieval_only",
-      "token_cost": 3.0,
+      "token_cost": 75.0,
       "unavailable": [
         "latency_ms",
         "token_cost"
@@ -646,9 +650,10 @@
       "profile_name": "write_value_only",
       "repeat_count": 1,
       "target_profile": "graph_only",
-      "token_cost": 3.0,
+      "token_cost": "unavailable",
       "unavailable": [
-        "latency_ms"
+        "latency_ms",
+        "token_cost"
       ]
     },
     {
@@ -703,7 +708,7 @@
       "profile_name": "rerank_only",
       "repeat_count": 1,
       "target_profile": "graph_only",
-      "token_cost": 0.0,
+      "token_cost": 49.0,
       "unavailable": [
         "latency_ms"
       ]
@@ -759,7 +764,7 @@
       "profile_name": "all_on",
       "repeat_count": 1,
       "target_profile": "graph_only",
-      "token_cost": 3.0,
+      "token_cost": 62.0,
       "unavailable": [
         "latency_ms",
         "token_cost"
@@ -799,9 +804,10 @@
       "profile_name": "write_value_only",
       "repeat_count": 1,
       "target_profile": "version_provenance_only",
-      "token_cost": 3.0,
+      "token_cost": "unavailable",
       "unavailable": [
-        "latency_ms"
+        "latency_ms",
+        "token_cost"
       ]
     },
     {
@@ -856,7 +862,7 @@
       "profile_name": "rerank_only",
       "repeat_count": 1,
       "target_profile": "version_provenance_only",
-      "token_cost": 0.0,
+      "token_cost": 77.0,
       "unavailable": [
         "latency_ms"
       ]
@@ -912,7 +918,7 @@
       "profile_name": "all_on",
       "repeat_count": 1,
       "target_profile": "version_provenance_only",
-      "token_cost": 3.0,
+      "token_cost": 89.0,
       "unavailable": [
         "latency_ms",
         "token_cost"
@@ -952,9 +958,10 @@
       "profile_name": "write_value_only",
       "repeat_count": 1,
       "target_profile": "version_provenance_only",
-      "token_cost": 3.0,
+      "token_cost": "unavailable",
       "unavailable": [
-        "latency_ms"
+        "latency_ms",
+        "token_cost"
       ]
     },
     {
@@ -1009,7 +1016,7 @@
       "profile_name": "rerank_only",
       "repeat_count": 1,
       "target_profile": "version_provenance_only",
-      "token_cost": 0.0,
+      "token_cost": 69.0,
       "unavailable": [
         "latency_ms"
       ]
@@ -1065,7 +1072,7 @@
       "profile_name": "all_on",
       "repeat_count": 1,
       "target_profile": "version_provenance_only",
-      "token_cost": 3.0,
+      "token_cost": 78.0,
       "unavailable": [
         "latency_ms",
         "token_cost"
@@ -1105,9 +1112,10 @@
       "profile_name": "write_value_only",
       "repeat_count": 1,
       "target_profile": "sleep_only",
-      "token_cost": 3.0,
+      "token_cost": "unavailable",
       "unavailable": [
-        "latency_ms"
+        "latency_ms",
+        "token_cost"
       ]
     },
     {
@@ -1162,7 +1170,7 @@
       "profile_name": "rerank_only",
       "repeat_count": 1,
       "target_profile": "sleep_only",
-      "token_cost": 0.0,
+      "token_cost": 99.0,
       "unavailable": [
         "latency_ms"
       ]
@@ -1218,7 +1226,7 @@
       "profile_name": "all_on",
       "repeat_count": 1,
       "target_profile": "sleep_only",
-      "token_cost": 3.0,
+      "token_cost": 104.0,
       "unavailable": [
         "latency_ms",
         "token_cost"
@@ -1258,9 +1266,10 @@
       "profile_name": "write_value_only",
       "repeat_count": 1,
       "target_profile": "rerank_only",
-      "token_cost": 3.0,
+      "token_cost": "unavailable",
       "unavailable": [
-        "latency_ms"
+        "latency_ms",
+        "token_cost"
       ]
     },
     {
@@ -1315,7 +1324,7 @@
       "profile_name": "rerank_only",
       "repeat_count": 1,
       "target_profile": "rerank_only",
-      "token_cost": 0.0,
+      "token_cost": 58.0,
       "unavailable": [
         "latency_ms"
       ]
@@ -1371,7 +1380,7 @@
       "profile_name": "all_on",
       "repeat_count": 1,
       "target_profile": "rerank_only",
-      "token_cost": 3.0,
+      "token_cost": 68.0,
       "unavailable": [
         "latency_ms",
         "token_cost"
@@ -1411,9 +1420,10 @@
       "profile_name": "write_value_only",
       "repeat_count": 1,
       "target_profile": "sleep_only",
-      "token_cost": 3.0,
+      "token_cost": "unavailable",
       "unavailable": [
-        "latency_ms"
+        "latency_ms",
+        "token_cost"
       ]
     },
     {
@@ -1468,7 +1478,7 @@
       "profile_name": "rerank_only",
       "repeat_count": 1,
       "target_profile": "sleep_only",
-      "token_cost": 0.0,
+      "token_cost": 36.0,
       "unavailable": [
         "latency_ms"
       ]
@@ -1524,7 +1534,7 @@
       "profile_name": "all_on",
       "repeat_count": 1,
       "target_profile": "sleep_only",
-      "token_cost": 3.0,
+      "token_cost": 52.0,
       "unavailable": [
         "latency_ms",
         "token_cost"
@@ -1564,9 +1574,10 @@
       "profile_name": "write_value_only",
       "repeat_count": 1,
       "target_profile": "tri_retrieval_only",
-      "token_cost": 3.0,
+      "token_cost": "unavailable",
       "unavailable": [
-        "latency_ms"
+        "latency_ms",
+        "token_cost"
       ]
     },
     {
@@ -1621,7 +1632,7 @@
       "profile_name": "rerank_only",
       "repeat_count": 1,
       "target_profile": "tri_retrieval_only",
-      "token_cost": 0.0,
+      "token_cost": 94.0,
       "unavailable": [
         "latency_ms"
       ]
@@ -1677,7 +1688,7 @@
       "profile_name": "all_on",
       "repeat_count": 1,
       "target_profile": "tri_retrieval_only",
-      "token_cost": 3.0,
+      "token_cost": 105.0,
       "unavailable": [
         "latency_ms",
         "token_cost"
@@ -1717,9 +1728,10 @@
       "profile_name": "write_value_only",
       "repeat_count": 1,
       "target_profile": "tri_retrieval_only",
-      "token_cost": 3.0,
+      "token_cost": "unavailable",
       "unavailable": [
-        "latency_ms"
+        "latency_ms",
+        "token_cost"
       ]
     },
     {
@@ -1774,7 +1786,7 @@
       "profile_name": "rerank_only",
       "repeat_count": 1,
       "target_profile": "tri_retrieval_only",
-      "token_cost": 0.0,
+      "token_cost": 68.0,
       "unavailable": [
         "latency_ms"
       ]
@@ -1830,7 +1842,7 @@
       "profile_name": "all_on",
       "repeat_count": 1,
       "target_profile": "tri_retrieval_only",
-      "token_cost": 3.0,
+      "token_cost": 82.0,
       "unavailable": [
         "latency_ms",
         "token_cost"
@@ -1870,9 +1882,10 @@
       "profile_name": "write_value_only",
       "repeat_count": 1,
       "target_profile": "tri_retrieval_only",
-      "token_cost": 3.0,
+      "token_cost": "unavailable",
       "unavailable": [
-        "latency_ms"
+        "latency_ms",
+        "token_cost"
       ]
     },
     {
@@ -1927,7 +1940,7 @@
       "profile_name": "rerank_only",
       "repeat_count": 1,
       "target_profile": "tri_retrieval_only",
-      "token_cost": 0.0,
+      "token_cost": 102.0,
       "unavailable": [
         "latency_ms"
       ]
@@ -1983,7 +1996,7 @@
       "profile_name": "all_on",
       "repeat_count": 1,
       "target_profile": "tri_retrieval_only",
-      "token_cost": 3.0,
+      "token_cost": 108.0,
       "unavailable": [
         "latency_ms",
         "token_cost"
@@ -2023,9 +2036,10 @@
       "profile_name": "write_value_only",
       "repeat_count": 1,
       "target_profile": "tri_retrieval_only",
-      "token_cost": 3.0,
+      "token_cost": "unavailable",
       "unavailable": [
-        "latency_ms"
+        "latency_ms",
+        "token_cost"
       ]
     },
     {
@@ -2080,7 +2094,7 @@
       "profile_name": "rerank_only",
       "repeat_count": 1,
       "target_profile": "tri_retrieval_only",
-      "token_cost": 0.0,
+      "token_cost": 59.0,
       "unavailable": [
         "latency_ms"
       ]
@@ -2136,7 +2150,7 @@
       "profile_name": "all_on",
       "repeat_count": 1,
       "target_profile": "tri_retrieval_only",
-      "token_cost": 3.0,
+      "token_cost": 75.0,
       "unavailable": [
         "latency_ms",
         "token_cost"
@@ -2176,9 +2190,10 @@
       "profile_name": "write_value_only",
       "repeat_count": 1,
       "target_profile": "graph_only",
-      "token_cost": 3.0,
+      "token_cost": "unavailable",
       "unavailable": [
-        "latency_ms"
+        "latency_ms",
+        "token_cost"
       ]
     },
     {
@@ -2233,7 +2248,7 @@
       "profile_name": "rerank_only",
       "repeat_count": 1,
       "target_profile": "graph_only",
-      "token_cost": 0.0,
+      "token_cost": 49.0,
       "unavailable": [
         "latency_ms"
       ]
@@ -2289,7 +2304,7 @@
       "profile_name": "all_on",
       "repeat_count": 1,
       "target_profile": "graph_only",
-      "token_cost": 3.0,
+      "token_cost": 62.0,
       "unavailable": [
         "latency_ms",
         "token_cost"
@@ -2329,9 +2344,10 @@
       "profile_name": "write_value_only",
       "repeat_count": 1,
       "target_profile": "version_provenance_only",
-      "token_cost": 3.0,
+      "token_cost": "unavailable",
       "unavailable": [
-        "latency_ms"
+        "latency_ms",
+        "token_cost"
       ]
     },
     {
@@ -2386,7 +2402,7 @@
       "profile_name": "rerank_only",
       "repeat_count": 1,
       "target_profile": "version_provenance_only",
-      "token_cost": 0.0,
+      "token_cost": 77.0,
       "unavailable": [
         "latency_ms"
       ]
@@ -2442,7 +2458,7 @@
       "profile_name": "all_on",
       "repeat_count": 1,
       "target_profile": "version_provenance_only",
-      "token_cost": 3.0,
+      "token_cost": 89.0,
       "unavailable": [
         "latency_ms",
         "token_cost"
@@ -2482,9 +2498,10 @@
       "profile_name": "write_value_only",
       "repeat_count": 1,
       "target_profile": "version_provenance_only",
-      "token_cost": 3.0,
+      "token_cost": "unavailable",
       "unavailable": [
-        "latency_ms"
+        "latency_ms",
+        "token_cost"
       ]
     },
     {
@@ -2539,7 +2556,7 @@
       "profile_name": "rerank_only",
       "repeat_count": 1,
       "target_profile": "version_provenance_only",
-      "token_cost": 0.0,
+      "token_cost": 69.0,
       "unavailable": [
         "latency_ms"
       ]
@@ -2595,7 +2612,7 @@
       "profile_name": "all_on",
       "repeat_count": 1,
       "target_profile": "version_provenance_only",
-      "token_cost": 3.0,
+      "token_cost": 78.0,
       "unavailable": [
         "latency_ms",
         "token_cost"
@@ -2635,9 +2652,10 @@
       "profile_name": "write_value_only",
       "repeat_count": 1,
       "target_profile": "sleep_only",
-      "token_cost": 3.0,
+      "token_cost": "unavailable",
       "unavailable": [
-        "latency_ms"
+        "latency_ms",
+        "token_cost"
       ]
     },
     {
@@ -2692,7 +2710,7 @@
       "profile_name": "rerank_only",
       "repeat_count": 1,
       "target_profile": "sleep_only",
-      "token_cost": 0.0,
+      "token_cost": 99.0,
       "unavailable": [
         "latency_ms"
       ]
@@ -2748,7 +2766,7 @@
       "profile_name": "all_on",
       "repeat_count": 1,
       "target_profile": "sleep_only",
-      "token_cost": 3.0,
+      "token_cost": 104.0,
       "unavailable": [
         "latency_ms",
         "token_cost"
@@ -2788,9 +2806,10 @@
       "profile_name": "write_value_only",
       "repeat_count": 1,
       "target_profile": "rerank_only",
-      "token_cost": 3.0,
+      "token_cost": "unavailable",
       "unavailable": [
-        "latency_ms"
+        "latency_ms",
+        "token_cost"
       ]
     },
     {
@@ -2845,7 +2864,7 @@
       "profile_name": "rerank_only",
       "repeat_count": 1,
       "target_profile": "rerank_only",
-      "token_cost": 0.0,
+      "token_cost": 58.0,
       "unavailable": [
         "latency_ms"
       ]
@@ -2901,7 +2920,7 @@
       "profile_name": "all_on",
       "repeat_count": 1,
       "target_profile": "rerank_only",
-      "token_cost": 3.0,
+      "token_cost": 68.0,
       "unavailable": [
         "latency_ms",
         "token_cost"
@@ -2941,9 +2960,10 @@
       "profile_name": "write_value_only",
       "repeat_count": 1,
       "target_profile": "sleep_only",
-      "token_cost": 3.0,
+      "token_cost": "unavailable",
       "unavailable": [
-        "latency_ms"
+        "latency_ms",
+        "token_cost"
       ]
     },
     {
@@ -2998,7 +3018,7 @@
       "profile_name": "rerank_only",
       "repeat_count": 1,
       "target_profile": "sleep_only",
-      "token_cost": 0.0,
+      "token_cost": 36.0,
       "unavailable": [
         "latency_ms"
       ]
@@ -3054,7 +3074,7 @@
       "profile_name": "all_on",
       "repeat_count": 1,
       "target_profile": "sleep_only",
-      "token_cost": 3.0,
+      "token_cost": 52.0,
       "unavailable": [
         "latency_ms",
         "token_cost"
@@ -3094,9 +3114,10 @@
       "profile_name": "write_value_only",
       "repeat_count": 1,
       "target_profile": "tri_retrieval_only",
-      "token_cost": 3.0,
+      "token_cost": "unavailable",
       "unavailable": [
-        "latency_ms"
+        "latency_ms",
+        "token_cost"
       ]
     },
     {
@@ -3151,7 +3172,7 @@
       "profile_name": "rerank_only",
       "repeat_count": 1,
       "target_profile": "tri_retrieval_only",
-      "token_cost": 0.0,
+      "token_cost": 94.0,
       "unavailable": [
         "latency_ms"
       ]
@@ -3207,7 +3228,7 @@
       "profile_name": "all_on",
       "repeat_count": 1,
       "target_profile": "tri_retrieval_only",
-      "token_cost": 3.0,
+      "token_cost": 105.0,
       "unavailable": [
         "latency_ms",
         "token_cost"
@@ -3247,9 +3268,10 @@
       "profile_name": "write_value_only",
       "repeat_count": 1,
       "target_profile": "tri_retrieval_only",
-      "token_cost": 3.0,
+      "token_cost": "unavailable",
       "unavailable": [
-        "latency_ms"
+        "latency_ms",
+        "token_cost"
       ]
     },
     {
@@ -3304,7 +3326,7 @@
       "profile_name": "rerank_only",
       "repeat_count": 1,
       "target_profile": "tri_retrieval_only",
-      "token_cost": 0.0,
+      "token_cost": 68.0,
       "unavailable": [
         "latency_ms"
       ]
@@ -3360,7 +3382,7 @@
       "profile_name": "all_on",
       "repeat_count": 1,
       "target_profile": "tri_retrieval_only",
-      "token_cost": 3.0,
+      "token_cost": 82.0,
       "unavailable": [
         "latency_ms",
         "token_cost"
@@ -3400,9 +3422,10 @@
       "profile_name": "write_value_only",
       "repeat_count": 1,
       "target_profile": "tri_retrieval_only",
-      "token_cost": 3.0,
+      "token_cost": "unavailable",
       "unavailable": [
-        "latency_ms"
+        "latency_ms",
+        "token_cost"
       ]
     },
     {
@@ -3457,7 +3480,7 @@
       "profile_name": "rerank_only",
       "repeat_count": 1,
       "target_profile": "tri_retrieval_only",
-      "token_cost": 0.0,
+      "token_cost": 102.0,
       "unavailable": [
         "latency_ms"
       ]
@@ -3513,7 +3536,7 @@
       "profile_name": "all_on",
       "repeat_count": 1,
       "target_profile": "tri_retrieval_only",
-      "token_cost": 3.0,
+      "token_cost": 108.0,
       "unavailable": [
         "latency_ms",
         "token_cost"
@@ -3553,9 +3576,10 @@
       "profile_name": "write_value_only",
       "repeat_count": 1,
       "target_profile": "tri_retrieval_only",
-      "token_cost": 3.0,
+      "token_cost": "unavailable",
       "unavailable": [
-        "latency_ms"
+        "latency_ms",
+        "token_cost"
       ]
     },
     {
@@ -3610,7 +3634,7 @@
       "profile_name": "rerank_only",
       "repeat_count": 1,
       "target_profile": "tri_retrieval_only",
-      "token_cost": 0.0,
+      "token_cost": 59.0,
       "unavailable": [
         "latency_ms"
       ]
@@ -3666,7 +3690,7 @@
       "profile_name": "all_on",
       "repeat_count": 1,
       "target_profile": "tri_retrieval_only",
-      "token_cost": 3.0,
+      "token_cost": 75.0,
       "unavailable": [
         "latency_ms",
         "token_cost"
@@ -3706,9 +3730,10 @@
       "profile_name": "write_value_only",
       "repeat_count": 1,
       "target_profile": "graph_only",
-      "token_cost": 3.0,
+      "token_cost": "unavailable",
       "unavailable": [
-        "latency_ms"
+        "latency_ms",
+        "token_cost"
       ]
     },
     {
@@ -3763,7 +3788,7 @@
       "profile_name": "rerank_only",
       "repeat_count": 1,
       "target_profile": "graph_only",
-      "token_cost": 0.0,
+      "token_cost": 49.0,
       "unavailable": [
         "latency_ms"
       ]
@@ -3819,7 +3844,7 @@
       "profile_name": "all_on",
       "repeat_count": 1,
       "target_profile": "graph_only",
-      "token_cost": 3.0,
+      "token_cost": 62.0,
       "unavailable": [
         "latency_ms",
         "token_cost"
@@ -3859,9 +3884,10 @@
       "profile_name": "write_value_only",
       "repeat_count": 1,
       "target_profile": "version_provenance_only",
-      "token_cost": 3.0,
+      "token_cost": "unavailable",
       "unavailable": [
-        "latency_ms"
+        "latency_ms",
+        "token_cost"
       ]
     },
     {
@@ -3916,7 +3942,7 @@
       "profile_name": "rerank_only",
       "repeat_count": 1,
       "target_profile": "version_provenance_only",
-      "token_cost": 0.0,
+      "token_cost": 77.0,
       "unavailable": [
         "latency_ms"
       ]
@@ -3972,7 +3998,7 @@
       "profile_name": "all_on",
       "repeat_count": 1,
       "target_profile": "version_provenance_only",
-      "token_cost": 3.0,
+      "token_cost": 89.0,
       "unavailable": [
         "latency_ms",
         "token_cost"
@@ -4012,9 +4038,10 @@
       "profile_name": "write_value_only",
       "repeat_count": 1,
       "target_profile": "version_provenance_only",
-      "token_cost": 3.0,
+      "token_cost": "unavailable",
       "unavailable": [
-        "latency_ms"
+        "latency_ms",
+        "token_cost"
       ]
     },
     {
@@ -4069,7 +4096,7 @@
       "profile_name": "rerank_only",
       "repeat_count": 1,
       "target_profile": "version_provenance_only",
-      "token_cost": 0.0,
+      "token_cost": 69.0,
       "unavailable": [
         "latency_ms"
       ]
@@ -4125,7 +4152,7 @@
       "profile_name": "all_on",
       "repeat_count": 1,
       "target_profile": "version_provenance_only",
-      "token_cost": 3.0,
+      "token_cost": 78.0,
       "unavailable": [
         "latency_ms",
         "token_cost"
@@ -4165,9 +4192,10 @@
       "profile_name": "write_value_only",
       "repeat_count": 1,
       "target_profile": "sleep_only",
-      "token_cost": 3.0,
+      "token_cost": "unavailable",
       "unavailable": [
-        "latency_ms"
+        "latency_ms",
+        "token_cost"
       ]
     },
     {
@@ -4222,7 +4250,7 @@
       "profile_name": "rerank_only",
       "repeat_count": 1,
       "target_profile": "sleep_only",
-      "token_cost": 0.0,
+      "token_cost": 99.0,
       "unavailable": [
         "latency_ms"
       ]
@@ -4278,7 +4306,7 @@
       "profile_name": "all_on",
       "repeat_count": 1,
       "target_profile": "sleep_only",
-      "token_cost": 3.0,
+      "token_cost": 104.0,
       "unavailable": [
         "latency_ms",
         "token_cost"
@@ -4318,9 +4346,10 @@
       "profile_name": "write_value_only",
       "repeat_count": 1,
       "target_profile": "rerank_only",
-      "token_cost": 3.0,
+      "token_cost": "unavailable",
       "unavailable": [
-        "latency_ms"
+        "latency_ms",
+        "token_cost"
       ]
     },
     {
@@ -4375,7 +4404,7 @@
       "profile_name": "rerank_only",
       "repeat_count": 1,
       "target_profile": "rerank_only",
-      "token_cost": 0.0,
+      "token_cost": 58.0,
       "unavailable": [
         "latency_ms"
       ]
@@ -4431,7 +4460,7 @@
       "profile_name": "all_on",
       "repeat_count": 1,
       "target_profile": "rerank_only",
-      "token_cost": 3.0,
+      "token_cost": 68.0,
       "unavailable": [
         "latency_ms",
         "token_cost"
@@ -4471,9 +4500,10 @@
       "profile_name": "write_value_only",
       "repeat_count": 1,
       "target_profile": "sleep_only",
-      "token_cost": 3.0,
+      "token_cost": "unavailable",
       "unavailable": [
-        "latency_ms"
+        "latency_ms",
+        "token_cost"
       ]
     },
     {
@@ -4528,7 +4558,7 @@
       "profile_name": "rerank_only",
       "repeat_count": 1,
       "target_profile": "sleep_only",
-      "token_cost": 0.0,
+      "token_cost": 36.0,
       "unavailable": [
         "latency_ms"
       ]
@@ -4584,7 +4614,7 @@
       "profile_name": "all_on",
       "repeat_count": 1,
       "target_profile": "sleep_only",
-      "token_cost": 3.0,
+      "token_cost": 52.0,
       "unavailable": [
         "latency_ms",
         "token_cost"
@@ -4624,9 +4654,10 @@
       "profile_name": "write_value_only",
       "repeat_count": 1,
       "target_profile": "tri_retrieval_only",
-      "token_cost": 3.0,
+      "token_cost": "unavailable",
       "unavailable": [
-        "latency_ms"
+        "latency_ms",
+        "token_cost"
       ]
     },
     {
@@ -4681,7 +4712,7 @@
       "profile_name": "rerank_only",
       "repeat_count": 1,
       "target_profile": "tri_retrieval_only",
-      "token_cost": 0.0,
+      "token_cost": 94.0,
       "unavailable": [
         "latency_ms"
       ]
@@ -4737,7 +4768,7 @@
       "profile_name": "all_on",
       "repeat_count": 1,
       "target_profile": "tri_retrieval_only",
-      "token_cost": 3.0,
+      "token_cost": 105.0,
       "unavailable": [
         "latency_ms",
         "token_cost"
@@ -4777,9 +4808,10 @@
       "profile_name": "write_value_only",
       "repeat_count": 1,
       "target_profile": "tri_retrieval_only",
-      "token_cost": 3.0,
+      "token_cost": "unavailable",
       "unavailable": [
-        "latency_ms"
+        "latency_ms",
+        "token_cost"
       ]
     },
     {
@@ -4834,7 +4866,7 @@
       "profile_name": "rerank_only",
       "repeat_count": 1,
       "target_profile": "tri_retrieval_only",
-      "token_cost": 0.0,
+      "token_cost": 68.0,
       "unavailable": [
         "latency_ms"
       ]
@@ -4890,7 +4922,7 @@
       "profile_name": "all_on",
       "repeat_count": 1,
       "target_profile": "tri_retrieval_only",
-      "token_cost": 3.0,
+      "token_cost": 82.0,
       "unavailable": [
         "latency_ms",
         "token_cost"
@@ -4930,9 +4962,10 @@
       "profile_name": "write_value_only",
       "repeat_count": 1,
       "target_profile": "tri_retrieval_only",
-      "token_cost": 3.0,
+      "token_cost": "unavailable",
       "unavailable": [
-        "latency_ms"
+        "latency_ms",
+        "token_cost"
       ]
     },
     {
@@ -4987,7 +5020,7 @@
       "profile_name": "rerank_only",
       "repeat_count": 1,
       "target_profile": "tri_retrieval_only",
-      "token_cost": 0.0,
+      "token_cost": 102.0,
       "unavailable": [
         "latency_ms"
       ]
@@ -5043,7 +5076,7 @@
       "profile_name": "all_on",
       "repeat_count": 1,
       "target_profile": "tri_retrieval_only",
-      "token_cost": 3.0,
+      "token_cost": 108.0,
       "unavailable": [
         "latency_ms",
         "token_cost"
@@ -5083,9 +5116,10 @@
       "profile_name": "write_value_only",
       "repeat_count": 1,
       "target_profile": "tri_retrieval_only",
-      "token_cost": 3.0,
+      "token_cost": "unavailable",
       "unavailable": [
-        "latency_ms"
+        "latency_ms",
+        "token_cost"
       ]
     },
     {
@@ -5140,7 +5174,7 @@
       "profile_name": "rerank_only",
       "repeat_count": 1,
       "target_profile": "tri_retrieval_only",
-      "token_cost": 0.0,
+      "token_cost": 59.0,
       "unavailable": [
         "latency_ms"
       ]
@@ -5196,7 +5230,7 @@
       "profile_name": "all_on",
       "repeat_count": 1,
       "target_profile": "tri_retrieval_only",
-      "token_cost": 3.0,
+      "token_cost": 75.0,
       "unavailable": [
         "latency_ms",
         "token_cost"
@@ -5236,9 +5270,10 @@
       "profile_name": "write_value_only",
       "repeat_count": 1,
       "target_profile": "graph_only",
-      "token_cost": 3.0,
+      "token_cost": "unavailable",
       "unavailable": [
-        "latency_ms"
+        "latency_ms",
+        "token_cost"
       ]
     },
     {
@@ -5293,7 +5328,7 @@
       "profile_name": "rerank_only",
       "repeat_count": 1,
       "target_profile": "graph_only",
-      "token_cost": 0.0,
+      "token_cost": 49.0,
       "unavailable": [
         "latency_ms"
       ]
@@ -5349,7 +5384,7 @@
       "profile_name": "all_on",
       "repeat_count": 1,
       "target_profile": "graph_only",
-      "token_cost": 3.0,
+      "token_cost": 62.0,
       "unavailable": [
         "latency_ms",
         "token_cost"
@@ -5389,9 +5424,10 @@
       "profile_name": "write_value_only",
       "repeat_count": 1,
       "target_profile": "version_provenance_only",
-      "token_cost": 3.0,
+      "token_cost": "unavailable",
       "unavailable": [
-        "latency_ms"
+        "latency_ms",
+        "token_cost"
       ]
     },
     {
@@ -5446,7 +5482,7 @@
       "profile_name": "rerank_only",
       "repeat_count": 1,
       "target_profile": "version_provenance_only",
-      "token_cost": 0.0,
+      "token_cost": 77.0,
       "unavailable": [
         "latency_ms"
       ]
@@ -5502,7 +5538,7 @@
       "profile_name": "all_on",
       "repeat_count": 1,
       "target_profile": "version_provenance_only",
-      "token_cost": 3.0,
+      "token_cost": 89.0,
       "unavailable": [
         "latency_ms",
         "token_cost"
@@ -5542,9 +5578,10 @@
       "profile_name": "write_value_only",
       "repeat_count": 1,
       "target_profile": "version_provenance_only",
-      "token_cost": 3.0,
+      "token_cost": "unavailable",
       "unavailable": [
-        "latency_ms"
+        "latency_ms",
+        "token_cost"
       ]
     },
     {
@@ -5599,7 +5636,7 @@
       "profile_name": "rerank_only",
       "repeat_count": 1,
       "target_profile": "version_provenance_only",
-      "token_cost": 0.0,
+      "token_cost": 69.0,
       "unavailable": [
         "latency_ms"
       ]
@@ -5655,7 +5692,7 @@
       "profile_name": "all_on",
       "repeat_count": 1,
       "target_profile": "version_provenance_only",
-      "token_cost": 3.0,
+      "token_cost": 78.0,
       "unavailable": [
         "latency_ms",
         "token_cost"
@@ -5695,9 +5732,10 @@
       "profile_name": "write_value_only",
       "repeat_count": 1,
       "target_profile": "sleep_only",
-      "token_cost": 3.0,
+      "token_cost": "unavailable",
       "unavailable": [
-        "latency_ms"
+        "latency_ms",
+        "token_cost"
       ]
     },
     {
@@ -5752,7 +5790,7 @@
       "profile_name": "rerank_only",
       "repeat_count": 1,
       "target_profile": "sleep_only",
-      "token_cost": 0.0,
+      "token_cost": 99.0,
       "unavailable": [
         "latency_ms"
       ]
@@ -5808,7 +5846,7 @@
       "profile_name": "all_on",
       "repeat_count": 1,
       "target_profile": "sleep_only",
-      "token_cost": 3.0,
+      "token_cost": 104.0,
       "unavailable": [
         "latency_ms",
         "token_cost"
@@ -5848,9 +5886,10 @@
       "profile_name": "write_value_only",
       "repeat_count": 1,
       "target_profile": "rerank_only",
-      "token_cost": 3.0,
+      "token_cost": "unavailable",
       "unavailable": [
-        "latency_ms"
+        "latency_ms",
+        "token_cost"
       ]
     },
     {
@@ -5905,7 +5944,7 @@
       "profile_name": "rerank_only",
       "repeat_count": 1,
       "target_profile": "rerank_only",
-      "token_cost": 0.0,
+      "token_cost": 58.0,
       "unavailable": [
         "latency_ms"
       ]
@@ -5961,7 +6000,7 @@
       "profile_name": "all_on",
       "repeat_count": 1,
       "target_profile": "rerank_only",
-      "token_cost": 3.0,
+      "token_cost": 68.0,
       "unavailable": [
         "latency_ms",
         "token_cost"
@@ -6001,9 +6040,10 @@
       "profile_name": "write_value_only",
       "repeat_count": 1,
       "target_profile": "sleep_only",
-      "token_cost": 3.0,
+      "token_cost": "unavailable",
       "unavailable": [
-        "latency_ms"
+        "latency_ms",
+        "token_cost"
       ]
     },
     {
@@ -6058,7 +6098,7 @@
       "profile_name": "rerank_only",
       "repeat_count": 1,
       "target_profile": "sleep_only",
-      "token_cost": 0.0,
+      "token_cost": 36.0,
       "unavailable": [
         "latency_ms"
       ]
@@ -6114,7 +6154,7 @@
       "profile_name": "all_on",
       "repeat_count": 1,
       "target_profile": "sleep_only",
-      "token_cost": 3.0,
+      "token_cost": 52.0,
       "unavailable": [
         "latency_ms",
         "token_cost"
@@ -6154,9 +6194,10 @@
       "profile_name": "write_value_only",
       "repeat_count": 1,
       "target_profile": "tri_retrieval_only",
-      "token_cost": 3.0,
+      "token_cost": "unavailable",
       "unavailable": [
-        "latency_ms"
+        "latency_ms",
+        "token_cost"
       ]
     },
     {
@@ -6211,7 +6252,7 @@
       "profile_name": "rerank_only",
       "repeat_count": 1,
       "target_profile": "tri_retrieval_only",
-      "token_cost": 0.0,
+      "token_cost": 88.0,
       "unavailable": [
         "latency_ms"
       ]
@@ -6267,7 +6308,7 @@
       "profile_name": "all_on",
       "repeat_count": 1,
       "target_profile": "tri_retrieval_only",
-      "token_cost": 3.0,
+      "token_cost": 99.0,
       "unavailable": [
         "latency_ms",
         "token_cost"
@@ -6307,9 +6348,10 @@
       "profile_name": "write_value_only",
       "repeat_count": 1,
       "target_profile": "tri_retrieval_only",
-      "token_cost": 3.0,
+      "token_cost": "unavailable",
       "unavailable": [
-        "latency_ms"
+        "latency_ms",
+        "token_cost"
       ]
     },
     {
@@ -6364,7 +6406,7 @@
       "profile_name": "rerank_only",
       "repeat_count": 1,
       "target_profile": "tri_retrieval_only",
-      "token_cost": 0.0,
+      "token_cost": 62.0,
       "unavailable": [
         "latency_ms"
       ]
@@ -6420,7 +6462,7 @@
       "profile_name": "all_on",
       "repeat_count": 1,
       "target_profile": "tri_retrieval_only",
-      "token_cost": 3.0,
+      "token_cost": 76.0,
       "unavailable": [
         "latency_ms",
         "token_cost"
@@ -6460,9 +6502,10 @@
       "profile_name": "write_value_only",
       "repeat_count": 1,
       "target_profile": "tri_retrieval_only",
-      "token_cost": 3.0,
+      "token_cost": "unavailable",
       "unavailable": [
-        "latency_ms"
+        "latency_ms",
+        "token_cost"
       ]
     },
     {
@@ -6517,7 +6560,7 @@
       "profile_name": "rerank_only",
       "repeat_count": 1,
       "target_profile": "tri_retrieval_only",
-      "token_cost": 0.0,
+      "token_cost": 76.0,
       "unavailable": [
         "latency_ms"
       ]
@@ -6573,7 +6616,7 @@
       "profile_name": "all_on",
       "repeat_count": 1,
       "target_profile": "tri_retrieval_only",
-      "token_cost": 3.0,
+      "token_cost": 82.0,
       "unavailable": [
         "latency_ms",
         "token_cost"
@@ -6613,9 +6656,10 @@
       "profile_name": "write_value_only",
       "repeat_count": 1,
       "target_profile": "tri_retrieval_only",
-      "token_cost": 3.0,
+      "token_cost": "unavailable",
       "unavailable": [
-        "latency_ms"
+        "latency_ms",
+        "token_cost"
       ]
     },
     {
@@ -6670,7 +6714,7 @@
       "profile_name": "rerank_only",
       "repeat_count": 1,
       "target_profile": "tri_retrieval_only",
-      "token_cost": 0.0,
+      "token_cost": 53.0,
       "unavailable": [
         "latency_ms"
       ]
@@ -6726,7 +6770,7 @@
       "profile_name": "all_on",
       "repeat_count": 1,
       "target_profile": "tri_retrieval_only",
-      "token_cost": 3.0,
+      "token_cost": 69.0,
       "unavailable": [
         "latency_ms",
         "token_cost"
@@ -6766,9 +6810,10 @@
       "profile_name": "write_value_only",
       "repeat_count": 1,
       "target_profile": "graph_only",
-      "token_cost": 3.0,
+      "token_cost": "unavailable",
       "unavailable": [
-        "latency_ms"
+        "latency_ms",
+        "token_cost"
       ]
     },
     {
@@ -6823,7 +6868,7 @@
       "profile_name": "rerank_only",
       "repeat_count": 1,
       "target_profile": "graph_only",
-      "token_cost": 0.0,
+      "token_cost": 43.0,
       "unavailable": [
         "latency_ms"
       ]
@@ -6879,7 +6924,7 @@
       "profile_name": "all_on",
       "repeat_count": 1,
       "target_profile": "graph_only",
-      "token_cost": 3.0,
+      "token_cost": 56.0,
       "unavailable": [
         "latency_ms",
         "token_cost"
@@ -6919,9 +6964,10 @@
       "profile_name": "write_value_only",
       "repeat_count": 1,
       "target_profile": "version_provenance_only",
-      "token_cost": 3.0,
+      "token_cost": "unavailable",
       "unavailable": [
-        "latency_ms"
+        "latency_ms",
+        "token_cost"
       ]
     },
     {
@@ -6976,7 +7022,7 @@
       "profile_name": "rerank_only",
       "repeat_count": 1,
       "target_profile": "version_provenance_only",
-      "token_cost": 0.0,
+      "token_cost": 70.0,
       "unavailable": [
         "latency_ms"
       ]
@@ -7032,7 +7078,7 @@
       "profile_name": "all_on",
       "repeat_count": 1,
       "target_profile": "version_provenance_only",
-      "token_cost": 3.0,
+      "token_cost": 82.0,
       "unavailable": [
         "latency_ms",
         "token_cost"
@@ -7072,9 +7118,10 @@
       "profile_name": "write_value_only",
       "repeat_count": 1,
       "target_profile": "version_provenance_only",
-      "token_cost": 3.0,
+      "token_cost": "unavailable",
       "unavailable": [
-        "latency_ms"
+        "latency_ms",
+        "token_cost"
       ]
     },
     {
@@ -7129,7 +7176,7 @@
       "profile_name": "rerank_only",
       "repeat_count": 1,
       "target_profile": "version_provenance_only",
-      "token_cost": 0.0,
+      "token_cost": 63.0,
       "unavailable": [
         "latency_ms"
       ]
@@ -7185,7 +7232,7 @@
       "profile_name": "all_on",
       "repeat_count": 1,
       "target_profile": "version_provenance_only",
-      "token_cost": 3.0,
+      "token_cost": 72.0,
       "unavailable": [
         "latency_ms",
         "token_cost"
@@ -7225,9 +7272,10 @@
       "profile_name": "write_value_only",
       "repeat_count": 1,
       "target_profile": "sleep_only",
-      "token_cost": 3.0,
+      "token_cost": "unavailable",
       "unavailable": [
-        "latency_ms"
+        "latency_ms",
+        "token_cost"
       ]
     },
     {
@@ -7282,7 +7330,7 @@
       "profile_name": "rerank_only",
       "repeat_count": 1,
       "target_profile": "sleep_only",
-      "token_cost": 0.0,
+      "token_cost": 93.0,
       "unavailable": [
         "latency_ms"
       ]
@@ -7338,7 +7386,7 @@
       "profile_name": "all_on",
       "repeat_count": 1,
       "target_profile": "sleep_only",
-      "token_cost": 3.0,
+      "token_cost": 98.0,
       "unavailable": [
         "latency_ms",
         "token_cost"
@@ -7378,9 +7426,10 @@
       "profile_name": "write_value_only",
       "repeat_count": 1,
       "target_profile": "rerank_only",
-      "token_cost": 3.0,
+      "token_cost": "unavailable",
       "unavailable": [
-        "latency_ms"
+        "latency_ms",
+        "token_cost"
       ]
     },
     {
@@ -7435,7 +7484,7 @@
       "profile_name": "rerank_only",
       "repeat_count": 1,
       "target_profile": "rerank_only",
-      "token_cost": 0.0,
+      "token_cost": 82.0,
       "unavailable": [
         "latency_ms"
       ]
@@ -7491,7 +7540,7 @@
       "profile_name": "all_on",
       "repeat_count": 1,
       "target_profile": "rerank_only",
-      "token_cost": 3.0,
+      "token_cost": 92.0,
       "unavailable": [
         "latency_ms",
         "token_cost"
@@ -7531,9 +7580,10 @@
       "profile_name": "write_value_only",
       "repeat_count": 1,
       "target_profile": "sleep_only",
-      "token_cost": 3.0,
+      "token_cost": "unavailable",
       "unavailable": [
-        "latency_ms"
+        "latency_ms",
+        "token_cost"
       ]
     },
     {
@@ -7588,7 +7638,7 @@
       "profile_name": "rerank_only",
       "repeat_count": 1,
       "target_profile": "sleep_only",
-      "token_cost": 0.0,
+      "token_cost": 50.0,
       "unavailable": [
         "latency_ms"
       ]
@@ -7644,7 +7694,7 @@
       "profile_name": "all_on",
       "repeat_count": 1,
       "target_profile": "sleep_only",
-      "token_cost": 3.0,
+      "token_cost": 66.0,
       "unavailable": [
         "latency_ms",
         "token_cost"
@@ -7684,9 +7734,10 @@
       "profile_name": "write_value_only",
       "repeat_count": 1,
       "target_profile": "tri_retrieval_only",
-      "token_cost": 3.0,
+      "token_cost": "unavailable",
       "unavailable": [
-        "latency_ms"
+        "latency_ms",
+        "token_cost"
       ]
     },
     {
@@ -7741,7 +7792,7 @@
       "profile_name": "rerank_only",
       "repeat_count": 1,
       "target_profile": "tri_retrieval_only",
-      "token_cost": 0.0,
+      "token_cost": 88.0,
       "unavailable": [
         "latency_ms"
       ]
@@ -7797,7 +7848,7 @@
       "profile_name": "all_on",
       "repeat_count": 1,
       "target_profile": "tri_retrieval_only",
-      "token_cost": 3.0,
+      "token_cost": 99.0,
       "unavailable": [
         "latency_ms",
         "token_cost"
@@ -7837,9 +7888,10 @@
       "profile_name": "write_value_only",
       "repeat_count": 1,
       "target_profile": "tri_retrieval_only",
-      "token_cost": 3.0,
+      "token_cost": "unavailable",
       "unavailable": [
-        "latency_ms"
+        "latency_ms",
+        "token_cost"
       ]
     },
     {
@@ -7894,7 +7946,7 @@
       "profile_name": "rerank_only",
       "repeat_count": 1,
       "target_profile": "tri_retrieval_only",
-      "token_cost": 0.0,
+      "token_cost": 62.0,
       "unavailable": [
         "latency_ms"
       ]
@@ -7950,7 +8002,7 @@
       "profile_name": "all_on",
       "repeat_count": 1,
       "target_profile": "tri_retrieval_only",
-      "token_cost": 3.0,
+      "token_cost": 76.0,
       "unavailable": [
         "latency_ms",
         "token_cost"
@@ -7990,9 +8042,10 @@
       "profile_name": "write_value_only",
       "repeat_count": 1,
       "target_profile": "tri_retrieval_only",
-      "token_cost": 3.0,
+      "token_cost": "unavailable",
       "unavailable": [
-        "latency_ms"
+        "latency_ms",
+        "token_cost"
       ]
     },
     {
@@ -8047,7 +8100,7 @@
       "profile_name": "rerank_only",
       "repeat_count": 1,
       "target_profile": "tri_retrieval_only",
-      "token_cost": 0.0,
+      "token_cost": 76.0,
       "unavailable": [
         "latency_ms"
       ]
@@ -8103,7 +8156,7 @@
       "profile_name": "all_on",
       "repeat_count": 1,
       "target_profile": "tri_retrieval_only",
-      "token_cost": 3.0,
+      "token_cost": 82.0,
       "unavailable": [
         "latency_ms",
         "token_cost"
@@ -8143,9 +8196,10 @@
       "profile_name": "write_value_only",
       "repeat_count": 1,
       "target_profile": "tri_retrieval_only",
-      "token_cost": 3.0,
+      "token_cost": "unavailable",
       "unavailable": [
-        "latency_ms"
+        "latency_ms",
+        "token_cost"
       ]
     },
     {
@@ -8200,7 +8254,7 @@
       "profile_name": "rerank_only",
       "repeat_count": 1,
       "target_profile": "tri_retrieval_only",
-      "token_cost": 0.0,
+      "token_cost": 53.0,
       "unavailable": [
         "latency_ms"
       ]
@@ -8256,7 +8310,7 @@
       "profile_name": "all_on",
       "repeat_count": 1,
       "target_profile": "tri_retrieval_only",
-      "token_cost": 3.0,
+      "token_cost": 69.0,
       "unavailable": [
         "latency_ms",
         "token_cost"
@@ -8296,9 +8350,10 @@
       "profile_name": "write_value_only",
       "repeat_count": 1,
       "target_profile": "graph_only",
-      "token_cost": 3.0,
+      "token_cost": "unavailable",
       "unavailable": [
-        "latency_ms"
+        "latency_ms",
+        "token_cost"
       ]
     },
     {
@@ -8353,7 +8408,7 @@
       "profile_name": "rerank_only",
       "repeat_count": 1,
       "target_profile": "graph_only",
-      "token_cost": 0.0,
+      "token_cost": 43.0,
       "unavailable": [
         "latency_ms"
       ]
@@ -8409,7 +8464,7 @@
       "profile_name": "all_on",
       "repeat_count": 1,
       "target_profile": "graph_only",
-      "token_cost": 3.0,
+      "token_cost": 56.0,
       "unavailable": [
         "latency_ms",
         "token_cost"
@@ -8449,9 +8504,10 @@
       "profile_name": "write_value_only",
       "repeat_count": 1,
       "target_profile": "version_provenance_only",
-      "token_cost": 3.0,
+      "token_cost": "unavailable",
       "unavailable": [
-        "latency_ms"
+        "latency_ms",
+        "token_cost"
       ]
     },
     {
@@ -8506,7 +8562,7 @@
       "profile_name": "rerank_only",
       "repeat_count": 1,
       "target_profile": "version_provenance_only",
-      "token_cost": 0.0,
+      "token_cost": 70.0,
       "unavailable": [
         "latency_ms"
       ]
@@ -8562,7 +8618,7 @@
       "profile_name": "all_on",
       "repeat_count": 1,
       "target_profile": "version_provenance_only",
-      "token_cost": 3.0,
+      "token_cost": 82.0,
       "unavailable": [
         "latency_ms",
         "token_cost"
@@ -8602,9 +8658,10 @@
       "profile_name": "write_value_only",
       "repeat_count": 1,
       "target_profile": "version_provenance_only",
-      "token_cost": 3.0,
+      "token_cost": "unavailable",
       "unavailable": [
-        "latency_ms"
+        "latency_ms",
+        "token_cost"
       ]
     },
     {
@@ -8659,7 +8716,7 @@
       "profile_name": "rerank_only",
       "repeat_count": 1,
       "target_profile": "version_provenance_only",
-      "token_cost": 0.0,
+      "token_cost": 63.0,
       "unavailable": [
         "latency_ms"
       ]
@@ -8715,7 +8772,7 @@
       "profile_name": "all_on",
       "repeat_count": 1,
       "target_profile": "version_provenance_only",
-      "token_cost": 3.0,
+      "token_cost": 72.0,
       "unavailable": [
         "latency_ms",
         "token_cost"
@@ -8755,9 +8812,10 @@
       "profile_name": "write_value_only",
       "repeat_count": 1,
       "target_profile": "sleep_only",
-      "token_cost": 3.0,
+      "token_cost": "unavailable",
       "unavailable": [
-        "latency_ms"
+        "latency_ms",
+        "token_cost"
       ]
     },
     {
@@ -8812,7 +8870,7 @@
       "profile_name": "rerank_only",
       "repeat_count": 1,
       "target_profile": "sleep_only",
-      "token_cost": 0.0,
+      "token_cost": 93.0,
       "unavailable": [
         "latency_ms"
       ]
@@ -8868,7 +8926,7 @@
       "profile_name": "all_on",
       "repeat_count": 1,
       "target_profile": "sleep_only",
-      "token_cost": 3.0,
+      "token_cost": 98.0,
       "unavailable": [
         "latency_ms",
         "token_cost"
@@ -8908,9 +8966,10 @@
       "profile_name": "write_value_only",
       "repeat_count": 1,
       "target_profile": "rerank_only",
-      "token_cost": 3.0,
+      "token_cost": "unavailable",
       "unavailable": [
-        "latency_ms"
+        "latency_ms",
+        "token_cost"
       ]
     },
     {
@@ -8965,7 +9024,7 @@
       "profile_name": "rerank_only",
       "repeat_count": 1,
       "target_profile": "rerank_only",
-      "token_cost": 0.0,
+      "token_cost": 82.0,
       "unavailable": [
         "latency_ms"
       ]
@@ -9021,7 +9080,7 @@
       "profile_name": "all_on",
       "repeat_count": 1,
       "target_profile": "rerank_only",
-      "token_cost": 3.0,
+      "token_cost": 92.0,
       "unavailable": [
         "latency_ms",
         "token_cost"
@@ -9061,9 +9120,10 @@
       "profile_name": "write_value_only",
       "repeat_count": 1,
       "target_profile": "sleep_only",
-      "token_cost": 3.0,
+      "token_cost": "unavailable",
       "unavailable": [
-        "latency_ms"
+        "latency_ms",
+        "token_cost"
       ]
     },
     {
@@ -9118,7 +9178,7 @@
       "profile_name": "rerank_only",
       "repeat_count": 1,
       "target_profile": "sleep_only",
-      "token_cost": 0.0,
+      "token_cost": 50.0,
       "unavailable": [
         "latency_ms"
       ]
@@ -9174,7 +9234,7 @@
       "profile_name": "all_on",
       "repeat_count": 1,
       "target_profile": "sleep_only",
-      "token_cost": 3.0,
+      "token_cost": 66.0,
       "unavailable": [
         "latency_ms",
         "token_cost"
@@ -9214,9 +9274,10 @@
       "profile_name": "write_value_only",
       "repeat_count": 1,
       "target_profile": "tri_retrieval_only",
-      "token_cost": 3.0,
+      "token_cost": "unavailable",
       "unavailable": [
-        "latency_ms"
+        "latency_ms",
+        "token_cost"
       ]
     },
     {
@@ -9271,7 +9332,7 @@
       "profile_name": "rerank_only",
       "repeat_count": 1,
       "target_profile": "tri_retrieval_only",
-      "token_cost": 0.0,
+      "token_cost": 88.0,
       "unavailable": [
         "latency_ms"
       ]
@@ -9327,7 +9388,7 @@
       "profile_name": "all_on",
       "repeat_count": 1,
       "target_profile": "tri_retrieval_only",
-      "token_cost": 3.0,
+      "token_cost": 99.0,
       "unavailable": [
         "latency_ms",
         "token_cost"
@@ -9367,9 +9428,10 @@
       "profile_name": "write_value_only",
       "repeat_count": 1,
       "target_profile": "tri_retrieval_only",
-      "token_cost": 3.0,
+      "token_cost": "unavailable",
       "unavailable": [
-        "latency_ms"
+        "latency_ms",
+        "token_cost"
       ]
     },
     {
@@ -9424,7 +9486,7 @@
       "profile_name": "rerank_only",
       "repeat_count": 1,
       "target_profile": "tri_retrieval_only",
-      "token_cost": 0.0,
+      "token_cost": 62.0,
       "unavailable": [
         "latency_ms"
       ]
@@ -9480,7 +9542,7 @@
       "profile_name": "all_on",
       "repeat_count": 1,
       "target_profile": "tri_retrieval_only",
-      "token_cost": 3.0,
+      "token_cost": 76.0,
       "unavailable": [
         "latency_ms",
         "token_cost"
@@ -9520,9 +9582,10 @@
       "profile_name": "write_value_only",
       "repeat_count": 1,
       "target_profile": "tri_retrieval_only",
-      "token_cost": 3.0,
+      "token_cost": "unavailable",
       "unavailable": [
-        "latency_ms"
+        "latency_ms",
+        "token_cost"
       ]
     },
     {
@@ -9577,7 +9640,7 @@
       "profile_name": "rerank_only",
       "repeat_count": 1,
       "target_profile": "tri_retrieval_only",
-      "token_cost": 0.0,
+      "token_cost": 76.0,
       "unavailable": [
         "latency_ms"
       ]
@@ -9633,7 +9696,7 @@
       "profile_name": "all_on",
       "repeat_count": 1,
       "target_profile": "tri_retrieval_only",
-      "token_cost": 3.0,
+      "token_cost": 82.0,
       "unavailable": [
         "latency_ms",
         "token_cost"
@@ -9673,9 +9736,10 @@
       "profile_name": "write_value_only",
       "repeat_count": 1,
       "target_profile": "tri_retrieval_only",
-      "token_cost": 3.0,
+      "token_cost": "unavailable",
       "unavailable": [
-        "latency_ms"
+        "latency_ms",
+        "token_cost"
       ]
     },
     {
@@ -9730,7 +9794,7 @@
       "profile_name": "rerank_only",
       "repeat_count": 1,
       "target_profile": "tri_retrieval_only",
-      "token_cost": 0.0,
+      "token_cost": 53.0,
       "unavailable": [
         "latency_ms"
       ]
@@ -9786,7 +9850,7 @@
       "profile_name": "all_on",
       "repeat_count": 1,
       "target_profile": "tri_retrieval_only",
-      "token_cost": 3.0,
+      "token_cost": 69.0,
       "unavailable": [
         "latency_ms",
         "token_cost"
@@ -9826,9 +9890,10 @@
       "profile_name": "write_value_only",
       "repeat_count": 1,
       "target_profile": "graph_only",
-      "token_cost": 3.0,
+      "token_cost": "unavailable",
       "unavailable": [
-        "latency_ms"
+        "latency_ms",
+        "token_cost"
       ]
     },
     {
@@ -9883,7 +9948,7 @@
       "profile_name": "rerank_only",
       "repeat_count": 1,
       "target_profile": "graph_only",
-      "token_cost": 0.0,
+      "token_cost": 43.0,
       "unavailable": [
         "latency_ms"
       ]
@@ -9939,7 +10004,7 @@
       "profile_name": "all_on",
       "repeat_count": 1,
       "target_profile": "graph_only",
-      "token_cost": 3.0,
+      "token_cost": 56.0,
       "unavailable": [
         "latency_ms",
         "token_cost"
@@ -9979,9 +10044,10 @@
       "profile_name": "write_value_only",
       "repeat_count": 1,
       "target_profile": "version_provenance_only",
-      "token_cost": 3.0,
+      "token_cost": "unavailable",
       "unavailable": [
-        "latency_ms"
+        "latency_ms",
+        "token_cost"
       ]
     },
     {
@@ -10036,7 +10102,7 @@
       "profile_name": "rerank_only",
       "repeat_count": 1,
       "target_profile": "version_provenance_only",
-      "token_cost": 0.0,
+      "token_cost": 70.0,
       "unavailable": [
         "latency_ms"
       ]
@@ -10092,7 +10158,7 @@
       "profile_name": "all_on",
       "repeat_count": 1,
       "target_profile": "version_provenance_only",
-      "token_cost": 3.0,
+      "token_cost": 82.0,
       "unavailable": [
         "latency_ms",
         "token_cost"
@@ -10132,9 +10198,10 @@
       "profile_name": "write_value_only",
       "repeat_count": 1,
       "target_profile": "version_provenance_only",
-      "token_cost": 3.0,
+      "token_cost": "unavailable",
       "unavailable": [
-        "latency_ms"
+        "latency_ms",
+        "token_cost"
       ]
     },
     {
@@ -10189,7 +10256,7 @@
       "profile_name": "rerank_only",
       "repeat_count": 1,
       "target_profile": "version_provenance_only",
-      "token_cost": 0.0,
+      "token_cost": 63.0,
       "unavailable": [
         "latency_ms"
       ]
@@ -10245,7 +10312,7 @@
       "profile_name": "all_on",
       "repeat_count": 1,
       "target_profile": "version_provenance_only",
-      "token_cost": 3.0,
+      "token_cost": 72.0,
       "unavailable": [
         "latency_ms",
         "token_cost"
@@ -10285,9 +10352,10 @@
       "profile_name": "write_value_only",
       "repeat_count": 1,
       "target_profile": "sleep_only",
-      "token_cost": 3.0,
+      "token_cost": "unavailable",
       "unavailable": [
-        "latency_ms"
+        "latency_ms",
+        "token_cost"
       ]
     },
     {
@@ -10342,7 +10410,7 @@
       "profile_name": "rerank_only",
       "repeat_count": 1,
       "target_profile": "sleep_only",
-      "token_cost": 0.0,
+      "token_cost": 93.0,
       "unavailable": [
         "latency_ms"
       ]
@@ -10398,7 +10466,7 @@
       "profile_name": "all_on",
       "repeat_count": 1,
       "target_profile": "sleep_only",
-      "token_cost": 3.0,
+      "token_cost": 98.0,
       "unavailable": [
         "latency_ms",
         "token_cost"
@@ -10438,9 +10506,10 @@
       "profile_name": "write_value_only",
       "repeat_count": 1,
       "target_profile": "rerank_only",
-      "token_cost": 3.0,
+      "token_cost": "unavailable",
       "unavailable": [
-        "latency_ms"
+        "latency_ms",
+        "token_cost"
       ]
     },
     {
@@ -10495,7 +10564,7 @@
       "profile_name": "rerank_only",
       "repeat_count": 1,
       "target_profile": "rerank_only",
-      "token_cost": 0.0,
+      "token_cost": 82.0,
       "unavailable": [
         "latency_ms"
       ]
@@ -10551,7 +10620,7 @@
       "profile_name": "all_on",
       "repeat_count": 1,
       "target_profile": "rerank_only",
-      "token_cost": 3.0,
+      "token_cost": 92.0,
       "unavailable": [
         "latency_ms",
         "token_cost"
@@ -10591,9 +10660,10 @@
       "profile_name": "write_value_only",
       "repeat_count": 1,
       "target_profile": "sleep_only",
-      "token_cost": 3.0,
+      "token_cost": "unavailable",
       "unavailable": [
-        "latency_ms"
+        "latency_ms",
+        "token_cost"
       ]
     },
     {
@@ -10648,7 +10718,7 @@
       "profile_name": "rerank_only",
       "repeat_count": 1,
       "target_profile": "sleep_only",
-      "token_cost": 0.0,
+      "token_cost": 50.0,
       "unavailable": [
         "latency_ms"
       ]
@@ -10704,7 +10774,7 @@
       "profile_name": "all_on",
       "repeat_count": 1,
       "target_profile": "sleep_only",
-      "token_cost": 3.0,
+      "token_cost": 66.0,
       "unavailable": [
         "latency_ms",
         "token_cost"
@@ -10744,9 +10814,10 @@
       "profile_name": "write_value_only",
       "repeat_count": 1,
       "target_profile": "tri_retrieval_only",
-      "token_cost": 3.0,
+      "token_cost": "unavailable",
       "unavailable": [
-        "latency_ms"
+        "latency_ms",
+        "token_cost"
       ]
     },
     {
@@ -10801,7 +10872,7 @@
       "profile_name": "rerank_only",
       "repeat_count": 1,
       "target_profile": "tri_retrieval_only",
-      "token_cost": 0.0,
+      "token_cost": 88.0,
       "unavailable": [
         "latency_ms"
       ]
@@ -10857,7 +10928,7 @@
       "profile_name": "all_on",
       "repeat_count": 1,
       "target_profile": "tri_retrieval_only",
-      "token_cost": 3.0,
+      "token_cost": 99.0,
       "unavailable": [
         "latency_ms",
         "token_cost"
@@ -10897,9 +10968,10 @@
       "profile_name": "write_value_only",
       "repeat_count": 1,
       "target_profile": "tri_retrieval_only",
-      "token_cost": 3.0,
+      "token_cost": "unavailable",
       "unavailable": [
-        "latency_ms"
+        "latency_ms",
+        "token_cost"
       ]
     },
     {
@@ -10954,7 +11026,7 @@
       "profile_name": "rerank_only",
       "repeat_count": 1,
       "target_profile": "tri_retrieval_only",
-      "token_cost": 0.0,
+      "token_cost": 62.0,
       "unavailable": [
         "latency_ms"
       ]
@@ -11010,7 +11082,7 @@
       "profile_name": "all_on",
       "repeat_count": 1,
       "target_profile": "tri_retrieval_only",
-      "token_cost": 3.0,
+      "token_cost": 76.0,
       "unavailable": [
         "latency_ms",
         "token_cost"
@@ -11050,9 +11122,10 @@
       "profile_name": "write_value_only",
       "repeat_count": 1,
       "target_profile": "tri_retrieval_only",
-      "token_cost": 3.0,
+      "token_cost": "unavailable",
       "unavailable": [
-        "latency_ms"
+        "latency_ms",
+        "token_cost"
       ]
     },
     {
@@ -11107,7 +11180,7 @@
       "profile_name": "rerank_only",
       "repeat_count": 1,
       "target_profile": "tri_retrieval_only",
-      "token_cost": 0.0,
+      "token_cost": 76.0,
       "unavailable": [
         "latency_ms"
       ]
@@ -11163,7 +11236,7 @@
       "profile_name": "all_on",
       "repeat_count": 1,
       "target_profile": "tri_retrieval_only",
-      "token_cost": 3.0,
+      "token_cost": 82.0,
       "unavailable": [
         "latency_ms",
         "token_cost"
@@ -11203,9 +11276,10 @@
       "profile_name": "write_value_only",
       "repeat_count": 1,
       "target_profile": "tri_retrieval_only",
-      "token_cost": 3.0,
+      "token_cost": "unavailable",
       "unavailable": [
-        "latency_ms"
+        "latency_ms",
+        "token_cost"
       ]
     },
     {
@@ -11260,7 +11334,7 @@
       "profile_name": "rerank_only",
       "repeat_count": 1,
       "target_profile": "tri_retrieval_only",
-      "token_cost": 0.0,
+      "token_cost": 53.0,
       "unavailable": [
         "latency_ms"
       ]
@@ -11316,7 +11390,7 @@
       "profile_name": "all_on",
       "repeat_count": 1,
       "target_profile": "tri_retrieval_only",
-      "token_cost": 3.0,
+      "token_cost": 69.0,
       "unavailable": [
         "latency_ms",
         "token_cost"
@@ -11356,9 +11430,10 @@
       "profile_name": "write_value_only",
       "repeat_count": 1,
       "target_profile": "graph_only",
-      "token_cost": 3.0,
+      "token_cost": "unavailable",
       "unavailable": [
-        "latency_ms"
+        "latency_ms",
+        "token_cost"
       ]
     },
     {
@@ -11413,7 +11488,7 @@
       "profile_name": "rerank_only",
       "repeat_count": 1,
       "target_profile": "graph_only",
-      "token_cost": 0.0,
+      "token_cost": 43.0,
       "unavailable": [
         "latency_ms"
       ]
@@ -11469,7 +11544,7 @@
       "profile_name": "all_on",
       "repeat_count": 1,
       "target_profile": "graph_only",
-      "token_cost": 3.0,
+      "token_cost": 56.0,
       "unavailable": [
         "latency_ms",
         "token_cost"
@@ -11509,9 +11584,10 @@
       "profile_name": "write_value_only",
       "repeat_count": 1,
       "target_profile": "version_provenance_only",
-      "token_cost": 3.0,
+      "token_cost": "unavailable",
       "unavailable": [
-        "latency_ms"
+        "latency_ms",
+        "token_cost"
       ]
     },
     {
@@ -11566,7 +11642,7 @@
       "profile_name": "rerank_only",
       "repeat_count": 1,
       "target_profile": "version_provenance_only",
-      "token_cost": 0.0,
+      "token_cost": 70.0,
       "unavailable": [
         "latency_ms"
       ]
@@ -11622,7 +11698,7 @@
       "profile_name": "all_on",
       "repeat_count": 1,
       "target_profile": "version_provenance_only",
-      "token_cost": 3.0,
+      "token_cost": 82.0,
       "unavailable": [
         "latency_ms",
         "token_cost"
@@ -11662,9 +11738,10 @@
       "profile_name": "write_value_only",
       "repeat_count": 1,
       "target_profile": "version_provenance_only",
-      "token_cost": 3.0,
+      "token_cost": "unavailable",
       "unavailable": [
-        "latency_ms"
+        "latency_ms",
+        "token_cost"
       ]
     },
     {
@@ -11719,7 +11796,7 @@
       "profile_name": "rerank_only",
       "repeat_count": 1,
       "target_profile": "version_provenance_only",
-      "token_cost": 0.0,
+      "token_cost": 63.0,
       "unavailable": [
         "latency_ms"
       ]
@@ -11775,7 +11852,7 @@
       "profile_name": "all_on",
       "repeat_count": 1,
       "target_profile": "version_provenance_only",
-      "token_cost": 3.0,
+      "token_cost": 72.0,
       "unavailable": [
         "latency_ms",
         "token_cost"
@@ -11815,9 +11892,10 @@
       "profile_name": "write_value_only",
       "repeat_count": 1,
       "target_profile": "sleep_only",
-      "token_cost": 3.0,
+      "token_cost": "unavailable",
       "unavailable": [
-        "latency_ms"
+        "latency_ms",
+        "token_cost"
       ]
     },
     {
@@ -11872,7 +11950,7 @@
       "profile_name": "rerank_only",
       "repeat_count": 1,
       "target_profile": "sleep_only",
-      "token_cost": 0.0,
+      "token_cost": 93.0,
       "unavailable": [
         "latency_ms"
       ]
@@ -11928,7 +12006,7 @@
       "profile_name": "all_on",
       "repeat_count": 1,
       "target_profile": "sleep_only",
-      "token_cost": 3.0,
+      "token_cost": 98.0,
       "unavailable": [
         "latency_ms",
         "token_cost"
@@ -11968,9 +12046,10 @@
       "profile_name": "write_value_only",
       "repeat_count": 1,
       "target_profile": "rerank_only",
-      "token_cost": 3.0,
+      "token_cost": "unavailable",
       "unavailable": [
-        "latency_ms"
+        "latency_ms",
+        "token_cost"
       ]
     },
     {
@@ -12025,7 +12104,7 @@
       "profile_name": "rerank_only",
       "repeat_count": 1,
       "target_profile": "rerank_only",
-      "token_cost": 0.0,
+      "token_cost": 82.0,
       "unavailable": [
         "latency_ms"
       ]
@@ -12081,7 +12160,7 @@
       "profile_name": "all_on",
       "repeat_count": 1,
       "target_profile": "rerank_only",
-      "token_cost": 3.0,
+      "token_cost": 92.0,
       "unavailable": [
         "latency_ms",
         "token_cost"
@@ -12121,9 +12200,10 @@
       "profile_name": "write_value_only",
       "repeat_count": 1,
       "target_profile": "sleep_only",
-      "token_cost": 3.0,
+      "token_cost": "unavailable",
       "unavailable": [
-        "latency_ms"
+        "latency_ms",
+        "token_cost"
       ]
     },
     {
@@ -12178,7 +12258,7 @@
       "profile_name": "rerank_only",
       "repeat_count": 1,
       "target_profile": "sleep_only",
-      "token_cost": 0.0,
+      "token_cost": 50.0,
       "unavailable": [
         "latency_ms"
       ]
@@ -12234,7 +12314,7 @@
       "profile_name": "all_on",
       "repeat_count": 1,
       "target_profile": "sleep_only",
-      "token_cost": 3.0,
+      "token_cost": 66.0,
       "unavailable": [
         "latency_ms",
         "token_cost"
@@ -12255,10 +12335,11 @@
       "memory_grounding_pass_rate": 19.998,
       "profile_name": "write_value_only",
       "repeat_count": 1,
-      "token_cost": 240.0,
-      "token_cost_delta": 240.0,
+      "token_cost": "unavailable",
+      "token_cost_delta": "unavailable",
       "unavailable": [
-        "latency_ms"
+        "latency_ms",
+        "token_cost"
       ],
       "uplift_pct": 483.345,
       "uplift_points": 48.3345
@@ -12318,8 +12399,8 @@
       "memory_grounding_pass_rate": 50.0,
       "profile_name": "rerank_only",
       "repeat_count": 1,
-      "token_cost": 0.0,
-      "token_cost_delta": 0.0,
+      "token_cost": 5564.0,
+      "token_cost_delta": 5564.0,
       "unavailable": [
         "latency_ms"
       ],
@@ -12380,8 +12461,8 @@
       "memory_grounding_pass_rate": 49.4626,
       "profile_name": "all_on",
       "repeat_count": 1,
-      "token_cost": 240.0,
-      "token_cost_delta": 240.0,
+      "token_cost": 6460.0,
+      "token_cost_delta": 6460.0,
       "unavailable": [
         "latency_ms",
         "token_cost"
@@ -12390,7 +12471,7 @@
       "uplift_points": 58.9767
     }
   ],
-  "generated_at": "2026-07-19T06:42:15.556557+00:00",
+  "generated_at": "2026-07-19T07:07:52.318248+00:00",
   "metrics": {
     "baseline_main_score": 10.0,
     "case_count": 80,
@@ -12451,10 +12532,11 @@
       "memory_grounding_pass_rate": 19.998,
       "profile_name": "write_value_only",
       "repeat_count": 1,
-      "token_cost": 120.0,
-      "token_cost_delta": 120.0,
+      "token_cost": "unavailable",
+      "token_cost_delta": "unavailable",
       "unavailable": [
-        "latency_ms"
+        "latency_ms",
+        "token_cost"
       ],
       "uplift_pct": 483.345,
       "uplift_points": 48.3345
@@ -12514,8 +12596,8 @@
       "memory_grounding_pass_rate": 50.0,
       "profile_name": "rerank_only",
       "repeat_count": 1,
-      "token_cost": 0.0,
-      "token_cost_delta": 0.0,
+      "token_cost": 2844.0,
+      "token_cost_delta": 2844.0,
       "unavailable": [
         "latency_ms"
       ],
@@ -12576,8 +12658,8 @@
       "memory_grounding_pass_rate": 49.2183,
       "profile_name": "all_on",
       "repeat_count": 1,
-      "token_cost": 120.0,
-      "token_cost_delta": 120.0,
+      "token_cost": 3292.0,
+      "token_cost_delta": 3292.0,
       "unavailable": [
         "latency_ms",
         "token_cost"
@@ -12620,10 +12702,11 @@
       "memory_grounding_pass_rate": 19.998,
       "profile_name": "write_value_only",
       "repeat_count": 1,
-      "token_cost": 120.0,
-      "token_cost_delta": 120.0,
+      "token_cost": "unavailable",
+      "token_cost_delta": "unavailable",
       "unavailable": [
-        "latency_ms"
+        "latency_ms",
+        "token_cost"
       ],
       "uplift_pct": 483.345,
       "uplift_points": 48.3345
@@ -12683,8 +12766,8 @@
       "memory_grounding_pass_rate": 50.0,
       "profile_name": "rerank_only",
       "repeat_count": 1,
-      "token_cost": 0.0,
-      "token_cost_delta": 0.0,
+      "token_cost": 2720.0,
+      "token_cost_delta": 2720.0,
       "unavailable": [
         "latency_ms"
       ],
@@ -12745,8 +12828,8 @@
       "memory_grounding_pass_rate": 49.707,
       "profile_name": "all_on",
       "repeat_count": 1,
-      "token_cost": 120.0,
-      "token_cost_delta": 120.0,
+      "token_cost": 3168.0,
+      "token_cost_delta": 3168.0,
       "unavailable": [
         "latency_ms",
         "token_cost"
@@ -12789,10 +12872,11 @@
       "memory_grounding_pass_rate": 19.998,
       "profile_name": "write_value_only",
       "repeat_count": 1,
-      "token_cost": 240.0,
-      "token_cost_delta": 240.0,
+      "token_cost": "unavailable",
+      "token_cost_delta": "unavailable",
       "unavailable": [
-        "latency_ms"
+        "latency_ms",
+        "token_cost"
       ],
       "uplift_pct": 483.345,
       "uplift_points": 48.3345
@@ -12852,8 +12936,8 @@
       "memory_grounding_pass_rate": 50.0,
       "profile_name": "rerank_only",
       "repeat_count": 1,
-      "token_cost": 0.0,
-      "token_cost_delta": 0.0,
+      "token_cost": 5564.0,
+      "token_cost_delta": 5564.0,
       "unavailable": [
         "latency_ms"
       ],
@@ -12914,8 +12998,8 @@
       "memory_grounding_pass_rate": 49.4626,
       "profile_name": "all_on",
       "repeat_count": 1,
-      "token_cost": 240.0,
-      "token_cost_delta": 240.0,
+      "token_cost": 6460.0,
+      "token_cost_delta": 6460.0,
       "unavailable": [
         "latency_ms",
         "token_cost"

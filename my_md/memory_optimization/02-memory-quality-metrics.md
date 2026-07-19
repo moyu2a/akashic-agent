@@ -294,6 +294,10 @@ main_score = 0.7 * answer_rule_pass_rate
 - `write_value_only = 48.3345`
 - `sleep_only = 35.1014`
 
+这里的 `token_cost` 只汇总真正以 token 计量的 trace 信号，比如 injection 的 `prompt_token_delta` 和 sleep 的 `estimated_token_saving`；`latency_ms` 只汇总真正以毫秒计量的 trace 信号，比如 retrieval 和 sleep 的耗时。没有统一单位的 family 直接标成 `unavailable`，不再硬填。
+
+`tri_retrieval_only` 和 `graph_only` 仍然来自同一轮 phase2 runtime 的不同家族视角，读数是为了比较两条检索路径的贡献，不要把它们理解成两个独立启动的 profile。
+
 报表文件：
 
 - `my_md/memory_optimization/eval_reports/memory_quantitative_uplift_eval.json`
