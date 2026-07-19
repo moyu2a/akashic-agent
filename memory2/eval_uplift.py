@@ -68,6 +68,7 @@ def build_uplift_report(
             profile,
         )
     )
+    records = tuple(sorted(records, key=_record_sort_key))
     summaries = _phase_summaries(records)
     metrics = _report_metrics(eval_report, records, summaries)
     return UpliftReport(
@@ -79,18 +80,8 @@ def build_uplift_report(
 
 def write_uplift_json(report: UpliftReport, path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    payload = {
-        "metrics": report.metrics,
-        "phase_summaries": {
-            phase: _phase_summary_to_dict(summary)
-            for phase, summary in report.phase_summaries.items()
-        },
-        "feature_records": [
-            _feature_record_to_dict(record) for record in report.feature_records
-        ],
-    }
     path.write_text(
-        json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True),
+        json.dumps(_report_to_dict(report), ensure_ascii=False, indent=2, sort_keys=True),
         encoding="utf-8",
     )
 
@@ -98,9 +89,10 @@ def write_uplift_json(report: UpliftReport, path: Path) -> None:
 def write_uplift_markdown(report: UpliftReport, path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     lines = [
-        "# Memory Offline Uplift Proxy Report",
+        "# Memory Offline Uplift Evaluation Report",
         "",
-        "本报告基于离线 fixture traces，反映 proxy uplift，不代表线上答案质量或生产效果。",
+        "本报告只记录离线 fixture 上的 proxy uplift。",
+        "它不调用真实 LLM、不调用 embedding、不读取真实 memory DB，也不声明生产性能提升。",
         "",
         "## Summary",
         "",
@@ -108,15 +100,14 @@ def write_uplift_markdown(report: UpliftReport, path: Path) -> None:
     for key in sorted(report.metrics):
         lines.append(f"- `{key}`: `{report.metrics[key]}`")
     lines.extend(["", "## Phase Summaries", ""])
-    for phase in _ordered_phases(report.feature_records):
-        summary = report.phase_summaries[phase]
+    for phase, summary in report.phase_summaries.items():
         lines.append(
             f"- `{phase}`: `{json.dumps(_phase_summary_to_dict(summary), ensure_ascii=False, sort_keys=True)}`"
         )
     lines.extend(["", "## Feature Records", ""])
     for record in report.feature_records:
         lines.append(
-            f"- `{record.case_id}/{record.profile}/{record.feature_name}`: "
+            f"- `{record.case_id}` / `{record.profile}` / `{record.feature_name}`: "
             f"`{json.dumps(_feature_record_to_dict(record), ensure_ascii=False, sort_keys=True)}`"
         )
     path.write_text("\n".join(lines), encoding="utf-8")
@@ -552,6 +543,19 @@ def _report_metrics(
     }
 
 
+def _report_to_dict(report: UpliftReport) -> dict[str, Any]:
+    return {
+        "metrics": report.metrics,
+        "phase_summaries": {
+            phase: _phase_summary_to_dict(summary)
+            for phase, summary in report.phase_summaries.items()
+        },
+        "feature_records": [
+            _feature_record_to_dict(record) for record in report.feature_records
+        ],
+    }
+
+
 def _ids(value: object) -> tuple[str, ...]:
     if not isinstance(value, list | tuple):
         return ()
@@ -622,3 +626,7 @@ def _flatten_group_ids(value: object) -> tuple[str, ...]:
 
 def _round_score(value: float) -> float:
     return round(float(value), 4)
+
+
+def _record_sort_key(record: UpliftFeatureRecord) -> tuple[str, str, str, str]:
+    return (record.phase, record.case_id, record.profile, record.feature_name)

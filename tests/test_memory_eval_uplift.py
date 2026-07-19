@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from memory2.eval_cases import load_eval_cases
@@ -62,3 +63,28 @@ def test_uplift_report_records_feature_level_proxy_scores() -> None:
     sleep = by_feature[("stale_memory_sleep", "phase5", "sleep_consolidation_shadow")]
     assert sleep.metric_kind == "consolidation_proxy"
     assert sleep.positive_signal_count >= 2
+
+
+def test_write_uplift_reports_are_stable_and_sanitized(tmp_path: Path) -> None:
+    cases = load_eval_cases(FIXTURE_ROOT)
+    eval_report = run_eval_cases(cases)
+    report = build_uplift_report(cases, eval_report)
+    json_path = tmp_path / "memory_uplift_eval.json"
+    md_path = tmp_path / "memory_uplift_eval.md"
+
+    write_uplift_json(report, json_path)
+    write_uplift_markdown(report, md_path)
+
+    payload = json.loads(json_path.read_text(encoding="utf-8"))
+    assert payload["metrics"]["phase6c_level"] == "offline_uplift_proxy"
+    assert "phase2" in payload["phase_summaries"]
+    assert payload["feature_records"]
+    assert md_path.read_text(encoding="utf-8").startswith(
+        "# Memory Offline Uplift Evaluation Report"
+    )
+    combined = json_path.read_text(encoding="utf-8") + md_path.read_text(
+        encoding="utf-8"
+    )
+    assert "api_key" not in combined
+    assert "sk-" not in combined
+    assert "answer_text" not in combined
