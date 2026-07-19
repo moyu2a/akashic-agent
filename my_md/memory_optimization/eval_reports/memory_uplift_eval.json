@@ -1,0 +1,955 @@
+{
+  "feature_records": [
+    {
+      "baseline_ids": [
+        "m_like_cn",
+        "m_dislike_cn"
+      ],
+      "baseline_score": 0.0,
+      "case_id": "conflict_memory",
+      "category": "conflict_detection",
+      "estimated_token_saving": 0,
+      "expected_ids": [],
+      "experimental_ids": [
+        "m_dislike_cn",
+        "m_like_cn"
+      ],
+      "experimental_score": 1.0,
+      "feature_name": "sleep_consolidation_shadow",
+      "forbidden_ids": [],
+      "metric_kind": "consolidation_proxy",
+      "metric_name": "diagnostic_signal_presence",
+      "negative_signal_count": 0,
+      "notes": [
+        "consolidation proxy uses duplicate/merge/stale/low_value/conflict signals",
+        "estimated_token_saving=0"
+      ],
+      "phase": "all",
+      "positive_signal_count": 1,
+      "profile": "all",
+      "token_delta": 0,
+      "uplift": 1.0
+    },
+    {
+      "baseline_ids": [
+        "m_like_cn",
+        "m_dislike_cn"
+      ],
+      "baseline_score": 0.0,
+      "case_id": "conflict_memory",
+      "category": "conflict_detection",
+      "estimated_token_saving": 0,
+      "expected_ids": [],
+      "experimental_ids": [
+        "m_dislike_cn",
+        "m_like_cn"
+      ],
+      "experimental_score": 1.0,
+      "feature_name": "version_chain_shadow",
+      "forbidden_ids": [],
+      "metric_kind": "consistency_proxy",
+      "metric_name": "diagnostic_signal_presence",
+      "negative_signal_count": 0,
+      "notes": [
+        "version_chain_shadow proxy uses diagnostic signal presence",
+        "positive_signal_count=2"
+      ],
+      "phase": "all",
+      "positive_signal_count": 2,
+      "profile": "all",
+      "token_delta": 0,
+      "uplift": 1.0
+    },
+    {
+      "baseline_ids": [
+        "m_tg_pref"
+      ],
+      "baseline_score": 0.0,
+      "case_id": "cross_scope_isolation",
+      "category": "scope_isolation",
+      "estimated_token_saving": 0,
+      "expected_ids": [
+        "m_tg_pref"
+      ],
+      "experimental_ids": [
+        "m_qq_pref"
+      ],
+      "experimental_score": 1.0,
+      "feature_name": "provenance_shadow",
+      "forbidden_ids": [
+        "m_qq_pref"
+      ],
+      "metric_kind": "provenance_proxy",
+      "metric_name": "diagnostic_signal_presence",
+      "negative_signal_count": 0,
+      "notes": [
+        "provenance_shadow proxy uses diagnostic signal presence",
+        "positive_signal_count=4"
+      ],
+      "phase": "all",
+      "positive_signal_count": 4,
+      "profile": "all",
+      "token_delta": 0,
+      "uplift": 1.0
+    },
+    {
+      "baseline_ids": [
+        "m_dup_1",
+        "m_dup_2"
+      ],
+      "baseline_score": 0.0,
+      "case_id": "duplicate_memory",
+      "category": "duplicate_detection",
+      "estimated_token_saving": 4,
+      "expected_ids": [
+        "m_dup_1"
+      ],
+      "experimental_ids": [
+        "m_dup_1",
+        "m_dup_2"
+      ],
+      "experimental_score": 1.0,
+      "feature_name": "sleep_consolidation_shadow",
+      "forbidden_ids": [],
+      "metric_kind": "consolidation_proxy",
+      "metric_name": "diagnostic_signal_presence",
+      "negative_signal_count": 0,
+      "notes": [
+        "consolidation proxy uses duplicate/merge/stale/low_value/conflict signals",
+        "estimated_token_saving=4"
+      ],
+      "phase": "all",
+      "positive_signal_count": 1,
+      "profile": "all",
+      "token_delta": 0,
+      "uplift": 1.0
+    },
+    {
+      "baseline_ids": [
+        "m_dup_1",
+        "m_dup_2"
+      ],
+      "baseline_score": 2.0,
+      "case_id": "duplicate_memory",
+      "category": "duplicate_detection",
+      "estimated_token_saving": 0,
+      "expected_ids": [
+        "m_dup_1"
+      ],
+      "experimental_ids": [],
+      "experimental_score": 2.0,
+      "feature_name": "write_value_score",
+      "forbidden_ids": [],
+      "metric_kind": "write_proxy",
+      "metric_name": "write_reduction_count",
+      "negative_signal_count": 0,
+      "notes": [
+        "generic write proxy fallback",
+        "candidate_count=2"
+      ],
+      "phase": "all",
+      "positive_signal_count": 2,
+      "profile": "all",
+      "token_delta": 0,
+      "uplift": 0.0
+    },
+    {
+      "baseline_ids": [
+        "m_rule"
+      ],
+      "baseline_score": 1.0,
+      "case_id": "injection_governance_budget",
+      "category": "injection_governance",
+      "estimated_token_saving": 0,
+      "expected_ids": [
+        "m_rule"
+      ],
+      "experimental_ids": [
+        "m_rule"
+      ],
+      "experimental_score": 1.0,
+      "feature_name": "injection_governance_shadow",
+      "forbidden_ids": [
+        "m_low_conf"
+      ],
+      "metric_kind": "injection_proxy",
+      "metric_name": "injection_quality",
+      "negative_signal_count": 0,
+      "notes": [
+        "injection proxy uses low_confidence_injected_count",
+        "prompt_token_delta=14"
+      ],
+      "phase": "all",
+      "positive_signal_count": 1,
+      "profile": "all",
+      "token_delta": 14,
+      "uplift": 0.0
+    },
+    {
+      "baseline_ids": [
+        "m_rule"
+      ],
+      "baseline_score": 1.0,
+      "case_id": "injection_governance_budget",
+      "category": "injection_governance",
+      "estimated_token_saving": 0,
+      "expected_ids": [
+        "m_rule"
+      ],
+      "experimental_ids": [
+        "m_rule"
+      ],
+      "experimental_score": 1.0,
+      "feature_name": "rerank_shadow",
+      "forbidden_ids": [
+        "m_low_conf"
+      ],
+      "metric_kind": "injection_proxy",
+      "metric_name": "label_hit_rate",
+      "negative_signal_count": 0,
+      "notes": [
+        "rerank proxy tracks changed and scope-matched candidates",
+        "rerank_changed_count=0"
+      ],
+      "phase": "all",
+      "positive_signal_count": 1,
+      "profile": "all",
+      "token_delta": 0,
+      "uplift": 0.0
+    },
+    {
+      "baseline_ids": [
+        "m_pref_cn"
+      ],
+      "baseline_score": 1.0,
+      "case_id": "preference_recall",
+      "category": "preference_recall",
+      "estimated_token_saving": 0,
+      "expected_ids": [
+        "m_pref_cn"
+      ],
+      "experimental_ids": [
+        "m_pref_cn"
+      ],
+      "experimental_score": 1.0,
+      "feature_name": "injection_governance_shadow",
+      "forbidden_ids": [],
+      "metric_kind": "injection_proxy",
+      "metric_name": "injection_quality",
+      "negative_signal_count": 0,
+      "notes": [
+        "injection proxy uses low_confidence_injected_count",
+        "prompt_token_delta=17"
+      ],
+      "phase": "all",
+      "positive_signal_count": 1,
+      "profile": "all",
+      "token_delta": 17,
+      "uplift": 0.0
+    },
+    {
+      "baseline_ids": [
+        "m_pref_cn"
+      ],
+      "baseline_score": 1.0,
+      "case_id": "preference_recall",
+      "category": "preference_recall",
+      "estimated_token_saving": 0,
+      "expected_ids": [
+        "m_pref_cn"
+      ],
+      "experimental_ids": [
+        "m_pref_cn",
+        "m_profile_pytest"
+      ],
+      "experimental_score": 1.0,
+      "feature_name": "rerank_shadow",
+      "forbidden_ids": [],
+      "metric_kind": "injection_proxy",
+      "metric_name": "label_hit_rate",
+      "negative_signal_count": 0,
+      "notes": [
+        "rerank proxy tracks changed and scope-matched candidates",
+        "rerank_changed_count=1"
+      ],
+      "phase": "all",
+      "positive_signal_count": 3,
+      "profile": "all",
+      "token_delta": 0,
+      "uplift": 0.0
+    },
+    {
+      "baseline_ids": [
+        "m_pref_cn"
+      ],
+      "baseline_score": 1.0,
+      "case_id": "preference_recall",
+      "category": "preference_recall",
+      "estimated_token_saving": 0,
+      "expected_ids": [
+        "m_pref_cn"
+      ],
+      "experimental_ids": [
+        "m_pref_cn",
+        "m_profile_pytest"
+      ],
+      "experimental_score": 1.0,
+      "feature_name": "tri_retrieval",
+      "forbidden_ids": [],
+      "metric_kind": "retrieval_proxy",
+      "metric_name": "label_hit_rate",
+      "negative_signal_count": 1,
+      "notes": [
+        "retrieval proxy scored against should_recall_ids and should_not_recall_ids",
+        "lane_contribution={'semantic': 1, 'keyword': 1, 'provenance': 2}"
+      ],
+      "phase": "all",
+      "positive_signal_count": 6,
+      "profile": "all",
+      "token_delta": 0,
+      "uplift": 0.0
+    },
+    {
+      "baseline_ids": [
+        "m_source_msg"
+      ],
+      "baseline_score": 0.0,
+      "case_id": "provenance_trace",
+      "category": "provenance",
+      "estimated_token_saving": 0,
+      "expected_ids": [
+        "m_source_msg"
+      ],
+      "experimental_ids": [],
+      "experimental_score": 1.0,
+      "feature_name": "provenance_shadow",
+      "forbidden_ids": [
+        "m_orphan"
+      ],
+      "metric_kind": "provenance_proxy",
+      "metric_name": "diagnostic_signal_presence",
+      "negative_signal_count": 0,
+      "notes": [
+        "provenance_shadow proxy uses diagnostic signal presence",
+        "positive_signal_count=2"
+      ],
+      "phase": "all",
+      "positive_signal_count": 2,
+      "profile": "all",
+      "token_delta": 0,
+      "uplift": 1.0
+    },
+    {
+      "baseline_ids": [
+        "m_old_tmp"
+      ],
+      "baseline_score": 0.0,
+      "case_id": "stale_memory_sleep",
+      "category": "sleep_consolidation",
+      "estimated_token_saving": 3,
+      "expected_ids": [],
+      "experimental_ids": [
+        "m_old_tmp",
+        "m_old_tmp"
+      ],
+      "experimental_score": 1.0,
+      "feature_name": "sleep_consolidation_shadow",
+      "forbidden_ids": [
+        "m_old_tmp"
+      ],
+      "metric_kind": "consolidation_proxy",
+      "metric_name": "diagnostic_signal_presence",
+      "negative_signal_count": 0,
+      "notes": [
+        "consolidation proxy uses duplicate/merge/stale/low_value/conflict signals",
+        "estimated_token_saving=3"
+      ],
+      "phase": "all",
+      "positive_signal_count": 2,
+      "profile": "all",
+      "token_delta": 0,
+      "uplift": 1.0
+    },
+    {
+      "baseline_ids": [
+        "mem_tmp"
+      ],
+      "baseline_score": 1.0,
+      "case_id": "temporary_memory_pollution",
+      "category": "write_value",
+      "estimated_token_saving": 0,
+      "expected_ids": [],
+      "experimental_ids": [],
+      "experimental_score": 1.0,
+      "feature_name": "write_value_score",
+      "forbidden_ids": [
+        "mem_tmp"
+      ],
+      "metric_kind": "write_proxy",
+      "metric_name": "write_reduction_count",
+      "negative_signal_count": 0,
+      "notes": [
+        "generic write proxy fallback",
+        "candidate_count=1"
+      ],
+      "phase": "all",
+      "positive_signal_count": 1,
+      "profile": "all",
+      "token_delta": 0,
+      "uplift": 0.0
+    },
+    {
+      "baseline_ids": [
+        "m_graph_1",
+        "m_graph_2"
+      ],
+      "baseline_score": 1.0,
+      "case_id": "vague_reference_graph",
+      "category": "vague_reference",
+      "estimated_token_saving": 0,
+      "expected_ids": [
+        "m_graph_1",
+        "m_graph_2"
+      ],
+      "experimental_ids": [
+        "m_graph_1",
+        "m_graph_2"
+      ],
+      "experimental_score": 1.0,
+      "feature_name": "graph_retrieval",
+      "forbidden_ids": [],
+      "metric_kind": "retrieval_proxy",
+      "metric_name": "label_hit_rate",
+      "negative_signal_count": 0,
+      "notes": [
+        "retrieval proxy scored against should_recall_ids and should_not_recall_ids",
+        "lane_contribution={'semantic': 2, 'keyword': 2, 'provenance': 2, 'graph': 2}"
+      ],
+      "phase": "all",
+      "positive_signal_count": 10,
+      "profile": "all",
+      "token_delta": 0,
+      "uplift": 0.0
+    },
+    {
+      "baseline_ids": [
+        "m_graph_1",
+        "m_graph_2"
+      ],
+      "baseline_score": 1.0,
+      "case_id": "vague_reference_graph",
+      "category": "vague_reference",
+      "estimated_token_saving": 0,
+      "expected_ids": [
+        "m_graph_1",
+        "m_graph_2"
+      ],
+      "experimental_ids": [
+        "m_graph_1",
+        "m_graph_2"
+      ],
+      "experimental_score": 1.0,
+      "feature_name": "tri_retrieval",
+      "forbidden_ids": [],
+      "metric_kind": "retrieval_proxy",
+      "metric_name": "label_hit_rate",
+      "negative_signal_count": 0,
+      "notes": [
+        "retrieval proxy scored against should_recall_ids and should_not_recall_ids",
+        "lane_contribution={'semantic': 2, 'keyword': 2, 'provenance': 2}"
+      ],
+      "phase": "all",
+      "positive_signal_count": 8,
+      "profile": "all",
+      "token_delta": 0,
+      "uplift": 0.0
+    },
+    {
+      "baseline_ids": [
+        "m_pref_cn"
+      ],
+      "baseline_score": 1.0,
+      "case_id": "preference_recall",
+      "category": "preference_recall",
+      "estimated_token_saving": 0,
+      "expected_ids": [
+        "m_pref_cn"
+      ],
+      "experimental_ids": [
+        "m_pref_cn",
+        "m_profile_pytest"
+      ],
+      "experimental_score": 1.0,
+      "feature_name": "tri_retrieval",
+      "forbidden_ids": [],
+      "metric_kind": "retrieval_proxy",
+      "metric_name": "label_hit_rate",
+      "negative_signal_count": 1,
+      "notes": [
+        "retrieval proxy scored against should_recall_ids and should_not_recall_ids",
+        "lane_contribution={'semantic': 1, 'keyword': 1, 'provenance': 2}"
+      ],
+      "phase": "phase2",
+      "positive_signal_count": 6,
+      "profile": "phase2",
+      "token_delta": 0,
+      "uplift": 0.0
+    },
+    {
+      "baseline_ids": [
+        "m_graph_1",
+        "m_graph_2"
+      ],
+      "baseline_score": 1.0,
+      "case_id": "vague_reference_graph",
+      "category": "vague_reference",
+      "estimated_token_saving": 0,
+      "expected_ids": [
+        "m_graph_1",
+        "m_graph_2"
+      ],
+      "experimental_ids": [
+        "m_graph_1",
+        "m_graph_2"
+      ],
+      "experimental_score": 1.0,
+      "feature_name": "graph_retrieval",
+      "forbidden_ids": [],
+      "metric_kind": "retrieval_proxy",
+      "metric_name": "label_hit_rate",
+      "negative_signal_count": 0,
+      "notes": [
+        "retrieval proxy scored against should_recall_ids and should_not_recall_ids",
+        "lane_contribution={'semantic': 2, 'keyword': 2, 'provenance': 2, 'graph': 2}"
+      ],
+      "phase": "phase2",
+      "positive_signal_count": 10,
+      "profile": "phase2",
+      "token_delta": 0,
+      "uplift": 0.0
+    },
+    {
+      "baseline_ids": [
+        "m_graph_1",
+        "m_graph_2"
+      ],
+      "baseline_score": 1.0,
+      "case_id": "vague_reference_graph",
+      "category": "vague_reference",
+      "estimated_token_saving": 0,
+      "expected_ids": [
+        "m_graph_1",
+        "m_graph_2"
+      ],
+      "experimental_ids": [
+        "m_graph_1",
+        "m_graph_2"
+      ],
+      "experimental_score": 1.0,
+      "feature_name": "tri_retrieval",
+      "forbidden_ids": [],
+      "metric_kind": "retrieval_proxy",
+      "metric_name": "label_hit_rate",
+      "negative_signal_count": 0,
+      "notes": [
+        "retrieval proxy scored against should_recall_ids and should_not_recall_ids",
+        "lane_contribution={'semantic': 2, 'keyword': 2, 'provenance': 2}"
+      ],
+      "phase": "phase2",
+      "positive_signal_count": 8,
+      "profile": "phase2",
+      "token_delta": 0,
+      "uplift": 0.0
+    },
+    {
+      "baseline_ids": [
+        "m_rule"
+      ],
+      "baseline_score": 1.0,
+      "case_id": "injection_governance_budget",
+      "category": "injection_governance",
+      "estimated_token_saving": 0,
+      "expected_ids": [
+        "m_rule"
+      ],
+      "experimental_ids": [
+        "m_rule"
+      ],
+      "experimental_score": 1.0,
+      "feature_name": "injection_governance_shadow",
+      "forbidden_ids": [
+        "m_low_conf"
+      ],
+      "metric_kind": "injection_proxy",
+      "metric_name": "injection_quality",
+      "negative_signal_count": 0,
+      "notes": [
+        "injection proxy uses low_confidence_injected_count",
+        "prompt_token_delta=14"
+      ],
+      "phase": "phase3",
+      "positive_signal_count": 1,
+      "profile": "phase3",
+      "token_delta": 14,
+      "uplift": 0.0
+    },
+    {
+      "baseline_ids": [
+        "m_rule"
+      ],
+      "baseline_score": 1.0,
+      "case_id": "injection_governance_budget",
+      "category": "injection_governance",
+      "estimated_token_saving": 0,
+      "expected_ids": [
+        "m_rule"
+      ],
+      "experimental_ids": [
+        "m_rule"
+      ],
+      "experimental_score": 1.0,
+      "feature_name": "rerank_shadow",
+      "forbidden_ids": [
+        "m_low_conf"
+      ],
+      "metric_kind": "injection_proxy",
+      "metric_name": "label_hit_rate",
+      "negative_signal_count": 0,
+      "notes": [
+        "rerank proxy tracks changed and scope-matched candidates",
+        "rerank_changed_count=0"
+      ],
+      "phase": "phase3",
+      "positive_signal_count": 1,
+      "profile": "phase3",
+      "token_delta": 0,
+      "uplift": 0.0
+    },
+    {
+      "baseline_ids": [
+        "m_pref_cn"
+      ],
+      "baseline_score": 1.0,
+      "case_id": "preference_recall",
+      "category": "preference_recall",
+      "estimated_token_saving": 0,
+      "expected_ids": [
+        "m_pref_cn"
+      ],
+      "experimental_ids": [
+        "m_pref_cn"
+      ],
+      "experimental_score": 1.0,
+      "feature_name": "injection_governance_shadow",
+      "forbidden_ids": [],
+      "metric_kind": "injection_proxy",
+      "metric_name": "injection_quality",
+      "negative_signal_count": 0,
+      "notes": [
+        "injection proxy uses low_confidence_injected_count",
+        "prompt_token_delta=17"
+      ],
+      "phase": "phase3",
+      "positive_signal_count": 1,
+      "profile": "phase3",
+      "token_delta": 17,
+      "uplift": 0.0
+    },
+    {
+      "baseline_ids": [
+        "m_pref_cn"
+      ],
+      "baseline_score": 1.0,
+      "case_id": "preference_recall",
+      "category": "preference_recall",
+      "estimated_token_saving": 0,
+      "expected_ids": [
+        "m_pref_cn"
+      ],
+      "experimental_ids": [
+        "m_pref_cn",
+        "m_profile_pytest"
+      ],
+      "experimental_score": 1.0,
+      "feature_name": "rerank_shadow",
+      "forbidden_ids": [],
+      "metric_kind": "injection_proxy",
+      "metric_name": "label_hit_rate",
+      "negative_signal_count": 0,
+      "notes": [
+        "rerank proxy tracks changed and scope-matched candidates",
+        "rerank_changed_count=1"
+      ],
+      "phase": "phase3",
+      "positive_signal_count": 3,
+      "profile": "phase3",
+      "token_delta": 0,
+      "uplift": 0.0
+    },
+    {
+      "baseline_ids": [
+        "m_like_cn",
+        "m_dislike_cn"
+      ],
+      "baseline_score": 0.0,
+      "case_id": "conflict_memory",
+      "category": "conflict_detection",
+      "estimated_token_saving": 0,
+      "expected_ids": [],
+      "experimental_ids": [
+        "m_dislike_cn",
+        "m_like_cn"
+      ],
+      "experimental_score": 1.0,
+      "feature_name": "version_chain_shadow",
+      "forbidden_ids": [],
+      "metric_kind": "consistency_proxy",
+      "metric_name": "diagnostic_signal_presence",
+      "negative_signal_count": 0,
+      "notes": [
+        "version_chain_shadow proxy uses diagnostic signal presence",
+        "positive_signal_count=2"
+      ],
+      "phase": "phase4",
+      "positive_signal_count": 2,
+      "profile": "phase4",
+      "token_delta": 0,
+      "uplift": 1.0
+    },
+    {
+      "baseline_ids": [
+        "m_tg_pref"
+      ],
+      "baseline_score": 0.0,
+      "case_id": "cross_scope_isolation",
+      "category": "scope_isolation",
+      "estimated_token_saving": 0,
+      "expected_ids": [
+        "m_tg_pref"
+      ],
+      "experimental_ids": [
+        "m_qq_pref"
+      ],
+      "experimental_score": 1.0,
+      "feature_name": "provenance_shadow",
+      "forbidden_ids": [
+        "m_qq_pref"
+      ],
+      "metric_kind": "provenance_proxy",
+      "metric_name": "diagnostic_signal_presence",
+      "negative_signal_count": 0,
+      "notes": [
+        "provenance_shadow proxy uses diagnostic signal presence",
+        "positive_signal_count=4"
+      ],
+      "phase": "phase4",
+      "positive_signal_count": 4,
+      "profile": "phase4",
+      "token_delta": 0,
+      "uplift": 1.0
+    },
+    {
+      "baseline_ids": [
+        "m_source_msg"
+      ],
+      "baseline_score": 0.0,
+      "case_id": "provenance_trace",
+      "category": "provenance",
+      "estimated_token_saving": 0,
+      "expected_ids": [
+        "m_source_msg"
+      ],
+      "experimental_ids": [],
+      "experimental_score": 1.0,
+      "feature_name": "provenance_shadow",
+      "forbidden_ids": [
+        "m_orphan"
+      ],
+      "metric_kind": "provenance_proxy",
+      "metric_name": "diagnostic_signal_presence",
+      "negative_signal_count": 0,
+      "notes": [
+        "provenance_shadow proxy uses diagnostic signal presence",
+        "positive_signal_count=2"
+      ],
+      "phase": "phase4",
+      "positive_signal_count": 2,
+      "profile": "phase4",
+      "token_delta": 0,
+      "uplift": 1.0
+    },
+    {
+      "baseline_ids": [
+        "m_like_cn",
+        "m_dislike_cn"
+      ],
+      "baseline_score": 0.0,
+      "case_id": "conflict_memory",
+      "category": "conflict_detection",
+      "estimated_token_saving": 0,
+      "expected_ids": [],
+      "experimental_ids": [
+        "m_dislike_cn",
+        "m_like_cn"
+      ],
+      "experimental_score": 1.0,
+      "feature_name": "sleep_consolidation_shadow",
+      "forbidden_ids": [],
+      "metric_kind": "consolidation_proxy",
+      "metric_name": "diagnostic_signal_presence",
+      "negative_signal_count": 0,
+      "notes": [
+        "consolidation proxy uses duplicate/merge/stale/low_value/conflict signals",
+        "estimated_token_saving=0"
+      ],
+      "phase": "phase5",
+      "positive_signal_count": 1,
+      "profile": "phase5",
+      "token_delta": 0,
+      "uplift": 1.0
+    },
+    {
+      "baseline_ids": [
+        "m_dup_1",
+        "m_dup_2"
+      ],
+      "baseline_score": 0.0,
+      "case_id": "duplicate_memory",
+      "category": "duplicate_detection",
+      "estimated_token_saving": 4,
+      "expected_ids": [
+        "m_dup_1"
+      ],
+      "experimental_ids": [
+        "m_dup_1",
+        "m_dup_2"
+      ],
+      "experimental_score": 1.0,
+      "feature_name": "sleep_consolidation_shadow",
+      "forbidden_ids": [],
+      "metric_kind": "consolidation_proxy",
+      "metric_name": "diagnostic_signal_presence",
+      "negative_signal_count": 0,
+      "notes": [
+        "consolidation proxy uses duplicate/merge/stale/low_value/conflict signals",
+        "estimated_token_saving=4"
+      ],
+      "phase": "phase5",
+      "positive_signal_count": 1,
+      "profile": "phase5",
+      "token_delta": 0,
+      "uplift": 1.0
+    },
+    {
+      "baseline_ids": [
+        "m_old_tmp"
+      ],
+      "baseline_score": 0.0,
+      "case_id": "stale_memory_sleep",
+      "category": "sleep_consolidation",
+      "estimated_token_saving": 3,
+      "expected_ids": [],
+      "experimental_ids": [
+        "m_old_tmp",
+        "m_old_tmp"
+      ],
+      "experimental_score": 1.0,
+      "feature_name": "sleep_consolidation_shadow",
+      "forbidden_ids": [
+        "m_old_tmp"
+      ],
+      "metric_kind": "consolidation_proxy",
+      "metric_name": "diagnostic_signal_presence",
+      "negative_signal_count": 0,
+      "notes": [
+        "consolidation proxy uses duplicate/merge/stale/low_value/conflict signals",
+        "estimated_token_saving=3"
+      ],
+      "phase": "phase5",
+      "positive_signal_count": 2,
+      "profile": "phase5",
+      "token_delta": 0,
+      "uplift": 1.0
+    }
+  ],
+  "metrics": {
+    "answer_quality_available": false,
+    "case_count": 9,
+    "embedding_calls_enabled": false,
+    "estimated_token_saving": 14,
+    "feature_record_count": 28,
+    "llm_calls_enabled": false,
+    "negative_signal_count": 2,
+    "offline_fixture_only": true,
+    "overall_avg_uplift": 0.4286,
+    "phase6c_level": "offline_uplift_proxy",
+    "phase_summary_count": 5,
+    "positive_signal_count": 87,
+    "production_uplift_claimed": false,
+    "profile_count": 30,
+    "real_memory_db_enabled": false,
+    "total_token_delta": 62
+  },
+  "phase_summaries": {
+    "all": {
+      "avg_baseline_score": 0.6667,
+      "avg_experimental_score": 1.0667,
+      "avg_uplift": 0.4,
+      "estimated_token_saving": 7,
+      "evaluated_case_count": 9,
+      "feature_record_count": 15,
+      "negative_signal_count": 1,
+      "phase": "all",
+      "positive_signal_count": 45,
+      "total_token_delta": 31
+    },
+    "phase2": {
+      "avg_baseline_score": 1.0,
+      "avg_experimental_score": 1.0,
+      "avg_uplift": 0.0,
+      "estimated_token_saving": 0,
+      "evaluated_case_count": 2,
+      "feature_record_count": 3,
+      "negative_signal_count": 1,
+      "phase": "phase2",
+      "positive_signal_count": 24,
+      "total_token_delta": 0
+    },
+    "phase3": {
+      "avg_baseline_score": 1.0,
+      "avg_experimental_score": 1.0,
+      "avg_uplift": 0.0,
+      "estimated_token_saving": 0,
+      "evaluated_case_count": 2,
+      "feature_record_count": 4,
+      "negative_signal_count": 0,
+      "phase": "phase3",
+      "positive_signal_count": 6,
+      "total_token_delta": 31
+    },
+    "phase4": {
+      "avg_baseline_score": 0.0,
+      "avg_experimental_score": 1.0,
+      "avg_uplift": 1.0,
+      "estimated_token_saving": 0,
+      "evaluated_case_count": 3,
+      "feature_record_count": 3,
+      "negative_signal_count": 0,
+      "phase": "phase4",
+      "positive_signal_count": 8,
+      "total_token_delta": 0
+    },
+    "phase5": {
+      "avg_baseline_score": 0.0,
+      "avg_experimental_score": 1.0,
+      "avg_uplift": 1.0,
+      "estimated_token_saving": 7,
+      "evaluated_case_count": 3,
+      "feature_record_count": 3,
+      "negative_signal_count": 0,
+      "phase": "phase5",
+      "positive_signal_count": 4,
+      "total_token_delta": 0
+    }
+  }
+}

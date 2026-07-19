@@ -231,6 +231,42 @@ GROUP BY status, memory_type;
 - 注入但未使用比例。
 - 被使用记忆的平均 score。
 
+Phase 6b-4 已经补上第一版答案级证据使用调试：
+
+- `memory_grounding_pass_count`：期望 memory id 是否进入受控 memory engine 的使用记录。
+- `answer_rule_pass_count`：最终回答是否命中答案规则。
+- `repeat_count`：同一批 case 的重复轮数。
+- `repeat_pass_rate`：重复评测整体通过率。
+- `repeat_answer_rule_pass_rate`：重复评测中答案规则通过率。
+- `repeat_memory_grounding_pass_rate`：重复评测中记忆 grounding 通过率。
+- `prompt_variant_mode`：当前是 `baseline`、`coached` 还是 `both`。
+- `pass_count_by_prompt_variant`：按提示词变体拆分的整体通过数。
+- `answer_rule_pass_count_by_prompt_variant`：按提示词变体拆分的答案规则通过数。
+- `memory_grounding_pass_count_by_prompt_variant`：按提示词变体拆分的记忆 grounding 通过数。
+
+这些指标用于判断“记忆已经给到模型”之后，模型是否稳定使用了关键证据。完整回答和证据块只在显式开启 `--include-answer-debug` 时写入临时 workspace，不进入常规报告。
+
+### Phase 6c-1 已建立的离线 uplift proxy report
+
+Phase 6c-1 不是答案质量评测，而是把现有 shadow trace 转成统一的对照指标。它输出：
+
+- `overall_avg_uplift`
+- `avg_baseline_score`
+- `avg_experimental_score`
+- `avg_uplift`
+- `positive_signal_count`
+- `negative_signal_count`
+- `total_token_delta`
+- `estimated_token_saving`
+- `metric_kind`
+- `metric_name`
+
+解释边界：
+
+- retrieval / injection 可以作为离线质量 proxy。
+- version/provenance/sleep 更多是治理信号 proxy。
+- 因为没有真实 LLM 和真实 memory DB，不能宣称真实回答准确率提升。
+
 ### 5. 回源成功率
 
 需要记录 `fetch_messages` 与 memory source_ref 的关联：
@@ -743,6 +779,7 @@ Phase 0 首个落地点是 `write_value_score` shadow trace。它先记录显式
 | Phase 6b-1 | 真实 memory 只读采样和候选指标 | `sample_count`、`memory_item_count`、`replacement_count`、`category_counts`、`labelled_contract_pass_rate`、`candidate_hit_rate_without_label_forcing`、`candidate_wrong_scope_count`、`candidate_labelled_wrong_scope_count`、`sample_records`、`profile_records`、`candidate_records`、`failure_records`、`invalid_extra_json_count`、`missing_scope_count`、`missing_table_count` |
 | Phase 6b-2 | 真实 AgentLoop dry-run | `agent_loop_enabled`、`fake_llm_enabled`、`llm_calls_enabled`、`embedding_calls_enabled`、`answer_quality_available`、`agent_turn_count`、`retrieval_request_count`、`fake_llm_call_count`、`turn_committed_count`、`session_message_count`、`retrieval_query_matched`、`retrieval_history_seen` |
 | Phase 6b-3 | 答案级小样本评测和真实 LLM 显式门控 | `answer_quality_available`、`answer_contains_pass_count`、`answer_contains_miss_count`、`forbidden_contains_violation_count`、`expected_memory_used_count`、`language_pass_count`、`provider_error_count`、`timeout_count`、`token_metrics_available`、`prompt_token_count`、`completion_token_count`、`total_token_count`、`total_latency_ms`、`avg_latency_ms` |
+| Phase 6c-1 | 离线 uplift proxy report | `overall_avg_uplift`、`phase_summaries`、`feature_records`、`positive_signal_count`、`negative_signal_count`、`total_token_delta`、`estimated_token_saving` |
 | Phase 6 后续 | Dashboard、连续真实样本评测和 active 化决策 | `recall_at_k`、`precision_at_k`、`wrong_recall_rate`、`memory_pollution_rate`、`compression_ratio`、`source_support_rate` |
 
 其中 Phase 1b 到 Phase 5 默认仍然是 shadow 或 dry-run。只有 Phase 6 的评测数据稳定后，才讨论把某些策略切到 active。

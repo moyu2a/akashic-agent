@@ -430,7 +430,9 @@ Phase 6a-2 已完成第一版：离线 eval runner 和 JSON report
 Phase 6b-1 已完成第一版：真实 memory 只读采样、真实样本 EvalCase 转换、unforced candidate 指标和报告 CLI
 Phase 6b-2 已完成第一版：真实 AgentLoop dry-run，fake LLM，临时 workspace
 Phase 6b-3 已完成第一版：显式门控的 LLM 小样本答案级评测，fake-provider 报告链路
-Phase 6   待做：真实 LLM 人工确认运行、Dashboard、连续评测和 active 化决策
+Phase 6b-4 已完成第一版：证据使用 debug、repeat 评测和 baseline/coached 真实 LLM 对照
+Phase 6c-1 已完成第一版：离线 uplift report
+Phase 6   待做：Dashboard、连续评测和 active 化决策
 ```
 
 后续计划按 6 个主要步骤推进。trace 汇总报告属于数据出口和验证手段，不单独替代某个 memory 能力阶段。
@@ -788,9 +790,50 @@ Phase 6b-3 修订后真实 LLM 复测结论：
 
 后续建议拆分：
 
-1. Phase 6b-4：定位 `vague_reference_graph` 的证据使用失败原因，尝试显式引用要求、证据注入增强或 answer debug 手动开关。
-2. Phase 6c：把 eval report 接入 Dashboard 或 observe 查询界面。
-3. Phase 6d：基于连续评测结果决定哪些策略可以从 shadow 切到 active。
+Phase 6b-4 已完成第一版：证据使用 debug 和真实 LLM 对照。
+
+- 新增 `LLMSampleRunSpec`，让同一 EvalCase 可以按 `prompt_variant` 和 `repeat_index` 变成多条可对照运行记录。
+- 新增 `--case-id`，支持指定单个或多个 case，选择顺序按用户传参保留。
+- 新增 `--repeat-count`，重复次数小于 1 时直接报错，不做静默修正。
+- 新增 `--evidence-prompt-mode baseline|coached|both`。`baseline` 保持原记忆块，`coached` 只在 eval harness 内提示模型优先使用记忆并保留关键术语，`both` 同时跑基线和增强两组。
+- 新增 `--include-answer-debug`，只有显式打开时才把完整回答、证据块、命中词、缺失词和失败原因写到 `<workspace>/answer_debug/`。
+- 常规 JSON/Markdown 报告仍不包含原始 query、memory summary、prompt、session text 或完整回答。
+
+Phase 6b-4 可输出的数据：
+
+- `repeat_count`
+- `repeat_pass_rate`
+- `repeat_answer_rule_pass_rate`
+- `repeat_memory_grounding_pass_rate`
+- `prompt_variant_mode`
+- `pass_count_by_prompt_variant`
+- `answer_rule_pass_count_by_prompt_variant`
+- `memory_grounding_pass_count_by_prompt_variant`
+- 本地 debug 文件中的 `evidence_block_text`、`answer_text`、`matched_expected_terms`、`missing_expected_terms`、`matched_any_groups`、`missing_any_groups`
+
+Phase 6b-4 验证结论：
+
+- focused harness tests：`16 passed`。
+- focused CLI tests：`9 passed`。
+- fake-provider smoke：`vague_reference_graph` 使用 `repeat_count = 2`、`prompt_variant_mode = both` 跑出 4 条记录并生成 4 个本地 debug 文件。
+- 真实 LLM 对照：`vague_reference_graph` 使用 `repeat_count = 5`、`prompt_variant_mode = both`，共 10 次真实调用，全部通过。
+- 真实 LLM 指标：`case_count = 10`、`passed_case_count = 10`、`failed_case_count = 0`、`answer_rule_pass_count = 10`、`memory_grounding_pass_count = 10`、`repeat_pass_rate = 1.0`。
+- 按变体拆分：baseline 5/5 通过，coached 5/5 通过。
+- token/延迟：`prompt_token_count = 49865`、`completion_token_count = 2697`、`total_token_count = 52562`、`total_latency_ms = 46977`、`avg_latency_ms = 4697`。
+- 本轮结论：上一轮 `vague_reference_graph` 失败没有稳定复现；baseline 已经 5/5 通过，所以不能把本轮改进归因于 coached 提示。Phase 6b-4 的主要产出是可重复对照和可手动排查的 debug 能力，后续需要扩大样本、增加更难的模糊指代 case，才能判断提示增强是否有统计意义。
+
+Phase 6c-1 已完成第一版：离线 uplift report。
+
+- 复用 Phase 6a fixture 和 `EvalRunReport`。
+- 输出 Phase 2/3/4/5/all 的离线 proxy uplift。
+- 不调用真实 LLM，不读取真实 memory DB。
+- 当前结论只能说明 shadow trace 在 fixture 上产生了可比较的 proxy 信号，不能说明真实生产回答提升。
+
+后续建议拆分：
+
+1. Phase 6c：把 eval report 接入 Dashboard 或 observe 查询界面。
+2. Phase 6d：扩展真实样本答案级评测，把 Phase 6b-1 的真实 memory 采样和 Phase 6b-4 的 repeat/baseline-coached 对照联动。
+3. Phase 6e：基于连续评测结果决定哪些策略可以从 shadow 切到 active。
 
 ## 面试表达
 

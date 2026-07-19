@@ -54,6 +54,8 @@
 - Phase 6b-1：真实 memory 数据只读采样器、真实样本到 EvalCase 的转换、unforced candidate 指标和 CLI 报告；严格使用 raw sqlite read-only + `PRAGMA query_only=ON`，不启动 Agent，不调用 LLM/embedding，不写真实 DB，报告默认不包含真实记忆正文。
 - Phase 6b-2：真实 `AgentLoop` dry-run，使用临时 workspace、真实 `SessionManager`、真实 `DefaultMemoryRetrievalPipeline`、真实 `EventBus` / `TurnCommitted`，但 LLM 是 fake provider，memory engine 是受控测试 engine；不调用真实 LLM/embedding，不写真实 workspace，不代表最终回答质量。
 - Phase 6b-3：显式门控的 LLM 小样本答案级评测，复用真实 `AgentLoop.process_direct()`、临时 workspace 和受控 memory engine；默认禁止真实 LLM，必须通过 `--enable-real-llm` 才能构造真实 `LLMProvider`。本轮已用 fake provider 跑通 3 个稳定答案级 case，报告记录答案规则命中、记忆 ID 使用、延迟、token 元数据和脱敏审计。
+- Phase 6b-4：证据使用 debug 和真实 LLM 基线/增强对照。新增 `--case-id`、`--repeat-count`、`--evidence-prompt-mode baseline|coached|both` 和 `--include-answer-debug`，常规报告仍脱敏，完整回答和证据块只写入临时 workspace 的 `answer_debug`。本轮真实 LLM 对 `vague_reference_graph` 跑 5 轮 baseline + 5 轮 coached，10/10 通过。
+- Phase 6c-1：离线 uplift report，复用 Phase 6a fixture 和 profile 对照，把 Phase 2-5 的 shadow trace 转成离线 proxy uplift。它不调用真实 LLM、不读真实 memory DB，也不声明生产性能提升；第一版输出 phase summary、feature records、overall_avg_uplift、positive/negative diagnostic signals、token delta 和 estimated token saving。
 
 后续还有 1 个主要方向：
 
@@ -174,6 +176,26 @@ Phase 6b-3 的验证结论：
 - `vague_reference_graph` 是模糊指代场景，问题短、上下文依赖强，模型可能没有把“第三路方案”稳定映射到 `RRF 融合排序` 这条记忆。
 - 受控 memory engine 只保证注入 memory summary，并不模拟真实三路召回、图谱路径、source_ref 回源后的证据强化。
 - 答案评测没有保存完整回答正文，隐私边界更安全，但排查语义等价失败时可观测性较弱；后续可增加显式手动开关，把答案 debug 写到临时目录且不提交。
+
+Phase 6b-4 的验证结论：
+
+- 新增证据使用 debug 开关，只有显式传入 `--include-answer-debug` 时才把完整回答和注入证据块写到 `<workspace>/answer_debug/`，不会写入 `my_md` 常规报告。
+- 新增 `--evidence-prompt-mode baseline|coached|both`。`baseline` 保持原记忆块，`coached` 只在 eval-only memory engine 中加入“优先使用记忆并保留关键术语”的提示，`both` 用于同一 case 的对照实验。
+- 新增重复评测指标：`repeat_count`、`repeat_pass_rate`、`repeat_answer_rule_pass_rate`、`repeat_memory_grounding_pass_rate`，以及按 `prompt_variant` 拆分的通过数。
+- focused tests：`tests/test_memory_eval_llm_sample.py` 为 `16 passed`，`tests/test_memory_llm_sample_cli.py` 为 `9 passed`。
+- fake-provider smoke：`vague_reference_graph` 在 `repeat_count = 2`、`prompt_variant_mode = both` 下生成 4 条 case record，并成功写出本地 debug 文件。
+- 真实 LLM 对照：`case_count = 10`、`repeat_count = 5`、`passed_case_count = 10`、`failed_case_count = 0`、`answer_rule_pass_count = 10`、`memory_grounding_pass_count = 10`。
+- 按变体拆分：`pass_count_by_prompt_variant = {'baseline': 5, 'coached': 5}`、`answer_rule_pass_count_by_prompt_variant = {'baseline': 5, 'coached': 5}`、`memory_grounding_pass_count_by_prompt_variant = {'baseline': 5, 'coached': 5}`。
+- 真实 LLM token/延迟：`prompt_token_count = 49865`、`completion_token_count = 2697`、`total_token_count = 52562`、`total_latency_ms = 46977`、`avg_latency_ms = 4697`。
+- 本轮结论：上一轮失败的 `vague_reference_graph` 在 10 次真实调用中都命中了 `RRF` 和第三路相关表达。debug 摘要显示 baseline 本身也能通过，因此本轮不能证明 coached 提示显著优于 baseline，只能说明“证据使用失败”不是稳定复现的问题，需要更大样本或更难 case 才能量化差异。
+
+Phase 6c-1 的验证结论：
+
+- 新增 `memory2/eval_uplift.py` 和 `scripts/run_memory_uplift_eval.py`。
+- 报告路径：`my_md/memory_optimization/eval_reports/memory_uplift_eval.json` 和 `.md`。
+- 当前报告是离线 fixture proxy uplift，不是真实生产 uplift。
+- `llm_calls_enabled = false`、`embedding_calls_enabled = false`、`real_memory_db_enabled = false`、`production_uplift_claimed = false`。
+- 记录 Phase 2-5/all 的 `avg_baseline_score`、`avg_experimental_score`、`avg_uplift`、positive/negative signal、token delta 和 estimated token saving。
 
 ## 实验扩展原则
 
