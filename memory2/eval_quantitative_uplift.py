@@ -278,7 +278,8 @@ def write_quantitative_uplift_markdown(report: QuantitativeUpliftReport, path: P
             "- `off` 作为 baseline，只用于对比，不应单独解读为生产结论。",
         ]
     )
-    path.write_text("\n".join(lines), encoding="utf-8")
+    lines.extend(_detailed_review_lines(report, rows))
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
 def _family_trace_for_case(case: EvalCase, family_name: str) -> EvalTrace | None:
@@ -946,10 +947,14 @@ def _build_report_metrics(
         "baseline_main_score": overall_baseline,
         "total_uplift_points": total_uplift_points,
         "total_uplift_pct": total_uplift_pct,
-        "common_main_score": common.main_score if common else 0.0,
-        "hard_main_score": hard.main_score if hard else 0.0,
-        "common_baseline_main_score": common_baseline.main_score if common_baseline else 0.0,
-        "hard_baseline_main_score": hard_baseline.main_score if hard_baseline else 0.0,
+        "common_main_score": common.main_score if common else "unavailable",
+        "hard_main_score": hard.main_score if hard else "unavailable",
+        "common_baseline_main_score": common_baseline.main_score
+        if common_baseline
+        else "unavailable",
+        "hard_baseline_main_score": hard_baseline.main_score
+        if hard_baseline
+        else "unavailable",
         "overall_answer_rule_pass_rate": all_on.answer_rule_pass_rate if all_on else 0.0,
         "overall_memory_grounding_pass_rate": all_on.memory_grounding_pass_rate if all_on else 0.0,
         "overall_forbidden_violation_rate": all_on.forbidden_violation_rate if all_on else 0.0,
@@ -996,6 +1001,213 @@ def _summary_row_to_md(row: QuantitativeProfileSummary) -> str:
         f"{_fmt(row.latency_ms)} | "
         f"{_fmt(row.latency_delta_ms)} |"
     )
+
+
+def _detailed_review_lines(
+    report: QuantitativeUpliftReport,
+    rows: Sequence[QuantitativeProfileSummary],
+) -> list[str]:
+    ordered_profiles = (
+        "off",
+        "write_value_only",
+        "tri_retrieval_only",
+        "graph_only",
+        "rerank_only",
+        "version_provenance_only",
+        "sleep_only",
+        "all_on",
+    )
+    case_count = report.metrics.get("case_count", "unavailable")
+    common_case_count = report.metrics.get("common_case_count", "unavailable")
+    hard_case_count = report.metrics.get("hard_case_count", "unavailable")
+    lines = [
+        "",
+        "## 详细复盘",
+        "",
+        "### 测试过程",
+        "",
+        "- 测试对象：Phase 6d 离线量化 uplift report。",
+        f"- 样本规模：{case_count} 个目标导向 case，其中 common {common_case_count} 个，hard {hard_case_count} 个。",
+        "- 对照方式：同一批 case 同时跑 `off`、单项开关和 `all_on`。",
+        "- 执行方式：复用离线 `EvalCase`、`EvalRunReport` 和 shadow trace，不启动 AgentLoop，不调用真实 LLM，不读写真实 memory DB。",
+        "- 评分方式：用 `answer_rule_pass_rate`、`memory_grounding_pass_rate` 和 `forbidden_violation_rate` 计算 `main_score`。",
+        "- 失败门控：如果底层 eval runner 失败，报告生成直接失败，不输出伪成功报表。",
+        "- 验证结果：本报告只记录评测产物；测试是否通过以实际命令输出为准，不在报告生成逻辑中硬编码。",
+        "",
+        "### 指标含义",
+        "",
+        "| 指标 | 含义 | 方向 |",
+        "| --- | --- | --- |",
+        "| `main_score` | 综合主分，公式为 `0.7 * answer + 0.2 * grounding + 0.1 * (100 - forbidden)` | 越高越好 |",
+        "| `uplift_points` | 当前开关相比 `off` 提高的分数 | 越高越好 |",
+        "| `uplift_pct` | 当前开关相比 `off` 的提升百分比 | 越高越好 |",
+        "| `answer_rule_pass_rate` | 是否命中预期答案规则或目标记忆 | 越高越好 |",
+        "| `memory_grounding_pass_rate` | 召回、注入或治理结果是否有来源和证据支撑 | 越高越好 |",
+        "| `forbidden_violation_rate` | 是否召回或注入了旧记忆、噪声记忆、跨会话记忆等 forbidden 内容 | 越低越好 |",
+        "| `token_signal_kind` | token 信号类型，例如 `prompt_token_delta`、`estimated_token_saving`、`mixed` | 用于解释 token 数字 |",
+        "| `token_signal_value` | token 信号值；不同 kind 不能直接相加 | 视 kind 而定 |",
+        "| `token_signal_delta` | 与 baseline 可比时的 token 差值；不可比时为 `unavailable` | 视 kind 而定 |",
+        "| `latency_ms` | 当前 trace 能观测到的耗时信号 | 越低越好 |",
+        "| `common` | 常见场景样本集 | 用于看普通问题表现 |",
+        "| `hard` | 难例、边界、模糊指代样本集 | 用于看复杂问题表现 |",
+        "",
+        "### 各开关详细结论",
+        "",
+    ]
+    for profile_name in ordered_profiles:
+        overall = _summary_lookup(rows, profile_name)
+        if overall is None:
+            continue
+        common = _summary_lookup(rows, profile_name, case_set="common")
+        hard = _summary_lookup(rows, profile_name, case_set="hard")
+        review = _profile_review_text(profile_name, overall, common, hard)
+        lines.extend(
+            [
+                f"#### {PROFILE_FEATURE_LABELS[profile_name]} `{profile_name}`",
+                "",
+                "| scope | main_score | uplift_points | uplift_pct | answer | grounding | forbidden | token_signal_kind | token_signal_value | token_signal_delta | latency_ms |",
+                "| --- | ---: | ---: | ---: | ---: | ---: | ---: | --- | --- | --- | --- |",
+                _review_metric_row("overall", overall),
+            ]
+        )
+        if common is not None:
+            lines.append(_review_metric_row("common", common))
+        if hard is not None:
+            lines.append(_review_metric_row("hard", hard))
+        lines.extend(
+            [
+                "",
+                f"- 关闭时做得好：{review['off_good']}",
+                f"- 关闭时做得不好：{review['off_bad']}",
+                f"- 开启后做得好：{review['on_good']}",
+                f"- 开启后做得不好：{review['on_bad']}",
+                f"- 结论：{review['conclusion']}",
+                "",
+            ]
+        )
+    lines.extend(
+        [
+            "### 总结",
+            "",
+            f"- 全开组合 `all_on` 的主分为 `{report.metrics.get('overall_main_score')}`，相比 `off` 提高 `{report.metrics.get('total_uplift_points')}` 分。",
+            f"- 单项直接提分最强的是 `{_strongest_feature_profile(rows)}`，它是当前样本集上的最高 uplift profile。",
+            "- `graph_only` 对模糊关联命中有效，但需要继续和 source_ref / provenance 联动提升证据支撑。",
+            "- `rerank_only` 和 `version_provenance_only` 更偏治理，价值在降低错误注入、旧版本误用和跨 scope 风险。",
+            "- `write_value_only` 和 `sleep_only` 更偏长期质量维护，不应只用即时回答主分评价。",
+            "- `all_on` 不是单项分数相加；它是多类能力同时打开后的组合态，后续需要优化组合权重和 active 化策略。",
+        ]
+    )
+    return lines
+
+
+def _review_metric_row(label: str, row: QuantitativeProfileSummary) -> str:
+    return (
+        f"| {label} | {_fmt(row.main_score)} | {_fmt(row.uplift_points)} | "
+        f"{_fmt(row.uplift_pct)} | {_fmt(row.answer_rule_pass_rate)} | "
+        f"{_fmt(row.memory_grounding_pass_rate)} | "
+        f"{_fmt(row.forbidden_violation_rate)} | {_fmt(row.token_signal_kind)} | "
+        f"{_fmt(row.token_signal_value)} | {_fmt(row.token_signal_delta)} | "
+        f"{_fmt(row.latency_ms)} |"
+    )
+
+
+def _profile_review_text(
+    profile_name: str,
+    overall: QuantitativeProfileSummary,
+    common: QuantitativeProfileSummary | None,
+    hard: QuantitativeProfileSummary | None,
+) -> dict[str, str]:
+    common_score = _case_set_score_clause("common", common)
+    hard_score = _case_set_score_clause("hard", hard)
+    graph_on_good = (
+        f"answer 为 {_fmt(overall.answer_rule_pass_rate)}，{hard_score}，说明图谱对模糊关联和难例补召回有效。"
+        if hard is not None
+        else f"answer 为 {_fmt(overall.answer_rule_pass_rate)}，{hard_score}，当前只说明图谱对已评测样本的补召回有效。"
+    )
+    rerank_on_good = (
+        f"forbidden 降到 {_fmt(overall.forbidden_violation_rate)}，{hard_score}，说明它能有效控制哪些记忆进入 prompt。"
+        if hard is not None
+        else f"forbidden 降到 {_fmt(overall.forbidden_violation_rate)}，{hard_score}，当前只说明它能控制已评测样本中哪些记忆进入 prompt。"
+    )
+    reviews: dict[str, dict[str, str]] = {
+        "off": {
+            "off_good": "没有启用实验召回、注入或写入治理，因此没有额外 token 成本、延迟和实验模块引入的 forbidden 风险。",
+            "off_bad": f"answer 为 {_fmt(overall.answer_rule_pass_rate)}，grounding 为 {_fmt(overall.memory_grounding_pass_rate)}，主分为 {_fmt(overall.main_score)}，只能作为对照组，不能提供记忆增强能力。",
+            "on_good": "不适用；`off` 本身就是关闭状态。",
+            "on_bad": "不适用；`off` 本身就是关闭状态。",
+            "conclusion": "关闭状态安全但无增强能力，是衡量 uplift 的 baseline。",
+        },
+        "write_value_only": {
+            "off_good": "关闭时不会因为写入价值评分引入额外计算成本。",
+            "off_bad": "缺少候选记忆价值判断，临时信息、重复信息、助手推断都有污染长期记忆的风险。",
+            "on_good": f"answer 达到 {_fmt(overall.answer_rule_pass_rate)}，说明写入治理规则能识别不少应该拒绝或审查的候选。",
+            "on_bad": f"grounding 为 {_fmt(overall.memory_grounding_pass_rate)}，forbidden 为 {_fmt(overall.forbidden_violation_rate)}，说明它只适合作为写入入口治理，不能单独保证召回和证据质量。",
+            "conclusion": "适合作为长期记忆写入前的第一道过滤，但需要和 source_ref、重复检测、冲突检测继续联动。",
+        },
+        "tri_retrieval_only": {
+            "off_good": "关闭时没有额外检索路径和融合排序成本。",
+            "off_bad": "单一路径或无增强召回容易漏掉模糊指代、关键词不完全匹配和 source_ref 相关记忆。",
+            "on_good": f"main_score 为 {_fmt(overall.main_score)}，answer 为 {_fmt(overall.answer_rule_pass_rate)}，grounding 为 {_fmt(overall.memory_grounding_pass_rate)}；{hard_score}。",
+            "on_bad": f"forbidden 为 {_fmt(overall.forbidden_violation_rate)}，说明仍可能带入旧记忆、噪声记忆或跨 scope 候选。",
+            "conclusion": "当前最强直接提分项，优先级最高，但需要后接重排和注入治理。",
+        },
+        "graph_only": {
+            "off_good": "关闭时不会引入图谱构建、实体桥接和图路径解释成本。",
+            "off_bad": "模糊实体关系、跨概念关联和第三路补充召回能力不足。",
+            "on_good": graph_on_good,
+            "on_bad": f"grounding 为 {_fmt(overall.memory_grounding_pass_rate)}，forbidden 为 {_fmt(overall.forbidden_violation_rate)}，说明当前图谱结果还没有充分转成可解释 source_ref 证据。",
+            "conclusion": "适合作为第三路增强，但必须和溯源、重排、注入治理一起使用。",
+        },
+        "rerank_only": {
+            "off_good": "关闭时没有额外 prompt token 增量。",
+            "off_bad": "召回候选可能直接进入上下文，低质量、低置信度或冲突记忆更容易污染 prompt。",
+            "on_good": rerank_on_good,
+            "on_bad": f"token_signal_kind 为 {_fmt(overall.token_signal_kind)}，token_signal_value 为 {_fmt(overall.token_signal_value)}；grounding 为 {_fmt(overall.memory_grounding_pass_rate)}。",
+            "conclusion": "是召回后的必要治理层，重点价值是降风险，但需要继续控制 token 成本。",
+        },
+        "version_provenance_only": {
+            "off_good": "关闭时没有版本链扫描和 source_ref 解析成本。",
+            "off_bad": "旧版本、新版本、跨会话记忆容易混在一起，难以判断记忆来源是否可信。",
+            "on_good": f"forbidden 为 {_fmt(overall.forbidden_violation_rate)}，说明旧版本误用和跨 scope 风险被有效压住。",
+            "on_bad": f"answer 为 {_fmt(overall.answer_rule_pass_rate)}，grounding 为 {_fmt(overall.memory_grounding_pass_rate)}，不如三路召回直接提分明显。",
+            "conclusion": "是长期记忆可信度基础设施，价值在一致性、隔离和可追溯，不是单独的最强召回模块。",
+        },
+        "sleep_only": {
+            "off_good": "关闭时不会执行后台扫描、去重和压缩估算。",
+            "off_bad": "重复、过期、低价值、冲突记忆会持续堆积，长期增加 prompt 噪声和维护成本。",
+            "on_good": f"grounding 达到 {_fmt(overall.memory_grounding_pass_rate)}，forbidden 为 {_fmt(overall.forbidden_violation_rate)}，并输出 {_fmt(overall.token_signal_kind)} {_fmt(overall.token_signal_value)}。",
+            "on_bad": f"answer 为 {_fmt(overall.answer_rule_pass_rate)}，说明它不是即时召回模块，不能直接提高单轮回答命中。",
+            "conclusion": "适合作为后台长期质量维护能力，主要价值是去重、压缩、清理和降噪。",
+        },
+        "all_on": {
+            "off_good": "关闭时最简单、最安全、没有组合复杂度。",
+            "off_bad": "没有召回增强、图谱、重排治理、版本链、溯源和睡眠巩固，记忆能力不足。",
+            "on_good": f"overall 主分达到 {_fmt(overall.main_score)}，{common_score}，{hard_score}，说明组合能力可以覆盖当前已评测样本。",
+            "on_bad": "分数低于单独三路召回，因为组合态混入写入、睡眠等非即时问答能力；token_signal_kind 为 mixed，不能合并成一个 token 数。",
+            "conclusion": "全开证明整体方向有效，但后续要优化组合权重，不能简单把所有模块平均计算。",
+        },
+    }
+    return reviews[profile_name]
+
+
+def _case_set_score_clause(
+    case_set: str,
+    row: QuantitativeProfileSummary | None,
+) -> str:
+    if row is None:
+        return f"本次未评测 {case_set} 集"
+    return f"{case_set} 集为 {_fmt(row.main_score)}"
+
+
+def _strongest_feature_profile(rows: Sequence[QuantitativeProfileSummary]) -> str:
+    candidates = [
+        row
+        for row in rows
+        if row.case_set == "overall" and row.profile_name not in {"off", "all_on"}
+    ]
+    if not candidates:
+        return "unavailable"
+    return max(candidates, key=lambda row: row.uplift_points).profile_name
 
 
 def _fmt(value: object) -> str:

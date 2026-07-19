@@ -59,6 +59,18 @@ def test_report_contains_single_feature_and_total_uplift() -> None:
     assert report.metrics["case_count"] == 16
 
 
+def test_missing_case_set_metrics_are_unavailable() -> None:
+    report = build_quantitative_uplift_report(
+        build_quantitative_eval_cases("common", limit=8)
+    )
+
+    assert report.metrics["common_case_count"] == 8
+    assert report.metrics["hard_case_count"] == 0
+    assert report.metrics["common_main_score"] != "unavailable"
+    assert report.metrics["hard_main_score"] == "unavailable"
+    assert report.metrics["hard_baseline_main_score"] == "unavailable"
+
+
 def test_full_report_has_expected_totals() -> None:
     report = build_quantitative_uplift_report(build_quantitative_eval_cases())
     overall = {(row.case_set, row.profile_name): row for row in report.profile_summaries}

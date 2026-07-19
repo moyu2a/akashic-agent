@@ -307,6 +307,8 @@ main_score = 0.7 * answer_rule_pass_rate
 - `metric_kind`
 - `metric_name`
 
+其中 `memory_quantitative_uplift_eval.md` 已补充“详细复盘”章节，记录测试过程、每个指标的含义、每个开关的 overall/common/hard 数据、关闭时做得好/不好、开启后做得好/不好，以及最终结论，便于后续复盘时直接查看。
+
 解释边界：
 
 - retrieval / injection 可以作为离线质量 proxy。
