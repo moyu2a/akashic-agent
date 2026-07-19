@@ -258,6 +258,46 @@ Phase 6c-1 不是答案质量评测，而是把现有 shadow trace 转成统一�
 - `negative_signal_count`
 - `total_token_delta`
 - `estimated_token_saving`
+
+### Phase 6d 的量化总表
+
+Phase 6d 把前面的 trace 指标再收敛成一张可背诵的总表，主指标继续沿用同一公式：
+
+```text
+main_score = 0.7 * answer_rule_pass_rate
+           + 0.2 * memory_grounding_pass_rate
+           + 0.1 * (100 - forbidden_violation_rate)
+```
+
+这张表的作用不是替代前面的细分指标，而是回答更直接的问题：
+
+- 单开某个功能，主分能涨多少。
+- 全开以后，主分比 baseline 高多少。
+- common 和 hard 两套样本各自表现怎样。
+
+本轮实际结果：
+
+- `case_count = 80`
+- `common_case_count = 40`
+- `hard_case_count = 40`
+- `baseline_main_score = 10.0`
+- `all_on_main_score = 68.9767`
+- `total_uplift_points = 58.9767`
+- `total_uplift_pct = 589.767`
+
+单项 uplift：
+
+- `tri_retrieval_only = 87.4997`
+- `graph_only = 68.5001`
+- `rerank_only = 60.9109`
+- `version_provenance_only = 55.278`
+- `write_value_only = 48.3345`
+- `sleep_only = 35.1014`
+
+报表文件：
+
+- `my_md/memory_optimization/eval_reports/memory_quantitative_uplift_eval.json`
+- `my_md/memory_optimization/eval_reports/memory_quantitative_uplift_eval.md`
 - `metric_kind`
 - `metric_name`
 

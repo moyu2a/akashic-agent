@@ -432,6 +432,7 @@ Phase 6b-2 已完成第一版：真实 AgentLoop dry-run，fake LLM，临时 wor
 Phase 6b-3 已完成第一版：显式门控的 LLM 小样本答案级评测，fake-provider 报告链路
 Phase 6b-4 已完成第一版：证据使用 debug、repeat 评测和 baseline/coached 真实 LLM 对照
 Phase 6c-1 已完成第一版：离线 uplift report
+Phase 6d   已完成第一版：80 case 量化 uplift 总表，输出 common/hard 双集和单项 / 总增益 JSON + Markdown
 Phase 6   待做：Dashboard、连续评测和 active 化决策
 ```
 
@@ -832,7 +833,7 @@ Phase 6c-1 已完成第一版：离线 uplift report。
 后续建议拆分：
 
 1. Phase 6c：把 eval report 接入 Dashboard 或 observe 查询界面。
-2. Phase 6d：扩展真实样本答案级评测，把 Phase 6b-1 的真实 memory 采样和 Phase 6b-4 的 repeat/baseline-coached 对照联动。
+2. Phase 6d：已经完成 80 case 量化 uplift 总表，输出 common/hard 双集和单项 / 总增益 JSON + Markdown，当前结果为 `baseline_main_score = 10.0`、`all_on_main_score = 68.9767`、`total_uplift_points = 58.9767`，报表路径见 `my_md/memory_optimization/eval_reports/memory_quantitative_uplift_eval.json`。
 3. Phase 6e：基于连续评测结果决定哪些策略可以从 shadow 切到 active。
 
 ## 面试表达
