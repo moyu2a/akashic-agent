@@ -433,6 +433,7 @@ Phase 6b-3 已完成第一版：显式门控的 LLM 小样本答案级评测，f
 Phase 6b-4 已完成第一版：证据使用 debug、repeat 评测和 baseline/coached 真实 LLM 对照
 Phase 6c-1 已完成第一版：离线 uplift report
 Phase 6d   已完成第一版：80 case 量化 uplift 总表，输出 common/hard 双集和单项 / 总增益 JSON + Markdown
+Phase 6d-chain 已完成第一版：链路量化评测，输出累计开关链路、相邻增益和总增益 JSON + Markdown
 Phase 6   待做：Dashboard、连续评测和 active 化决策
 ```
 
@@ -834,7 +835,8 @@ Phase 6c-1 已完成第一版：离线 uplift report。
 
 1. Phase 6c：把 eval report 接入 Dashboard 或 observe 查询界面。
 2. Phase 6d：已经完成 80 case 量化 uplift 总表，输出 common/hard 双集和单项 / 总增益 JSON + Markdown，当前结果为 `baseline_main_score = 10.0`、`all_on_main_score = 69.6017`、`total_uplift_points = 59.6017`。本轮修正后，token 输出使用 `token_signal_kind/value/delta`，混合成本与节省的组合态标记为 `mixed`；溯源 forbidden rate 只按实际 `cross_scope_risk_count` 计算。报表路径见 `my_md/memory_optimization/eval_reports/memory_quantitative_uplift_eval.json`。
-3. Phase 6e：基于连续评测结果决定哪些策略可以从 shadow 切到 active。
+3. Phase 6d-chain：已经完成链路量化评测，输出 `memory_quantitative_chain_eval.json` 和 `memory_quantitative_chain_eval.md`。当前链路为 `chain_off -> chain_write_value -> chain_tri_retrieval -> chain_graph_retrieval -> chain_rerank_injection -> chain_version_provenance -> chain_sleep_consolidation -> chain_all_on`。结果显示最终总提升 `+59.6017` 分；相邻增益最高是写入价值 `+48.3345`，其次是三路召回 `+19.5826`，图谱召回 `+0.1943`；后续治理和睡眠步骤在当前平均评分公式下为负相邻增益，说明下一步应优化组合权重、场景路由和 active 化策略。
+4. Phase 6e：基于连续评测结果决定哪些策略可以从 shadow 切到 active。
 
 ## 面试表达
 

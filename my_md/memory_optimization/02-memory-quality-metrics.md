@@ -304,10 +304,21 @@ main_score = 0.7 * answer_rule_pass_rate
 
 - `my_md/memory_optimization/eval_reports/memory_quantitative_uplift_eval.json`
 - `my_md/memory_optimization/eval_reports/memory_quantitative_uplift_eval.md`
+- `my_md/memory_optimization/eval_reports/memory_quantitative_chain_eval.json`
+- `my_md/memory_optimization/eval_reports/memory_quantitative_chain_eval.md`
 - `metric_kind`
 - `metric_name`
 
 其中 `memory_quantitative_uplift_eval.md` 已补充“详细复盘”章节，记录测试过程、每个指标的含义、每个开关的 overall/common/hard 数据、关闭时做得好/不好、开启后做得好/不好，以及最终结论，便于后续复盘时直接查看。
+
+其中 `memory_quantitative_chain_eval.md` 是链路方案评测，关注“前一步打开后，再打开下一步能带来多少相邻增益”。它和单项 uplift 总表不是同一个口径：
+
+- 单项总表回答“单独打开某个能力，相比关闭状态提升多少”。
+- 链路总表回答“按工程链路累计打开能力，每一步相比上一步提升或下降多少”。
+- 链路里的 `uplift_points` 是相邻增益，不是相对 baseline 的总增益。
+- 当前离线结果：`chain_off = 10.0`，`chain_all_on = 69.6017`，`total_chain_uplift_points = 59.6017`。
+- 当前相邻增益：写入价值 `+48.3345`，三路召回 `+19.5826`，图谱召回 `+0.1943`，重排与注入治理 `-2.8802`，版本链与溯源 `-2.1295`，睡眠巩固 `-3.5`，全开校验 `0`。
+- 负相邻增益不等于功能无效；它说明当前平均评分公式把即时回答能力、治理能力和后台维护能力放在同一张主分里，后续需要做组合权重、场景路由和 active 化策略。
 
 解释边界：
 
@@ -828,6 +839,7 @@ Phase 0 首个落地点是 `write_value_score` shadow trace。它先记录显式
 | Phase 6b-2 | 真实 AgentLoop dry-run | `agent_loop_enabled`、`fake_llm_enabled`、`llm_calls_enabled`、`embedding_calls_enabled`、`answer_quality_available`、`agent_turn_count`、`retrieval_request_count`、`fake_llm_call_count`、`turn_committed_count`、`session_message_count`、`retrieval_query_matched`、`retrieval_history_seen` |
 | Phase 6b-3 | 答案级小样本评测和真实 LLM 显式门控 | `answer_quality_available`、`answer_contains_pass_count`、`answer_contains_miss_count`、`forbidden_contains_violation_count`、`expected_memory_used_count`、`language_pass_count`、`provider_error_count`、`timeout_count`、`token_metrics_available`、`prompt_token_count`、`completion_token_count`、`total_token_count`、`total_latency_ms`、`avg_latency_ms` |
 | Phase 6c-1 | 离线 uplift proxy report | `overall_avg_uplift`、`phase_summaries`、`feature_records`、`positive_signal_count`、`negative_signal_count`、`total_token_delta`、`estimated_token_saving` |
+| Phase 6d | 80 case 量化 uplift 总表和链路评测 | `baseline_main_score`、`all_on_main_score`、`total_uplift_points`、`total_chain_uplift_points`、`chain_step_count`、`strongest_step`、`weakest_step`、`common_final_main_score`、`hard_final_main_score` |
 | Phase 6 后续 | Dashboard、连续真实样本评测和 active 化决策 | `recall_at_k`、`precision_at_k`、`wrong_recall_rate`、`memory_pollution_rate`、`compression_ratio`、`source_support_rate` |
 
 其中 Phase 1b 到 Phase 5 默认仍然是 shadow 或 dry-run。只有 Phase 6 的评测数据稳定后，才讨论把某些策略切到 active。

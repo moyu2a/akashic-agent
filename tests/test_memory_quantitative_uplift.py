@@ -8,6 +8,8 @@ import pytest
 from memory2.eval_cases import validate_eval_case_payload
 from memory2.eval_quantitative_cases import build_quantitative_eval_cases
 from memory2.eval_quantitative_uplift import (
+    CHAIN_PROFILES,
+    build_quantitative_chain_report,
     _score_provenance_family,
     build_quantitative_uplift_report,
     calculate_main_score,
@@ -96,6 +98,48 @@ def test_token_signal_kind_is_explicit() -> None:
     assert overall[("overall", "rerank_only")].token_signal_value > 0
     assert overall[("overall", "rerank_only")].token_signal_delta == "unavailable"
     assert overall[("overall", "all_on")].token_signal_kind == "mixed"
+
+
+def test_chain_report_contains_ordered_cumulative_steps() -> None:
+    report = build_quantitative_chain_report(build_quantitative_eval_cases(limit=8))
+    overall = [row for row in report.profile_summaries if row.case_set == "overall"]
+
+    assert tuple(row.profile_name for row in overall) == CHAIN_PROFILES
+    assert overall[0].profile_name == "chain_off"
+    assert overall[-1].profile_name == "chain_all_on"
+    assert report.metrics["measurement_mode"] == "offline_trace_quantitative_chain"
+    assert report.metrics["chain_step_count"] == len(CHAIN_PROFILES)
+
+
+def test_chain_report_step_delta_uses_previous_step() -> None:
+    report = build_quantitative_chain_report(build_quantitative_eval_cases(limit=8))
+    overall = [row for row in report.profile_summaries if row.case_set == "overall"]
+
+    for previous, current in zip(overall, overall[1:]):
+        expected_delta = round(current.main_score - previous.main_score, 4)
+        assert current.uplift_points == expected_delta
+        if (
+            isinstance(previous.latency_ms, (int, float))
+            and isinstance(current.latency_ms, (int, float))
+        ):
+            assert current.latency_delta_ms == round(
+                current.latency_ms - previous.latency_ms,
+                4,
+            )
+        if (
+            previous.token_signal_kind == current.token_signal_kind
+            and previous.token_signal_kind not in {"mixed", "unavailable"}
+            and isinstance(previous.token_signal_value, (int, float))
+            and isinstance(current.token_signal_value, (int, float))
+        ):
+            assert current.token_signal_delta == round(
+                current.token_signal_value - previous.token_signal_value,
+                4,
+            )
+    assert report.metrics["total_chain_uplift_points"] == round(
+        overall[-1].main_score - overall[0].main_score,
+        4,
+    )
 
 
 def test_report_generated_at_is_deterministic() -> None:
