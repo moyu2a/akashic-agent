@@ -380,3 +380,27 @@ Next open work:
 - Build the 320-case offline count/percentage report with two views:
   - single-module gain relative to original memory;
   - cumulative chain gain relative to original memory.
+
+## 2026-07-21 Memory 320 Case Baseline Plus Count Report
+
+Goal: produce a compact 320-case offline report that presents memory enhancement effects as recalled/missed counts and recall-rate percentage-point changes.
+
+1. Run comprehensive single-module quantitative uplift report into `/tmp` - complete
+2. Run comprehensive cumulative-chain quantitative report into `/tmp` - complete
+3. Extract single-module count/rate table relative to original memory - complete
+4. Extract cumulative-chain count/rate table relative to original memory - complete
+5. Write a linked memory optimization document with results and conclusions - complete
+
+Results:
+
+- Original memory baseline: `628/640` recalled, `12/640` missed, `98.12%` recall.
+- Tri retrieval: `640/640` recalled, +12 recalled, +1.88 percentage points.
+- Graph retrieval: `638/640` recalled, +10 recalled, +1.57 percentage points.
+- All-on: `370/640` recalled, -258 recalled, -40.31 percentage points.
+
+Next open work:
+
+- Convert the 320-case count report into the next real-LLM matrix selection:
+  - keep `chain_memory_base`;
+  - include `chain_tri_retrieval`, `chain_graph_retrieval`, and `chain_rerank_injection`;
+  - treat write governance and sleep hygiene as separate evidence-layer evaluations rather than answer-recall profiles.

@@ -662,3 +662,16 @@
   - `.venv/bin/python -m pytest tests/test_memory_quantitative_uplift.py tests/test_memory_quantitative_chain_cli.py tests/test_memory_quantitative_uplift_cli.py tests/test_memory_layered_scoring.py tests/test_memory_comprehensive_online_eval.py tests/test_memory_comprehensive_online_cli.py -q -p no:cacheprovider` -> `50 passed`.
   - `git diff --check` -> exit `0`.
 - Next step: commit the current memory evaluation baseline changes, then build the 320-case count/percentage report that compares each enhancement against original memory rather than against disabled memory.
+
+## 2026-07-21 Memory 320 Case Baseline Plus Count Report
+
+- Ran the comprehensive 320-case offline quantitative uplift report into `/tmp/akashic-memory-320-baseline-plus`.
+- Ran the comprehensive 320-case offline quantitative chain report into `/tmp/akashic-memory-320-baseline-plus`.
+- Added `my_md/memory_optimization/06-memory-320-baseline-plus-count-eval.md`.
+- Linked the new document from `my_md/memory_optimization/README.md`.
+- Main count results:
+  - original memory baseline: `628/640` recalled, `12/640` missed, recall rate `98.12%`;
+  - tri retrieval: `640/640` recalled, +12 recalled, +1.88 percentage points;
+  - graph retrieval: `638/640` recalled, +10 recalled, +1.57 percentage points;
+  - all-on: `370/640` recalled, -258 recalled, -40.31 percentage points.
+- Conclusion: answer/retrieval enhancements should not be evaluated against disabled memory. Tri retrieval and graph retrieval show measurable recall gains over original memory, while all-on currently performs worse and needs routing/layered evaluation before active rollout.

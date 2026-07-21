@@ -285,6 +285,7 @@ def test_online_primary_table_uses_counts_and_rates(tmp_path: Path) -> None:
     assert base["answer_success_count"] <= base["case_count"]
     assert "| profile | cases | answer_success | grounding_success | forbidden_cases |" in markdown
     assert "| profile | main_score |" not in markdown
+    assert "## Disabled Enhancement Control" in markdown
 
 
 def test_run_comprehensive_online_eval_supports_bounded_concurrency(

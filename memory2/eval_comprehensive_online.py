@@ -539,6 +539,32 @@ def write_comprehensive_online_markdown(
                 )
                 + " |"
             )
+        control = profile_summaries.get("chain_off")
+        if isinstance(control, dict):
+            lines.extend(
+                [
+                    "",
+                    "## Disabled Enhancement Control",
+                    "",
+                    "| control | cases | answer_success | grounding_success | forbidden_cases | answer_rate | grounding_rate | forbidden_rate | avg_tokens |",
+                    "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+                    "| "
+                    + " | ".join(
+                        [
+                            "chain_off",
+                            _fmt(control.get("case_count")),
+                            _fmt(control.get("answer_success_count")),
+                            _fmt(control.get("grounding_success_count")),
+                            _fmt(control.get("forbidden_case_count")),
+                            _fmt(control.get("answer_rule_pass_rate")),
+                            _fmt(control.get("memory_grounding_pass_rate")),
+                            _fmt(control.get("forbidden_violation_rate")),
+                            _fmt(control.get("avg_total_token_count")),
+                        ]
+                    )
+                    + " |",
+                ]
+            )
     lines.extend(
         [
             "",
