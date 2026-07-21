@@ -515,6 +515,32 @@ Conclusion:
 - The largest gain is conflict routing, which now sends `196/200` conflict candidates to review.
 - The remaining weakness is hard useful candidates, which still mostly enter review instead of direct write.
 
+Next plan:
+
+1. Add an offline review resolver for write-governance `review` candidates.
+2. Resolver inputs: candidate summary, existing memories, source_ref, original write-governance score, and reason list.
+3. Resolver outputs: `approve_write`, `keep_review`, or `reject`.
+4. Add tests for:
+   - safe useful review candidate promoted to final write;
+   - hard useful candidate final retention improves;
+   - conflict candidate remains in review;
+   - temporary / assistant inference / duplicate pollution does not get promoted.
+5. Add a second report table for review handling:
+   - review candidate count;
+   - promoted write count;
+   - kept review count;
+   - rejected count;
+   - useful final retention;
+   - hard useful final retention;
+   - conflict review preservation;
+   - duplicate hard leakage.
+6. Run offline metric gate before any online test:
+   - useful final retention `> 60%`;
+   - hard useful final retention `> 40%`;
+   - pollution control `>= 90%`;
+   - conflict review preservation `>= 95%`;
+   - duplicate hard leakage `< 10%`.
+
 Verification:
 
 - `.venv/bin/python -m pytest tests/test_memory_write_governance_counts.py tests/test_memory_write_governance_counts_cli.py tests/test_post_response_memory_experiments.py -q -p no:cacheprovider` -> `22 passed in 1.01s`.

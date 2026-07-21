@@ -753,3 +753,9 @@
   - direct reject false reject `< 20.0`;
   - conflict review miss `< 71.0`.
 - Current conclusion: tuning strongly improved conflict routing and direct reject mistakes while preserving pollution control. Remaining weakness is hard useful candidates: they still go mostly to `review`, so review processing or richer value scoring is needed before online write-governance claims.
+- Recommended next step:
+  - Build an offline-first review resolver for `review` candidates.
+  - The resolver should output `approve_write`, `keep_review`, or `reject`.
+  - Its purpose is to turn safe, high-value review candidates into final writes without lowering the initial `allow` threshold.
+  - Main metrics should be useful final retention, hard useful final retention, conflict review preservation, duplicate hard leakage, and pollution control.
+  - Target gates: useful final retention above `60%`, hard useful final retention above `40%`, pollution control at least `90%`, conflict review preservation at least `95%`, duplicate hard leakage below `10%`.
