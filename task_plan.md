@@ -670,3 +670,86 @@ Constraints:
 - No real LLM calls.
 - No production memory DB or observe DB writes.
 - No AgentLoop, Reasoner, ToolExecutor, ToolRegistry, or live memory write behavior changes.
+
+## 2026-07-21 Memory Write Governance Key Data Documentation
+
+Goal: record the current Phase 6n write-governance key data in memory optimization docs and clarify what is offline evidence versus online evidence.
+
+1. Add explicit dataset configuration and baseline explanation to `07-memory-write-governance-count-eval.md` - complete
+2. Sync the memory optimization README Phase 6n summary - complete
+3. Replace stale `240`-candidate write-governance wording in target metric and quality metric docs with the current `1200`-candidate offline count result - complete
+4. Update the experiment roadmap so future work starts from real online evidence instead of redoing useful-retention fixture work - complete
+5. Record the documentation update in `progress.md` and `task_plan.md` - complete
+
+Recorded key data:
+
+- Offline set: `1200` candidates = common `600` + hard `600` = `2 * 6 categories * 5 subtypes * 20 variants`.
+- Baseline: original write behavior writes `1200/1200`, including useful `400/400` and pollution/duplicate/conflict `800/800`.
+- Enhanced chain: direct write `172/1200`, write reduction `85.6667%`, first-stage pollution control `97.25%`.
+- Review/final path: review candidates `503`, promoted writes `253`, final writes `400/1200`.
+- Final quality: useful final retention `100.0%`, hard useful final retention `100.0%`, final pollution control `100.0%`, conflict review preservation `100.0%`, hard duplicate leakage `0.0%`, strict ideal gap `0`.
+
+Remaining boundary:
+
+- These are synthetic/template-based offline results.
+- They do not prove production AgentLoop write behavior or online memory quality.
+- Online evidence still needs real candidate records, decisions, actual write/review/reject outcomes, and future recall usefulness.
+
+## 2026-07-21 Memory Write Governance Online Shadow Eval
+
+Goal: build a test-set-driven online shadow path for write governance, producing `write_evidence.jsonl` that can be consumed by target metrics.
+
+1. Add write evidence domain mapping and final-decision conversion - complete
+2. Add test-set-driven AgentLoop runner with fake-provider support - complete
+3. Add CLI `scripts/run_memory_write_governance_online_eval.py` - complete
+4. Add target-metric integration smoke for `--online-write-evidence-json` - complete
+5. Fix small-sample category imbalance by adding balanced candidate selection - complete
+6. Run fake-provider smoke and target metric report generation - complete
+7. Update memory optimization docs and planning records - complete
+
+Implemented files:
+
+- `memory2/eval_write_governance_online.py`
+- `scripts/run_memory_write_governance_online_eval.py`
+- `tests/test_memory_write_governance_online_eval.py`
+- `tests/test_memory_write_governance_online_cli.py`
+
+Current fake-provider smoke:
+
+- reports: `/tmp/akashic-memory-write-governance-online-fake-v2/reports`
+- target metrics: `/tmp/akashic-memory-write-governance-online-fake-v2/target`
+- `candidate_count = 24`
+- `real_llm_enabled = False`
+- `infra_passed = True`
+- `provider_error_count = 0`
+- `timeout_count = 0`
+- `total_token_count = 720`
+- `avg_latency_ms = 34.5417`
+- evidence distribution:
+  - useful `8`, all after `allow`;
+  - pollution `8`, all after `reject`;
+  - duplicate `4`, all after `reject`;
+  - conflict `4`, all after `review`.
+
+Target metric online evidence row:
+
+- `online_write_record_count = 24`
+- useful write precision `33.3333% -> 100.0%`
+- pollution block rate `0.0% -> 100.0%`
+- duplicate control rate `0.0% -> 100.0%`
+- conflict review rate `0.0% -> 100.0%`
+- write reduction rate `0.0% -> 66.6667%`
+- false reject rate `0.0% -> 0.0%`
+- false accept rate `100.0% -> 0.0%`
+
+Verification so far:
+
+- `.venv/bin/python -m pytest tests/test_memory_write_governance_online_eval.py tests/test_memory_write_governance_online_cli.py tests/test_memory_target_metrics_cli.py -q -p no:cacheprovider` -> `21 passed in 15.51s`.
+
+Boundaries:
+
+- This is test-set-driven online shadow evaluation, not production traffic.
+- Candidate summaries and labels come from the test set, not from LLM extraction.
+- The run uses real AgentLoop and can optionally call real LLM, but fake-provider smoke did not call a real LLM.
+- `skip_post_memory=True` prevents post-response memory writes.
+- No production memory DB, observe DB, live AgentLoop behavior, ToolExecutor, or ToolRegistry changes.

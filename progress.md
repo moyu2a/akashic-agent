@@ -843,3 +843,87 @@
 - Current conclusion:
   - The offline write-governance chain now reaches the strict ideal target on the 1200-candidate synthetic set.
   - This still only affects offline/shadow scoring and reports. It does not change live AgentLoop behavior, production memory DB writes, observe DB writes, or real LLM behavior.
+
+## 2026-07-21 Memory Write Governance Key Data Documentation
+
+- Updated memory optimization docs to record the current Phase 6n write-governance key data and online boundary.
+- Key offline dataset configuration:
+  - `1200` generated write candidates;
+  - common `600`, hard `600`;
+  - 6 categories, `200` candidates each;
+  - categories: `valuable_preference`, `stable_fact`, `temporary`, `assistant_inference`, `duplicate`, `conflict`;
+  - each category has 5 common subtypes and 5 hard subtypes, with 20 variants per subtype;
+  - generation formula: `2 * 6 * 5 * 20 = 1200`.
+- Baseline meaning:
+  - original write behavior writes `1200/1200`;
+  - useful candidates are retained `400/400`;
+  - pollution/duplicate/conflict candidates are also written `800/800`;
+  - baseline pollution control is `0%`, write reduction is `0%`.
+- Current enhanced write-governance chain:
+  - first-stage direct write `172/1200`;
+  - write reduction `85.6667%`;
+  - first-stage pollution control `97.25%`;
+  - review candidates `503`;
+  - review promoted writes `253`;
+  - final writes `400/1200`;
+  - useful final retention `100.0%`;
+  - hard useful final retention `100.0%`;
+  - final pollution control `100.0%`;
+  - conflict review preservation `100.0%`;
+  - hard duplicate leakage `0.0%`;
+  - strict ideal gap `0`.
+- Updated docs:
+  - `my_md/memory_optimization/07-memory-write-governance-count-eval.md`;
+  - `my_md/memory_optimization/README.md`;
+  - `my_md/memory_optimization/05-memory-target-metric-eval-plan.md`;
+  - `my_md/memory_optimization/02-memory-quality-metrics.md`;
+  - `my_md/memory_optimization/04-memory-plugin-experiment-roadmap.md`.
+- Important boundary:
+  - this dataset is synthetic/template-based offline evidence, not online production sampling;
+  - online claims still require real write-candidate evidence: summary, existing memories, source_ref, baseline/proposed decision, actual write/review/reject result, and future recall usefulness where possible.
+
+## 2026-07-21 Memory Write Governance Online Shadow Eval
+
+- Implemented a test-set-driven write-governance online shadow evaluator.
+- New files:
+  - `memory2/eval_write_governance_online.py`;
+  - `scripts/run_memory_write_governance_online_eval.py`;
+  - `tests/test_memory_write_governance_online_eval.py`;
+  - `tests/test_memory_write_governance_online_cli.py`.
+- The runner uses pre-labeled `memory2/eval_write_governance_cases.py` candidates, runs them through real `AgentLoop.process_direct()`, optionally calls a real LLM, and outputs target-metric-compatible write evidence JSONL.
+- Safety boundary:
+  - default real LLM gate remains closed;
+  - fake-provider mode is available for smoke tests;
+  - every run uses `skip_post_memory=True`;
+  - production memory DB, observe DB, live AgentLoop behavior, ToolExecutor, and ToolRegistry are not changed;
+  - labels come from the test set, not model self-judgment.
+- Important correction during execution:
+  - plain `--limit 24` over the original candidate builder only selected useful candidates, which made pollution/duplicate/conflict metrics unavailable;
+  - added balanced category selection in `select_write_governance_online_candidates()` so small samples cover all 6 categories.
+- Fake-provider smoke report:
+  - command output directory: `/tmp/akashic-memory-write-governance-online-fake-v2/reports`;
+  - target metric output directory: `/tmp/akashic-memory-write-governance-online-fake-v2/target`;
+  - `candidate_count = 24`;
+  - `real_llm_enabled = False`;
+  - `infra_passed = True`;
+  - `provider_error_count = 0`;
+  - `timeout_count = 0`;
+  - `total_token_count = 720`;
+  - `avg_latency_ms = 34.5417`.
+- Fake-provider evidence distribution:
+  - useful `8`: after allow `8`, reject `0`, review `0`;
+  - pollution `8`: after allow `0`, reject `8`, review `0`;
+  - duplicate `4`: after allow `0`, reject `4`, review `0`;
+  - conflict `4`: after allow `0`, reject `0`, review `4`.
+- Target metrics online evidence row:
+  - `online_write_record_count = 24`;
+  - useful write precision `33.3333% -> 100.0%`;
+  - pollution block rate `0.0% -> 100.0%`;
+  - duplicate control rate `0.0% -> 100.0%`;
+  - conflict review rate `0.0% -> 100.0%`;
+  - write reduction rate `0.0% -> 66.6667%`;
+  - false reject rate `0.0% -> 0.0%`;
+  - false accept rate `100.0% -> 0.0%`.
+- Focused verification:
+  - `.venv/bin/python -m pytest tests/test_memory_write_governance_online_eval.py tests/test_memory_write_governance_online_cli.py tests/test_memory_target_metrics_cli.py -q -p no:cacheprovider` -> `21 passed in 15.51s`.
+- Real LLM pilot was not run in this step because it consumes provider quota and the plan requires explicit approval at execution time.

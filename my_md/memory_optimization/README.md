@@ -24,7 +24,7 @@
 - [04-memory-plugin-experiment-roadmap.md](./04-memory-plugin-experiment-roadmap.md): memory 插件实验扩展路线，记录版本链、信息价值评分、三路召回、睡眠巩固、层级溯源，以及每项能力的开关和对比数据。
 - [05-memory-target-metric-eval-plan.md](./05-memory-target-metric-eval-plan.md): Phase 6 后续目标指标评测口径，把回答效果、写入治理和记忆库卫生拆成三组百分比指标，并说明真实 LLM checkpoint 如何接入。
 - [06-memory-320-baseline-plus-count-eval.md](./06-memory-320-baseline-plus-count-eval.md): 320 case 和 1000 case answer/retrieval-only 离线计数评测，使用原始记忆作为主基线，展示单模块增益和组合链路增益。
-- [07-memory-write-governance-count-eval.md](./07-memory-write-governance-count-eval.md): 1200 个写入候选的离线写入治理计数评测，使用原本写入方式作为基线，展示写入减少、污染控制、误伤、漏拦和复核缺口。
+- [07-memory-write-governance-count-eval.md](./07-memory-write-governance-count-eval.md): 1200 个写入候选的离线写入治理计数评测，使用原本写入方式作为基线，展示离线集配置、写入减少、污染控制、误伤、漏拦、复核缺口和线上化边界。
 
 ## 当前优化主题
 
@@ -70,7 +70,8 @@
 - Phase 6k-real-llm-core-eval：真实 LLM 核心矩阵已完成，使用 `--checkpoint-jsonl /tmp/akashic-memory-phase6k-real/reports/memory_comprehensive_online_eval.checkpoint.jsonl --resume` 从 325 条 checkpoint 继续补齐到 `case_count = 1280`。最终真实报告是 `/tmp/akashic-memory-phase6k-real/reports/memory_comprehensive_online_eval.json` 和 `.md`；checkpoint 重建版是 `/tmp/akashic-memory-phase6k-real/checkpoint-report/memory_comprehensive_online_eval.json` 和 `.md`。最终结果为 `unique_case_count = 320`、`profile_count = 4`、`prompt_variant_count = 1`、`repeat_count = 1`、`answer_rule_pass_rate = 23.9844`、`memory_grounding_pass_rate = 75.0`、`forbidden_violation_rate = 15.7812`、`total_token_count = 6971048`、`avg_latency_ms = 4639.9172`。这仍然只覆盖 answer/retrieval 核心矩阵，不包含写入治理和睡眠巩固的真实 evidence。
 - Phase 6l-baseline-plus-count：320 case comprehensive 离线计数评测已完成，详细见 [06-memory-320-baseline-plus-count-eval.md](./06-memory-320-baseline-plus-count-eval.md)。原始记忆基线命中 `628/640`、召回率 `98.12%`；三路召回提升到 `640/640`，多命中 12 条，召回率提升 `+1.88` 个百分点；图谱召回提升到 `638/640`，多命中 10 条，召回率提升 `+1.57` 个百分点。全开组合为 `370/640`，低于原始记忆基线，说明后续不能简单全开，需要场景路由和分层评测。
 - Phase 6m-answer-comprehensive-v2：新增 answer/retrieval-only 扩展测试集，正式报告见 `my_md/memory_optimization/eval_reports/memory_answer_retrieval_counts_eval.json` 和 `.md`。本轮离线 deterministic 结果基于 `1000 case / 2000 target`：原始记忆基线命中 `1978/2000`，三路召回命中 `2000/2000`，图谱召回命中 `1994/2000`，纯回答组合链路到重排注入保持 `2000/2000`，版本链与溯源后为 `1998/2000`，回答链路全开为 `1998/2000`。写入治理和睡眠巩固已从这张回答主表的行和底层 feature 中排除。
-- Phase 6n-write-governance：新增并调优写入治理离线计数评测，详细见 [07-memory-write-governance-count-eval.md](./07-memory-write-governance-count-eval.md)。本轮基于 `1200` 个写入候选，原本写入方式写入 `1200/1200`，叠加写入价值治理后直接写入 `172/1200`，写入减少率 `85.6667%`，污染候选控制率 `97.25%`。调优后直接拒绝误伤率从 `20.0%` 降到 `0.0%`，冲突复核缺口率从 `71.0%` 降到 `0.0%`；有用候选直接保留率仍为 `37.5%`，hard 有用候选主要进入 review。随后新增离线 `review resolver`、最终写入安全门和 hard useful recovery 调优：复核候选 `503` 条，复核后晋升写入 `253` 条，最终写入 `400/1200`，有用候选最终保留率 `100.0%`，hard 有用候选最终保留率 `100.0%`，最终污染控制率 `100.0%`，冲突复核保持率 `100.0%`，hard 重复泄漏率 `0.0%`。相对严格理想状态的差距总数从 `54` 降到 `0`。该阶段仍是离线 shadow 评测，没有改变线上 AgentLoop 或真实写入行为。
+- Phase 6n-write-governance：新增并调优写入治理离线计数评测，详细见 [07-memory-write-governance-count-eval.md](./07-memory-write-governance-count-eval.md)。本轮基于 `1200` 个目标导向模板候选，构成为 common `600`、hard `600`，6 类各 `200` 条；原本写入方式写入 `1200/1200`，其中有用候选 `400/400` 不会漏写，但污染、重复和冲突候选也会写入 `800/800`。叠加写入价值治理后直接写入 `172/1200`，写入减少率 `85.6667%`，污染候选第一阶段控制率 `97.25%`。调优后直接拒绝误伤率从 `20.0%` 降到 `0.0%`，冲突复核缺口率从 `71.0%` 降到 `0.0%`；有用候选直接保留率仍为 `37.5%`，hard 有用候选主要进入 review。随后新增离线 `review resolver`、最终写入安全门和 hard useful recovery 调优：复核候选 `503` 条，复核后晋升写入 `253` 条，最终写入 `400/1200`，有用候选最终保留率 `100.0%`，hard 有用候选最终保留率 `100.0%`，最终污染控制率 `100.0%`，冲突复核保持率 `100.0%`，hard 重复泄漏率 `0.0%`。相对严格理想状态的差距总数从 `54` 降到 `0`。该阶段仍是离线 shadow 评测，没有改变线上 AgentLoop 或真实写入行为；要转成线上结论，还需要真实候选、真实决策、真实写入结果和后续召回有用率 evidence。
+- Phase 6o-write-governance-online-shadow：新增 `scripts/run_memory_write_governance_online_eval.py`，把测试集候选穿过真实 `AgentLoop.process_direct()` 并生成 `memory_write_governance_online_evidence.jsonl`，再接入 `scripts/run_memory_target_metrics_eval.py --online-write-evidence-json`。当前 fake-provider smoke 使用平衡抽样 `24` 个候选，`infra_passed = True`，`total_token_count = 720`，`avg_latency_ms = 34.5417`；evidence 分布为 useful `8`、pollution `8`、duplicate `4`、conflict `4`。target metrics 线上 evidence 行显示：有效写入精度 `33.3333% -> 100.0%`，污染拦截率 `0.0% -> 100.0%`，重复控制率 `0.0% -> 100.0%`，冲突复核率 `0.0% -> 100.0%`，写入减少率 `0.0% -> 66.6667%`，误拒率保持 `0.0%`，误收率 `100.0% -> 0.0%`。这仍是测试集驱动的 fake-provider 线上 shadow 验证，不是真实 LLM 结论，也不代表生产流量。
 - Phase 6e：综合线上 answer-level 评测。新增 `memory2/eval_comprehensive_online.py` 和 `scripts/run_memory_comprehensive_online_eval.py`，用真实 `AgentLoop.process_direct()`、真实 LLM、受控 memory engine、80 个目标导向 case、8 个链路 profile、2 个提示词变体、2 次 repeat 设计完整 `2560` run。真实运行到 `checkpoint_input_count = 1599` 时，外部 provider 返回 `402 Insufficient Balance`，按计划停止；排除 timeout / provider error 后生成部分真实报告，`case_count = 1417`、`unique_case_count = 45`、`excluded_infra_failure_count = 182`、`total_token_count = 7600606`、`infra_passed = True`、`answer_quality_passed = False`。报表路径是 `my_md/memory_optimization/eval_reports/memory_comprehensive_online_eval.json` 和 `.md`。这份报告只能说明余额耗尽前 1417 条有效真实调用的 answer-level 行为，不能当作完整 2560-run 结论；脚本退出码 0 只表示有效样本报告生成成功，不表示答案质量全通过。
 
 Phase 6e 的主要可量化结论：
@@ -92,7 +93,7 @@ Phase 6e 的主要可量化结论：
 
 后续还有 3 个主要方向：
 
-1. 写入治理：补“有用候选保留率”和“后续召回有用率”，避免全拒绝策略也拿到漂亮分数。
+1. 写入治理：1200 候选离线计数已补齐“有用候选最终保留率”和误拒控制；下一步要补真实线上候选 evidence 和后续召回有用率，避免只用离线模板结果代表生产效果。
 2. 记忆库卫生：补真实 evidence 输入，包括巩固前后 active 数、真实 prompt token、关键记忆保护率。
 3. Phase 6e checkpoint 转换与续跑：先用已有 checkpoint 重建新版目标指标表；如果 provider 余额恢复，再用同一个 checkpoint `--resume` 补齐完整 `2560` run。
 4. Phase 6 后续：在离线指标可解释、真实 LLM 评测稳定后，继续补 Dashboard 展示、连续评测和 active 化决策。

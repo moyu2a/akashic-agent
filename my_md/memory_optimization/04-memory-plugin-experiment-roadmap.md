@@ -1029,14 +1029,14 @@ Phase 6h 当前离线执行结果：
 - 召回与回答组：三路召回目标召回率 `93.75% -> 100%`，图谱召回按 graph 专用分母修订为 `97.5% -> 100%`，重排与注入治理 `93.75% -> 100%`，版本链与溯源 `90% -> 100%`。
 - hard 子集：三路召回 `87.5% -> 100%`，图谱召回 `95% -> 100%`，版本链当前有效版本召回率 `80% -> 100%`。
 - 版本链与溯源：新增 `current_version_recall_rate`、`stale_version_misuse_rate` 和 `conflict_chain_detection_rate`。forked replacement-chain fixture 后，冲突链识别率在 hard / overall 行上都是 `100%`。
-- 写入治理组：写入价值治理在 240 个候选上污染拦截率 after `100%`，重复控制率 after `80%`，写入减少率 after `100%`。其中没有真实 baseline 决策计数的 before 字段显示 `unavailable`。
+- 写入治理组：Phase 6h 的 target-metric trace 只保留旧 `240` 候选 shadow 口径；当前写入治理质量应以 Phase 6n 的独立 `1200` 候选离线计数报告为准。Phase 6n 中原本写入基线为 `1200/1200`，治理后直接写入 `172/1200`，最终写入 `400/1200`，有用候选最终保留率 `100%`，最终污染控制率 `100%`，冲突复核保持率 `100%`，hard 重复泄漏率 `0%`。
 - 记忆库卫生组：睡眠巩固扫描 600 条记忆，source_ref 覆盖率 `86.6072%`，token 节省率 `33.482%`，巩固后召回保持率 `100%`。
 - 当前仍是离线 shadow/proxy 报表，不调用真实 LLM，不写真实 memory DB；真实 LLM 版本应复用 Phase 6e checkpoint 生成。
 
 Phase 6h 仍然暴露的问题：
 
 - hard miss 是目标导向离线构造，不是线上真实用户自然分布；它能证明模块能力和报表口径，但不能直接当作生产准确率。
-- 写入治理的污染拦截和写入减少结果方向合理，但还需要补有效候选保留率、真实误拒率和后续召回有用率，防止“全拒绝”被误判为治理成功。
+- 写入治理的离线模板集已经补齐有效候选最终保留率、误拒控制、冲突复核和重复安全门，因此不再只依赖“污染拦截”和“写入减少”两个容易被全拒绝放大的指标；但真实误拒率、误收率和后续召回有用率仍需要线上 evidence。
 - 睡眠巩固结果仍是 shadow dry-run，重复合并、过期清理、低价值清理和 token 节省都需要真实执行或线上 evidence 才能证明生产效果。
 - 冲突链识别当前仅由一个 forked replacement chain 支撑，还需要补更多版本分叉类型和回滚场景。
 
@@ -1063,9 +1063,17 @@ Phase 6k 当前状态：
 - partial checkpoint 摘要：`case_count = 325`、`unique_case_count = 82`、`profile_count = 4`、`prompt_variant_count = 1`、`repeat_count = 1`、`answer_rule_pass_rate = 24.0`、`memory_grounding_pass_rate = 74.7692`、`forbidden_violation_rate = 15.3846`、`avg_latency_ms = 4635.4431`、`total_token_count = 1754732`。
 - 这份结果只覆盖 answer/retrieval 核心矩阵的一部分，不等于完整 1280-run 结论；后续可以继续 `--resume` 补完。
 
+Phase 6o 当前状态：
+
+- 新增测试集驱动的写入治理线上 shadow runner：`scripts/run_memory_write_governance_online_eval.py`。
+- runner 使用已标注写入治理候选穿过真实 `AgentLoop.process_direct()`，可选真实 LLM，但默认关闭真实 LLM。
+- fake-provider smoke 已跑通 `24` 个平衡抽样候选，输出 `/tmp/akashic-memory-write-governance-online-fake-v2/reports/memory_write_governance_online_evidence.jsonl`，并接入 `/tmp/akashic-memory-write-governance-online-fake-v2/target/memory_target_metrics_eval.md`。
+- 当前 fake-provider target metrics 行：有效写入精度 `33.3333% -> 100%`，污染拦截率 `0% -> 100%`，重复控制率 `0% -> 100%`，冲突复核率 `0% -> 100%`，写入减少率 `0% -> 66.6667%`，误收率 `100% -> 0%`。
+- 这仍是测试集驱动的线上 shadow 链路验证，不是自然生产流量，也不是正式真实 LLM 结论。
+
 后续计划：
 
-1. 补写入治理的“有用候选保留率”和“后续召回有用率”，避免全拒绝策略也拿到漂亮分数。
+1. 如果要进入真实模型测试，复用 Phase 6o runner，把 `--fake-provider` 换成 `--enable-real-llm`，保留 checkpoint，并先跑小样本 pilot。
 2. 补睡眠巩固的真实 token / active 数 evidence 输入，区分 dry-run 估算和真实效果。
 3. 扩展冲突链 fixture 类型，例如多层分叉、回滚分叉和跨 source_ref 分叉。
 4. 再从 Phase 6e checkpoint 重建真实 LLM 目标指标表；如果 checkpoint 不完整，再考虑 `--resume` 补跑。

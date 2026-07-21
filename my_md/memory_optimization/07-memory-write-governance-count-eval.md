@@ -17,6 +17,49 @@
   - `my_md/memory_optimization/eval_reports/memory_write_governance_counts_eval.json`
   - `my_md/memory_optimization/eval_reports/memory_write_governance_counts_eval.md`
 
+## 离线集配置和线上化边界
+
+本轮 `1200` 个候选来自 `memory2/eval_write_governance_cases.py` 的目标导向模板生成，不是真实线上采样。它的作用是稳定复现“该写、该拒、该复核”的边界样本，便于比较原本写入方式和写入价值治理链路。
+
+生成公式：
+
+```text
+2 个难度集合 * 6 个类别 * 5 个子类型 * 20 个变体 = 1200 个候选
+```
+
+类别配置：
+
+| 类别 | 期望动作 | 数量 | 主要验证点 |
+| --- | --- | ---: | --- |
+| `valuable_preference` | 写入 | `200` | 用户明确长期偏好是否被保留 |
+| `stable_fact` | 写入 | `200` | 稳定项目事实和规则是否被保留 |
+| `temporary` | 拒绝 | `200` | 临时状态是否被挡在长期记忆外 |
+| `assistant_inference` | 拒绝 | `200` | 助手猜测和未确认推断是否被拒绝 |
+| `duplicate` | 拒绝 | `200` | 重复和近重复记忆是否被控制 |
+| `conflict` | 复核 | `200` | 与已有记忆冲突时是否进入复核 |
+
+基线是原本写入方式：只要候选生成成功就算写入。因此基线的优势是不会漏掉有用候选，但缺点是污染、重复和冲突也会全部进入记忆库。
+
+| 口径 | 数值 | 含义 |
+| --- | ---: | --- |
+| 原本写入 | `1200/1200` | 所有候选都写入 |
+| 有用候选写入 | `400/400` | 基线不会漏掉长期有用记忆 |
+| 污染、重复、冲突写入 | `800/800` | 基线也会把不该直接写的内容写入 |
+| 污染控制率 | `0%` | 原本写入方式没有治理动作 |
+| 写入减少率 | `0%` | 原本写入方式不减少写入 |
+
+叠加写入价值治理、复核处理和最终写入安全门后，最终结果是：
+
+| 口径 | 数值 | 含义 |
+| --- | ---: | --- |
+| 最终写入 | `400/1200` | 只让期望写入的长期有用候选进入最终写入 |
+| 有用候选最终保留 | `400/400 = 100.0%` | 有用候选没有最终丢失 |
+| 污染候选最终控制 | `800/800 = 100.0%` | 临时、推断、重复和冲突候选没有被错误最终写入 |
+| 冲突复核保持 | `200/200 = 100.0%` | 冲突候选继续留在复核态 |
+| hard 重复泄漏 | `0/100 = 0.0%` | hard 重复候选没有最终泄漏 |
+
+这组数据可以作为离线规则回归和面试展示数据，但不能直接宣称“线上生产写入治理 100%”。要进入线上评测，需要采集真实写入候选 evidence，至少包含候选摘要、已有相似记忆、`source_ref`、基线决策、治理后决策、实际写入或复核结果，以及用户或可信策略给出的标签。后续还应继续看“写入后是否在未来对话中被正确召回”，否则只能证明写入阶段的离线治理效果，不能证明长期收益。
+
 ## 调优内容
 
 这次调优没有简单降低 `allow` 阈值，而是拆分价值和风险：
@@ -199,6 +242,83 @@
 - 把离线 resolver 的决策信号进一步约束在生产可用字段上，继续避免依赖评测标签。
 - 如果后续进入线上写入链路，需要先设计用户确认、可信策略和可回滚写入边界。
 - 在线测试仍需等待离线策略稳定，并且必须采集真实候选、真实决策、真实写入结果和后续召回有用率。
+
+## 测试集驱动的线上 shadow 评测
+
+当前新增了写入治理线上 shadow 评测入口：
+
+```text
+scripts/run_memory_write_governance_online_eval.py
+```
+
+这一步的“线上”含义要严格限定：它会让测试集候选穿过真实 `AgentLoop.process_direct()`，并可选调用真实 LLM；但候选摘要和标签仍来自测试集，写入治理仍是旁路 shadow 判断，不改生产记忆库。它验证的是在线运行路径、provider 行为、token/延迟记录、checkpoint/resume 和 write evidence 生成，不证明 LLM 已经能自动抽取候选记忆。
+
+安全边界：
+
+- 默认不调用真实 LLM，必须显式传 `--enable-real-llm`。
+- fake-provider 可跑通完整链路，但不代表真实模型效果。
+- 每轮调用使用 `skip_post_memory=True`，不触发 post-response memory 写入。
+- 使用临时 workspace，不写生产 memory DB 或 observe DB。
+- `label` 来自测试集预标注，不来自模型自评。
+- `baseline_decision = allow` 表示原本写入方式会直接写入成功候选。
+- `after_decision` 表示写入价值治理、复核 resolver 和最终安全门后的最终结果，映射为 `allow / reject / review`。
+
+当前 fake-provider smoke 命令：
+
+```bash
+.venv/bin/python scripts/run_memory_write_governance_online_eval.py \
+  --workspace /tmp/akashic-memory-write-governance-online-fake-v2/workspace \
+  --out-dir /tmp/akashic-memory-write-governance-online-fake-v2/reports \
+  --fake-provider \
+  --case-set all \
+  --limit 24 \
+  --checkpoint-jsonl /tmp/akashic-memory-write-governance-online-fake-v2/reports/checkpoint.jsonl \
+  --resume
+```
+
+生成的 evidence 接入现有目标指标报表：
+
+```bash
+.venv/bin/python scripts/run_memory_target_metrics_eval.py \
+  --out-dir /tmp/akashic-memory-write-governance-online-fake-v2/target \
+  --online-checkpoint-source fake_provider \
+  --online-write-evidence-json /tmp/akashic-memory-write-governance-online-fake-v2/reports/memory_write_governance_online_evidence.jsonl
+```
+
+本轮 fake-provider 结果：
+
+| 项目 | 数值 |
+| --- | ---: |
+| candidate_count | `24` |
+| real_llm_enabled | `False` |
+| infra_passed | `True` |
+| provider_error_count | `0` |
+| timeout_count | `0` |
+| total_token_count | `720` |
+| avg_latency_ms | `34.5417` |
+
+Evidence 分布：
+
+| label | count | after allow | after reject | after review |
+| --- | ---: | ---: | ---: | ---: |
+| useful | `8` | `8` | `0` | `0` |
+| pollution | `8` | `0` | `8` | `0` |
+| duplicate | `4` | `0` | `4` | `0` |
+| conflict | `4` | `0` | `0` | `4` |
+
+接入 target metrics 后的线上 evidence 行：
+
+| 指标 | before | after | 变化 |
+| --- | ---: | ---: | ---: |
+| 有效写入精度 | `33.3333%` | `100.0%` | `+66.6667` 个百分点 |
+| 污染拦截率 | `0.0%` | `100.0%` | `+100.0` 个百分点 |
+| 重复控制率 | `0.0%` | `100.0%` | `+100.0` 个百分点 |
+| 冲突复核率 | `0.0%` | `100.0%` | `+100.0` 个百分点 |
+| 写入减少率 | `0.0%` | `66.6667%` | `+66.6667` 个百分点 |
+| 误拒率 | `0.0%` | `0.0%` | `0.0` 个百分点 |
+| 误收率 | `100.0%` | `0.0%` | `-100.0` 个百分点 |
+
+这个结果说明：在测试集驱动的 fake-provider 在线 shadow 链路上，现有写入治理代码可以生成 target-metric-compatible evidence，并能把原本全写入的污染、重复和冲突候选挡住，同时保留有用候选。它仍然不是正式真实 LLM 结果；下一步如果要跑真实模型，应复用同一脚本，把 `--fake-provider` 换成 `--enable-real-llm`，并保留 checkpoint。
 
 ## 复核候选处理链路
 
