@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import Counter
 import json
 from dataclasses import asdict
 from pathlib import Path
@@ -40,7 +41,7 @@ def test_quantitative_case_pack_has_common_and_hard_sets() -> None:
 def test_comprehensive_quantitative_case_pack_is_larger_and_balanced() -> None:
     cases = build_quantitative_eval_cases(case_pack="comprehensive")
 
-    assert EVAL_CASE_PACKS == ("standard", "comprehensive")
+    assert EVAL_CASE_PACKS == ("standard", "comprehensive", "answer_comprehensive_v2")
     assert len(cases) == 320
     assert sum(1 for case in cases if str(case.category).startswith("common_")) == 160
     assert sum(1 for case in cases if str(case.category).startswith("hard_")) == 160
@@ -53,11 +54,63 @@ def test_comprehensive_quantitative_case_pack_is_larger_and_balanced() -> None:
     assert any(case.id.startswith("common_entropy_value") for case in cases)
 
 
+def test_answer_comprehensive_v2_case_pack_is_answer_retrieval_only() -> None:
+    cases = build_quantitative_eval_cases(case_pack="answer_comprehensive_v2")
+
+    assert len(cases) == 1000
+    assert sum(1 for case in cases if str(case.category).startswith("common_")) == 500
+    assert sum(1 for case in cases if str(case.category).startswith("hard_")) == 500
+    assert sum(
+        len(case.expectations.get("should_recall_ids", [])) for case in cases
+    ) == 2000
+    forbidden_measurement_families = {"write_governance", "sleep_consolidation"}
+    assert not {
+        str(case.setup.get("measurement_family") or "") for case in cases
+    } & forbidden_measurement_families
+
+    scenario_names = {str(case.setup.get("scenario_name") or "") for case in cases}
+    assert len(scenario_names) == 25
+    assert {
+        "implicit_rrf_alias",
+        "networkx_entity_bridge",
+        "current_version_preference",
+        "source_grounded_answer",
+        "rerank_noise_suppression",
+        "semantic_phrase_variation",
+        "source_ref_entity_bridge",
+        "ambiguous_entity_disambiguation",
+        "rerank_scope_priority",
+        "version_rollback_candidate",
+        "provenance_cross_scope_guard",
+    } <= scenario_names
+    assert {
+        str(case.setup.get("measurement_family") or "") for case in cases
+    } <= {
+        "tri_retrieval",
+        "graph_retrieval",
+        "rerank_injection",
+        "version_provenance",
+        "provenance",
+    }
+    by_set_and_scenario = Counter(
+        (
+            "common" if str(case.category).startswith("common_") else "hard",
+            str(case.setup.get("scenario_name") or ""),
+        )
+        for case in cases
+    )
+    assert set(by_set_and_scenario.values()) == {20}
+
+
 def test_quantitative_case_pack_can_filter_sets_and_limit() -> None:
     assert len(build_quantitative_eval_cases("common")) == 40
     assert len(build_quantitative_eval_cases("hard", limit=3)) == 3
     assert len(build_quantitative_eval_cases("common", case_pack="comprehensive")) == 160
     assert len(build_quantitative_eval_cases("hard", limit=3, case_pack="comprehensive")) == 3
+    assert (
+        len(build_quantitative_eval_cases("common", case_pack="answer_comprehensive_v2"))
+        == 500
+    )
 
 
 def test_quantitative_cases_are_valid_eval_cases() -> None:

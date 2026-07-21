@@ -404,3 +404,42 @@ Next open work:
   - keep `chain_memory_base`;
   - include `chain_tri_retrieval`, `chain_graph_retrieval`, and `chain_rerank_injection`;
   - treat write governance and sleep hygiene as separate evidence-layer evaluations rather than answer-recall profiles.
+
+## 2026-07-21 Memory Answer Comprehensive V2
+
+Goal: expand the answer/retrieval-only count evaluation from 320 cases to a more persuasive 1000-case pack, while keeping original memory as the main baseline.
+
+1. Revise and review the implementation plan - complete
+2. Add failing tests for the new case pack and answer-only report tables - complete
+3. Implement `answer_comprehensive_v2`, report builder, and CLI - complete
+4. Generate formal JSON/Markdown reports under `my_md/memory_optimization/eval_reports` - complete
+5. Update memory optimization docs and planning files - complete
+6. Run focused verification and commit - complete
+
+Results:
+
+- `answer_comprehensive_v2` produces `1000` cases and `2000` target memories.
+- Single-module table:
+  - original memory baseline: `1978/2000`, `98.9%`;
+  - tri retrieval: `2000/2000`, +22 recalled, +1.1 percentage points;
+  - graph retrieval: `1994/2000`, +16 recalled, +0.8 percentage points;
+  - rerank/injection: `1584/2000`, -394 recalled, -19.7 percentage points;
+  - version/provenance: `1000/2000`, -978 recalled, -48.9 percentage points;
+  - answer-only all-on: `1998/2000`, +20 recalled, +1.0 percentage points.
+- Chain table:
+  - `chain_tri_retrieval`: `2000/2000`, cumulative +22 recalled;
+  - `chain_graph_retrieval`: `2000/2000`, cumulative +22 recalled;
+  - `chain_rerank_injection`: `2000/2000`, cumulative +22 recalled;
+  - `chain_version_provenance`: `1998/2000`, cumulative +20 recalled;
+  - `chain_all_on`: `1998/2000`, cumulative +20 recalled.
+
+Next open work:
+
+- Verify and commit this answer/retrieval-only 1000-case report.
+- Use these results to select real-LLM answer/retrieval profiles: keep `chain_memory_base`, `chain_tri_retrieval`, `chain_graph_retrieval`, `chain_rerank_injection`, and include answer-only `chain_all_on` as a positive but not strongest recall setting.
+
+Verification:
+
+- `.venv/bin/python -m pytest tests/test_memory_quantitative_uplift.py tests/test_memory_answer_retrieval_counts.py tests/test_memory_answer_retrieval_counts_cli.py tests/test_memory_quantitative_chain_cli.py tests/test_memory_quantitative_uplift_cli.py -q -p no:cacheprovider` -> `30 passed in 59.58s`.
+- `.venv/bin/python -m compileall memory2/eval_answer_retrieval_counts.py scripts/run_memory_answer_retrieval_counts_eval.py tests/test_memory_answer_retrieval_counts.py tests/test_memory_answer_retrieval_counts_cli.py -q` -> exit `0`.
+- `git diff --check` and `git diff --cached --check` -> exit `0`.

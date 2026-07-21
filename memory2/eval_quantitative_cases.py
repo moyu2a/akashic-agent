@@ -7,7 +7,11 @@ from typing import Any
 from memory2.eval_cases import EVAL_CONFIG_PROFILES, EVAL_PHASE_TARGETS, EvalCase
 
 
-EVAL_CASE_PACKS: tuple[str, ...] = ("standard", "comprehensive")
+EVAL_CASE_PACKS: tuple[str, ...] = (
+    "standard",
+    "comprehensive",
+    "answer_comprehensive_v2",
+)
 
 QUANTITATIVE_FEATURES: tuple[str, ...] = (
     "write_value_score",
@@ -176,6 +180,17 @@ class ScenarioSpec:
     forbidden_contains: tuple[str, ...]
     graph_topic: str
     primary_phase_target: str
+
+
+_ANSWER_RETRIEVAL_FAMILIES: frozenset[str] = frozenset(
+    {
+        "tri_retrieval",
+        "graph_retrieval",
+        "rerank_injection",
+        "version_provenance",
+        "provenance",
+    }
+)
 
 
 _SCENARIOS: tuple[ScenarioSpec, ...] = (
@@ -564,6 +579,218 @@ _COMPREHENSIVE_EXTRA_SCENARIOS: tuple[ScenarioSpec, ...] = (
     ),
 )
 
+_ANSWER_V2_EXTRA_SCENARIOS: tuple[ScenarioSpec, ...] = (
+    ScenarioSpec(
+        name="implicit_rrf_alias",
+        target_profile="tri_retrieval_only",
+        measurement_family="tri_retrieval",
+        memory_type="procedure",
+        target_summary="第三路召回要用 RRF 融合排序",
+        graph_summary="RRF 是第三路召回的融合排序方法",
+        old_summary="第三路召回按时间排序",
+        duplicate_summary="第三路召回要用 RRF 融合排序",
+        conflict_summary="第三路召回不需要 RRF",
+        stale_summary="临时测试：第三路先随便排",
+        noise_summary="助手推断：可以先讨论界面颜色",
+        query_common="那个第三路排序方式是什么？",
+        query_hard="之前说的融合排序到底叫什么？",
+        answer_contains=("RRF",),
+        forbidden_contains=("时间排序",),
+        graph_topic="RRF",
+        primary_phase_target="phase2a",
+    ),
+    ScenarioSpec(
+        name="networkx_entity_bridge",
+        target_profile="graph_only",
+        measurement_family="graph_retrieval",
+        memory_type="procedure",
+        target_summary="NetworkX 图谱用于连接实体别名和记忆证据",
+        graph_summary="NetworkX 将别名节点、source_ref 和目标记忆连通",
+        old_summary="NetworkX 只用于画图展示",
+        duplicate_summary="NetworkX 图谱用于连接实体别名和记忆证据",
+        conflict_summary="NetworkX 不参与记忆召回",
+        stale_summary="临时测试：图谱功能以后再说",
+        noise_summary="助手推断：图谱只是可视化",
+        query_common="NetworkX 在记忆召回里做什么？",
+        query_hard="那个实体图谱是不是只展示？",
+        answer_contains=("NetworkX", "证据"),
+        forbidden_contains=("只用于画图",),
+        graph_topic="NetworkX",
+        primary_phase_target="phase2b",
+    ),
+    ScenarioSpec(
+        name="current_version_preference",
+        target_profile="version_provenance_only",
+        measurement_family="version_provenance",
+        memory_type="preference",
+        target_summary="当前偏好覆盖旧偏好时只使用当前版本",
+        graph_summary="版本链通过 replacement 标记当前有效叶子",
+        old_summary="旧偏好和当前偏好都同样有效",
+        duplicate_summary="当前偏好覆盖旧偏好时只使用当前版本",
+        conflict_summary="旧偏好仍然优先",
+        stale_summary="临时测试：偏好先不更新",
+        noise_summary="助手推断：旧偏好更稳定",
+        query_common="新旧偏好冲突时用哪个？",
+        query_hard="以前那个偏好还算当前的吗？",
+        answer_contains=("当前", "版本"),
+        forbidden_contains=("旧偏好仍然优先",),
+        graph_topic="版本链",
+        primary_phase_target="phase4a",
+    ),
+    ScenarioSpec(
+        name="source_grounded_answer",
+        target_profile="version_provenance_only",
+        measurement_family="provenance",
+        memory_type="event",
+        target_summary="回答需要优先使用带 source_ref 的记忆证据",
+        graph_summary="source_ref 用于把召回记忆回溯到消息来源",
+        old_summary="没有 source_ref 的记忆也可当强证据",
+        duplicate_summary="回答需要优先使用带 source_ref 的记忆证据",
+        conflict_summary="source_ref 不影响证据可信度",
+        stale_summary="临时测试：来源未知",
+        noise_summary="助手推断：无来源也可靠",
+        query_common="回答时为什么要看 source_ref？",
+        query_hard="没有来源的记忆能当证据吗？",
+        answer_contains=("source_ref", "证据"),
+        forbidden_contains=("无来源也可靠",),
+        graph_topic="source_ref",
+        primary_phase_target="phase4b",
+    ),
+    ScenarioSpec(
+        name="rerank_noise_suppression",
+        target_profile="rerank_only",
+        measurement_family="rerank_injection",
+        memory_type="procedure",
+        target_summary="重排注入治理会压低无关噪声并保留目标证据",
+        graph_summary="注入治理按相关性、scope 和 source_ref 裁剪上下文",
+        old_summary="无关噪声也应该注入 prompt",
+        duplicate_summary="重排注入治理会压低无关噪声并保留目标证据",
+        conflict_summary="prompt 越长越安全",
+        stale_summary="临时测试：无关噪声",
+        noise_summary="助手推断：所有记忆都应该注入",
+        query_common="重排注入治理怎么处理噪声？",
+        query_hard="所有记忆都塞进上下文安全吗？",
+        answer_contains=("噪声", "证据"),
+        forbidden_contains=("所有记忆",),
+        graph_topic="注入治理",
+        primary_phase_target="phase3b",
+    ),
+    ScenarioSpec(
+        name="semantic_phrase_variation",
+        target_profile="tri_retrieval_only",
+        measurement_family="tri_retrieval",
+        memory_type="preference",
+        target_summary="用户希望记忆评测使用命中条数和百分比展示",
+        graph_summary="召回评测口径是命中目标数、漏召回数和召回百分比",
+        old_summary="用户希望用抽象分数展示记忆评测",
+        duplicate_summary="用户希望记忆评测使用命中条数和百分比展示",
+        conflict_summary="评测仍然主要使用抽象分数",
+        stale_summary="临时测试：先看分数即可",
+        noise_summary="助手推断：用户只关心总分",
+        query_common="记忆评测应该怎么展示结果？",
+        query_hard="不要分数的话，用什么口径表达提升？",
+        answer_contains=("命中", "百分比"),
+        forbidden_contains=("抽象分数",),
+        graph_topic="百分比评测",
+        primary_phase_target="phase2a",
+    ),
+    ScenarioSpec(
+        name="source_ref_entity_bridge",
+        target_profile="graph_only",
+        measurement_family="graph_retrieval",
+        memory_type="procedure",
+        target_summary="source_ref 可以把别名实体和原始记忆证据串联起来",
+        graph_summary="实体别名、source_ref、目标记忆在图谱中形成多跳证据路径",
+        old_summary="source_ref 只是日志字段，不能帮助召回",
+        duplicate_summary="source_ref 可以把别名实体和原始记忆证据串联起来",
+        conflict_summary="source_ref 不参与实体证据召回",
+        stale_summary="临时测试：来源关系以后再看",
+        noise_summary="助手推断：source_ref 只是展示字段",
+        query_common="source_ref 能怎么帮助实体证据召回？",
+        query_hard="别名实体和原始记忆证据怎么串起来？",
+        answer_contains=("source_ref", "证据"),
+        forbidden_contains=("只是日志字段",),
+        graph_topic="source_ref",
+        primary_phase_target="phase2b",
+    ),
+    ScenarioSpec(
+        name="ambiguous_entity_disambiguation",
+        target_profile="graph_only",
+        measurement_family="graph_retrieval",
+        memory_type="profile",
+        target_summary="用户说的 Akashic 指当前 agent 项目",
+        graph_summary="Akashic、agent 项目、记忆插件属于同一实体簇",
+        old_summary="Akashic 指外部云服务",
+        duplicate_summary="用户说的 Akashic 指当前 agent 项目",
+        conflict_summary="Akashic 不是当前代码项目",
+        stale_summary="临时测试：名称先不确定",
+        noise_summary="助手推断：Akashic 可能是别的产品",
+        query_common="Akashic 在这里指哪个项目？",
+        query_hard="他说这个名字时是不是指当前代码库？",
+        answer_contains=("当前", "agent"),
+        forbidden_contains=("外部云服务",),
+        graph_topic="Akashic",
+        primary_phase_target="phase2b",
+    ),
+    ScenarioSpec(
+        name="rerank_scope_priority",
+        target_profile="rerank_only",
+        measurement_family="rerank_injection",
+        memory_type="procedure",
+        target_summary="重排时同 scope 且有来源的证据优先注入",
+        graph_summary="重排注入治理同时考虑 scope、相关性和 source_ref",
+        old_summary="跨会话证据和当前会话证据同等优先",
+        duplicate_summary="重排时同 scope 且有来源的证据优先注入",
+        conflict_summary="跨会话内容应该优先注入",
+        stale_summary="临时测试：先混合注入",
+        noise_summary="助手推断：来源无所谓",
+        query_common="重排注入时当前会话证据有什么优先级？",
+        query_hard="跨会话内容能不能比当前 scope 更优先？",
+        answer_contains=("scope", "source_ref"),
+        forbidden_contains=("跨会话内容应该优先",),
+        graph_topic="scope",
+        primary_phase_target="phase3b",
+    ),
+    ScenarioSpec(
+        name="version_rollback_candidate",
+        target_profile="version_provenance_only",
+        measurement_family="version_provenance",
+        memory_type="procedure",
+        target_summary="版本链保留回滚候选但回答只采用当前有效版本",
+        graph_summary="版本链叶子用于回答，旧节点作为回滚候选",
+        old_summary="回滚候选也可以直接作为当前答案",
+        duplicate_summary="版本链保留回滚候选但回答只采用当前有效版本",
+        conflict_summary="旧节点优先于当前叶子",
+        stale_summary="临时测试：版本状态未确认",
+        noise_summary="助手推断：所有历史节点都有效",
+        query_common="版本链里的回滚候选能直接回答吗？",
+        query_hard="旧节点和当前叶子冲突时怎么用？",
+        answer_contains=("当前", "回滚"),
+        forbidden_contains=("旧节点优先",),
+        graph_topic="回滚候选",
+        primary_phase_target="phase4a",
+    ),
+    ScenarioSpec(
+        name="provenance_cross_scope_guard",
+        target_profile="version_provenance_only",
+        measurement_family="provenance",
+        memory_type="event",
+        target_summary="跨 scope 记忆只有在策略允许时才能参与回答证据",
+        graph_summary="溯源检查会识别 scope_channel 和 scope_chat_id",
+        old_summary="跨 scope 记忆默认可以作为回答证据",
+        duplicate_summary="跨 scope 记忆只有在策略允许时才能参与回答证据",
+        conflict_summary="scope 不影响证据使用",
+        stale_summary="临时测试：先忽略 scope",
+        noise_summary="助手推断：任何来源都可用",
+        query_common="跨 scope 记忆什么时候能当证据？",
+        query_hard="不同 chat 的记忆能默认拿来回答吗？",
+        answer_contains=("scope", "策略"),
+        forbidden_contains=("默认可以",),
+        graph_topic="跨 scope",
+        primary_phase_target="phase4b",
+    ),
+)
+
 
 def build_quantitative_eval_cases(
     case_set: str = "all",
@@ -575,16 +802,28 @@ def build_quantitative_eval_cases(
         raise ValueError("case_set must be 'all', 'common', or 'hard'")
     normalized_pack = str(case_pack or "standard").strip().lower()
     if normalized_pack not in EVAL_CASE_PACKS:
-        raise ValueError("case_pack must be 'standard' or 'comprehensive'")
+        raise ValueError(
+            "case_pack must be 'standard', 'comprehensive', or "
+            "'answer_comprehensive_v2'"
+        )
 
     cases: list[EvalCase] = []
     sets = ("common", "hard") if normalized == "all" else (normalized,)
-    scenarios = (
-        _SCENARIOS
-        if normalized_pack == "standard"
-        else _SCENARIOS + _COMPREHENSIVE_EXTRA_SCENARIOS
-    )
-    variant_count = 4 if normalized_pack == "standard" else 8
+    if normalized_pack == "standard":
+        scenarios = _SCENARIOS
+        variant_count = 4
+    elif normalized_pack == "comprehensive":
+        scenarios = _SCENARIOS + _COMPREHENSIVE_EXTRA_SCENARIOS
+        variant_count = 8
+    else:
+        scenarios = tuple(
+            scenario
+            for scenario in (
+                _SCENARIOS + _COMPREHENSIVE_EXTRA_SCENARIOS + _ANSWER_V2_EXTRA_SCENARIOS
+            )
+            if scenario.measurement_family in _ANSWER_RETRIEVAL_FAMILIES
+        )
+        variant_count = 20
     for current_set in sets:
         for variant in range(1, variant_count + 1):
             for scenario in scenarios:
@@ -613,6 +852,7 @@ def _build_case(scenario: ScenarioSpec, case_set: str, variant: int) -> EvalCase
     )
     setup: dict[str, Any] = {
         "scope": scope,
+        "scenario_name": scenario.name,
         "measurement_family": scenario.measurement_family,
         "target_profile": scenario.target_profile,
         "memory_items": memory_items,

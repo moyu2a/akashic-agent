@@ -675,3 +675,23 @@
   - graph retrieval: `638/640` recalled, +10 recalled, +1.57 percentage points;
   - all-on: `370/640` recalled, -258 recalled, -40.31 percentage points.
 - Conclusion: answer/retrieval enhancements should not be evaluated against disabled memory. Tri retrieval and graph retrieval show measurable recall gains over original memory, while all-on currently performs worse and needs routing/layered evaluation before active rollout.
+
+## 2026-07-21 Memory Answer Comprehensive V2
+
+- Added explicit `answer_comprehensive_v2` case pack for answer/retrieval-only evaluation.
+- Pack size is `1000` cases: `25` answer/retrieval scenarios, `20` variants, and common/hard sets.
+- Generated formal reports:
+  - `my_md/memory_optimization/eval_reports/memory_answer_retrieval_counts_eval.json`
+  - `my_md/memory_optimization/eval_reports/memory_answer_retrieval_counts_eval.md`
+- Main offline count results:
+  - original memory baseline: `1978/2000` recalled, `22/2000` missed, `98.9%` recall;
+  - tri retrieval: `2000/2000` recalled, +22 recalled, +1.1 percentage points;
+  - graph retrieval: `1994/2000` recalled, +16 recalled, +0.8 percentage points;
+  - chain rerank/injection: `2000/2000` recalled, +22 recalled over baseline, +1.1 percentage points;
+  - chain version/provenance: `1998/2000` recalled, +20 recalled over baseline, +1.0 percentage points;
+  - answer-only all-on: `1998/2000` recalled, +20 recalled, +1.0 percentage points.
+- Write governance and sleep consolidation are excluded from the answer/retrieval main table rows and underlying feature sets; they should continue to use separate write/hygiene evidence metrics.
+- Focused verification:
+  - `.venv/bin/python -m pytest tests/test_memory_quantitative_uplift.py tests/test_memory_answer_retrieval_counts.py tests/test_memory_answer_retrieval_counts_cli.py tests/test_memory_quantitative_chain_cli.py tests/test_memory_quantitative_uplift_cli.py -q -p no:cacheprovider` -> `30 passed in 59.58s`.
+  - `.venv/bin/python -m compileall memory2/eval_answer_retrieval_counts.py scripts/run_memory_answer_retrieval_counts_eval.py tests/test_memory_answer_retrieval_counts.py tests/test_memory_answer_retrieval_counts_cli.py -q` -> exit `0`.
+  - `git diff --check` and `git diff --cached --check` -> exit `0`.
