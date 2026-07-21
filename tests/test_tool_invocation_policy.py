@@ -1,0 +1,228 @@
+from __future__ import annotations
+
+import pytest
+
+from agent.policies.tool_invocation_policy import (
+    ToolInvocationContext,
+    ToolInvocationDecision,
+    ToolInvocationPolicyEngine,
+)
+
+
+def test_context_normalizes_capabilities_arguments_and_metadata() -> None:
+    context = ToolInvocationContext(
+        tool_name="read_file",
+        arguments={"path": "README.md"},
+        registry_risk="read-only",
+        capabilities={"filesystem.read"},
+        source="passive",
+        metadata={"origin": "unit"},
+    )
+
+    assert context.tool_name == "read_file"
+    assert dict(context.arguments) == {"path": "README.md"}
+    assert context.capabilities == frozenset({"filesystem.read"})
+    assert dict(context.metadata) == {"origin": "unit"}
+
+
+def test_context_rejects_invalid_source() -> None:
+    with pytest.raises(ValueError, match="unsupported tool invocation source"):
+        ToolInvocationContext(tool_name="read_file", source="invalid")  # type: ignore[arg-type]
+
+
+def test_context_rejects_invalid_task_execution_phase() -> None:
+    with pytest.raises(ValueError, match="unsupported task execution phase"):
+        ToolInvocationContext(
+            tool_name="read_file",
+            task_execution_phase="wrk",  # type: ignore[arg-type]
+        )
+
+
+def test_decision_allowed_helper_and_trace_metadata() -> None:
+    decision = ToolInvocationDecision(
+        action="allow",
+        reason="read_only_allowed",
+        risk="read-only",
+        metadata={"tool_name": "read_file"},
+    )
+
+    assert decision.allowed is True
+    assert decision.to_trace_metadata() == {
+        "action": "allow",
+        "reason": "read_only_allowed",
+        "risk": "read-only",
+        "policy_name": "ToolInvocationPolicyEngine",
+        "metadata": {"tool_name": "read_file"},
+    }
+
+
+def test_decision_rejects_invalid_action() -> None:
+    with pytest.raises(ValueError, match="unsupported tool invocation action"):
+        ToolInvocationDecision(
+            action="sandbox",  # type: ignore[arg-type]
+            reason="not_in_p1",
+            risk="unknown",
+        )
+
+
+def test_engine_exists() -> None:
+    engine = ToolInvocationPolicyEngine()
+
+    assert engine.policy_name == "ToolInvocationPolicyEngine"
+
+
+def test_unregistered_tool_is_denied() -> None:
+    decision = ToolInvocationPolicyEngine().evaluate(
+        ToolInvocationContext(
+            tool_name="missing_tool",
+            registered=False,
+            registry_risk="unknown",
+        )
+    )
+
+    assert decision.action == "deny"
+    assert decision.allowed is False
+    assert decision.reason == "tool_invocation_unregistered_tool"
+    assert decision.metadata["tool_name"] == "missing_tool"
+
+
+def test_destructive_tool_is_denied() -> None:
+    decision = ToolInvocationPolicyEngine().evaluate(
+        ToolInvocationContext(
+            tool_name="delete_everything",
+            registered=True,
+            registry_risk="destructive",
+        )
+    )
+
+    assert decision.action == "deny"
+    assert decision.reason == "tool_invocation_destructive_denied"
+    assert decision.risk == "destructive"
+
+
+def test_read_only_tool_is_allowed() -> None:
+    decision = ToolInvocationPolicyEngine().evaluate(
+        ToolInvocationContext(
+            tool_name="read_file",
+            registered=True,
+            registry_risk="read-only",
+        )
+    )
+
+    assert decision.action == "allow"
+    assert decision.allowed is True
+    assert decision.reason == "tool_invocation_read_only_allowed"
+
+
+def test_non_task_execution_write_external_and_unknown_are_default_allowed() -> None:
+    engine = ToolInvocationPolicyEngine()
+
+    write = engine.evaluate(
+        ToolInvocationContext(tool_name="write_file", registry_risk="write")
+    )
+    external = engine.evaluate(
+        ToolInvocationContext(
+            tool_name="message_push",
+            registry_risk="external-side-effect",
+        )
+    )
+    unknown = engine.evaluate(
+        ToolInvocationContext(tool_name="custom_tool", registry_risk="unknown")
+    )
+
+    assert write.action == "allow"
+    assert external.action == "allow"
+    assert unknown.action == "allow"
+    assert write.reason == "tool_invocation_default_allow"
+
+
+def test_task_execution_work_allows_read_only() -> None:
+    decision = ToolInvocationPolicyEngine().evaluate(
+        ToolInvocationContext(
+            tool_name="read_file",
+            registry_risk="read-only",
+            source="task_execution",
+            task_execution_active=True,
+            task_execution_phase="work",
+        )
+    )
+
+    assert decision.action == "allow"
+    assert decision.reason == "tool_invocation_task_execution_read_only_allowed"
+
+
+def test_task_execution_work_defers_write_shell_external_and_unknown() -> None:
+    engine = ToolInvocationPolicyEngine()
+
+    write = engine.evaluate(
+        ToolInvocationContext(
+            tool_name="write_file",
+            registry_risk="write",
+            source="task_execution",
+            task_execution_active=True,
+            task_execution_phase="work",
+        )
+    )
+    shell = engine.evaluate(
+        ToolInvocationContext(
+            tool_name="shell",
+            registry_risk="read-only",
+            source="task_execution",
+            task_execution_active=True,
+            task_execution_phase="work",
+        )
+    )
+    external = engine.evaluate(
+        ToolInvocationContext(
+            tool_name="message_push",
+            registry_risk="external-side-effect",
+            source="task_execution",
+            task_execution_active=True,
+            task_execution_phase="work",
+        )
+    )
+    unknown = engine.evaluate(
+        ToolInvocationContext(
+            tool_name="custom_tool",
+            registry_risk="unknown",
+            source="task_execution",
+            task_execution_active=True,
+            task_execution_phase="work",
+        )
+    )
+
+    assert write.action == "defer"
+    assert shell.action == "defer"
+    assert external.action == "defer"
+    assert unknown.action == "defer"
+    assert write.reason == "tool_invocation_task_execution_authorization_required"
+    assert write.metadata["durable_transition"] == "waiting_authorization"
+
+
+def test_task_execution_unregistered_and_destructive_precedence() -> None:
+    engine = ToolInvocationPolicyEngine()
+
+    unregistered = engine.evaluate(
+        ToolInvocationContext(
+            tool_name="missing",
+            registered=False,
+            registry_risk="read-only",
+            source="task_execution",
+            task_execution_active=True,
+            task_execution_phase="work",
+        )
+    )
+    destructive = engine.evaluate(
+        ToolInvocationContext(
+            tool_name="delete_everything",
+            registry_risk="destructive",
+            source="task_execution",
+            task_execution_active=True,
+            task_execution_phase="work",
+        )
+    )
+
+    assert unregistered.action == "deny"
+    assert unregistered.reason == "tool_invocation_unregistered_tool"
+    assert destructive.action == "deny"
+    assert destructive.reason == "tool_invocation_destructive_denied"

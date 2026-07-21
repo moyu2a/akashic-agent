@@ -21,6 +21,7 @@
 - [04-fix-roadmap.md](./04-fix-roadmap.md): 修复优先级、阶段计划和验证方式。
 - [05-design-decisions.md](./05-design-decisions.md): 重要设计取舍记录。
 - [06-star-log.md](./06-star-log.md): 通用 STAR 复盘案例库。
+- [08-tool-invocation-policy-p1-status.md](./08-tool-invocation-policy-p1-status.md): Tool Safety Gateway P1.1 调用级策略接口状态、规则和验证结果。
 
 ## 映射规则
 
