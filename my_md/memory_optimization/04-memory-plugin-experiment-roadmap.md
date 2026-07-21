@@ -1069,11 +1069,13 @@ Phase 6o 当前状态：
 - runner 使用已标注写入治理候选穿过真实 `AgentLoop.process_direct()`，可选真实 LLM，但默认关闭真实 LLM。
 - fake-provider smoke 已跑通 `24` 个平衡抽样候选，输出 `/tmp/akashic-memory-write-governance-online-fake-v2/reports/memory_write_governance_online_evidence.jsonl`，并接入 `/tmp/akashic-memory-write-governance-online-fake-v2/target/memory_target_metrics_eval.md`。
 - 当前 fake-provider target metrics 行：有效写入精度 `33.3333% -> 100%`，污染拦截率 `0% -> 100%`，重复控制率 `0% -> 100%`，冲突复核率 `0% -> 100%`，写入减少率 `0% -> 66.6667%`，误收率 `100% -> 0%`。
-- 这仍是测试集驱动的线上 shadow 链路验证，不是自然生产流量，也不是正式真实 LLM 结论。
+- 真实 LLM pilot 已用同一批 `24` 个平衡候选跑通，输出 `/tmp/akashic-memory-write-governance-online-real-pilot-v2/reports/memory_write_governance_online_evidence.jsonl`，并接入 `/tmp/akashic-memory-write-governance-online-real-pilot-v2/target/memory_target_metrics_eval.md`。
+- 真实 LLM pilot 摘要：`real_llm_enabled = True`、`infra_passed = True`、`provider_error_count = 0`、`timeout_count = 0`、`total_token_count = 124099`、`avg_latency_ms = 2790.7917`；target metrics 行与 fake-provider smoke 一致。
+- 这仍是测试集驱动的线上 shadow 链路验证，不是自然生产流量；候选和标签来自测试集，不是 LLM 自动抽取候选记忆。
 
 后续计划：
 
-1. 如果要进入真实模型测试，复用 Phase 6o runner，把 `--fake-provider` 换成 `--enable-real-llm`，保留 checkpoint，并先跑小样本 pilot。
+1. 如果继续扩大真实模型测试，复用 Phase 6o runner 和 checkpoint 机制，把 `24` 条 pilot 扩展到更大平衡样本。
 2. 补睡眠巩固的真实 token / active 数 evidence 输入，区分 dry-run 估算和真实效果。
 3. 扩展冲突链 fixture 类型，例如多层分叉、回滚分叉和跨 source_ref 分叉。
 4. 再从 Phase 6e checkpoint 重建真实 LLM 目标指标表；如果 checkpoint 不完整，再考虑 `--resume` 补跑。

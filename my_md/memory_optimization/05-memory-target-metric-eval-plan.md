@@ -351,6 +351,23 @@ avg_latency_ms = 34.5417
 
 这仍然只是 fake-provider 在线路径验证，不是真实 LLM 结论。真实 LLM pilot 需要显式启用 `--enable-real-llm` 并保留 checkpoint。
 
+真实 LLM pilot 已用同一批 `24` 个平衡候选跑通：
+
+```text
+candidate_count = 24
+online_write_record_count = 24
+real_llm_enabled = True
+infra_passed = True
+provider_error_count = 0
+timeout_count = 0
+total_token_count = 124099
+avg_latency_ms = 2790.7917
+```
+
+真实 LLM pilot 的 evidence 分布和 fake-provider smoke 一致：useful `8` 条全部 allow，pollution `8` 条全部 reject，duplicate `4` 条全部 reject，conflict `4` 条全部 review。接入 `--online-write-evidence-json` 后，target metrics 线上 evidence 行仍为：有效写入精度 `33.3333% -> 100.0%`、污染拦截率 `0.0% -> 100.0%`、重复控制率 `0.0% -> 100.0%`、冲突复核率 `0.0% -> 100.0%`、写入减少率 `0.0% -> 66.6667%`、误拒率 `0.0% -> 0.0%`、误收率 `100.0% -> 0.0%`。
+
+这说明真实 LLM 接入后，测试集驱动的线上 shadow 链路和 evidence 转换是可用的。但它仍然不是生产流量评测，也不是 LLM 自动抽取候选记忆的评测；候选摘要和标签仍来自测试集，治理决策来自项目代码，且 `skip_post_memory=True` 阻止写入生产记忆库。
+
 ## 三张主表
 
 ### 召回与回答增益表

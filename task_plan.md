@@ -753,3 +753,37 @@ Boundaries:
 - The run uses real AgentLoop and can optionally call real LLM, but fake-provider smoke did not call a real LLM.
 - `skip_post_memory=True` prevents post-response memory writes.
 - No production memory DB, observe DB, live AgentLoop behavior, ToolExecutor, or ToolRegistry changes.
+
+Real LLM pilot:
+
+- reports: `/tmp/akashic-memory-write-governance-online-real-pilot-v2/reports`
+- target metrics: `/tmp/akashic-memory-write-governance-online-real-pilot-v2/target`
+- `candidate_count = 24`
+- `real_llm_enabled = True`
+- `infra_passed = True`
+- `provider_error_count = 0`
+- `timeout_count = 0`
+- `total_token_count = 124099`
+- `avg_latency_ms = 2790.7917`
+- evidence distribution:
+  - useful `8`, all after `allow`;
+  - pollution `8`, all after `reject`;
+  - duplicate `4`, all after `reject`;
+  - conflict `4`, all after `review`.
+
+Real target metric online evidence row:
+
+- `online_write_record_count = 24`
+- useful write precision `33.3333% -> 100.0%`
+- pollution block rate `0.0% -> 100.0%`
+- duplicate control rate `0.0% -> 100.0%`
+- conflict review rate `0.0% -> 100.0%`
+- write reduction rate `0.0% -> 66.6667%`
+- false reject rate `0.0% -> 0.0%`
+- false accept rate `100.0% -> 0.0%`
+
+Updated boundary after pilot:
+
+- The pilot proves the test-set-driven write-governance online shadow path can run with a real LLM provider and produce target-metric-compatible evidence.
+- It still does not prove natural production traffic quality.
+- It still does not evaluate LLM-generated memory candidate extraction.

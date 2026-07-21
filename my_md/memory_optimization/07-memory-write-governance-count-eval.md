@@ -320,6 +320,72 @@ Evidence 分布：
 
 这个结果说明：在测试集驱动的 fake-provider 在线 shadow 链路上，现有写入治理代码可以生成 target-metric-compatible evidence，并能把原本全写入的污染、重复和冲突候选挡住，同时保留有用候选。它仍然不是正式真实 LLM 结果；下一步如果要跑真实模型，应复用同一脚本，把 `--fake-provider` 换成 `--enable-real-llm`，并保留 checkpoint。
 
+## 真实 LLM 小样本 pilot
+
+随后用同一批 `24` 条平衡样本跑了真实 LLM pilot。第一次在沙箱内直接运行时，provider 请求连续等到 `60s` 超时，checkpoint 中已有 `7` 条 timeout 记录；改用允许外部 provider 网络访问的方式后，先跑 `6` 条诊断通过，再跑完整 `24` 条 pilot 通过。
+
+真实 pilot 命令：
+
+```bash
+.venv/bin/python scripts/run_memory_write_governance_online_eval.py \
+  --config /home/jjh/git_work/akashic-agent/config.toml \
+  --workspace /tmp/akashic-memory-write-governance-online-real-pilot-v2/workspace \
+  --out-dir /tmp/akashic-memory-write-governance-online-real-pilot-v2/reports \
+  --enable-real-llm \
+  --case-set all \
+  --limit 24 \
+  --timeout-s 60 \
+  --concurrency 1 \
+  --checkpoint-jsonl /tmp/akashic-memory-write-governance-online-real-pilot-v2/reports/checkpoint.jsonl \
+  --resume
+```
+
+真实 evidence 接入 target metrics：
+
+```bash
+.venv/bin/python scripts/run_memory_target_metrics_eval.py \
+  --out-dir /tmp/akashic-memory-write-governance-online-real-pilot-v2/target \
+  --online-checkpoint-source real_llm \
+  --online-write-evidence-json /tmp/akashic-memory-write-governance-online-real-pilot-v2/reports/memory_write_governance_online_evidence.jsonl
+```
+
+真实 pilot 运行结果：
+
+| 项目 | 数值 |
+| --- | ---: |
+| candidate_count | `24` |
+| checkpoint rows | `24` |
+| evidence rows | `24` |
+| real_llm_enabled | `True` |
+| infra_passed | `True` |
+| provider_error_count | `0` |
+| timeout_count | `0` |
+| total_token_count | `124099` |
+| avg_latency_ms | `2790.7917` |
+
+真实 LLM evidence 分布：
+
+| label | count | after allow | after reject | after review |
+| --- | ---: | ---: | ---: | ---: |
+| useful | `8` | `8` | `0` | `0` |
+| pollution | `8` | `0` | `8` | `0` |
+| duplicate | `4` | `0` | `4` | `0` |
+| conflict | `4` | `0` | `0` | `4` |
+
+真实 target metrics 线上 evidence 行：
+
+| 指标 | before | after | 变化 |
+| --- | ---: | ---: | ---: |
+| 有效写入精度 | `33.3333%` | `100.0%` | `+66.6667` 个百分点 |
+| 污染拦截率 | `0.0%` | `100.0%` | `+100.0` 个百分点 |
+| 重复控制率 | `0.0%` | `100.0%` | `+100.0` 个百分点 |
+| 冲突复核率 | `0.0%` | `100.0%` | `+100.0` 个百分点 |
+| 写入减少率 | `0.0%` | `66.6667%` | `+66.6667` 个百分点 |
+| 误拒率 | `0.0%` | `0.0%` | `0.0` 个百分点 |
+| 误收率 | `100.0%` | `0.0%` | `-100.0` 个百分点 |
+
+这说明真实 LLM 参与运行路径后，write evidence 仍能稳定生成并被 target metrics 消费；本轮 24 条样本中没有 provider error 或 timeout。它仍然不是生产流量评测，也不是 LLM 自动抽取候选记忆评测，因为候选和标签仍来自测试集。
+
 ## 复核候选处理链路
 
 当前已补齐离线版 `review` 后续处理。原因是调优后 hard 有用候选已经从“直接拒绝”更多转成“进入复核”，如果没有复核处理链路，这些候选仍然不会成为长期记忆。

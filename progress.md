@@ -1,5 +1,36 @@
 # Document RAG P10a Progress
 
+## 2026-07-21 Memory Phase 6o Write Governance Real LLM Pilot
+
+- Continued the write-governance online shadow work after commit `cfe0569`.
+- The already committed runner is `scripts/run_memory_write_governance_online_eval.py`; it sends pre-labeled write candidates through real `AgentLoop.process_direct()`, keeps `skip_post_memory=True`, and emits target-metric-compatible `memory_write_governance_online_evidence.jsonl`.
+- Fake-provider smoke had already passed on `24` balanced candidates: useful `8` all allow, pollution `8` all reject, duplicate `4` all reject, conflict `4` all review.
+- Real LLM pilot initially timed out inside the sandbox. Running the same command with the project config and external provider access succeeded.
+- Real LLM pilot report:
+  - `/tmp/akashic-memory-write-governance-online-real-pilot-v2/reports/memory_write_governance_online_eval.json`
+  - `/tmp/akashic-memory-write-governance-online-real-pilot-v2/reports/memory_write_governance_online_eval.md`
+  - `/tmp/akashic-memory-write-governance-online-real-pilot-v2/reports/memory_write_governance_online_evidence.jsonl`
+- Real target-metric report:
+  - `/tmp/akashic-memory-write-governance-online-real-pilot-v2/target/memory_target_metrics_eval.json`
+  - `/tmp/akashic-memory-write-governance-online-real-pilot-v2/target/memory_target_metrics_eval.md`
+- Real pilot summary:
+  - `candidate_count = 24`
+  - `real_llm_enabled = True`
+  - `infra_passed = True`
+  - `provider_error_count = 0`
+  - `timeout_count = 0`
+  - `total_token_count = 124099`
+  - `avg_latency_ms = 2790.7917`
+- Target metrics online evidence row:
+  - useful write precision `33.3333% -> 100.0%`
+  - pollution block rate `0.0% -> 100.0%`
+  - duplicate control rate `0.0% -> 100.0%`
+  - conflict review rate `0.0% -> 100.0%`
+  - write reduction rate `0.0% -> 66.6667%`
+  - false reject rate `0.0% -> 0.0%`
+  - false accept rate `100.0% -> 0.0%`
+- Boundary: this is real LLM plus real AgentLoop path, but still test-set-driven shadow evaluation. It is not natural production traffic and does not evaluate LLM-generated memory candidate extraction.
+
 ## 2026-07-20 Memory Phase 6k Real LLM Core Eval
 
 - User asked to proceed with the plan and then review/fix it before executing.

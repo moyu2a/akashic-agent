@@ -113,9 +113,9 @@ Phase 6g 已补充显式 hard miss，并修订版本链 active leaf 口径。Pha
 - baseline 语义召回失败但三路召回成功的 case。
 - baseline 关键词召回失败但图谱桥接成功的 case。
 - 相似实体、模糊指代、跨 session 和旧版本干扰 case。
-- 写入治理和记忆库卫生 evidence，用于把 shadow estimate 和显式证据输入分开。
+- 写入治理更大规模真实 LLM shadow evidence，以及记忆库卫生 evidence，用于把 shadow estimate 和显式证据输入分开。
 
-当前 graph `98.75%` 缺口已定位为指标分母问题：图谱召回不应被 tri-retrieval-only 的 `_target` miss 惩罚。当前冲突链识别率也已经通过 forked replacement-chain fixture 变成可测。下一步应优先补写入治理和记忆库卫生的显式 evidence，再跑真实 LLM 续测或 checkpoint 转换。
+当前 graph `98.75%` 缺口已定位为指标分母问题：图谱召回不应被 tri-retrieval-only 的 `_target` miss 惩罚。当前冲突链识别率也已经通过 forked replacement-chain fixture 变成可测。写入治理已补 `24` 条真实 LLM 线上 shadow pilot，能证明 AgentLoop + 真实 provider + target metrics evidence 链路可用；下一步应把写入治理扩大到更大平衡样本，同时补记忆库卫生的显式 evidence，再跑真实 LLM 续测或 checkpoint 转换。
 
 Phase 6j 已先补一版更大的目标导向测评集：默认 `standard` 仍是 80 case，新增显式 `comprehensive` 为 320 case，common 160 / hard 160。完整集覆盖 20 类场景和 8 个变体，并已通过 `scripts/run_memory_target_metrics_eval.py --case-pack comprehensive` 离线 smoke。这个改动解决“覆盖面不够”的一部分问题，但仍然不是线上真实 LLM 或真实 memory DB evidence。
 
