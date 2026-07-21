@@ -111,6 +111,10 @@ def write_write_governance_count_markdown(
         f"| 最终污染控制率 | {report.metrics['final_pollution_control_rate']}% |",
         f"| 冲突复核保持率 | {report.metrics['conflict_review_preservation_rate']}% |",
         f"| hard 重复泄漏率 | {report.metrics['duplicate_hard_leakage_rate']}% |",
+        f"| 有用候选最终缺口 | {report.metrics['useful_final_gap_count']} |",
+        f"| hard 有用候选最终缺口 | {report.metrics['hard_useful_final_gap_count']} |",
+        f"| 冲突复核缺口 | {report.metrics['conflict_review_gap_count']} |",
+        f"| 严格理想差距总数 | {report.metrics['strict_ideal_gap_count']} |",
         "",
         "## 写入治理主表",
         "",
@@ -445,6 +449,9 @@ def _metrics(records: Sequence[dict[str, Any]], rows: Sequence[dict[str, Any]]) 
         if record["case_set"] == "hard" and record["category"] == "duplicate"
     ]
     duplicate_hard_final_written = sum(1 for record in duplicate_hard_records if record["final_decision"] == "write")
+    useful_final_gap_count = useful_candidates - useful_final_written
+    hard_useful_final_gap_count = len(hard_useful_records) - hard_useful_final_written
+    conflict_review_gap_count = len(conflict_records) - conflict_final_review
     return {
         "measurement_mode": "offline_write_governance_count_eval",
         "candidate_count": len(records),
@@ -465,6 +472,8 @@ def _metrics(records: Sequence[dict[str, Any]], rows: Sequence[dict[str, Any]]) 
         "hard_useful_final_retention_rate": _pct(
             hard_useful_final_written / max(1, len(hard_useful_records))
         ),
+        "useful_final_gap_count": useful_final_gap_count,
+        "hard_useful_final_gap_count": hard_useful_final_gap_count,
         "pollution_candidate_count": pollution_candidates,
         "pollution_controlled_count": pollution_controlled,
         "pollution_control_rate": _pct(pollution_controlled / max(1, pollution_candidates)),
@@ -495,6 +504,8 @@ def _metrics(records: Sequence[dict[str, Any]], rows: Sequence[dict[str, Any]]) 
         "conflict_review_preservation_rate": _pct(
             conflict_final_review / max(1, len(conflict_records))
         ),
+        "conflict_review_gap_count": conflict_review_gap_count,
+        "strict_ideal_gap_count": useful_final_gap_count + conflict_review_gap_count,
         "duplicate_hard_leakage_count": duplicate_hard_final_written,
         "duplicate_hard_leakage_rate": _pct(
             duplicate_hard_final_written / max(1, len(duplicate_hard_records))

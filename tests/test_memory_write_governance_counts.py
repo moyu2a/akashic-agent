@@ -118,7 +118,8 @@ def test_write_governance_report_counts_partial_review_misses() -> None:
     conflict = next(row for row in report.main_rows if row["category"] == "conflict")
 
     assert conflict["review_miss_count"] == conflict["candidate_count"] - conflict["enhanced_review_count"]
-    assert any(row["category"] == "conflict" for row in report.review_miss_rows)
+    assert conflict["review_miss_count"] == 0
+    assert not any(row["category"] == "conflict" for row in report.review_miss_rows)
 
 
 def test_write_governance_report_rates_are_recomputed_from_counts() -> None:
@@ -209,6 +210,11 @@ def test_write_governance_report_includes_review_resolution_metrics() -> None:
     assert metrics["final_pollution_control_rate"] >= 90.0
     assert metrics["conflict_review_preservation_rate"] >= 95.0
     assert metrics["duplicate_hard_leakage_rate"] < 10.0
+    assert metrics["useful_final_retention_rate"] >= 95.0
+    assert metrics["hard_useful_final_retention_rate"] >= 95.0
+    assert metrics["final_pollution_control_rate"] >= 98.0
+    assert metrics["conflict_review_preservation_rate"] >= 99.0
+    assert metrics["duplicate_hard_leakage_rate"] == 0.0
     assert report.review_resolution_rows
 
 
@@ -231,6 +237,24 @@ def test_write_governance_final_metrics_are_recomputed_from_rows() -> None:
     )
 
 
+def test_write_governance_report_exposes_gap_to_strict_ideal() -> None:
+    report = build_write_governance_count_report(build_write_governance_candidates())
+    metrics = report.metrics
+
+    assert metrics["useful_final_gap_count"] == (
+        metrics["useful_candidate_count"] - metrics["useful_final_written_count"]
+    )
+    assert metrics["hard_useful_final_gap_count"] == (
+        metrics["hard_useful_candidate_count"] - metrics["hard_useful_final_written_count"]
+    )
+    assert metrics["conflict_review_gap_count"] == (
+        metrics["expected_review_candidate_count"] - metrics["conflict_review_preservation_count"]
+    )
+    assert metrics["strict_ideal_gap_count"] == (
+        metrics["useful_final_gap_count"] + metrics["conflict_review_gap_count"]
+    )
+
+
 def test_write_governance_does_not_reject_long_term_test_plan_as_temporary() -> None:
     scored = score_write_candidate_shadow(
         "长期项目约定：后续测试计划必须记录验证命令和指标口径",
@@ -249,6 +273,71 @@ def test_write_governance_allows_or_reviews_implicit_stable_requirement() -> Non
 
     assert scored["decision"] in {"allow", "review"}
     assert scored["final_score"] >= 0.45
+
+
+def test_write_governance_treats_temporary_exception_as_stable_rule() -> None:
+    summary = "难例/valuable_preference/exception_rule：面试材料：除非用户临时改口，否则在更新 my_md 时保持标出风险，样本 18"
+    scored = score_write_candidate_shadow(
+        summary,
+        source_ref="offline:test",
+    )
+
+    assert scored["reason"] != "temporary_state"
+    assert "temporary_state" not in scored["reasons"]
+    assert scored["decision"] in {"allow", "review"}
+
+    resolution = resolve_write_review_candidate(
+        summary=summary,
+        score_result=scored,
+        source_ref="offline:test",
+    )
+
+    assert resolution.decision == "approve_write"
+
+
+def test_write_governance_treats_english_temporary_exception_as_stable_rule() -> None:
+    scored = score_write_candidate_shadow(
+        "Stable rule: unless the user makes a temporary exception, keep source references in follow-up memory reports",
+        source_ref="offline:test",
+    )
+
+    assert scored["reason"] != "temporary_state"
+    assert "temporary_state" not in scored["reasons"]
+    assert scored["decision"] in {"allow", "review"}
+
+
+def test_write_governance_does_not_treat_do_not_record_source_as_temporary() -> None:
+    scored = score_write_candidate_shadow(
+        "常见/conflict/opposite_scope：面试材料：长期项目约定改为不要记录来源，而是先完整铺开解释，样本 6",
+        source_ref="offline:test",
+        existing_memories=[
+            {
+                "id": "existing",
+                "summary": "面试材料：长期项目约定是在解释失败原因时记录来源，样本 6",
+                "memory_type": "procedure",
+            }
+        ],
+    )
+
+    assert scored["decision"] == "review"
+    assert scored["reason"] == "conflict_with_existing_memory"
+    assert "temporary_state" not in scored["reasons"]
+
+
+def test_write_governance_keeps_precise_temporary_markers_rejected() -> None:
+    samples = [
+        "记忆实验：今天这次先保留关键数字，后续不用沿用，样本 1",
+        "代码审阅：本轮调试临时采用完整长文解释，完成后恢复默认，样本 2",
+        "插件文档：这个草稿只服务当前排查，先不用长期保存，样本 3",
+        "评测报告：会议前临时记一下记录来源，过期后不再使用，样本 4",
+        "用户偏好：不要写入长期记忆，只用于当前会话，样本 5",
+        "用户偏好：不要记住这条临时状态，样本 6",
+    ]
+
+    for summary in samples:
+        scored = score_write_candidate_shadow(summary, source_ref="offline:test")
+        assert scored["decision"] == "reject", summary
+        assert scored["reason"] == "temporary_state", summary
 
 
 def test_write_governance_routes_conflicting_existing_memory_to_review() -> None:

@@ -607,3 +607,66 @@ Constraints:
 - No production memory DB, observe DB, or workspace memory state writes.
 - No AgentLoop, live memory write behavior, Reasoner, ToolExecutor, or ToolRegistry changes.
 - Resolver and final safety gate do not branch on eval labels such as category, case_set, or subtype.
+
+## 2026-07-21 Memory Hard Useful Recovery Tuning
+
+Goal: recover hard useful write candidates that were falsely rejected by broad temporary-risk markers, while preserving pollution control and duplicate safety.
+
+1. Commit the current ideal-gap documentation baseline - complete
+2. Add regression tests for temporary-marker false positives - complete
+3. Tighten temporary-risk detection in `score_write_candidate_shadow()` - complete
+4. Add strict ideal gap metrics to the offline report - complete
+5. Regenerate JSON/Markdown reports and run strict metric gates - complete
+6. Update memory optimization docs and planning files - complete
+7. Run final verification and commit - complete
+
+Root cause:
+
+- `50/200` hard useful misses were all first-stage `reject` with reason `temporary_state`.
+- The stable exception phrase `除非用户临时改口` was matched by broad standalone `临时`.
+- `4/200` conflict misses were also first-stage `reject` with reason `temporary_state`, caused by broad `不要记` matching inside `不要记录来源`.
+
+Implementation:
+
+- Removed broad standalone `临时`, `不要记`, and English `temporary` from temporary-risk matching.
+- Kept precise temporary markers such as `今天这次`, `本轮调试`, `只用于当前`, `先不用长期保存`, `不要写入长期记忆`, `不要记住`, and `do not remember`.
+- Added regression tests for Chinese stable exceptions, English `temporary exception`, `不要记录来源` conflict wording, and precise temporary rejection examples.
+- Added JSON/Markdown metrics:
+  - `useful_final_gap_count`;
+  - `hard_useful_final_gap_count`;
+  - `conflict_review_gap_count`;
+  - `strict_ideal_gap_count`.
+
+Results:
+
+- Useful final retention: `87.5% -> 100.0%`.
+- Hard useful final retention: `75.0% -> 100.0%`.
+- Conflict review preservation: `98.0% -> 100.0%`.
+- Final pollution control: `100.0% -> 100.0%`.
+- Hard duplicate leakage: `0.0% -> 0.0%`.
+- Useful final gap: `50/400 -> 0/400`.
+- Hard useful final gap: `50/200 -> 0/200`.
+- Conflict review gap: `4/200 -> 0/200`.
+- Strict ideal gap: `54 -> 0`.
+
+Strict metric gate:
+
+- useful final retention `100.0%` >= `95.0%`;
+- hard useful final retention `100.0%` >= `95.0%`;
+- final pollution control `100.0%` >= `98.0%`;
+- conflict review preservation `100.0%` >= `99.0%`;
+- hard duplicate leakage `0.0%` == `0.0%`.
+
+Final verification:
+
+- `.venv/bin/python -m pytest tests/test_memory_write_governance_counts.py tests/test_memory_write_governance_counts_cli.py tests/test_post_response_memory_experiments.py tests/test_memory_experiments_runner.py tests/test_memory_eval_runner.py -q -p no:cacheprovider` -> `70 passed in 1.64s`.
+- `.venv/bin/python -m compileall plugins/default_memory/experiments.py memory2/write_governance_review.py memory2/eval_write_governance_counts.py tests/test_memory_write_governance_counts.py tests/test_memory_write_governance_counts_cli.py -q` -> exit `0`.
+- `git diff --check` -> exit `0`.
+- `git diff --cached --check` -> exit `0`.
+
+Constraints:
+
+- Offline/shadow evaluation only.
+- No real LLM calls.
+- No production memory DB or observe DB writes.
+- No AgentLoop, Reasoner, ToolExecutor, ToolRegistry, or live memory write behavior changes.

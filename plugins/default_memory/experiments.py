@@ -367,6 +367,27 @@ def _contains_any(text: str, markers: tuple[str, ...]) -> bool:
     return any(marker in lowered or marker in text for marker in markers)
 
 
+def _has_temporary_risk_marker(text: str) -> bool:
+    normalized = str(text or "")
+    temporary_markers = (
+        "临时测试",
+        "本轮调试",
+        "今天这次",
+        "本次",
+        "这一次",
+        "当前会话",
+        "只用于当前",
+        "只服务当前排查",
+        "先不用长期保存",
+        "过期后不再使用",
+        "不要写入长期记忆",
+        "不要记住",
+        "不要记录到长期记忆",
+        "do not remember",
+    )
+    return _contains_any(normalized, temporary_markers)
+
+
 _CJK_RE = re.compile(r"[\u4e00-\u9fff]")
 _WORD_RE = re.compile(r"[A-Za-z0-9_]+")
 
@@ -493,20 +514,6 @@ def score_write_candidate_shadow(
         "always",
         "prefer",
     )
-    temporary_markers = (
-        "临时",
-        "临时测试",
-        "本轮调试",
-        "今天这次",
-        "本次",
-        "这一次",
-        "先不用长期保存",
-        "过期后不再使用",
-        "不要写入长期记忆",
-        "不要记",
-        "temporary",
-        "do not remember",
-    )
     assistant_inference_markers = (
         "助手推断",
         "可能喜欢",
@@ -543,7 +550,7 @@ def score_write_candidate_shadow(
 
     explicit = _contains_any(text, explicit_markers)
     stable = explicit or _contains_any(text, stable_markers) or len(text) >= 16
-    temporary = _contains_any(text, temporary_markers)
+    temporary = _has_temporary_risk_marker(text)
     assistant_inference = _contains_any(text, assistant_inference_markers)
     source_ref_confident = bool(str(source_ref or "").strip())
     overlap = _score_existing_memory_overlap(text, existing_memories)

@@ -44,6 +44,11 @@ def test_memory_write_governance_counts_cli_writes_offline_report(
     assert payload["metrics"]["llm_calls_enabled"] is False
     assert payload["metrics"]["db_access_enabled"] is False
     assert payload["metrics"]["production_state_access_enabled"] is False
+    assert payload["metrics"]["useful_final_retention_rate"] >= 95.0
+    assert payload["metrics"]["hard_useful_final_retention_rate"] >= 95.0
+    assert payload["metrics"]["final_pollution_control_rate"] >= 98.0
+    assert payload["metrics"]["conflict_review_preservation_rate"] >= 99.0
+    assert payload["metrics"]["duplicate_hard_leakage_rate"] == 0.0
     assert len(payload["main_rows"]) == 6
     assert len(payload["case_set_rows"]) == 12
     assert len(payload["subtype_rows"]) == 60
@@ -56,6 +61,10 @@ def test_memory_write_governance_counts_cli_writes_offline_report(
     assert "有用候选最终保留率" in markdown
     assert "hard 有用候选最终保留率" in markdown
     assert "hard 重复泄漏率" in markdown
+    assert "有用候选最终缺口" in markdown
+    assert "hard 有用候选最终缺口" in markdown
+    assert "冲突复核缺口" in markdown
+    assert "严格理想差距总数" in markdown
     assert "## 写入治理主表" in markdown
     assert "## Common/Hard 分组表" in markdown
     assert "## 误伤表" in markdown
