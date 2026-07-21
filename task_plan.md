@@ -437,9 +437,39 @@ Next open work:
 
 - Verify and commit this answer/retrieval-only 1000-case report.
 - Use these results to select real-LLM answer/retrieval profiles: keep `chain_memory_base`, `chain_tri_retrieval`, `chain_graph_retrieval`, `chain_rerank_injection`, and include answer-only `chain_all_on` as a positive but not strongest recall setting.
+- Use the interview-facing explanation in `06-memory-320-baseline-plus-count-eval.md` when explaining why governance modules can drop single-module recall but remain valuable in the full chain.
 
 Verification:
 
 - `.venv/bin/python -m pytest tests/test_memory_quantitative_uplift.py tests/test_memory_answer_retrieval_counts.py tests/test_memory_answer_retrieval_counts_cli.py tests/test_memory_quantitative_chain_cli.py tests/test_memory_quantitative_uplift_cli.py -q -p no:cacheprovider` -> `30 passed in 59.58s`.
 - `.venv/bin/python -m compileall memory2/eval_answer_retrieval_counts.py scripts/run_memory_answer_retrieval_counts_eval.py tests/test_memory_answer_retrieval_counts.py tests/test_memory_answer_retrieval_counts_cli.py -q` -> exit `0`.
 - `git diff --check` and `git diff --cached --check` -> exit `0`.
+
+## 2026-07-21 Memory Write Governance Offline Count Eval
+
+Goal: produce a standalone write-governance count table that compares original write behavior against additive write-value governance.
+
+1. Revise and review the implementation plan - complete
+2. Add diversified 1200-candidate write-governance case pack - complete
+3. Add offline count report with category, common/hard, and subtype breakdowns - complete
+4. Add CLI and generate JSON/Markdown reports - complete
+5. Update linked memory optimization docs - complete
+6. Run focused verification and commit - complete
+
+Results:
+
+- Original write baseline: `1200/1200` written.
+- Write-value governance: `202/1200` directly written.
+- Write reduction: `998/1200`, `83.1667%`.
+- Useful candidate retention: `140/400`, `35.0%`.
+- Pollution candidate control: `738/800`, `92.25%`.
+- False reject: `260/400`, `65.0%`.
+- False accept: `62/800`, `7.75%`.
+- Review miss: `142/200`, `71.0%`.
+
+Conclusion:
+
+- This table successfully separates write governance from answer/retrieval evaluation.
+- The module is effective at controlling temporary state and assistant-inference pollution.
+- It is too conservative for useful preferences and stable facts, especially hard cases.
+- Conflict routing still needs improvement because most conflict candidates are not sent to review.

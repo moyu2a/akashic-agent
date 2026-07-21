@@ -691,7 +691,28 @@
   - chain version/provenance: `1998/2000` recalled, +20 recalled over baseline, +1.0 percentage points;
   - answer-only all-on: `1998/2000` recalled, +20 recalled, +1.0 percentage points.
 - Write governance and sleep consolidation are excluded from the answer/retrieval main table rows and underlying feature sets; they should continue to use separate write/hygiene evidence metrics.
+- Added interview-facing explanation to `06-memory-320-baseline-plus-count-eval.md`: retrieval modules improve coverage, while rerank/injection/version/provenance modules are governance layers that should be evaluated in chain context.
 - Focused verification:
   - `.venv/bin/python -m pytest tests/test_memory_quantitative_uplift.py tests/test_memory_answer_retrieval_counts.py tests/test_memory_answer_retrieval_counts_cli.py tests/test_memory_quantitative_chain_cli.py tests/test_memory_quantitative_uplift_cli.py -q -p no:cacheprovider` -> `30 passed in 59.58s`.
   - `.venv/bin/python -m compileall memory2/eval_answer_retrieval_counts.py scripts/run_memory_answer_retrieval_counts_eval.py tests/test_memory_answer_retrieval_counts.py tests/test_memory_answer_retrieval_counts_cli.py -q` -> exit `0`.
   - `git diff --check` and `git diff --cached --check` -> exit `0`.
+
+## 2026-07-21 Memory Write Governance Offline Count Eval
+
+- Built a 1200-candidate offline write-governance evaluation.
+- Baseline is original write behavior: `1200/1200` candidates are counted as written.
+- Enhanced profile is write-value governance: `allow` writes, `reject/review` do not directly write.
+- Generated:
+  - `my_md/memory_optimization/eval_reports/memory_write_governance_counts_eval.json`
+  - `my_md/memory_optimization/eval_reports/memory_write_governance_counts_eval.md`
+- Added linked documentation:
+  - `my_md/memory_optimization/07-memory-write-governance-count-eval.md`
+- Main offline results:
+  - 治理后直接写入 `202/1200`，写入减少率 `83.1667%`;
+  - 有用候选保留率 `35.0%`;
+  - 污染候选控制率 `92.25%`;
+  - 误伤率 `65.0%`;
+  - 漏拦率 `7.75%`;
+  - 冲突复核缺口率 `71.0%`.
+- Current conclusion: write governance already shows strong pollution control for temporary and assistant-inference candidates, but useful-memory retention and conflict review routing are not good enough for online claims.
+- Online evaluation remains gated until the offline table is reviewed and the useful-retention/conflict-review weaknesses are addressed.
