@@ -47,6 +47,9 @@ def test_memory_write_governance_counts_cli_writes_offline_report(
     assert len(payload["main_rows"]) == 6
     assert len(payload["case_set_rows"]) == 12
     assert len(payload["subtype_rows"]) == 60
+    assert "## 总体指标" in markdown
+    assert "直接拒绝误伤率" in markdown
+    assert "复核分流率" in markdown
     assert "## 写入治理主表" in markdown
     assert "## Common/Hard 分组表" in markdown
     assert "## 误伤表" in markdown

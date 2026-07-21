@@ -4,6 +4,7 @@ from collections import Counter
 
 from memory2.eval_write_governance_cases import build_write_governance_candidates
 from memory2.eval_write_governance_counts import build_write_governance_count_report
+from plugins.default_memory.experiments import score_write_candidate_shadow
 
 
 def test_write_governance_candidate_pack_has_1200_balanced_candidates() -> None:
@@ -145,6 +146,41 @@ def test_write_governance_report_rates_are_recomputed_from_counts() -> None:
     )
 
 
+def test_write_governance_false_reject_metrics_split_reject_and_review() -> None:
+    report = build_write_governance_count_report(build_write_governance_candidates())
+    useful_total = sum(
+        row["candidate_count"]
+        for row in report.main_rows
+        if row["expected_action"] == "write"
+    )
+    direct_reject = sum(
+        row["enhanced_rejected_count"]
+        for row in report.main_rows
+        if row["expected_action"] == "write"
+    )
+    review_deferral = sum(
+        row["enhanced_review_count"]
+        for row in report.main_rows
+        if row["expected_action"] == "write"
+    )
+
+    assert report.metrics["direct_reject_false_reject_count"] == direct_reject
+    assert report.metrics["direct_reject_false_reject_rate"] == round(
+        direct_reject / useful_total * 100,
+        4,
+    )
+    assert report.metrics["review_deferral_count"] == review_deferral
+    assert report.metrics["review_deferral_rate"] == round(
+        review_deferral / useful_total * 100,
+        4,
+    )
+    assert report.metrics["not_directly_written_useful_count"] == direct_reject + review_deferral
+    assert report.metrics["not_directly_written_useful_rate"] == round(
+        (direct_reject + review_deferral) / useful_total * 100,
+        4,
+    )
+
+
 def test_write_governance_report_is_offline_only(monkeypatch) -> None:
     def fail_connect(*args: object, **kwargs: object) -> object:
         raise AssertionError("offline write-governance eval must not open sqlite databases")
@@ -154,3 +190,64 @@ def test_write_governance_report_is_offline_only(monkeypatch) -> None:
 
     assert report.metrics["offline_only"] is True
     assert report.metrics["candidate_count"] == 24
+
+
+def test_write_governance_does_not_reject_long_term_test_plan_as_temporary() -> None:
+    scored = score_write_candidate_shadow(
+        "长期项目约定：后续测试计划必须记录验证命令和指标口径",
+        source_ref="offline:test",
+    )
+
+    assert scored["decision"] in {"allow", "review"}
+    assert scored["reason"] != "temporary_state"
+
+
+def test_write_governance_allows_or_reviews_implicit_stable_requirement() -> None:
+    scored = score_write_candidate_shadow(
+        "稳定要求：适用于后续同类任务，回答先给结论并保留关键数字",
+        source_ref="offline:test",
+    )
+
+    assert scored["decision"] in {"allow", "review"}
+    assert scored["final_score"] >= 0.45
+
+
+def test_write_governance_routes_conflicting_existing_memory_to_review() -> None:
+    scored = score_write_candidate_shadow(
+        "长期项目约定改为不要先给结论，而是先完整铺开解释",
+        source_ref="offline:test",
+        existing_memories=[
+            {"id": "existing", "summary": "长期项目约定是回答时先给结论并保留关键数字"}
+        ],
+    )
+
+    assert scored["decision"] == "review"
+    assert scored["reason"] == "conflict_with_existing_memory"
+
+
+def test_write_governance_keeps_polluted_candidates_blocked_after_tuning() -> None:
+    temporary = score_write_candidate_shadow(
+        "本轮调试临时采用完整长文解释，完成后恢复默认",
+        source_ref="offline:test",
+    )
+    inference = score_write_candidate_shadow(
+        "从回答中猜到用户倾向于自动长期保存所有内容",
+        source_ref="offline:test",
+    )
+
+    assert temporary["decision"] == "reject"
+    assert temporary["reason"] == "temporary_state"
+    assert inference["decision"] == "reject"
+    assert inference["reason"] == "assistant_inference"
+
+
+def test_write_governance_does_not_route_unrelated_change_as_conflict() -> None:
+    scored = score_write_candidate_shadow(
+        "长期项目约定改为在文档中记录验证命令",
+        source_ref="offline:test",
+        existing_memories=[
+            {"id": "existing", "summary": "用户偏好是回答时用中文条目式表达"}
+        ],
+    )
+
+    assert scored["reason"] != "conflict_with_existing_memory"

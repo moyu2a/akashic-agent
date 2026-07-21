@@ -416,6 +416,40 @@ def _score_existing_memory_overlap(
     }
 
 
+def _detect_memory_conflict(
+    summary: str,
+    existing_memories: list[dict[str, object]] | None,
+) -> bool:
+    text = str(summary or "")
+    conflict_markers = (
+        "不要",
+        "改为",
+        "替代",
+        "相反",
+        "优先级调整",
+        "覆盖旧规则",
+        "先忽略旧",
+    )
+    if not _contains_any(text, conflict_markers):
+        return False
+    candidate_tokens = _tokenize_memory_text(text)
+    paired_conflict = "完整铺开解释" in text or "完整长文解释" in text
+    for item in existing_memories or []:
+        existing_summary = str(item.get("summary") or "")
+        if not existing_summary:
+            continue
+        similarity = _jaccard_similarity(
+            candidate_tokens,
+            _tokenize_memory_text(existing_summary),
+        )
+        has_behavior_pair = paired_conflict and (
+            "先给结论" in existing_summary or "简短结论" in existing_summary
+        )
+        if similarity >= 0.18 or has_behavior_pair:
+            return True
+    return False
+
+
 def _average_signal(scored: list[dict[str, Any]], signal_name: str) -> float:
     if not scored:
         return 0.0
@@ -449,14 +483,25 @@ def score_write_candidate_shadow(
         "流程",
         "以后",
         "长期",
+        "稳定要求",
+        "适用于后续",
+        "后续同类任务",
+        "跨会话",
+        "默认规则",
+        "优先级",
+        "除非用户临时改口",
         "always",
         "prefer",
     )
     temporary_markers = (
         "临时",
-        "测试",
+        "临时测试",
+        "本轮调试",
         "今天这次",
         "本次",
+        "这一次",
+        "先不用长期保存",
+        "过期后不再使用",
         "不要写入长期记忆",
         "不要记",
         "temporary",
@@ -465,6 +510,8 @@ def score_write_candidate_shadow(
     assistant_inference_markers = (
         "助手推断",
         "可能喜欢",
+        "猜到",
+        "倾向于",
         "看起来",
         "应该是",
         "猜测",
@@ -500,6 +547,7 @@ def score_write_candidate_shadow(
     assistant_inference = _contains_any(text, assistant_inference_markers)
     source_ref_confident = bool(str(source_ref or "").strip())
     overlap = _score_existing_memory_overlap(text, existing_memories)
+    conflict = _detect_memory_conflict(text, existing_memories)
 
     signals = {
         "explicit_user_intent_score": 1.0 if explicit else 0.2,
@@ -538,6 +586,8 @@ def score_write_candidate_shadow(
         reasons.append("duplicate_existing_memory")
     elif float(overlap["novelty_score"]) >= 0.6:
         reasons.append("novel_information")
+    if conflict:
+        reasons.append("conflict_with_existing_memory")
     if not reasons:
         reasons.append("low_information")
 
@@ -551,6 +601,9 @@ def score_write_candidate_shadow(
     elif duplicate_risk >= 0.8:
         decision = "reject"
         reason = "duplicate_existing_memory"
+    elif conflict:
+        decision = "review"
+        reason = "conflict_with_existing_memory"
     elif final_score >= 0.7:
         decision = "allow"
         reason = "explicit_memory_signal" if explicit else "high_value_signal"

@@ -473,3 +473,50 @@ Conclusion:
 - The module is effective at controlling temporary state and assistant-inference pollution.
 - It is too conservative for useful preferences and stable facts, especially hard cases.
 - Conflict routing still needs improvement because most conflict candidates are not sent to review.
+
+Next plan:
+
+1. Split write-governance false-reject reporting into direct reject false reject, review deferral, and not-directly-written conservative rate.
+2. Narrow temporary-risk markers so terms like `测试` do not automatically reject long-term test plans or evaluation rules.
+3. Add implicit long-term value signals for stable requirements, cross-session preferences, default rules, priorities, and follow-up reusable constraints.
+4. Add conflict-to-review routing based on overlap with existing memories and opposite/priority/scope-change wording.
+5. Regenerate the 1200-candidate report and compare before/after:
+   - useful retention should improve from `35.0%`;
+   - pollution control should stay near or above `90%`;
+   - direct reject false reject should fall below current `20.0%`;
+   - conflict review miss should fall below current `71.0%`.
+
+## 2026-07-21 Memory Write Governance Policy Tuning
+
+Goal: reduce useful-memory false rejects while keeping pollution control high and routing conflicts to review.
+
+1. Plan and review policy tuning - complete
+2. Split false-reject metrics into direct reject, review deferral, and conservative not-directly-written useful rate - complete
+3. Narrow temporary-risk markers and add implicit long-term value signals - complete
+4. Add conflict-to-review routing with unrelated-change guard - complete
+5. Regenerate 1200-candidate report and run metric gate - complete
+6. Update docs and run verification - complete
+
+Results:
+
+- Original write baseline remains `1200/1200` written.
+- Tuned write-value governance directly writes `172/1200`.
+- Useful retention improved from `35.0%` to `37.5%`.
+- Pollution control improved from `92.25%` to `97.25%`.
+- Direct reject false reject improved from `20.0%` to `12.5%`.
+- Review deferral moved from `45.0%` to `50.0%`.
+- Not-directly-written useful candidate rate improved from `65.0%` to `62.5%`.
+- False accept improved from `7.75%` to `2.75%`.
+- Conflict review miss improved from `71.0%` to `2.0%`.
+
+Conclusion:
+
+- The tuning meets the automatic metric gates and does not trade away pollution control.
+- The largest gain is conflict routing, which now sends `196/200` conflict candidates to review.
+- The remaining weakness is hard useful candidates, which still mostly enter review instead of direct write.
+
+Verification:
+
+- `.venv/bin/python -m pytest tests/test_memory_write_governance_counts.py tests/test_memory_write_governance_counts_cli.py tests/test_post_response_memory_experiments.py -q -p no:cacheprovider` -> `22 passed in 1.01s`.
+- `.venv/bin/python -m compileall plugins/default_memory/experiments.py memory2/eval_write_governance_counts.py tests/test_memory_write_governance_counts.py -q` -> exit `0`.
+- `git diff --check` -> exit `0`.

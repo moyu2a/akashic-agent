@@ -716,3 +716,40 @@
   - 冲突复核缺口率 `71.0%`.
 - Current conclusion: write governance already shows strong pollution control for temporary and assistant-inference candidates, but useful-memory retention and conflict review routing are not good enough for online claims.
 - Online evaluation remains gated until the offline table is reviewed and the useful-retention/conflict-review weaknesses are addressed.
+- Follow-up analysis:
+  - The `65.0%` false reject rate is a conservative "not directly written" metric, because it includes both `reject` and `review`.
+  - Direct reject false rejects are `80/400 = 20.0%`; review deferrals are `180/400 = 45.0%`.
+  - Main causes are broad temporary markers such as `测试`, weak implicit long-term value recognition in hard cases, and insufficient conflict-to-review routing.
+  - Next implementation should split false-reject metrics, narrow temporary risk, add long-term value signals, and route conflicts to review before any online write-governance test.
+
+## 2026-07-21 Memory Write Governance Policy Tuning
+
+- Tuned `score_write_candidate_shadow()` without lowering the main allow threshold:
+  - narrowed temporary markers so broad `测试` no longer rejects long-term test plans;
+  - added implicit long-term value markers such as stable requirements, follow-up reusable constraints, cross-session/default-rule wording, and priorities;
+  - added lightweight existing-memory conflict detection that routes likely conflicts to `review`;
+  - kept temporary, assistant inference, and duplicate pollution protections.
+- Split write-governance false reject reporting:
+  - direct reject false reject;
+  - review deferral;
+  - not-directly-written useful candidate rate.
+- Regenerated:
+  - `my_md/memory_optimization/eval_reports/memory_write_governance_counts_eval.json`
+  - `my_md/memory_optimization/eval_reports/memory_write_governance_counts_eval.md`
+- Updated:
+  - `my_md/memory_optimization/07-memory-write-governance-count-eval.md`
+  - `my_md/memory_optimization/README.md`
+- Before/after results:
+  - useful retention: `35.0% -> 37.5%`;
+  - pollution control: `92.25% -> 97.25%`;
+  - direct reject false reject: `20.0% -> 12.5%`;
+  - review deferral: `45.0% -> 50.0%`;
+  - not-directly-written useful candidate rate: `65.0% -> 62.5%`;
+  - false accept: `7.75% -> 2.75%`;
+  - conflict review miss: `71.0% -> 2.0%`.
+- Metric gate passed:
+  - useful retention `> 35.0`;
+  - pollution control `>= 90.0`;
+  - direct reject false reject `< 20.0`;
+  - conflict review miss `< 71.0`.
+- Current conclusion: tuning strongly improved conflict routing and direct reject mistakes while preserving pollution control. Remaining weakness is hard useful candidates: they still go mostly to `review`, so review processing or richer value scoring is needed before online write-governance claims.

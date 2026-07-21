@@ -75,6 +75,21 @@ def write_write_governance_count_markdown(
         "",
         "本报告只评价写入阶段：原本写入方式作为基线，写入价值治理作为叠加模块。",
         "",
+        "## 总体指标",
+        "",
+        "| 指标 | 数值 |",
+        "| --- | ---: |",
+        f"| 原本写入 | {report.metrics['baseline_written_count']}/{report.metrics['candidate_count']} |",
+        f"| 治理后直接写入 | {report.metrics['enhanced_written_count']}/{report.metrics['candidate_count']} |",
+        f"| 写入减少率 | {report.metrics['write_reduction_rate']}% |",
+        f"| 有用候选保留率 | {report.metrics['useful_retention_rate']}% |",
+        f"| 污染候选控制率 | {report.metrics['pollution_control_rate']}% |",
+        f"| 直接拒绝误伤率 | {report.metrics['direct_reject_false_reject_rate']}% |",
+        f"| 复核分流率 | {report.metrics['review_deferral_rate']}% |",
+        f"| 未直接写入有用候选率 | {report.metrics['not_directly_written_useful_rate']}% |",
+        f"| 漏拦率 | {report.metrics['false_accept_rate']}% |",
+        f"| 复核缺口率 | {report.metrics['review_miss_rate']}% |",
+        "",
         "## 写入治理主表",
         "",
         "| 类别 | 期望 | 原本写入 | 治理后写入 | 治理后拒绝 | 治理后复核 | 污染减少 | 有用保留率 | 治理率 |",
@@ -199,6 +214,16 @@ def _metrics(records: Sequence[dict[str, Any]], rows: Sequence[dict[str, Any]]) 
     pollution_candidates = sum(int(row["candidate_count"]) for row in rows if row["expected_action"] != "write")
     pollution_controlled = sum(int(row["enhanced_controlled_count"]) for row in rows if row["expected_action"] != "write")
     false_reject_count = sum(int(row["false_reject_count"]) for row in rows)
+    direct_reject_false_reject_count = sum(
+        int(row["enhanced_rejected_count"])
+        for row in rows
+        if row["expected_action"] == "write"
+    )
+    review_deferral_count = sum(
+        int(row["enhanced_review_count"])
+        for row in rows
+        if row["expected_action"] == "write"
+    )
     false_accept_count = sum(int(row["false_accept_count"]) for row in rows)
     review_candidates = sum(int(row["candidate_count"]) for row in rows if row["expected_action"] == "review")
     review_miss_count = sum(int(row["review_miss_count"]) for row in rows)
@@ -219,6 +244,16 @@ def _metrics(records: Sequence[dict[str, Any]], rows: Sequence[dict[str, Any]]) 
         "pollution_control_rate": _pct(pollution_controlled / max(1, pollution_candidates)),
         "false_reject_count": false_reject_count,
         "false_reject_rate": _pct(false_reject_count / max(1, useful_candidates)),
+        "direct_reject_false_reject_count": direct_reject_false_reject_count,
+        "direct_reject_false_reject_rate": _pct(
+            direct_reject_false_reject_count / max(1, useful_candidates)
+        ),
+        "review_deferral_count": review_deferral_count,
+        "review_deferral_rate": _pct(review_deferral_count / max(1, useful_candidates)),
+        "not_directly_written_useful_count": false_reject_count,
+        "not_directly_written_useful_rate": _pct(
+            false_reject_count / max(1, useful_candidates)
+        ),
         "false_accept_count": false_accept_count,
         "false_accept_rate": _pct(false_accept_count / max(1, pollution_candidates)),
         "review_candidate_count": review_candidates,
