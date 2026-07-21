@@ -50,6 +50,12 @@ def test_memory_write_governance_counts_cli_writes_offline_report(
     assert "## 总体指标" in markdown
     assert "直接拒绝误伤率" in markdown
     assert "复核分流率" in markdown
+    assert "## 复核处理总体指标" in markdown
+    assert "## 复核处理表" in markdown
+    assert "## 最终写入安全门表" in markdown
+    assert "有用候选最终保留率" in markdown
+    assert "hard 有用候选最终保留率" in markdown
+    assert "hard 重复泄漏率" in markdown
     assert "## 写入治理主表" in markdown
     assert "## Common/Hard 分组表" in markdown
     assert "## 误伤表" in markdown

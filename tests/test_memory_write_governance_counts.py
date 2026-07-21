@@ -4,6 +4,10 @@ from collections import Counter
 
 from memory2.eval_write_governance_cases import build_write_governance_candidates
 from memory2.eval_write_governance_counts import build_write_governance_count_report
+from memory2.write_governance_review import (
+    apply_final_write_safety_gate,
+    resolve_write_review_candidate,
+)
 from plugins.default_memory.experiments import score_write_candidate_shadow
 
 
@@ -192,6 +196,41 @@ def test_write_governance_report_is_offline_only(monkeypatch) -> None:
     assert report.metrics["candidate_count"] == 24
 
 
+def test_write_governance_report_includes_review_resolution_metrics() -> None:
+    report = build_write_governance_count_report(build_write_governance_candidates())
+    metrics = report.metrics
+
+    assert metrics["review_candidate_count"] > 0
+    assert metrics["review_promoted_write_count"] > 0
+    assert metrics["review_kept_count"] > 0
+    assert metrics["final_written_count"] >= metrics["enhanced_written_count"]
+    assert metrics["useful_final_retention_rate"] > metrics["useful_retention_rate"]
+    assert metrics["hard_useful_final_retention_rate"] > 40.0
+    assert metrics["final_pollution_control_rate"] >= 90.0
+    assert metrics["conflict_review_preservation_rate"] >= 95.0
+    assert metrics["duplicate_hard_leakage_rate"] < 10.0
+    assert report.review_resolution_rows
+
+
+def test_write_governance_final_metrics_are_recomputed_from_rows() -> None:
+    report = build_write_governance_count_report(build_write_governance_candidates())
+    useful_total = sum(
+        row["candidate_count"]
+        for row in report.main_rows
+        if row["expected_action"] == "write"
+    )
+    final_useful_written = sum(
+        row["final_written_count"]
+        for row in report.main_rows
+        if row["expected_action"] == "write"
+    )
+
+    assert report.metrics["useful_final_retention_rate"] == round(
+        final_useful_written / useful_total * 100,
+        4,
+    )
+
+
 def test_write_governance_does_not_reject_long_term_test_plan_as_temporary() -> None:
     scored = score_write_candidate_shadow(
         "长期项目约定：后续测试计划必须记录验证命令和指标口径",
@@ -251,3 +290,164 @@ def test_write_governance_does_not_route_unrelated_change_as_conflict() -> None:
     )
 
     assert scored["reason"] != "conflict_with_existing_memory"
+
+
+def test_review_resolver_promotes_safe_useful_review_candidate() -> None:
+    scored = score_write_candidate_shadow(
+        "稳定要求：适用于后续同类任务，回答先给结论并保留关键数字",
+        source_ref="offline:test",
+    )
+    result = resolve_write_review_candidate(
+        summary="稳定要求：适用于后续同类任务，回答先给结论并保留关键数字",
+        score_result=scored,
+        source_ref="offline:test",
+        category="stable_fact",
+        case_set="hard",
+        subtype="evaluation_contract",
+    )
+
+    assert result.decision == "approve_write"
+    assert result.promoted is True
+    assert result.controlled is False
+
+
+def test_review_resolver_keeps_conflict_in_review() -> None:
+    scored = score_write_candidate_shadow(
+        "长期项目约定改为不要先给结论，而是先完整铺开解释",
+        source_ref="offline:test",
+        existing_memories=[
+            {"id": "existing", "summary": "长期项目约定是回答时先给结论并保留关键数字"}
+        ],
+    )
+    result = resolve_write_review_candidate(
+        summary="长期项目约定改为不要先给结论，而是先完整铺开解释",
+        score_result=scored,
+        existing_memories=[
+            {"id": "existing", "summary": "长期项目约定是回答时先给结论并保留关键数字"}
+        ],
+        source_ref="offline:test",
+        category="conflict",
+        case_set="hard",
+        subtype="priority_conflict",
+    )
+
+    assert result.decision == "keep_review"
+    assert result.promoted is False
+    assert result.controlled is True
+
+
+def test_review_resolver_rejects_polluted_review_candidate() -> None:
+    result = resolve_write_review_candidate(
+        summary="从回答中猜到用户倾向于自动长期保存所有内容",
+        score_result={
+            "decision": "review",
+            "reason": "moderate_value_signal",
+            "reasons": ["assistant_inference"],
+        },
+        source_ref="offline:test",
+        category="assistant_inference",
+        case_set="hard",
+        subtype="soft_inference",
+    )
+
+    assert result.decision == "reject"
+    assert result.promoted is False
+    assert result.controlled is True
+
+
+def test_review_resolver_rejects_inference_text_without_reason_marker() -> None:
+    result = resolve_write_review_candidate(
+        summary="模型感觉用户大概希望在执行计划前先给结论",
+        score_result={
+            "decision": "review",
+            "reason": "moderate_value_signal",
+            "reasons": ["long_term_stability", "source_ref_present"],
+            "final_score": 0.55,
+        },
+        source_ref="offline:test",
+    )
+
+    assert result.decision == "reject"
+    assert result.reason == "pollution_risk"
+
+
+def test_review_resolver_rejects_duplicate_review_candidate() -> None:
+    result = resolve_write_review_candidate(
+        summary="后续同类任务请在中文回答中先给结论",
+        score_result={
+            "decision": "review",
+            "reason": "moderate_value_signal",
+            "reasons": ["duplicate_existing_memory", "long_term_stability"],
+            "final_score": 0.55,
+        },
+        existing_memories=[
+            {"id": "existing", "summary": "后续同类任务请在中文回答中先给结论"}
+        ],
+        source_ref="offline:test",
+        category="duplicate",
+        case_set="hard",
+        subtype="near_duplicate",
+    )
+
+    assert result.decision == "reject"
+    assert result.promoted is False
+    assert result.controlled is True
+
+
+def test_review_resolver_keeps_unlabeled_conflict_in_review() -> None:
+    result = resolve_write_review_candidate(
+        summary="长期项目约定改为不要先给结论，而是完整铺开解释",
+        score_result={
+            "decision": "review",
+            "reason": "moderate_value_signal",
+            "reasons": ["long_term_stability", "source_ref_present"],
+            "final_score": 0.6,
+        },
+        existing_memories=[
+            {"id": "existing", "summary": "长期项目约定是回答时先给结论"}
+        ],
+        source_ref="offline:test",
+        category="stable_fact",
+        case_set="hard",
+        subtype="evaluation_contract",
+    )
+
+    assert result.decision == "keep_review"
+    assert result.reason == "conflict_requires_confirmation"
+
+
+def test_final_write_safety_gate_blocks_near_duplicate_allow() -> None:
+    result = apply_final_write_safety_gate(
+        summary="难例重复：以后请记住用户偏好，在生成报告时要保留关键数字",
+        score_result={
+            "decision": "allow",
+            "reason": "explicit_memory_signal",
+            "reasons": ["explicit_user_intent", "long_term_stability"],
+            "final_score": 0.72,
+        },
+        existing_memories=[
+            {"id": "existing", "summary": "难例重复：后续同类任务请在面试表达中保留关键数字"}
+        ],
+        source_ref="offline:test",
+    )
+
+    assert result is not None
+    assert result.decision == "reject"
+    assert result.reason == "duplicate_safety_gate"
+
+
+def test_final_write_safety_gate_blocks_inference_text_without_reason_marker() -> None:
+    result = apply_final_write_safety_gate(
+        summary="模型感觉用户大概希望后续都自动保存回答中的所有内容",
+        score_result={
+            "decision": "allow",
+            "reason": "strong_value_signal",
+            "reasons": ["long_term_stability", "source_ref_present"],
+            "final_score": 0.8,
+        },
+        source_ref="offline:test",
+    )
+
+    assert result is not None
+    assert result.decision == "reject"
+    assert result.reason == "pollution_risk"

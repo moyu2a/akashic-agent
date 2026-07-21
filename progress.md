@@ -759,3 +759,40 @@
   - Its purpose is to turn safe, high-value review candidates into final writes without lowering the initial `allow` threshold.
   - Main metrics should be useful final retention, hard useful final retention, conflict review preservation, duplicate hard leakage, and pollution control.
   - Target gates: useful final retention above `60%`, hard useful final retention above `40%`, pollution control at least `90%`, conflict review preservation at least `95%`, duplicate hard leakage below `10%`.
+
+## 2026-07-21 Memory Write Governance Review Resolver
+
+- Implemented an offline-only `review` resolver and final write safety gate for write-governance candidates.
+- Added `memory2/write_governance_review.py` with:
+  - `resolve_write_review_candidate()`;
+  - `apply_final_write_safety_gate()`;
+  - `WriteReviewResolution`.
+- The resolver and safety gate decisions use only production-available signals: candidate summary, score result, existing memories, and source_ref. Eval grouping labels such as category, case_set, and subtype remain reporting-only and are not decision inputs.
+- Extended `memory2/eval_write_governance_counts.py` so the report keeps first-stage direct-write metrics and separately adds final-decision metrics.
+- Regenerated:
+  - `my_md/memory_optimization/eval_reports/memory_write_governance_counts_eval.json`
+  - `my_md/memory_optimization/eval_reports/memory_write_governance_counts_eval.md`
+- Main offline results:
+  - first-stage direct write remains `172/1200`;
+  - review candidates: `449`;
+  - review promoted writes: `203`;
+  - review kept: `196`;
+  - review rejected: `50`;
+  - final writes after resolver and safety gate: `350/1200`;
+  - useful final retention: `87.5%`;
+  - hard useful final retention: `75.0%`;
+  - final pollution control: `100.0%`;
+  - conflict review preservation: `98.0%`;
+  - hard duplicate leakage: `0.0%`.
+- Important implementation adjustment:
+  - Duplicate leakage was not fully solvable in resolver-only logic because some hard duplicate rows were first-stage `allow`, not `review`.
+  - A final write safety gate was added after first-stage allow / resolver promotion, so every provisional final write is checked once more before counting as written.
+- Current conclusion:
+  - The offline chain now shows the intended write-governance shape: direct write stays conservative, useful review candidates can be recovered, conflicts stay in review, and duplicate/pollution candidates do not leak into final writes.
+  - This is still offline shadow evaluation only. It does not change live AgentLoop, production memory DB writes, observe DB writes, or real LLM behavior.
+- Focused verification:
+  - `.venv/bin/python -m pytest tests/test_memory_write_governance_counts.py -q -p no:cacheprovider` -> `26 passed in 0.98s`.
+  - `.venv/bin/python -m pytest tests/test_memory_write_governance_counts_cli.py -q -p no:cacheprovider` -> `1 passed in 0.20s`.
+  - Resolver metric gate passed with useful final retention `87.5%`, hard useful final retention `75.0%`, final pollution control `100.0%`, conflict review preservation `98.0%`, duplicate hard leakage `0.0%`.
+  - Final focused suite `.venv/bin/python -m pytest tests/test_memory_write_governance_counts.py tests/test_memory_write_governance_counts_cli.py tests/test_post_response_memory_experiments.py -q -p no:cacheprovider` -> `32 passed in 1.52s`.
+  - Compileall and diff checks exited `0`.

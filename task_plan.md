@@ -546,3 +546,56 @@ Verification:
 - `.venv/bin/python -m pytest tests/test_memory_write_governance_counts.py tests/test_memory_write_governance_counts_cli.py tests/test_post_response_memory_experiments.py -q -p no:cacheprovider` -> `22 passed in 1.01s`.
 - `.venv/bin/python -m compileall plugins/default_memory/experiments.py memory2/eval_write_governance_counts.py tests/test_memory_write_governance_counts.py -q` -> exit `0`.
 - `git diff --check` -> exit `0`.
+
+## 2026-07-21 Memory Write Governance Review Resolver
+
+Goal: add an offline-first second-stage resolver for write-governance `review` candidates, plus a final safety gate for candidates that would otherwise be written.
+
+1. Commit the pre-existing documentation state - complete
+2. Add pure resolver module and resolver-focused tests - complete
+3. Integrate resolver and final safety gate into the offline count report - complete
+4. Regenerate JSON/Markdown reports and run metric gates - complete
+5. Update memory optimization docs and planning files - complete
+6. Run final verification and commit - complete
+
+Results:
+
+- First-stage direct write remains `172/1200`; this keeps the previous write-governance table comparable.
+- Review candidates: `449`.
+- Review promoted writes: `203`.
+- Review kept: `196`.
+- Review rejected: `50`.
+- Final written count after resolver and safety gate: `350/1200`.
+- Useful final retention: `87.5%`.
+- Hard useful final retention: `75.0%`.
+- Final pollution control: `100.0%`.
+- Conflict review preservation: `98.0%`.
+- Hard duplicate leakage: `0.0%`.
+
+Plan adjustment:
+
+- Resolver-only handling was insufficient because some hard duplicate leakage came from first-stage `allow`, not from `review`.
+- The implementation therefore adds a final write safety gate after first-stage allow / resolver promotion. It checks every provisional final write for duplicate, conflict, and pollution signals before final write counting.
+
+Verification so far:
+
+- `.venv/bin/python -m pytest tests/test_memory_write_governance_counts.py -q -p no:cacheprovider` -> `26 passed in 0.98s`.
+- `.venv/bin/python -m pytest tests/test_memory_write_governance_counts_cli.py -q -p no:cacheprovider` -> `1 passed in 0.20s`.
+- Resolver metric gate passed:
+  - useful final retention `87.5%` > `60.0%`;
+  - hard useful final retention `75.0%` > `40.0%`;
+  - final pollution control `100.0%` >= `90.0%`;
+  - conflict review preservation `98.0%` >= `95.0%`;
+  - hard duplicate leakage `0.0%` < `10.0%`.
+- Final focused verification:
+  - `.venv/bin/python -m pytest tests/test_memory_write_governance_counts.py tests/test_memory_write_governance_counts_cli.py tests/test_post_response_memory_experiments.py -q -p no:cacheprovider` -> `32 passed in 1.52s`.
+  - `.venv/bin/python -m compileall memory2/write_governance_review.py memory2/eval_write_governance_counts.py tests/test_memory_write_governance_counts.py tests/test_memory_write_governance_counts_cli.py -q` -> exit `0`.
+  - `git diff --check` -> exit `0`.
+  - `git diff --cached --check` -> exit `0`.
+
+Constraints:
+
+- Offline-only; no real LLM calls.
+- No production memory DB, observe DB, or workspace memory state writes.
+- No AgentLoop, live memory write behavior, Reasoner, ToolExecutor, or ToolRegistry changes.
+- Resolver and final safety gate do not branch on eval labels such as category, case_set, or subtype.
