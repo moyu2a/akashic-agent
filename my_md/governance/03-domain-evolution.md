@@ -633,6 +633,51 @@
 
 - `my_md/governance/01-issue-index.md`
 - `my_md/governance/02-current-issues.md`
+
+### TEST-005: Memory Phase 6h 目标指标文档同步
+
+场景：
+
+- 在 Phase 6g 之后，继续修订 memory target-metric 的口径，并把最新离线报表结论同步到 memory optimization 目录和任务日志。
+
+发现：
+
+- 图谱召回的 `98.75%` 缺口来自分母口径，不是图谱 lane 的真实失败。
+- forked replacement-chain fixture 让 `conflict_chain_detection_rate` 从不可测变成可测。
+- 写入治理和睡眠巩固在当前正式报告里仍然是 shadow / proxy 结果，没有真正的在线证据行。
+
+处理：
+
+- 将 Phase 6h 的正式报告作为当前对外口径。
+- 把写入治理与记忆库卫生继续标成需要真实 evidence 的后续工作，而不是已经完成的在线指标。
+- 更新任务日志和发现记录，避免 Phase 6g / Phase 6h 的状态混淆。
+
+结果：
+
+- 目标指标表现在可以稳定表达“开启后提升多少百分点”，同时不会把 shadow 估算误写成线上结果。
+
+证据：
+
+- `my_md/memory_optimization/eval_reports/memory_target_metrics_eval.md`
+- `my_md/memory_optimization/05-memory-target-metric-eval-plan.md`
+- `task_plan.md`
+- `progress.md`
+- `findings.md`
+
+影响：
+
+- 后续补写入治理和记忆库卫生证据时，可以直接延续 Phase 6h 的口径，不需要重新解释图谱分母或版本链冲突链是否可测。
+
+下一步：
+
+- 继续补真实 evidence 输入，再决定是否接入 checkpoint-backed 的目标指标报告。
+
+关联文档：
+
+- `my_md/memory_optimization/README.md`
+- `my_md/memory_optimization/01-memory-optimization-roadmap.md`
+- `my_md/memory_optimization/02-memory-quality-metrics.md`
+- `my_md/memory_optimization/04-memory-plugin-experiment-roadmap.md`
 - `my_md/governance/04-fix-roadmap.md`
 
 ### RAG-006: Document RAG 启用后 live smoke 暴露工具可见性和成本问题

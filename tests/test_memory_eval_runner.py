@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 
 from memory2.eval_cases import load_eval_case
+from memory2.eval_quantitative_cases import build_quantitative_eval_cases
 from memory2.eval_runner import (
     run_eval_case,
     run_eval_case_files,
@@ -86,6 +87,27 @@ def test_eval_runner_reports_should_not_recall_failure() -> None:
     phase4 = result.profiles["phase4"]
     assert phase4.passed is True
     assert "m_qq_pref" not in phase4.recalled_ids
+
+
+def test_baseline_miss_recall_ids_do_not_fail_should_recall_validation() -> None:
+    case = next(
+        case
+        for case in build_quantitative_eval_cases()
+        if case.expectations.get("baseline_miss_recall_ids")
+    )
+
+    result = run_eval_case(case)
+    missed_id = str(case.expectations["baseline_miss_recall_ids"][0])
+
+    assert result.passed is True
+    assert (
+        missed_id
+        not in result.profiles["all"].traces["tri_retrieval"].baseline_result["baseline_ids"]
+    )
+    assert (
+        missed_id
+        in result.profiles["all"].traces["tri_retrieval"].experimental_result["fused_ids"]
+    )
 
 
 def test_eval_runner_reports_validation_failures_for_bad_expectations() -> None:

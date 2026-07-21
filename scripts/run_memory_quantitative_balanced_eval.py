@@ -11,9 +11,9 @@ if str(ROOT) not in sys.path:
 
 from memory2.eval_quantitative_cases import build_quantitative_eval_cases
 from memory2.eval_quantitative_uplift import (
-    build_quantitative_chain_report,
-    write_quantitative_chain_markdown,
-    write_quantitative_uplift_json,
+    build_quantitative_balanced_report,
+    write_quantitative_balanced_json,
+    write_quantitative_balanced_markdown,
 )
 
 
@@ -38,12 +38,12 @@ def main() -> int:
         print("No quantitative cases available.")
         return 1
 
-    report = build_quantitative_chain_report(cases)
+    report = build_quantitative_balanced_report(cases)
     out_dir = Path(args.out_dir)
-    json_path = out_dir / "memory_quantitative_chain_eval.json"
-    md_path = out_dir / "memory_quantitative_chain_eval.md"
-    write_quantitative_uplift_json(report, json_path)
-    write_quantitative_chain_markdown(report, md_path)
+    json_path = out_dir / "memory_quantitative_balanced_eval.json"
+    md_path = out_dir / "memory_quantitative_balanced_eval.md"
+    write_quantitative_balanced_json(report, json_path)
+    write_quantitative_balanced_markdown(report, md_path)
     print(json_path)
     print(md_path)
     return 0

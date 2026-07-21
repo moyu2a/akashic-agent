@@ -1,9 +1,43 @@
 # Document RAG P10a Findings
 
+## 2026-07-20 Memory Phase 6k Findings
+
+- The comprehensive fake-provider core matrix can run end to end with the current scripts and produces a 1280-row report for the answer/retrieval slice.
+- The real LLM core matrix also works with checkpointing. The run produced `/tmp/akashic-memory-phase6k-real/reports/memory_comprehensive_online_eval.checkpoint.jsonl`, then was manually stopped after 325 real calls to control cost/time.
+- The checkpoint report was successfully rebuilt from that file. It records a partial real LLM slice with `case_count = 325`, `unique_case_count = 82`, `profile_count = 4`, `answer_rule_pass_rate = 24.0`, `memory_grounding_pass_rate = 74.7692`, `forbidden_violation_rate = 15.3846`, `avg_latency_ms = 4635.4431`, and `total_token_count = 1754732`.
+- The target-metric report conversion initially failed because the writer tried to render version-chain专项 rows for online checkpoint data that only contains answer/retrieval fields. The fix is to keep version-chain专项 rendering offline-only while leaving the online checkpoint rows in the main table.
+- After that fix, `/tmp/akashic-memory-phase6k-target/memory_target_metrics_eval.json` and `.md` were generated successfully from the real checkpoint.
+- The current real LLM result is intentionally partial. It is useful for validating the checkpoint path and report conversion, but it is not the full 1280-run conclusion.
+
+## 2026-07-20 Memory Phase 6j Findings
+
+- A larger evaluation set can be added without destabilizing previous reports by keeping `standard` as the default case pack and making the larger set explicit through `--case-pack comprehensive`.
+- The comprehensive pack now produces 320 deterministic target-oriented cases: common 160 / hard 160, 20 scenario categories, and 8 variants per set.
+- This is a target-driven synthetic evaluation set, not natural production traffic. Its purpose is to stress known memory capabilities and boundaries: recall, graph bridge, injection control, version/provenance, write value, session isolation, source_ref, entropy/value, and sleep compaction.
+- The existing target metric runner can consume the 320-case pack. The smoke report in `/tmp/akashic-memory-comprehensive-pack` produced 1920 case records, 960 write candidates, and 2400 hygiene scan units.
+- The smoke target recall values are high because many comprehensive cases remain easier than the hard-miss fixtures: tri `98.125% -> 100%`, graph `98.75% -> 100%`, rerank/injection `98.125% -> 100%`, version/provenance `97.5% -> 100%`.
+- The first comprehensive smoke uncovered one fixture-design issue: the `costly_call_preference` noise text shared strong query keywords and became a ranked-context injection. The root cause was sample content collision with the current deterministic keyword/semantic scoring, not CLI parsing or report generation.
+- Write-governance and sleep-consolidation numbers from the comprehensive smoke remain shadow/proxy. They are useful for offline comparison but still do not replace real write evidence or real consolidation evidence.
+
 ## Project Overview
 
 - `akashic-agent` is a Python agent with passive reply loops, tools, plugins, long-term/session memory, and proactive/background workflows.
 - Document RAG tools are implemented under `agent/tools/doc_rag.py` and currently registered as deferred read-only tools, not always-on.
+
+## 2026-07-20 Memory Phase 6i Findings
+
+- The target-metric report already had online write/hygiene evidence row builders, but the input boundary needed hardening before real evidence could be trusted.
+- Evidence inputs now accept JSON arrays, wrapped `{"records": [...]}` JSON, and JSONL.
+- Write evidence and hygiene evidence now fail fast on missing fields, unsupported value domains, string booleans, bool token values, negative token values, and nonnumeric token estimates.
+- This does not create real write-governance or sleep-consolidation evidence by itself. It makes the evidence ingestion path strict enough for the next phase to collect real records.
+
+## 2026-07-20 Memory Phase 6h Findings
+
+- Phase 6h fixed the remaining graph gap as a denominator issue, not a real graph-lane miss: graph retrieval now uses `expected_graph_recall_ids`, so the report is `97.5% -> 100%` instead of being penalized by tri-retrieval-only misses.
+- The forked replacement-chain fixture made `conflict_chain_detection_rate` measurable on hard / overall rows; common stays `unavailable` because it has no forked chain.
+- The current formal report is still offline proxy data, not real online LLM evidence. It uses `measurement_mode = offline_trace_real_baseline_target_metrics` and `online_status = gated_no_checkpoint`.
+- Write-governance and sleep-consolidation are still shadow / proxy tables. They are useful for structure and comparison, but they do not yet prove real online prompt token reduction or live DB hygiene.
+- The next useful step is to add real evidence inputs for write governance and memory hygiene, then rebuild the target-metric report from checkpoint-backed or live rows.
 
 ## P10a Requirements
 
@@ -66,3 +100,34 @@
 - Execution tools should join the existing `task_plan` toolset and return the shared `TaskExecutionService` through toolset extras; a second toolset would make service/store identity easier to miswire.
 - `TaskPlanPromptRenderModule` is the correct prompt integration point for a bounded current-attempt summary; full event history should stay in SQLite/observe.
 - The config model needs a separate `TaskExecutionConfig` with `enabled=false`; the implementation plan must test that invalid high-risk auto configuration cannot enable write/external/destructive execution.
+
+## 2026-07-20 Memory Target Metric Findings
+
+- Existing layered scoring correctly separates answer, write governance, and memory hygiene, but it still uses score formulas that are hard to explain per module.
+- `write_governance` currently depends on `write_value_score` trace, so it should be presented as the effect of enabling write-value governance, not as a number every retrieval module must change.
+- `memory_hygiene` currently depends on `sleep_consolidation_shadow` trace, so it should be presented as the effect of enabling sleep consolidation and library-level maintenance.
+- Retrieval, graph, rerank, and version/provenance effects are better explained through target recall, answer hit, evidence hit, wrong recall, wrong injection, stale-version misuse, and source support percentages.
+- A percentage report should show before percentage, after percentage, percentage-point delta, and relative uplift only when the denominator is valid.
+- Real LLM target-metric reporting should reuse comprehensive online checkpoints; changing presentation should not force another expensive provider run.
+- The first target-metric report used a presentation baseline (`before = 0`) and therefore overstated retrieval uplift. The realistic report now reads `before` from trace baseline ids or marks unavailable when no baseline event exists.
+- With real offline baseline, the Phase 6f 80-case fixture had target recall `100% -> 100%` for tri retrieval, graph retrieval, and rerank/injection. This was more truthful than `0% -> 100%`, but it meant the fixture was not discriminative enough to prove recall uplift. This finding was superseded by Phase 6g hard-miss cases below.
+- Version/provenance in Phase 6f reported target recall `100% -> 50%`; this reflected stricter active-leaf selection and showed the case expectations needed to distinguish stale/old targets from active-current targets. This finding was superseded by Phase 6g version-aware metrics below.
+- Write governance and hygiene online layers need evidence records; answer-level comprehensive checkpoints alone cannot honestly produce write candidate or scanned-memory health metrics.
+- Fake-provider checkpoint smoke must stay separated from formal reports and must be labeled `fake_provider`, not real LLM.
+- Rerank/injection governance is the most interpretable governance result in the current target table: target recall stays `100%`, while wrong injection after is `0%`.
+- Write governance direction is reasonable but incomplete: pollution block after `100%` and write reduction after `100%` can be inflated by rejecting too much. Future metrics need useful-candidate retention, true false-reject baseline, and future recall usefulness.
+- Sleep consolidation direction is reasonable but still shadow-only: token saving after `33.482%` and recall retention after `100%` are estimates from dry-run traces, not proof that the real memory DB was cleaned or real prompt tokens dropped.
+- Next work should not start with another costly real LLM run. Fix version-chain target semantics and add harder retrieval cases first, then rerun offline real-baseline target metrics, then rebuild real LLM target tables from checkpoint.
+
+## 2026-07-20 Memory Phase 6g Findings
+
+- The old version/provenance `100% -> 50%` result was a metric semantics problem: `_version_provenance_metrics()` used generic `should_recall_ids` containing both `_target` and `_graph`, but `version_chain.active_leaf_ids` can only contain replacement-chain leaves such as `_target`.
+- Version/provenance now uses `expected_active_version_ids` for current-version recall and `expected_stale_version_ids` for stale misuse. Overall current-version recall is now `90% -> 100%`; hard subset is `80% -> 100%`.
+- Current generated version fixtures have only `old -> target` replacement chains. There is no forked replacement chain, so `conflict_chain_detection_rate` must remain `unavailable`; reporting `0%` or `100%` would imply a tested capability that the data does not contain.
+- The old retrieval `100% -> 100%` result was too easy to prove uplift. Phase 6g adds explicit `baseline_miss_recall_ids` only for selected hard cases so baseline can miss target ids while experimental lanes can recover them.
+- Validation is not globally weakened: normal cases still require every `should_recall_ids` item in baseline recalled ids; only explicitly marked baseline-miss ids are skipped for baseline validation.
+- Graph retrieval needed an extra correction: graph baseline fused lanes reuse semantic/keyword/provenance lanes, so explicit graph misses must be filtered from those baseline lanes while leaving the graph lane available for experimental recovery.
+- Current overall target recall results are: 三路召回 `93.75% -> 100%`, 图谱召回 `93.75% -> 98.75%`, 重排与注入治理 `93.75% -> 100%`, 版本链与溯源 `90% -> 100%`.
+- Current hard target recall results are: 三路召回 `87.5% -> 100%`, 图谱召回 `87.5% -> 97.5%`, 版本链当前有效版本 `80% -> 100%`.
+- These are still offline target-oriented fixtures, not real online LLM results. The formal report keeps `online_status = gated_no_checkpoint` and `real_llm_used = False`.
+- Next useful work: inspect graph hard misses behind the remaining `98.75%`, add forked replacement-chain fixtures, and add write/hygiene evidence before spending more provider tokens.

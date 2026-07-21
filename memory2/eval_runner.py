@@ -227,12 +227,13 @@ def _build_trace(case: EvalCase, feature_name: str) -> EvalTrace | None:
         return EvalTrace(feature_name, result.baseline_result, result.experimental_result, metrics)
     if feature_name == "graph_retrieval":
         semantic_items, keyword_items, provenance_items, graph_items = _candidate_lanes(case)
+        baseline_miss = _baseline_miss_ids(case)
         result = build_graph_retrieval_shadow_result(
             query=_query(case),
             baseline_items=_baseline_recalled_items(case),
-            semantic_items=semantic_items,
-            keyword_items=keyword_items,
-            provenance_items=provenance_items,
+            semantic_items=_without_ids(semantic_items, baseline_miss),
+            keyword_items=_without_ids(keyword_items, baseline_miss),
+            provenance_items=_without_ids(provenance_items, baseline_miss),
             graph_items=graph_items,
             latency_ms=0.0,
             top_n=max(8, len(_active_memory_items(case))),
@@ -412,7 +413,14 @@ def _validate_profile_result(
     if result.enabled:
         recalled = set(result.recalled_ids)
         injected = set(result.injected_ids)
+        baseline_miss = {
+            str(item)
+            for item in expectations.get("baseline_miss_recall_ids", [])
+            if str(item)
+        }
         for item_id in expectations.get("should_recall_ids", []):
+            if str(item_id) in baseline_miss:
+                continue
             if str(item_id) not in recalled:
                 failures.append(f"should recall id '{item_id}' was not recalled")
         for item_id in expectations.get("should_not_recall_ids", []):
@@ -537,8 +545,10 @@ def _query(case: EvalCase) -> str:
 
 
 def _baseline_recalled_items(case: EvalCase) -> list[dict[str, object]]:
-    should_recall = {str(item) for item in _expectations(case).get("should_recall_ids", [])}
-    should_not = {str(item) for item in _expectations(case).get("should_not_recall_ids", [])}
+    expectations = _expectations(case)
+    should_recall = {str(item) for item in expectations.get("should_recall_ids", [])}
+    should_not = {str(item) for item in expectations.get("should_not_recall_ids", [])}
+    baseline_miss = _baseline_miss_ids(case)
     query_terms = _terms(_query(case))
     result: list[dict[str, object]] = []
     seen: set[str] = set()
@@ -546,6 +556,8 @@ def _baseline_recalled_items(case: EvalCase) -> list[dict[str, object]]:
     for item in _active_memory_items(case):
         item_id = str(item.get("id") or "").strip()
         if not item_id or item_id in should_not:
+            continue
+        if item_id in baseline_miss:
             continue
         if item_id in should_recall:
             result.append(_with_default_score(item, 0.82))
@@ -557,6 +569,27 @@ def _baseline_recalled_items(case: EvalCase) -> list[dict[str, object]]:
             result.append(_with_default_score(item, 0.62))
             seen.add(item_id)
     return [item for item in result if str(item.get("id") or "") in seen]
+
+
+def _baseline_miss_ids(case: EvalCase) -> set[str]:
+    return {
+        str(item)
+        for item in _expectations(case).get("baseline_miss_recall_ids", [])
+        if str(item)
+    }
+
+
+def _without_ids(
+    items: list[dict[str, object]],
+    excluded_ids: set[str],
+) -> list[dict[str, object]]:
+    if not excluded_ids:
+        return items
+    return [
+        item
+        for item in items
+        if str(item.get("id") or "").strip() not in excluded_ids
+    ]
 
 
 def _candidate_lanes(

@@ -43,9 +43,19 @@ from plugins.default_memory.experiments import (
 
 _FIXED_REPORT_TIME = datetime(2026, 7, 17, tzinfo=timezone.utc)
 
+BALANCED_SCORE_FORMULA = (
+    "balanced_score = 0.30 * answer_score + "
+    "0.25 * retrieval_proxy_score + "
+    "0.20 * grounding_score + "
+    "0.15 * governance_score + "
+    "0.10 * efficiency_score; unavailable dimensions are omitted "
+    "and remaining weights are normalized"
+)
+
 
 REPORT_PROFILES: tuple[str, ...] = (
     "off",
+    "memory_base",
     "write_value_only",
     "tri_retrieval_only",
     "graph_only",
@@ -56,7 +66,7 @@ REPORT_PROFILES: tuple[str, ...] = (
 )
 
 CHAIN_PROFILES: tuple[str, ...] = (
-    "chain_off",
+    "chain_memory_base",
     "chain_write_value",
     "chain_tri_retrieval",
     "chain_graph_retrieval",
@@ -66,8 +76,11 @@ CHAIN_PROFILES: tuple[str, ...] = (
     "chain_all_on",
 )
 
+CHAIN_REPORT_PROFILES: tuple[str, ...] = (*CHAIN_PROFILES, "chain_off")
+
 PROFILE_RUNTIME_MAP: dict[str, str] = {
     "off": "off",
+    "memory_base": "off",
     "write_value_only": "phase1",
     "tri_retrieval_only": "phase2",
     "graph_only": "phase2",
@@ -79,6 +92,7 @@ PROFILE_RUNTIME_MAP: dict[str, str] = {
 
 PROFILE_FEATURE_MAP: dict[str, tuple[str, ...]] = {
     "off": (),
+    "memory_base": (),
     "write_value_only": ("write_value_score",),
     "tri_retrieval_only": ("tri_retrieval",),
     "graph_only": ("graph_retrieval",),
@@ -90,6 +104,7 @@ PROFILE_FEATURE_MAP: dict[str, tuple[str, ...]] = {
 
 CHAIN_PROFILE_FEATURE_MAP: dict[str, tuple[str, ...]] = {
     "chain_off": (),
+    "chain_memory_base": (),
     "chain_write_value": ("write_value_score",),
     "chain_tri_retrieval": ("write_value_score", "tri_retrieval"),
     "chain_graph_retrieval": (
@@ -118,7 +133,8 @@ CHAIN_PROFILE_FEATURE_MAP: dict[str, tuple[str, ...]] = {
 }
 
 PROFILE_FEATURE_LABELS: dict[str, str] = {
-    "off": "baseline",
+    "off": "关闭增强控制组",
+    "memory_base": "原始记忆基线",
     "write_value_only": "写入价值",
     "tri_retrieval_only": "三路召回",
     "graph_only": "图谱召回",
@@ -130,6 +146,7 @@ PROFILE_FEATURE_LABELS: dict[str, str] = {
 
 CHAIN_PROFILE_LABELS: dict[str, str] = {
     "chain_off": "关闭记忆增强",
+    "chain_memory_base": "原始记忆基线",
     "chain_write_value": "加入写入价值治理",
     "chain_tri_retrieval": "加入三路召回",
     "chain_graph_retrieval": "加入图谱召回",
@@ -146,6 +163,12 @@ class QuantitativeProfileSummary:
     feature_name: str
     case_set: str
     case_count: int
+    target_count: int
+    success_count: int
+    miss_count: int
+    recall_rate: float
+    grounding_count: int
+    forbidden_count: int
     repeat_count: int
     answer_rule_pass_rate: float
     memory_grounding_pass_rate: float
@@ -173,6 +196,35 @@ class QuantitativeUpliftReport:
     metrics: dict[str, object]
 
 
+@dataclass(frozen=True)
+class BalancedProfileSummary:
+    profile_name: str
+    feature_name: str
+    case_set: str
+    case_count: int
+    answer_score: float
+    retrieval_proxy_score: float | str
+    grounding_score: float
+    governance_score: float
+    efficiency_score: float | str
+    balanced_score: float
+    balanced_delta_points: float
+    balanced_delta_pct: float | None
+    balanced_score_available_dimensions: tuple[str, ...]
+    unavailable_dimensions: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class QuantitativeBalancedReport:
+    run_id: str
+    generated_at: str
+    score_formula: str
+    profile_summaries: tuple[QuantitativeProfileSummary, ...]
+    balanced_summaries: tuple[BalancedProfileSummary, ...]
+    case_records: tuple[dict[str, object], ...]
+    metrics: dict[str, object]
+
+
 def calculate_main_score(
     *,
     answer_rule_pass_rate: float,
@@ -184,6 +236,75 @@ def calculate_main_score(
         + 0.2 * float(memory_grounding_pass_rate)
         + 0.1 * (100.0 - float(forbidden_violation_rate)),
         4,
+    )
+
+
+def calculate_balanced_scores(
+    row: QuantitativeProfileSummary,
+) -> dict[str, float | str | tuple[str, ...]]:
+    answer_score = row.answer_rule_pass_rate
+    retrieval_proxy_score: float | str = (
+        row.answer_rule_pass_rate
+        if _profile_has_retrieval_signal(row.profile_name)
+        else "unavailable"
+    )
+    grounding_score = row.memory_grounding_pass_rate
+    governance_score = round(
+        0.55 * (100.0 - row.forbidden_violation_rate)
+        + 0.45 * grounding_score,
+        4,
+    )
+    efficiency_score = _efficiency_score(row)
+    weighted_scores: tuple[tuple[str, float, float | str], ...] = (
+        ("answer_score", 0.30, answer_score),
+        ("retrieval_proxy_score", 0.25, retrieval_proxy_score),
+        ("grounding_score", 0.20, grounding_score),
+        ("governance_score", 0.15, governance_score),
+        ("efficiency_score", 0.10, efficiency_score),
+    )
+    available = [
+        (name, weight, float(value))
+        for name, weight, value in weighted_scores
+        if isinstance(value, (int, float))
+    ]
+    unavailable = tuple(
+        name
+        for name, _, value in weighted_scores
+        if not isinstance(value, (int, float))
+    )
+    weight_sum = sum(weight for _, weight, _ in available)
+    balanced_score = (
+        round(sum(weight * value for _, weight, value in available) / weight_sum, 4)
+        if weight_sum
+        else 0.0
+    )
+    return {
+        "answer_score": answer_score,
+        "retrieval_proxy_score": retrieval_proxy_score,
+        "grounding_score": grounding_score,
+        "governance_score": governance_score,
+        "efficiency_score": efficiency_score,
+        "balanced_score": balanced_score,
+        "balanced_score_available_dimensions": tuple(name for name, _, _ in available),
+        "unavailable_dimensions": unavailable,
+    }
+
+
+def build_quantitative_balanced_report(
+    cases: Sequence[EvalCase],
+) -> QuantitativeBalancedReport:
+    chain_report = build_quantitative_chain_report(cases)
+    balanced_summaries = _build_balanced_summaries(chain_report.profile_summaries)
+    metrics = _build_balanced_report_metrics(cases, balanced_summaries, chain_report)
+    run_id = _deterministic_run_id(cases, (*CHAIN_PROFILES, "balanced"))
+    return QuantitativeBalancedReport(
+        run_id=run_id,
+        generated_at=_FIXED_REPORT_TIME.isoformat(),
+        score_formula=BALANCED_SCORE_FORMULA,
+        profile_summaries=chain_report.profile_summaries,
+        balanced_summaries=balanced_summaries,
+        case_records=chain_report.case_records,
+        metrics=metrics,
     )
 
 
@@ -212,7 +333,10 @@ def build_quantitative_uplift_report(cases: Sequence[EvalCase]) -> QuantitativeU
 
     profile_summaries = _build_profile_summaries(per_case_rows)
     feature_contributions = tuple(
-        row for row in profile_summaries if row.case_set == "overall" and row.profile_name != "off"
+        row
+        for row in profile_summaries
+        if row.case_set == "overall"
+        and row.profile_name not in {"off", "memory_base"}
     )
     metrics = _build_report_metrics(cases, profile_summaries, per_case_rows)
     run_id = _deterministic_run_id(cases, REPORT_PROFILES)
@@ -251,7 +375,7 @@ def build_quantitative_chain_report(cases: Sequence[EvalCase]) -> QuantitativeUp
         case_set = _case_set(case)
         all_profile = case_results[case.id].profiles["all"]
         off_profile = case_results[case.id].profiles["off"]
-        for profile_name in CHAIN_PROFILES:
+        for profile_name in CHAIN_REPORT_PROFILES:
             feature_names = CHAIN_PROFILE_FEATURE_MAP[profile_name]
             runtime_profile = off_profile if not feature_names else all_profile
             row = _score_case_feature_set(
@@ -267,14 +391,16 @@ def build_quantitative_chain_report(cases: Sequence[EvalCase]) -> QuantitativeUp
 
     profile_summaries = _build_profile_summaries(
         per_case_rows,
-        profile_order=CHAIN_PROFILES,
+        profile_order=CHAIN_REPORT_PROFILES,
         label_map=CHAIN_PROFILE_LABELS,
         delta_mode="previous_step",
+        baseline_profile="chain_memory_base",
     )
     feature_contributions = tuple(
         row
         for row in profile_summaries
-        if row.case_set == "overall" and row.profile_name != "chain_off"
+        if row.case_set == "overall"
+        and row.profile_name not in {"chain_off", "chain_memory_base"}
     )
     metrics = _build_chain_report_metrics(cases, profile_summaries, per_case_rows)
     run_id = _deterministic_run_id(cases, CHAIN_PROFILES)
@@ -315,9 +441,9 @@ def write_quantitative_chain_markdown(report: QuantitativeUpliftReport, path: Pa
         "## 评测口径",
         "",
         "- 链路评测按累计开关计算，每一步包含前面已经打开的能力。",
-        "- `uplift_points` 在本报告中表示相邻增益，也就是当前步骤相对上一步的分数变化。",
-        "- `total_chain_uplift_points` 表示最终步骤相对 `chain_off` 的总提升。",
-        "- 链路分数不是单项分数相加；新增能力可能补短板，也可能因为治理成本或非即时能力拉低综合分。",
+        "- 主表使用目标命中、grounding 和 forbidden 的计数及比例；原始评分字段仅保留在 JSON 兼容输出中。",
+        "- `chain_memory_base` 是主基线，`chain_off` 只作为关闭增强控制组。",
+        "- 链路不是单项分数相加；后一步会继承前一步的上下文、治理成本和候选变化。",
         "",
         "## 总览",
         "",
@@ -326,33 +452,31 @@ def write_quantitative_chain_markdown(report: QuantitativeUpliftReport, path: Pa
         f"- `common_case_count`: `{report.metrics.get('common_case_count')}`",
         f"- `hard_case_count`: `{report.metrics.get('hard_case_count')}`",
         f"- `chain_step_count`: `{report.metrics.get('chain_step_count')}`",
-        f"- `baseline_main_score`: `{report.metrics.get('baseline_main_score')}`",
-        f"- `final_main_score`: `{report.metrics.get('final_main_score')}`",
-        f"- `total_chain_uplift_points`: `{report.metrics.get('total_chain_uplift_points')}`",
-        f"- `total_chain_uplift_pct`: `{report.metrics.get('total_chain_uplift_pct')}`",
+        f"- 原始记忆基线：命中 `{report.metrics.get('baseline_success_count')}` / `{report.metrics.get('baseline_target_count')}`，漏召回 `{report.metrics.get('baseline_miss_count')}`，召回率 `{report.metrics.get('baseline_recall_rate')}`%。",
+        f"- 全开组合：命中 `{report.metrics.get('final_success_count')}` / `{report.metrics.get('final_target_count')}`，漏召回 `{report.metrics.get('final_miss_count')}`，召回率 `{report.metrics.get('final_recall_rate')}`%。",
         "",
-        "## 链路阶段增益",
+        "## 链路主要结果",
         "",
-        "| step | label | main_score | 相邻增益 | total_uplift | answer | grounding | forbidden | token_signal_kind | token_signal_value |",
-        "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- | --- |",
+        "| step | label | targets | success | miss | recall_rate | grounding | grounding_rate | forbidden | forbidden_rate |",
+        "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
     ]
-    baseline = overall_rows[0].main_score if overall_rows else 0.0
     for row in overall_rows:
-        total_uplift = round(row.main_score - baseline, 4)
+        if row.profile_name == "chain_off":
+            continue
         lines.append(
             "| "
             + " | ".join(
                 [
                     row.profile_name,
                     row.feature_name,
-                    _fmt(row.main_score),
-                    _fmt(row.uplift_points),
-                    _fmt(total_uplift),
-                    _fmt(row.answer_rule_pass_rate),
+                    _fmt(row.target_count),
+                    _fmt(row.success_count),
+                    _fmt(row.miss_count),
+                    _fmt(row.recall_rate),
+                    _fmt(row.grounding_count),
                     _fmt(row.memory_grounding_pass_rate),
+                    _fmt(row.forbidden_count),
                     _fmt(row.forbidden_violation_rate),
-                    _fmt(row.token_signal_kind),
-                    _fmt(row.token_signal_value),
                 ]
             )
             + " |"
@@ -360,37 +484,64 @@ def write_quantitative_chain_markdown(report: QuantitativeUpliftReport, path: Pa
     lines.extend(
         [
             "",
-            "## common / hard 链路对比",
+            "## common / hard 对比",
             "",
-            "| case_set | step | main_score | 相邻增益 | answer | grounding | forbidden |",
-            "| --- | --- | ---: | ---: | ---: | ---: | ---: |",
+            "| case_set | step | targets | success | miss | recall_rate | grounding | grounding_rate | forbidden | forbidden_rate |",
+            "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
         ]
     )
     for row in common_rows + hard_rows:
+        if row.profile_name == "chain_off":
+            continue
         lines.append(
             "| "
             + " | ".join(
                 [
                     row.case_set,
                     row.profile_name,
-                    _fmt(row.main_score),
-                    _fmt(row.uplift_points),
-                    _fmt(row.answer_rule_pass_rate),
+                    _fmt(row.target_count),
+                    _fmt(row.success_count),
+                    _fmt(row.miss_count),
+                    _fmt(row.recall_rate),
+                    _fmt(row.grounding_count),
                     _fmt(row.memory_grounding_pass_rate),
+                    _fmt(row.forbidden_count),
                     _fmt(row.forbidden_violation_rate),
                 ]
             )
             + " |"
         )
+    control = _summary_lookup(overall_rows, "chain_off")
     lines.extend(
         [
             "",
-            "## 结论",
+            "## 关闭增强控制组",
             "",
-            f"- 最终链路 `{CHAIN_PROFILES[-1]}` 主分为 `{report.metrics.get('final_main_score')}`，相对关闭状态提升 `{report.metrics.get('total_chain_uplift_points')}` 分。",
-            f"- 相邻增益最高的步骤是 `{report.metrics.get('strongest_step')}`，增益为 `{report.metrics.get('strongest_step_delta')}` 分。",
-            f"- 相邻增益最低的步骤是 `{report.metrics.get('weakest_step')}`，变化为 `{report.metrics.get('weakest_step_delta')}` 分。",
-            "- 如果某一步相邻增益为负，表示它在当前评分公式下引入了治理成本或非即时能力稀释；这不是功能无效，而是提示后续要调整组合权重和 active 化策略。",
+            "| control | targets | success | miss | recall_rate | grounding | grounding_rate | forbidden | forbidden_rate |",
+            "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+            "| "
+            + " | ".join(
+                [
+                    "chain_off",
+                    _fmt(control.target_count if control else "unavailable"),
+                    _fmt(control.success_count if control else "unavailable"),
+                    _fmt(control.miss_count if control else "unavailable"),
+                    _fmt(control.recall_rate if control else "unavailable"),
+                    _fmt(control.grounding_count if control else "unavailable"),
+                    _fmt(
+                        control.memory_grounding_pass_rate
+                        if control
+                        else "unavailable"
+                    ),
+                    _fmt(control.forbidden_count if control else "unavailable"),
+                    _fmt(
+                        control.forbidden_violation_rate
+                        if control
+                        else "unavailable"
+                    ),
+                ]
+            )
+            + " |",
         ]
     )
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
@@ -402,16 +553,17 @@ def write_quantitative_uplift_markdown(report: QuantitativeUpliftReport, path: P
     overall_rows = [row for row in rows if row.case_set == "overall"]
     common_rows = [row for row in rows if row.case_set == "common"]
     hard_rows = [row for row in rows if row.case_set == "hard"]
-    baseline = _summary_lookup(overall_rows, "off")
+    baseline = _summary_lookup(overall_rows, "memory_base")
     all_on = _summary_lookup(overall_rows, "all_on")
     lines = [
         "# 记忆系统 Phase 6d 量化提升报告",
         "",
         "本报告是离线确定性评测结果，只代表当前样本集上的对比，不代表生产全量结论。",
         "",
-        "## 评分公式",
+        "## 计数与比例口径",
         "",
-        f"- `{report.score_formula}`",
+        "- 主表使用目标命中、grounding 和 forbidden 的计数及比例；原始评分字段仅保留在 JSON 兼容输出中。",
+        "- `memory_base` 是主基线，`off` 只作为关闭增强控制组。",
         "",
         "## 总览",
         "",
@@ -419,60 +571,48 @@ def write_quantitative_uplift_markdown(report: QuantitativeUpliftReport, path: P
         f"- `common_case_count`: `{report.metrics.get('common_case_count')}`",
         f"- `hard_case_count`: `{report.metrics.get('hard_case_count')}`",
         f"- `repeat_count`: `{report.metrics.get('repeat_count')}`",
-        f"- `baseline_main_score`: `{baseline.main_score if baseline else 'unavailable'}`",
-        f"- `all_on_main_score`: `{all_on.main_score if all_on else 'unavailable'}`",
-        f"- `total_uplift_points`: `{report.metrics.get('total_uplift_points')}`",
-        f"- `total_uplift_pct`: `{report.metrics.get('total_uplift_pct')}`",
+        f"- 原始记忆基线：命中 `{baseline.success_count if baseline else 'unavailable'}` / `{baseline.target_count if baseline else 'unavailable'}`，漏召回 `{baseline.miss_count if baseline else 'unavailable'}`，召回率 `{_fmt(baseline.recall_rate if baseline else 'unavailable')}`%。",
+        f"- 全开组合：命中 `{all_on.success_count if all_on else 'unavailable'}` / `{all_on.target_count if all_on else 'unavailable'}`，漏召回 `{all_on.miss_count if all_on else 'unavailable'}`，召回率 `{_fmt(all_on.recall_rate if all_on else 'unavailable')}`%。",
         "",
-        "## 单项提升",
+        "## 主要结果",
         "",
-        "| profile | case_set | main_score | uplift_points | uplift_pct | answer | grounding | forbidden | token_signal_kind | token_signal_value | token_signal_delta | latency_ms | latency_delta_ms |",
-        "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- | --- | --- | --- | --- |",
+        "| profile | case_set | targets | success | miss | recall_rate | grounding | grounding_rate | forbidden | forbidden_rate |",
+        "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
     ]
     for row in overall_rows:
         if row.profile_name == "off":
             continue
-        lines.append(_summary_row_to_md(row))
+        lines.append(_count_rate_summary_row_to_md(row))
     lines.extend(
         [
             "",
             "## common / hard 对比",
             "",
-            "| case_set | profile | main_score | uplift_points | answer | grounding | forbidden | token_signal_kind | token_signal_value | token_signal_delta | latency_delta_ms |",
-            "| --- | --- | ---: | ---: | ---: | ---: | ---: | --- | --- | --- | --- |",
+            "| case_set | profile | targets | success | miss | recall_rate | grounding | grounding_rate | forbidden | forbidden_rate |",
+            "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
         ]
     )
     for row in common_rows + hard_rows:
         if row.profile_name == "off":
             continue
-        lines.append(
-            "| "
-            + " | ".join(
-                [
-                    row.case_set,
-                    row.profile_name,
-                    _fmt(row.main_score),
-                    _fmt(row.uplift_points),
-                    _fmt(row.answer_rule_pass_rate),
-                    _fmt(row.memory_grounding_pass_rate),
-                    _fmt(row.forbidden_violation_rate),
-                    _fmt(row.token_signal_kind),
-                    _fmt(row.token_signal_value),
-                    _fmt(row.token_signal_delta),
-                    _fmt(row.latency_delta_ms),
-                ]
-            )
-            + " |"
-        )
+        lines.append(_count_rate_summary_row_to_md(row))
+    control = _summary_lookup(overall_rows, "off")
     lines.extend(
         [
             "",
-            "## 原始指标",
+            "## 关闭增强控制组",
             "",
+            "| control | targets | success | miss | recall_rate | grounding | grounding_rate | forbidden | forbidden_rate |",
+            "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+            _count_rate_summary_row_to_md(control, include_profile_only=True)
+            if control
+            else "| off | unavailable | unavailable | unavailable | unavailable | unavailable | unavailable | unavailable | unavailable |",
+            "",
+            "## 原始评分字段",
+            "",
+            "- `main_score`、`uplift_points` 和 `uplift_pct` 保留在 JSON 输出中以兼容既有消费者，不作为本报告主表的解释口径。",
         ]
     )
-    for key in sorted(report.metrics):
-        lines.append(f"- `{key}`: `{report.metrics[key]}`")
     lines.extend(
         [
             "",
@@ -483,7 +623,7 @@ def write_quantitative_uplift_markdown(report: QuantitativeUpliftReport, path: P
             "- `tri_retrieval_only` 和 `graph_only` 是同一轮 phase2 runtime 的两条家族视角，不是两个独立开关运行。",
             "- `all_on` 若同时包含成本和节省两类 token 信号，会标记为 `mixed`，不会强行合并成一个 token 数。",
             "- `feature_contributions` 只展示 overall 视角，便于看单项开关的净增益。",
-            "- `off` 作为 baseline，只用于对比，不应单独解读为生产结论。",
+            "- `memory_base` 是原始记忆基线，`off` 是关闭增强控制组；单项增益和总增益都应优先相对 `memory_base` 理解。",
         ]
     )
     lines.extend(_detailed_review_lines(report, rows))
@@ -698,6 +838,14 @@ def _score_case_feature_set(
     feature_name: str,
     feature_names: tuple[str, ...],
 ) -> dict[str, object]:
+    if profile_name in {"memory_base", "chain_memory_base"}:
+        return _score_original_memory_base_case(
+            case=case,
+            case_set=case_set,
+            profile_name=profile_name,
+            feature_name=feature_name,
+        )
+
     family_scores = tuple(
         _score_family(
             case=case,
@@ -734,6 +882,21 @@ def _score_case_feature_set(
         memory_grounding_pass_rate=memory_grounding_pass_rate,
         forbidden_violation_rate=forbidden_violation_rate,
     )
+    expected_ids = tuple(
+        str(item) for item in case.expectations.get("should_recall_ids", [])
+    )
+    forbidden_ids = tuple(
+        str(item) for item in case.expectations.get("should_not_recall_ids", [])
+    )
+    target_count = len(set(expected_ids))
+    success_count = int(round(answer_rule_pass_rate / 100.0 * target_count))
+    success_count = min(success_count, target_count)
+    miss_count = max(0, target_count - success_count)
+    grounding_count = int(round(memory_grounding_pass_rate / 100.0 * target_count))
+    grounding_count = min(grounding_count, target_count)
+    forbidden_count = int(
+        round(forbidden_violation_rate / 100.0 * max(1, len(set(forbidden_ids))))
+    )
     unavailable = tuple(
         sorted({item for row in family_scores for item in row["unavailable"]})
     )
@@ -754,6 +917,12 @@ def _score_case_feature_set(
         "measurement_family": case.setup.get("measurement_family", ""),
         "target_profile": case.setup.get("target_profile", ""),
         "repeat_count": 1,
+        "target_count": target_count,
+        "success_count": success_count,
+        "miss_count": miss_count,
+        "recall_rate": _ratio(success_count, target_count) * 100.0,
+        "grounding_count": grounding_count,
+        "forbidden_count": forbidden_count,
         "answer_rule_pass_rate": answer_rule_pass_rate,
         "memory_grounding_pass_rate": memory_grounding_pass_rate,
         "forbidden_violation_rate": forbidden_violation_rate,
@@ -763,6 +932,68 @@ def _score_case_feature_set(
         "token_signal_delta": token_signal_delta,
         "latency_ms": latency_ms,
         "unavailable": unavailable,
+    }
+
+
+def _score_original_memory_base_case(
+    *,
+    case: EvalCase,
+    case_set: str,
+    profile_name: str,
+    feature_name: str,
+) -> dict[str, object]:
+    expected_ids = tuple(
+        str(item) for item in case.expectations.get("should_recall_ids", [])
+    )
+    forbidden_ids = tuple(
+        str(item) for item in case.expectations.get("should_not_recall_ids", [])
+    )
+    recalled_items = _baseline_recalled_items(case)
+    recalled_ids = tuple(str(item.get("id") or "") for item in recalled_items)
+    expected_set = set(expected_ids)
+    forbidden_set = set(forbidden_ids)
+    recalled_set = set(recalled_ids)
+    target_count = len(expected_set)
+    success_count = len(recalled_set & expected_set)
+    forbidden_count = len(recalled_set & forbidden_set)
+    grounding_count = sum(
+        1
+        for item in recalled_items
+        if str(item.get("id") or "") in expected_set
+        and str(item.get("source_ref") or "").strip()
+    )
+    recall_rate = _ratio(success_count, target_count) * 100.0
+    grounding_rate = _ratio(grounding_count, target_count) * 100.0
+    forbidden_rate = _ratio(forbidden_count, max(1, len(forbidden_set))) * 100.0
+    main_score = calculate_main_score(
+        answer_rule_pass_rate=recall_rate,
+        memory_grounding_pass_rate=grounding_rate,
+        forbidden_violation_rate=forbidden_rate,
+    )
+    return {
+        "case_id": case.id,
+        "category": case.category,
+        "case_set": case_set,
+        "profile_name": profile_name,
+        "feature_name": feature_name,
+        "measurement_family": case.setup.get("measurement_family", ""),
+        "target_profile": case.setup.get("target_profile", ""),
+        "repeat_count": 1,
+        "target_count": target_count,
+        "success_count": success_count,
+        "miss_count": max(0, target_count - success_count),
+        "recall_rate": recall_rate,
+        "grounding_count": grounding_count,
+        "forbidden_count": forbidden_count,
+        "answer_rule_pass_rate": recall_rate,
+        "memory_grounding_pass_rate": grounding_rate,
+        "forbidden_violation_rate": forbidden_rate,
+        "main_score": main_score,
+        "token_signal_kind": "unavailable",
+        "token_signal_value": "unavailable",
+        "token_signal_delta": "unavailable",
+        "latency_ms": "unavailable",
+        "unavailable": ("token_signal_value", "latency_ms"),
     }
 
 
@@ -1050,6 +1281,7 @@ def _build_profile_summaries(
     profile_order: Sequence[str] = REPORT_PROFILES,
     label_map: dict[str, str] = PROFILE_FEATURE_LABELS,
     delta_mode: str = "baseline",
+    baseline_profile: str = "memory_base",
 ) -> tuple[QuantitativeProfileSummary, ...]:
     grouped: dict[tuple[str, str], list[dict[str, object]]] = {}
     for row in rows:
@@ -1060,12 +1292,12 @@ def _build_profile_summaries(
         overall_grouped.setdefault(str(row["profile_name"]), []).append(row)
 
     baseline_lookup = {
-        case_set: _aggregate_case_rows(grouped[(case_set, "off")])
+        case_set: _aggregate_case_rows(grouped[(case_set, baseline_profile)])
         for case_set in {"common", "hard"}
-        if (case_set, "off") in grouped
+        if (case_set, baseline_profile) in grouped
     }
     baseline_lookup["overall"] = _aggregate_case_rows(
-        overall_grouped.get("off", [])
+        overall_grouped.get(baseline_profile, [])
     )
     result: list[QuantitativeProfileSummary] = []
     for case_set in ("common", "hard", "overall"):
@@ -1129,6 +1361,12 @@ def _build_profile_summaries(
                     feature_name=label_map[profile_name],
                     case_set=case_set,
                     case_count=int(aggregate["case_count"]),
+                    target_count=int(aggregate["target_count"]),
+                    success_count=int(aggregate["success_count"]),
+                    miss_count=int(aggregate["miss_count"]),
+                    recall_rate=float(aggregate["recall_rate"]),
+                    grounding_count=int(aggregate["grounding_count"]),
+                    forbidden_count=int(aggregate["forbidden_count"]),
                     repeat_count=1,
                     answer_rule_pass_rate=float(aggregate["answer_rule_pass_rate"]),
                     memory_grounding_pass_rate=float(
@@ -1154,6 +1392,10 @@ def _build_profile_summaries(
 
 
 def _aggregate_case_rows(rows: Sequence[dict[str, object]]) -> dict[str, object]:
+    target_count = sum(int(row.get("target_count", 0) or 0) for row in rows)
+    success_count = sum(int(row.get("success_count", 0) or 0) for row in rows)
+    grounding_count = sum(int(row.get("grounding_count", 0) or 0) for row in rows)
+    forbidden_count = sum(int(row.get("forbidden_count", 0) or 0) for row in rows)
     answer = _avg(float(row["answer_rule_pass_rate"]) for row in rows)
     grounding = _avg(float(row["memory_grounding_pass_rate"]) for row in rows)
     forbidden = _avg(float(row["forbidden_violation_rate"]) for row in rows)
@@ -1162,6 +1404,12 @@ def _aggregate_case_rows(rows: Sequence[dict[str, object]]) -> dict[str, object]
     latency_values = [row["latency_ms"] for row in rows if isinstance(row["latency_ms"], (int, float))]
     return {
         "case_count": len(rows),
+        "target_count": target_count,
+        "success_count": success_count,
+        "miss_count": max(0, target_count - success_count),
+        "recall_rate": _ratio(success_count, target_count) * 100.0,
+        "grounding_count": grounding_count,
+        "forbidden_count": forbidden_count,
         "answer_rule_pass_rate": answer,
         "memory_grounding_pass_rate": grounding,
         "forbidden_violation_rate": forbidden,
@@ -1178,12 +1426,12 @@ def _build_report_metrics(
     summaries: Sequence[QuantitativeProfileSummary],
     rows: Sequence[dict[str, object]],
 ) -> dict[str, object]:
-    baseline = _summary_lookup(summaries, "off", case_set="overall")
+    baseline = _summary_lookup(summaries, "memory_base", case_set="overall")
     all_on = _summary_lookup(summaries, "all_on", case_set="overall")
     common = _summary_lookup(summaries, "all_on", case_set="common")
     hard = _summary_lookup(summaries, "all_on", case_set="hard")
-    common_baseline = _summary_lookup(summaries, "off", case_set="common")
-    hard_baseline = _summary_lookup(summaries, "off", case_set="hard")
+    common_baseline = _summary_lookup(summaries, "memory_base", case_set="common")
+    hard_baseline = _summary_lookup(summaries, "memory_base", case_set="hard")
     overall_baseline = baseline.main_score if baseline else 0.0
     overall_all_on = all_on.main_score if all_on else 0.0
     total_uplift_points = round(overall_all_on - overall_baseline, 4)
@@ -1194,6 +1442,8 @@ def _build_report_metrics(
     )
     return {
         "measurement_mode": "offline_trace_quantitative_uplift",
+        "baseline_profile": "memory_base",
+        "control_profile": "off",
         "case_count": len(cases),
         "common_case_count": sum(1 for case in cases if case.id.startswith("common_")),
         "hard_case_count": sum(1 for case in cases if case.id.startswith("hard_")),
@@ -1204,6 +1454,14 @@ def _build_report_metrics(
         "profile_summary_count": len(summaries),
         "overall_main_score": overall_all_on,
         "baseline_main_score": overall_baseline,
+        "baseline_target_count": baseline.target_count if baseline else 0,
+        "baseline_success_count": baseline.success_count if baseline else 0,
+        "baseline_miss_count": baseline.miss_count if baseline else 0,
+        "baseline_recall_rate": baseline.recall_rate if baseline else 0.0,
+        "final_target_count": all_on.target_count if all_on else 0,
+        "final_success_count": all_on.success_count if all_on else 0,
+        "final_miss_count": all_on.miss_count if all_on else 0,
+        "final_recall_rate": all_on.recall_rate if all_on else 0.0,
         "total_uplift_points": total_uplift_points,
         "total_uplift_pct": total_uplift_pct,
         "common_main_score": common.main_score if common else "unavailable",
@@ -1231,7 +1489,7 @@ def _build_chain_report_metrics(
     summaries: Sequence[QuantitativeProfileSummary],
     rows: Sequence[dict[str, object]],
 ) -> dict[str, object]:
-    baseline = _summary_lookup(summaries, "chain_off", case_set="overall")
+    baseline = _summary_lookup(summaries, "chain_memory_base", case_set="overall")
     final = _summary_lookup(summaries, "chain_all_on", case_set="overall")
     common_final = _summary_lookup(summaries, "chain_all_on", case_set="common")
     hard_final = _summary_lookup(summaries, "chain_all_on", case_set="hard")
@@ -1252,6 +1510,8 @@ def _build_chain_report_metrics(
     weakest = min(overall_steps, key=lambda row: row.uplift_points, default=None)
     return {
         "measurement_mode": "offline_trace_quantitative_chain",
+        "baseline_profile": "chain_memory_base",
+        "control_profile": "chain_off",
         "case_count": len(cases),
         "common_case_count": sum(1 for case in cases if case.id.startswith("common_")),
         "hard_case_count": sum(1 for case in cases if case.id.startswith("hard_")),
@@ -1262,6 +1522,14 @@ def _build_chain_report_metrics(
         "profile_summary_count": len(summaries),
         "baseline_main_score": baseline_score,
         "final_main_score": final_score,
+        "baseline_target_count": baseline.target_count if baseline else 0,
+        "baseline_success_count": baseline.success_count if baseline else 0,
+        "baseline_miss_count": baseline.miss_count if baseline else 0,
+        "baseline_recall_rate": baseline.recall_rate if baseline else 0.0,
+        "final_target_count": final.target_count if final else 0,
+        "final_success_count": final.success_count if final else 0,
+        "final_miss_count": final.miss_count if final else 0,
+        "final_recall_rate": final.recall_rate if final else 0.0,
         "total_chain_uplift_points": total_uplift_points,
         "total_chain_uplift_pct": total_uplift_pct,
         "common_final_main_score": common_final.main_score
@@ -1286,6 +1554,139 @@ def _build_chain_report_metrics(
     }
 
 
+def _build_balanced_summaries(
+    rows: Sequence[QuantitativeProfileSummary],
+) -> tuple[BalancedProfileSummary, ...]:
+    result: list[BalancedProfileSummary] = []
+    for case_set in ("common", "hard", "overall"):
+        previous: BalancedProfileSummary | None = None
+        for profile_name in CHAIN_PROFILES:
+            row = _summary_lookup(rows, profile_name, case_set=case_set)
+            if row is None:
+                continue
+            scores = calculate_balanced_scores(row)
+            balanced_score = float(scores["balanced_score"])
+            previous_score = previous.balanced_score if previous else balanced_score
+            delta_points = round(balanced_score - previous_score, 4)
+            delta_pct = (
+                round(delta_points / previous_score * 100.0, 4)
+                if previous_score
+                else None
+            )
+            summary = BalancedProfileSummary(
+                profile_name=row.profile_name,
+                feature_name=row.feature_name,
+                case_set=row.case_set,
+                case_count=row.case_count,
+                answer_score=float(scores["answer_score"]),
+                retrieval_proxy_score=scores["retrieval_proxy_score"],
+                grounding_score=float(scores["grounding_score"]),
+                governance_score=float(scores["governance_score"]),
+                efficiency_score=scores["efficiency_score"],
+                balanced_score=balanced_score,
+                balanced_delta_points=delta_points,
+                balanced_delta_pct=delta_pct,
+                balanced_score_available_dimensions=tuple(
+                    str(item) for item in scores["balanced_score_available_dimensions"]
+                ),
+                unavailable_dimensions=tuple(
+                    str(item) for item in scores["unavailable_dimensions"]
+                ),
+            )
+            result.append(summary)
+            previous = summary
+    return tuple(result)
+
+
+def _build_balanced_report_metrics(
+    cases: Sequence[EvalCase],
+    summaries: Sequence[BalancedProfileSummary],
+    chain_report: QuantitativeUpliftReport,
+) -> dict[str, object]:
+    baseline = _balanced_summary_lookup(summaries, "chain_off", case_set="overall")
+    final = _balanced_summary_lookup(summaries, "chain_all_on", case_set="overall")
+    common_final = _balanced_summary_lookup(
+        summaries, "chain_all_on", case_set="common"
+    )
+    hard_final = _balanced_summary_lookup(summaries, "chain_all_on", case_set="hard")
+    baseline_score = baseline.balanced_score if baseline else 0.0
+    final_score = final.balanced_score if final else 0.0
+    total_uplift_points = round(final_score - baseline_score, 4)
+    overall_steps = [
+        row
+        for row in summaries
+        if row.case_set == "overall" and row.profile_name != "chain_off"
+    ]
+    strongest = max(
+        overall_steps,
+        key=lambda row: row.balanced_delta_points,
+        default=None,
+    )
+    weakest = min(
+        overall_steps,
+        key=lambda row: row.balanced_delta_points,
+        default=None,
+    )
+    return {
+        "measurement_mode": "offline_trace_quantitative_balanced",
+        "case_count": len(cases),
+        "common_case_count": sum(1 for case in cases if case.id.startswith("common_")),
+        "hard_case_count": sum(1 for case in cases if case.id.startswith("hard_")),
+        "balanced_step_count": len(CHAIN_PROFILES),
+        "chain_run_id": chain_report.run_id,
+        "baseline_balanced_score": baseline_score,
+        "final_balanced_score": final_score,
+        "total_balanced_uplift_points": total_uplift_points,
+        "total_balanced_uplift_pct": (
+            round(total_uplift_points / baseline_score * 100.0, 4)
+            if baseline_score
+            else None
+        ),
+        "strongest_balanced_step": strongest.profile_name
+        if strongest
+        else "unavailable",
+        "strongest_balanced_delta": strongest.balanced_delta_points
+        if strongest
+        else "unavailable",
+        "weakest_balanced_step": weakest.profile_name
+        if weakest
+        else "unavailable",
+        "weakest_balanced_delta": weakest.balanced_delta_points
+        if weakest
+        else "unavailable",
+        "answer_score_final": final.answer_score if final else "unavailable",
+        "retrieval_proxy_score_final": final.retrieval_proxy_score
+        if final
+        else "unavailable",
+        "grounding_score_final": final.grounding_score if final else "unavailable",
+        "governance_score_final": final.governance_score if final else "unavailable",
+        "efficiency_score_final": final.efficiency_score if final else "unavailable",
+        "common_final_balanced_score": common_final.balanced_score
+        if common_final
+        else "unavailable",
+        "hard_final_balanced_score": hard_final.balanced_score
+        if hard_final
+        else "unavailable",
+        "balanced_score_available_dimensions_final": final.balanced_score_available_dimensions
+        if final
+        else (),
+        "unavailable_dimensions_final": final.unavailable_dimensions if final else (),
+        "score_formula": BALANCED_SCORE_FORMULA,
+    }
+
+
+def _balanced_summary_lookup(
+    rows: Sequence[BalancedProfileSummary],
+    profile_name: str,
+    *,
+    case_set: str = "overall",
+) -> BalancedProfileSummary | None:
+    for row in rows:
+        if row.profile_name == profile_name and row.case_set == case_set:
+            return row
+    return None
+
+
 def _report_to_dict(report: QuantitativeUpliftReport) -> dict[str, object]:
     return {
         "run_id": report.run_id,
@@ -1296,6 +1697,142 @@ def _report_to_dict(report: QuantitativeUpliftReport) -> dict[str, object]:
         "feature_contributions": [asdict(row) for row in report.feature_contributions],
         "case_records": list(report.case_records),
     }
+
+
+def _balanced_report_to_dict(report: QuantitativeBalancedReport) -> dict[str, object]:
+    return {
+        "run_id": report.run_id,
+        "generated_at": report.generated_at,
+        "score_formula": report.score_formula,
+        "metrics": report.metrics,
+        "profile_summaries": [asdict(row) for row in report.profile_summaries],
+        "balanced_summaries": [asdict(row) for row in report.balanced_summaries],
+        "case_records": list(report.case_records),
+    }
+
+
+def write_quantitative_balanced_json(
+    report: QuantitativeBalancedReport,
+    path: Path,
+) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(
+            _balanced_report_to_dict(report),
+            ensure_ascii=False,
+            indent=2,
+            sort_keys=True,
+        ),
+        encoding="utf-8",
+    )
+
+
+def write_quantitative_balanced_markdown(
+    report: QuantitativeBalancedReport,
+    path: Path,
+) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    rows = list(report.balanced_summaries)
+    overall_rows = [row for row in rows if row.case_set == "overall"]
+    common_rows = [row for row in rows if row.case_set == "common"]
+    hard_rows = [row for row in rows if row.case_set == "hard"]
+    baseline = _balanced_summary_lookup(overall_rows, "chain_off")
+    final = _balanced_summary_lookup(overall_rows, "chain_all_on")
+    common_count = report.metrics.get("common_case_count", "unavailable")
+    hard_count = report.metrics.get("hard_case_count", "unavailable")
+    lines = [
+        "# 记忆系统 Balanced 量化评测报告",
+        "",
+        "本报告是离线确定性 trace 的分层代理评测，不调用真实 LLM，不读写真实 memory DB，不是生产回答准确率。",
+        "",
+        "## 评测口径",
+        "",
+        f"- 样本规模：{report.metrics.get('case_count')} 个目标导向 case，其中 common {common_count} 个，hard {hard_count} 个。",
+        "- Balanced report 借鉴 RAG/Agent 分层评测共识，把回答、召回代理、证据、治理和效率分开；本项目的改进是把 memory 生命周期治理纳入评分，包括 forbidden、source_ref、版本链、scope 隔离和 token/sleep 信号。它仍然是离线代理评测，不是生产回答准确率。",
+        "- `retrieval_proxy_score` 是当前离线 trace 的召回代理指标，不是真实 `recall@k`。",
+        "- `efficiency_score` 缺失时保持 `unavailable`，计算 `balanced_score` 时只按可用维度归一化权重。",
+        f"- `{report.score_formula}`",
+        "",
+        "## 分层评分",
+        "",
+        "| 指标 | 含义 | 方向 |",
+        "| --- | --- | --- |",
+        "| `answer_score` | 回答规则或目标记忆命中代理分，来自 `answer_rule_pass_rate` | 越高越好 |",
+        "| `retrieval_proxy_score` | 召回相关链路步骤上的离线召回代理分，不是真实 `recall@k` | 越高越好 |",
+        "| `grounding_score` | 来源、证据或可解释字段覆盖情况，来自 `memory_grounding_pass_rate` | 越高越好 |",
+        "| `governance_score` | 综合 forbidden 控制和 grounding 的治理分 | 越高越好 |",
+        "| `efficiency_score` | token 节省或 prompt token 控制的效率分；缺失时为 `unavailable` | 越高越好 |",
+        "| `balanced_score` | 只用可用维度归一化后的综合代理分 | 越高越好 |",
+        "",
+        "## 链路 Balanced 增益",
+        "",
+        "| step | label | balanced_score | 相邻增益 | answer_score | retrieval_proxy_score | grounding_score | governance_score | efficiency_score | available | unavailable |",
+        "| --- | --- | ---: | ---: | ---: | --- | ---: | ---: | --- | --- | --- |",
+    ]
+    for row in overall_rows:
+        lines.append(_balanced_summary_row_to_md(row))
+    lines.extend(
+        [
+            "",
+            "## common / hard 对比",
+            "",
+            "| case_set | step | balanced_score | 相邻增益 | answer_score | retrieval_proxy_score | grounding_score | governance_score | efficiency_score |",
+            "| --- | --- | ---: | ---: | ---: | --- | ---: | ---: | --- |",
+        ]
+    )
+    for row in common_rows + hard_rows:
+        lines.append(
+            "| "
+            + " | ".join(
+                [
+                    row.case_set,
+                    row.profile_name,
+                    _fmt(row.balanced_score),
+                    _fmt(row.balanced_delta_points),
+                    _fmt(row.answer_score),
+                    _fmt(row.retrieval_proxy_score),
+                    _fmt(row.grounding_score),
+                    _fmt(row.governance_score),
+                    _fmt(row.efficiency_score),
+                ]
+            )
+            + " |"
+        )
+    lines.extend(
+        [
+            "",
+            "## 结论",
+            "",
+            f"- 关闭状态 balanced_score 为 `{_fmt(baseline.balanced_score if baseline else 'unavailable')}`。",
+            f"- 全开组合 balanced_score 为 `{_fmt(final.balanced_score if final else 'unavailable')}`，相邻链路总提升 `{_fmt(report.metrics.get('total_balanced_uplift_points'))}` 分。",
+            f"- 相邻增益最高的步骤是 `{report.metrics.get('strongest_balanced_step')}`，增益为 `{_fmt(report.metrics.get('strongest_balanced_delta'))}` 分。",
+            f"- 相邻增益最低的步骤是 `{report.metrics.get('weakest_balanced_step')}`，变化为 `{_fmt(report.metrics.get('weakest_balanced_delta'))}` 分。",
+            "- 这个口径让后段治理、证据和效率模块有独立展示空间，但它仍然是离线代理评测，不能写成线上效果或真实准确率结论。",
+        ]
+    )
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def _balanced_summary_row_to_md(row: BalancedProfileSummary) -> str:
+    return (
+        "| "
+        + " | ".join(
+            [
+                row.profile_name,
+                row.feature_name,
+                _fmt(row.balanced_score),
+                _fmt(row.balanced_delta_points),
+                _fmt(row.answer_score),
+                _fmt(row.retrieval_proxy_score),
+                _fmt(row.grounding_score),
+                _fmt(row.governance_score),
+                _fmt(row.efficiency_score),
+                ", ".join(row.balanced_score_available_dimensions),
+                ", ".join(row.unavailable_dimensions) or "none",
+            ]
+        )
+        + " |"
+    )
 
 
 def _summary_lookup(
@@ -1320,6 +1857,29 @@ def _summary_row_to_md(row: QuantitativeProfileSummary) -> str:
         f"{_fmt(row.latency_ms)} | "
         f"{_fmt(row.latency_delta_ms)} |"
     )
+
+
+def _count_rate_summary_row_to_md(
+    row: QuantitativeProfileSummary,
+    *,
+    include_profile_only: bool = False,
+) -> str:
+    fields = [row.profile_name]
+    if not include_profile_only:
+        fields.append(row.case_set)
+    fields.extend(
+        [
+            _fmt(row.target_count),
+            _fmt(row.success_count),
+            _fmt(row.miss_count),
+            _fmt(row.recall_rate),
+            _fmt(row.grounding_count),
+            _fmt(row.memory_grounding_pass_rate),
+            _fmt(row.forbidden_count),
+            _fmt(row.forbidden_violation_rate),
+        ]
+    )
+    return "| " + " | ".join(fields) + " |"
 
 
 def _detailed_review_lines(
@@ -1358,8 +1918,8 @@ def _detailed_review_lines(
         "| 指标 | 含义 | 方向 |",
         "| --- | --- | --- |",
         "| `main_score` | 综合主分，公式为 `0.7 * answer + 0.2 * grounding + 0.1 * (100 - forbidden)` | 越高越好 |",
-        "| `uplift_points` | 当前开关相比 `off` 提高的分数 | 越高越好 |",
-        "| `uplift_pct` | 当前开关相比 `off` 的提升百分比 | 越高越好 |",
+        "| `uplift_points` | 当前开关相比 `memory_base` 提高的分数 | 越高越好 |",
+        "| `uplift_pct` | 当前开关相比 `memory_base` 的提升百分比 | 越高越好 |",
         "| `answer_rule_pass_rate` | 是否命中预期答案规则或目标记忆 | 越高越好 |",
         "| `memory_grounding_pass_rate` | 召回、注入或治理结果是否有来源和证据支撑 | 越高越好 |",
         "| `forbidden_violation_rate` | 是否召回或注入了旧记忆、噪声记忆、跨会话记忆等 forbidden 内容 | 越低越好 |",
@@ -1408,7 +1968,7 @@ def _detailed_review_lines(
         [
             "### 总结",
             "",
-            f"- 全开组合 `all_on` 的主分为 `{report.metrics.get('overall_main_score')}`，相比 `off` 提高 `{report.metrics.get('total_uplift_points')}` 分。",
+            f"- 全开组合 `all_on` 的主分为 `{report.metrics.get('overall_main_score')}`，相比原始记忆基线提高 `{report.metrics.get('total_uplift_points')}` 分。",
             f"- 单项直接提分最强的是 `{_strongest_feature_profile(rows)}`，它是当前样本集上的最高 uplift profile。",
             "- `graph_only` 对模糊关联命中有效，但需要继续和 source_ref / provenance 联动提升证据支撑。",
             "- `rerank_only` 和 `version_provenance_only` 更偏治理，价值在降低错误注入、旧版本误用和跨 scope 风险。",
@@ -1527,6 +2087,33 @@ def _strongest_feature_profile(rows: Sequence[QuantitativeProfileSummary]) -> st
     if not candidates:
         return "unavailable"
     return max(candidates, key=lambda row: row.uplift_points).profile_name
+
+
+def _profile_has_retrieval_signal(profile_name: str) -> bool:
+    return any(
+        feature in CHAIN_PROFILE_FEATURE_MAP.get(profile_name, ())
+        for feature in (
+            "tri_retrieval",
+            "graph_retrieval",
+            "rerank_shadow",
+            "version_chain_shadow",
+        )
+    )
+
+
+def _efficiency_score(row: QuantitativeProfileSummary) -> float | str:
+    value = row.token_signal_value
+    if row.token_signal_kind == "estimated_token_saving" and isinstance(
+        value,
+        (int, float),
+    ):
+        return round(min(100.0, float(value) / 10.0), 4)
+    if row.token_signal_kind == "prompt_token_delta" and isinstance(
+        value,
+        (int, float),
+    ):
+        return round(max(0.0, 100.0 - float(value) / 100.0), 4)
+    return "unavailable"
 
 
 def _fmt(value: object) -> str:

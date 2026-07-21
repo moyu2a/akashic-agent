@@ -21,10 +21,19 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--out-dir", default="my_md/memory_optimization/eval_reports")
     parser.add_argument("--case-set", choices=("all", "common", "hard"), default="all")
+    parser.add_argument(
+        "--case-pack",
+        choices=("standard", "comprehensive"),
+        default="standard",
+    )
     parser.add_argument("--limit", type=int, default=0)
     args = parser.parse_args()
 
-    cases = build_quantitative_eval_cases(case_set=args.case_set, limit=args.limit)
+    cases = build_quantitative_eval_cases(
+        case_set=args.case_set,
+        limit=args.limit,
+        case_pack=args.case_pack,
+    )
     if not cases:
         print("No quantitative cases available.")
         return 1

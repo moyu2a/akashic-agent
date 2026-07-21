@@ -59,11 +59,43 @@ class AnswerScoreResult:
     expected_memory_used: bool
     language_passed: bool
     failures: tuple[str, ...]
+    matched_expected_terms: tuple[str, ...]
+    missing_expected_terms: tuple[str, ...]
+    matched_any_groups: tuple[tuple[str, ...], ...]
+    missing_any_groups: tuple[tuple[str, ...], ...]
+
+
+@dataclass(frozen=True)
+class LLMSampleRunSpec:
+    case: EvalCase
+    prompt_variant: str = "baseline"
+    repeat_index: int = 0
+
+
+@dataclass(frozen=True)
+class LLMSampleAnswerDebugRecord:
+    case_id: str
+    case_index: int
+    prompt_variant: str
+    session_key: str
+    evidence_block_text: str
+    answer_text: str
+    answer_length: int
+    used_memory_ids: tuple[str, ...]
+    matched_expected_terms: tuple[str, ...]
+    missing_expected_terms: tuple[str, ...]
+    matched_any_groups: tuple[tuple[str, ...], ...]
+    missing_any_groups: tuple[tuple[str, ...], ...]
+    failures: tuple[str, ...]
+    answer_rule_passed: bool
+    memory_grounding_passed: bool
 
 
 @dataclass(frozen=True)
 class LLMSampleCaseResult:
     case_id: str
+    prompt_variant: str
+    repeat_index: int
     category: str
     session_key: str
     channel: str
@@ -103,10 +135,14 @@ class LLMSampleReport:
 class LLMSampleMemoryEngine:
     """Memory engine for answer-quality evals. Reports only ids, never summaries."""
 
-    def __init__(self, case: EvalCase) -> None:
+    def __init__(self, case: EvalCase, *, prompt_variant: str = "baseline") -> None:
+        if prompt_variant not in {"baseline", "coached"}:
+            raise ValueError("prompt_variant must be 'baseline' or 'coached'")
         self.case = case
+        self.prompt_variant = prompt_variant
         self.retrieve_requests: list[MemoryEngineRetrieveRequest] = []
         self.used_memory_ids: list[str] = []
+        self.last_text_block = ""
 
     async def retrieve(
         self,
@@ -128,10 +164,19 @@ class LLMSampleMemoryEngine:
             )
             for item_id in ids
         ]
-        block = "\n".join(
+        lines = [
             f"- memory_id={item_id}; summary={summaries.get(item_id, '')}"
             for item_id in ids
-        )
+        ]
+        if self.prompt_variant == "coached":
+            lines.insert(
+                0,
+                "记忆评测说明：请优先使用下列记忆回答；"
+                "如果记忆包含具体方案名、排序方式、工具名或关键术语，"
+                "请在答案中保留这些关键术语。",
+            )
+        block = "\n".join(lines)
+        self.last_text_block = block
         return MemoryEngineRetrieveResult(
             text_block=block,
             hits=hits,
@@ -217,22 +262,30 @@ def score_answer_text(
     used_memory_ids: Sequence[str],
 ) -> AnswerScoreResult:
     failures: list[str] = []
+    matched_expected_terms: list[str] = []
+    missing_expected_terms: list[str] = []
     expected_pass_count = 0
     expected_miss_count = 0
     for term in expectation.expected_answer_contains:
         if _contains_term(answer, term):
             expected_pass_count += 1
+            matched_expected_terms.append(term)
         else:
             expected_miss_count += 1
+            missing_expected_terms.append(term)
             failures.append(f"missing expected answer term: {term}")
 
+    matched_any_groups: list[tuple[str, ...]] = []
+    missing_any_groups: list[tuple[str, ...]] = []
     expected_any_pass_count = 0
     expected_any_miss_count = 0
     for group in expectation.expected_answer_contains_any:
         if any(_contains_term(answer, term) for term in group):
             expected_any_pass_count += 1
+            matched_any_groups.append(group)
         else:
             expected_any_miss_count += 1
+            missing_any_groups.append(group)
             failures.append(
                 "missing expected answer term group: " + "|".join(group)
             )
@@ -278,18 +331,33 @@ def score_answer_text(
         expected_memory_used=expected_memory_used,
         language_passed=language_passed,
         failures=tuple(failures),
+        matched_expected_terms=tuple(matched_expected_terms),
+        missing_expected_terms=tuple(missing_expected_terms),
+        matched_any_groups=tuple(matched_any_groups),
+        missing_any_groups=tuple(missing_any_groups),
     )
 
 
 async def run_llm_sample_case(
-    case: EvalCase,
+    run: EvalCase | LLMSampleRunSpec,
     workspace: Path,
     provider: object,
     model: str,
     timeout_s: float = 60.0,
+    *,
+    case_index: int = 0,
+    answer_debug_dir: Path | None = None,
 ) -> LLMSampleCaseResult:
+    if isinstance(run, LLMSampleRunSpec):
+        case = run.case
+        prompt_variant = run.prompt_variant
+        repeat_index = run.repeat_index
+    else:
+        case = run
+        prompt_variant = "baseline"
+        repeat_index = 0
     workspace.mkdir(parents=True, exist_ok=True)
-    memory = LLMSampleMemoryEngine(case)
+    memory = LLMSampleMemoryEngine(case, prompt_variant=prompt_variant)
     recording_provider = _RecordingProvider(provider)
     event_bus = EventBus()
     session_manager = SessionManager(workspace)
@@ -348,8 +416,10 @@ async def run_llm_sample_case(
     token_counts = _extract_token_counts(
         recording_provider.responses[-1] if recording_provider.responses else None
     )
-    return LLMSampleCaseResult(
+    result = LLMSampleCaseResult(
         case_id=case.id,
+        prompt_variant=prompt_variant,
+        repeat_index=repeat_index,
         category=case.category,
         session_key=scope["session_key"],
         channel=scope["channel"],
@@ -373,32 +443,89 @@ async def run_llm_sample_case(
         used_memory_ids=tuple(memory.used_memory_ids),
         failures=tuple(failures),
     )
+    if answer_debug_dir is not None:
+        write_llm_sample_answer_debug(
+            LLMSampleAnswerDebugRecord(
+                case_id=case.id,
+                case_index=case_index,
+                prompt_variant=prompt_variant,
+                session_key=scope["session_key"],
+                evidence_block_text=memory.last_text_block,
+                answer_text=answer,
+                answer_length=len(answer),
+                used_memory_ids=tuple(memory.used_memory_ids),
+                matched_expected_terms=score.matched_expected_terms,
+                missing_expected_terms=score.missing_expected_terms,
+                matched_any_groups=score.matched_any_groups,
+                missing_any_groups=score.missing_any_groups,
+                failures=tuple(failures),
+                answer_rule_passed=score.answer_rule_passed,
+                memory_grounding_passed=score.memory_grounding_passed,
+            ),
+            answer_debug_dir
+            / f"{case_index:04d}-{_safe_debug_name(prompt_variant)}-{_safe_debug_name(case.id)}.json",
+        )
+    return result
 
 
 async def run_llm_sample_cases(
-    cases: Sequence[EvalCase],
+    cases: Sequence[EvalCase | LLMSampleRunSpec],
     workspace: Path,
     provider: object,
     model: str,
     timeout_s: float = 60.0,
     real_llm_enabled: bool = False,
+    *,
+    answer_debug_dir: Path | None = None,
 ) -> LLMSampleReport:
+    selected = [_coerce_run_spec(case) for case in cases]
     selected = [
-        case
-        for case in cases
-        if isinstance(case.expectations.get("answer_expectations"), dict)
+        run
+        for run in selected
+        if isinstance(run.case.expectations.get("answer_expectations"), dict)
     ]
     results: list[LLMSampleCaseResult] = []
-    for index, case in enumerate(selected):
+    for index, run in enumerate(selected):
         result = await run_llm_sample_case(
-            case,
-            workspace / f"case-{index:03d}-{case.id}",
+            run,
+            workspace
+            / f"case-{index:03d}-{_safe_debug_name(run.prompt_variant)}-{_safe_debug_name(run.case.id)}",
             provider,
             model,
             timeout_s=timeout_s,
+            case_index=index,
+            answer_debug_dir=answer_debug_dir,
         )
         results.append(result)
     return _build_llm_sample_report(tuple(results), real_llm_enabled=real_llm_enabled)
+
+
+def write_llm_sample_answer_debug(
+    record: LLMSampleAnswerDebugRecord,
+    path: Path,
+) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "case_id": record.case_id,
+        "case_index": record.case_index,
+        "prompt_variant": record.prompt_variant,
+        "session_key": record.session_key,
+        "evidence_block_text": record.evidence_block_text,
+        "answer_text": record.answer_text,
+        "answer_length": record.answer_length,
+        "used_memory_ids": list(record.used_memory_ids),
+        "matched_expected_terms": list(record.matched_expected_terms),
+        "missing_expected_terms": list(record.missing_expected_terms),
+        "matched_any_groups": [list(group) for group in record.matched_any_groups],
+        "missing_any_groups": [list(group) for group in record.missing_any_groups],
+        "failures": list(record.failures),
+        "answer_rule_passed": record.answer_rule_passed,
+        "memory_grounding_passed": record.memory_grounding_passed,
+    }
+    path.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True),
+        encoding="utf-8",
+    )
 
 
 def write_llm_sample_json(report: LLMSampleReport, path: Path) -> None:
@@ -450,6 +577,14 @@ def build_gated_llm_sample_report(reason: str) -> LLMSampleReport:
         "session_text_included": False,
         "full_answer_included": False,
         "case_count": 0,
+        "repeat_count": 0,
+        "prompt_variant_mode": "baseline",
+        "repeat_pass_rate": 0.0,
+        "repeat_answer_rule_pass_rate": 0.0,
+        "repeat_memory_grounding_pass_rate": 0.0,
+        "pass_count_by_prompt_variant": {},
+        "answer_rule_pass_count_by_prompt_variant": {},
+        "memory_grounding_pass_count_by_prompt_variant": {},
         "passed_case_count": 0,
         "failed_case_count": 0,
         "answer_contains_pass_count": 0,
@@ -492,10 +627,21 @@ def _string_groups(value: Any) -> tuple[tuple[str, ...], ...]:
     return tuple(groups)
 
 
+def _coerce_run_spec(run: EvalCase | LLMSampleRunSpec) -> LLMSampleRunSpec:
+    if isinstance(run, LLMSampleRunSpec):
+        return run
+    return LLMSampleRunSpec(case=run, prompt_variant="baseline", repeat_index=0)
+
+
 def _contains_term(text: str, term: str) -> bool:
     if _CJK_RE.search(term):
         return term in text
     return term.lower() in text.lower()
+
+
+def _safe_debug_name(value: str) -> str:
+    safe = re.sub(r"[^A-Za-z0-9_.-]+", "_", value)
+    return safe or "unknown"
 
 
 def _build_llm_sample_report(
@@ -506,6 +652,33 @@ def _build_llm_sample_report(
     passed_count = sum(1 for result in results if result.passed)
     failed_count = len(results) - passed_count
     token_metrics_available = any(result.token_metrics_available for result in results)
+    variant_order = _prompt_variants_in_order(results)
+    repeat_count = _repeat_count(results)
+    variant_mode = _prompt_variant_mode(variant_order)
+    pass_by_variant = {
+        variant: sum(
+            1
+            for result in results
+            if result.prompt_variant == variant and result.passed
+        )
+        for variant in variant_order
+    }
+    answer_rule_by_variant = {
+        variant: sum(
+            1
+            for result in results
+            if result.prompt_variant == variant and result.answer_rule_passed
+        )
+        for variant in variant_order
+    }
+    memory_grounding_by_variant = {
+        variant: sum(
+            1
+            for result in results
+            if result.prompt_variant == variant and result.memory_grounding_passed
+        )
+        for variant in variant_order
+    }
     metrics: dict[str, object] = {
         "phase6b_level": "real_llm_small_sample",
         "real_llm_enabled": real_llm_enabled,
@@ -516,6 +689,20 @@ def _build_llm_sample_report(
         "session_text_included": False,
         "full_answer_included": False,
         "case_count": len(results),
+        "repeat_count": repeat_count,
+        "prompt_variant_mode": variant_mode,
+        "repeat_pass_rate": _rate(passed_count, len(results)),
+        "repeat_answer_rule_pass_rate": _rate(
+            sum(1 for result in results if result.answer_rule_passed),
+            len(results),
+        ),
+        "repeat_memory_grounding_pass_rate": _rate(
+            sum(1 for result in results if result.memory_grounding_passed),
+            len(results),
+        ),
+        "pass_count_by_prompt_variant": pass_by_variant,
+        "answer_rule_pass_count_by_prompt_variant": answer_rule_by_variant,
+        "memory_grounding_pass_count_by_prompt_variant": memory_grounding_by_variant,
         "passed_case_count": passed_count,
         "failed_case_count": failed_count,
         "answer_contains_pass_count": sum(
@@ -563,6 +750,8 @@ def _build_llm_sample_report(
 def _llm_sample_case_record(result: LLMSampleCaseResult) -> dict[str, object]:
     return {
         "case_id": result.case_id,
+        "prompt_variant": result.prompt_variant,
+        "repeat_index": result.repeat_index,
         "category": result.category,
         "session_key": result.session_key,
         "channel": result.channel,
@@ -594,8 +783,47 @@ def _llm_sample_failure_records(
     records: list[dict[str, object]] = []
     for result in results:
         for failure in result.failures:
-            records.append({"case_id": result.case_id, "failure": failure})
+            records.append(
+                {
+                    "case_id": result.case_id,
+                    "prompt_variant": result.prompt_variant,
+                    "repeat_index": result.repeat_index,
+                    "failure": failure,
+                }
+            )
     return tuple(records)
+
+
+def _prompt_variants_in_order(
+    results: tuple[LLMSampleCaseResult, ...],
+) -> tuple[str, ...]:
+    variants: list[str] = []
+    for result in results:
+        if result.prompt_variant not in variants:
+            variants.append(result.prompt_variant)
+    return tuple(variants)
+
+
+def _prompt_variant_mode(variants: tuple[str, ...]) -> str:
+    if variants == ("baseline",):
+        return "baseline"
+    if variants == ("coached",):
+        return "coached"
+    if set(variants) == {"baseline", "coached"}:
+        return "both"
+    return ",".join(variants)
+
+
+def _repeat_count(results: tuple[LLMSampleCaseResult, ...]) -> int:
+    if not results:
+        return 0
+    return max(result.repeat_index for result in results) + 1
+
+
+def _rate(numerator: int, denominator: int) -> float:
+    if denominator <= 0:
+        return 0.0
+    return round(numerator / denominator, 4)
 
 
 def _llm_sample_report_to_dict(report: LLMSampleReport) -> dict[str, object]:

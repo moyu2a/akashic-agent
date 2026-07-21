@@ -22,6 +22,7 @@
 - [02-memory-quality-metrics.md](./02-memory-quality-metrics.md): 记忆质量指标清单，区分现有可测、加埋点可测、需要评测集才能测的指标。
 - [03-memory-governance-design.md](./03-memory-governance-design.md): 记忆治理设计草案，覆盖写入门控、质量评分、冲突检测、检索重排和生命周期管理。
 - [04-memory-plugin-experiment-roadmap.md](./04-memory-plugin-experiment-roadmap.md): memory 插件实验扩展路线，记录版本链、信息价值评分、三路召回、睡眠巩固、层级溯源，以及每项能力的开关和对比数据。
+- [05-memory-target-metric-eval-plan.md](./05-memory-target-metric-eval-plan.md): Phase 6 后续目标指标评测口径，把回答效果、写入治理和记忆库卫生拆成三组百分比指标，并说明真实 LLM checkpoint 如何接入。
 
 ## 当前优化主题
 
@@ -56,12 +57,40 @@
 - Phase 6b-3：显式门控的 LLM 小样本答案级评测，复用真实 `AgentLoop.process_direct()`、临时 workspace 和受控 memory engine；默认禁止真实 LLM，必须通过 `--enable-real-llm` 才能构造真实 `LLMProvider`。本轮已用 fake provider 跑通 3 个稳定答案级 case，报告记录答案规则命中、记忆 ID 使用、延迟、token 元数据和脱敏审计。
 - Phase 6b-4：证据使用 debug 和真实 LLM 基线/增强对照。新增 `--case-id`、`--repeat-count`、`--evidence-prompt-mode baseline|coached|both` 和 `--include-answer-debug`，常规报告仍脱敏，完整回答和证据块只写入临时 workspace 的 `answer_debug`。本轮真实 LLM 对 `vague_reference_graph` 跑 5 轮 baseline + 5 轮 coached，10/10 通过。
 - Phase 6c-1：离线 uplift report，复用 Phase 6a fixture 和 profile 对照，把 Phase 2-5 的 shadow trace 转成离线 proxy uplift。它不调用真实 LLM、不读真实 memory DB，也不声明生产性能提升；第一版输出 phase summary、feature records、overall_avg_uplift、positive/negative diagnostic signals、token delta 和 estimated token saving。
-- Phase 6d：量化 uplift 总表，基于 80 个目标导向 case（common 40 / hard 40）把 `off`、单项开关和 `all_on` 放到同一张表里。当前报表路径是 `my_md/memory_optimization/eval_reports/memory_quantitative_uplift_eval.json` 和 `memory_quantitative_uplift_eval.md`；本轮离线结果里，`baseline_main_score = 10.0`、`all_on_main_score = 69.6017`、`total_uplift_points = 59.6017`，`common_main_score = 69.067`、`hard_main_score = 70.1364`，单项 uplift 里三路召回最高，`tri_retrieval_only = 87.4997`，其后是图谱召回、重排与注入治理、版本链与溯源、写入价值、睡眠巩固。token 相关输出改为 `token_signal_kind/value/delta`，组合态混合成本和节省信号时标记为 `mixed`，不再硬拼总 token 数。
-- Phase 6d-chain：链路量化评测，基于同一批 80 个目标导向 case 输出 `chain_off -> chain_write_value -> chain_tri_retrieval -> chain_graph_retrieval -> chain_rerank_injection -> chain_version_provenance -> chain_sleep_consolidation -> chain_all_on` 的累计链路分数。报表路径是 `my_md/memory_optimization/eval_reports/memory_quantitative_chain_eval.json` 和 `memory_quantitative_chain_eval.md`；当前离线结果里，最终主分从 `10.0` 到 `69.6017`，总提升 `59.6017` 分。相邻增益最高的是 `chain_write_value`，`+48.3345` 分；`chain_tri_retrieval` 继续提升 `+19.5826` 分；`chain_graph_retrieval` 小幅提升 `+0.1943` 分；后续治理和睡眠步骤在当前平均评分公式下出现负相邻增益，说明组合权重和 active 化策略还需要优化，不能简单把所有能力平均打开。
+- Phase 6d：量化 uplift 总表，基于 80 个目标导向 case（common 40 / hard 40）把 `memory_base`、单项开关和 `all_on` 放到同一张表里，`off` 只作为关闭增强控制组。当前报表路径是 `my_md/memory_optimization/eval_reports/memory_quantitative_uplift_eval.json` 和 `memory_quantitative_uplift_eval.md`；本轮离线结果里，`baseline_main_score = 94.375`、`all_on_main_score = 69.5543`、`total_uplift_points = -24.8207`，`common_main_score = 69.067`、`hard_main_score = 70.1364`，单项 uplift 里三路召回最高，`tri_retrieval_only = 87.4997`，其后是图谱召回、重排与注入治理、版本链与溯源、写入价值、睡眠巩固。token 相关输出改为 `token_signal_kind/value/delta`，组合态混合成本和节省信号时标记为 `mixed`，不再硬拼总 token 数。
+- Phase 6d-chain：链路量化评测，基于同一批 80 个目标导向 case 输出 `chain_memory_base -> chain_write_value -> chain_tri_retrieval -> chain_graph_retrieval -> chain_rerank_injection -> chain_version_provenance -> chain_sleep_consolidation -> chain_all_on` 的累计链路分数，`chain_off` 只作为关闭增强控制组。报表路径是 `my_md/memory_optimization/eval_reports/memory_quantitative_chain_eval.json` 和 `memory_quantitative_chain_eval.md`；当前离线结果里，最终主分从 `94.375` 到 `69.5543`，总提升 `-24.8207` 分。相邻增益最高的是 `chain_write_value`，`-40.4156` 分后的继续打开三路召回开始回升；`chain_tri_retrieval` 继续提升 `+18.2433` 分；`chain_graph_retrieval` 小幅下降 `-0.1093` 分；后续治理和睡眠步骤在当前平均评分公式下继续下降，说明组合权重和 active 化策略还需要优化，不能简单把所有能力平均打开。
+- Phase 6d-balanced：分层 balanced 链路评测，继续使用同一批 80 个目标导向 case，把回答、召回代理、证据、治理和效率分开计分。报表路径是 `my_md/memory_optimization/eval_reports/memory_quantitative_balanced_eval.json` 和 `memory_quantitative_balanced_eval.md`；当前离线结果里，`baseline_balanced_score = 12.6923`、`final_balanced_score = 67.2022`、`total_balanced_uplift_points = 54.5099`，common 最终分 `66.6972`，hard 最终分 `67.7072`。Balanced report 借鉴 RAG/Agent 分层评测共识，把回答、召回代理、证据、治理和效率分开；本项目的改进是把 memory 生命周期治理纳入评分，包括 forbidden、source_ref、版本链、scope 隔离和 token/sleep 信号。它仍然是离线代理评测，不是生产回答准确率。
+- Phase 6d-layered：三层评分评测，把即时回答、写入治理和记忆库卫生分开看。报表路径是 `my_md/memory_optimization/eval_reports/memory_layered_scoring_eval.json` 和 `memory_layered_scoring_eval.md`；当前离线结果里，`baseline_total_layered_score = 94.375`、`final_total_layered_score = 54.9521`、`total_layered_uplift_points = -39.4229`，common 最终分 `54.773`、hard 最终分 `55.1312`，`chain_all_on` 的写入治理分 `49.3334`，记忆库卫生分 `35.4107`。这份报表专门用来说明写入和巩固不应只按回答分评价。
+- Phase 6f-target-metrics：下一步把三层分数继续拆成三组目标百分比指标。回答效果组评估三路召回、图谱召回、重排注入治理和版本链溯源；写入治理组只评估写入价值治理；记忆库卫生组评估睡眠巩固、层级溯源和版本链库级信号。这样可以用“目标记忆召回率从 A% 到 B%”“污染写入拦截率从 A% 到 B%”“重复合并率达到 A% / token 节省 B%”这类表达替代笼统的综合分。详细设计见 [05-memory-target-metric-eval-plan.md](./05-memory-target-metric-eval-plan.md)。
+- Phase 6h-target-metrics：继续修订目标指标口径。当前正式报告仍是 `my_md/memory_optimization/eval_reports/memory_target_metrics_eval.json` 和 `memory_target_metrics_eval.md`，`measurement_mode = offline_trace_real_baseline_target_metrics`，`online_status = gated_no_checkpoint`。80 case 结果显示：三路召回目标召回率 `93.75% -> 100%`，图谱召回按 graph 专用目标分母修订为 `97.5% -> 100%`，重排与注入治理 `93.75% -> 100%`，版本链与溯源 `90% -> 100%`；hard 子集分别为三路 `87.5% -> 100%`、图谱 `95% -> 100%`、版本链当前有效版本 `80% -> 100%`。版本链新增 forked replacement-chain fixture 后，`conflict_chain_detection_rate.after = 100%`。这些仍是离线 shadow / proxy 指标，不代表生产准确率或真实 LLM 线上效果。
+- Phase 6i-evidence-input：补强写入治理和记忆库卫生的线上 evidence 输入边界。`scripts/run_memory_target_metrics_eval.py` 现在支持 JSON 数组、`{"records": [...]}` 和 JSONL evidence，并会拒绝缺字段、非法 label / decision / state、字符串布尔值、负数或非数字 token 估算。这个阶段只保证 evidence 入口可信，不代表真实 evidence 已经采集完成。
+- Phase 6j-comprehensive-case-pack：新增显式 `--case-pack comprehensive` 完整目标导向测评集，不改变默认 80 case 标准集。完整集规模为 320 case，其中 common 160、hard 160，覆盖 20 类场景、8 个变体、960 个写入候选和 2400 个记忆库卫生扫描单元。`scripts/run_memory_target_metrics_eval.py --case-pack comprehensive` 已在 `/tmp/akashic-memory-comprehensive-pack` 跑通离线 smoke：三路召回 `98.125% -> 100%`，图谱召回 `98.75% -> 100%`，重排与注入治理 `98.125% -> 100%`，版本链与溯源 `97.5% -> 100%`，写入价值治理污染拦截率 after `100%`，睡眠巩固 token 节省率 after `32.8125%`。这仍是离线代理结果，不是正式线上 LLM 结论。
+- Phase 6k-real-llm-core-eval：真实 LLM 核心矩阵已完成，使用 `--checkpoint-jsonl /tmp/akashic-memory-phase6k-real/reports/memory_comprehensive_online_eval.checkpoint.jsonl --resume` 从 325 条 checkpoint 继续补齐到 `case_count = 1280`。最终真实报告是 `/tmp/akashic-memory-phase6k-real/reports/memory_comprehensive_online_eval.json` 和 `.md`；checkpoint 重建版是 `/tmp/akashic-memory-phase6k-real/checkpoint-report/memory_comprehensive_online_eval.json` 和 `.md`。最终结果为 `unique_case_count = 320`、`profile_count = 4`、`prompt_variant_count = 1`、`repeat_count = 1`、`answer_rule_pass_rate = 23.9844`、`memory_grounding_pass_rate = 75.0`、`forbidden_violation_rate = 15.7812`、`total_token_count = 6971048`、`avg_latency_ms = 4639.9172`。这仍然只覆盖 answer/retrieval 核心矩阵，不包含写入治理和睡眠巩固的真实 evidence。
+- Phase 6e：综合线上 answer-level 评测。新增 `memory2/eval_comprehensive_online.py` 和 `scripts/run_memory_comprehensive_online_eval.py`，用真实 `AgentLoop.process_direct()`、真实 LLM、受控 memory engine、80 个目标导向 case、8 个链路 profile、2 个提示词变体、2 次 repeat 设计完整 `2560` run。真实运行到 `checkpoint_input_count = 1599` 时，外部 provider 返回 `402 Insufficient Balance`，按计划停止；排除 timeout / provider error 后生成部分真实报告，`case_count = 1417`、`unique_case_count = 45`、`excluded_infra_failure_count = 182`、`total_token_count = 7600606`、`infra_passed = True`、`answer_quality_passed = False`。报表路径是 `my_md/memory_optimization/eval_reports/memory_comprehensive_online_eval.json` 和 `.md`。这份报告只能说明余额耗尽前 1417 条有效真实调用的 answer-level 行为，不能当作完整 2560-run 结论；脚本退出码 0 只表示有效样本报告生成成功，不表示答案质量全通过。
 
-后续还有 1 个主要方向：
+Phase 6e 的主要可量化结论：
 
-1. Phase 6：在真实 LLM 小样本稳定后，继续补 Dashboard 展示、连续评测和 active 化决策。
+- 关闭记忆链路 `chain_off`：`main_score = 18.4269`，`answer_rule_pass_rate = 12.9213`，`memory_grounding_pass_rate = 0`。
+- 只开写入价值 `chain_write_value`：相对关闭 `-0.3478`，符合预期；写入价值不直接给当前回答注入证据，它的价值应主要看离线写入质量和污染率。
+- 打开三路召回 `chain_tri_retrieval`：相对关闭 `+35.5279`，是本轮 answer-level 最大基础增益来源。
+- 增加图谱召回 `chain_graph_retrieval`：相对关闭 `+36.4319`，相邻 `+0.904`，在当前已完成样本里是小幅正增益。
+- 增加重排和注入治理 `chain_rerank_injection`：相对关闭 `+43.155`，相邻 `+6.7231`，是本轮 answer-level 最强 profile。
+- 增加版本链与溯源 `chain_version_provenance`：相对关闭 `+23.946`，但相邻 `-19.209`，因为当前 profile 的 memory grounding 为 `0`，说明此阶段证据 ID 显示和受控注入策略还需要修订。
+- 增加睡眠巩固 `chain_sleep_consolidation`：相对关闭 `+28.5788`，相邻 `+4.6328`；它在 balanced proxy 中相邻 `+14.4267`，说明治理、证据和效率维度能体现部分价值。
+- 全开 `chain_all_on`：相对关闭 `+26.9968`，相邻 `-1.582`；当前不能简单宣称“全开最好”，更合理的 active 化顺序是先验证三路召回、图谱召回、重排注入治理，再处理版本链和睡眠巩固的组合策略。
+
+写入价值和睡眠巩固的评测口径需要单独看：
+
+- 写入价值的核心作用是“少写错、少写脏、少写重复、保留真正长期有用的信息”，不是让当前这一轮回答马上变好。它更适合用写入治理指标评测：`policy_allow_count`、`policy_reject_count`、`temporary_reject_count`、`assistant_inference_reject_count`、`duplicate_risk_count`、`write_reduction_rate`、`memory_pollution_rate`、`useful_memory_precision` 和后续多轮里的 `future_recall_usefulness`。
+- 睡眠巩固的核心作用是“长期记忆库维护”，不是即时问答增强。它更适合用库级和检索级指标评测：`duplicate_group_count`、`merge_candidate_count`、`stale_candidate_count`、`low_value_candidate_count`、`conflict_candidate_count`、`estimated_token_saving`、`estimated_redundancy_drop`、巩固前后 active 记忆数量、检索 precision、错误召回率、prompt token 变化和关键记忆保护率。
+- 所以后续评测不应只用 `answer_rule_pass_rate` 给这两个能力下结论。更合理的方式是把总评测拆成三层：当前回答层评测三路召回、图谱召回、重排注入治理；写入治理层评测写入价值；记忆库卫生层评测睡眠巩固。最后再用 balanced score 或按场景加权的综合分汇总。
+
+后续还有 3 个主要方向：
+
+1. 写入治理：补“有用候选保留率”和“后续召回有用率”，避免全拒绝策略也拿到漂亮分数。
+2. 记忆库卫生：补真实 evidence 输入，包括巩固前后 active 数、真实 prompt token、关键记忆保护率。
+3. Phase 6e checkpoint 转换与续跑：先用已有 checkpoint 重建新版目标指标表；如果 provider 余额恢复，再用同一个 checkpoint `--resume` 补齐完整 `2560` run。
+4. Phase 6 后续：在离线指标可解释、真实 LLM 评测稳定后，继续补 Dashboard 展示、连续评测和 active 化决策。
 
 trace 汇总报告是这些阶段的数据出口，不应替代上述实验方向。
 

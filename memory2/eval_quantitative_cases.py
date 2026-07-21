@@ -7,6 +7,8 @@ from typing import Any
 from memory2.eval_cases import EVAL_CONFIG_PROFILES, EVAL_PHASE_TARGETS, EvalCase
 
 
+EVAL_CASE_PACKS: tuple[str, ...] = ("standard", "comprehensive")
+
 QUANTITATIVE_FEATURES: tuple[str, ...] = (
     "write_value_score",
     "tri_retrieval",
@@ -369,20 +371,223 @@ _SCENARIOS: tuple[ScenarioSpec, ...] = (
     ),
 )
 
+_COMPREHENSIVE_EXTRA_SCENARIOS: tuple[ScenarioSpec, ...] = (
+    ScenarioSpec(
+        name="entity_alias",
+        target_profile="graph_only",
+        measurement_family="graph_retrieval",
+        memory_type="profile",
+        target_summary="用户把 memory2 称为第二套记忆系统",
+        graph_summary="memory2、第二套记忆系统、向量记忆属于同一主题",
+        old_summary="memory2 是临时测试名称",
+        duplicate_summary="用户把 memory2 称为第二套记忆系统",
+        conflict_summary="memory2 不属于记忆系统",
+        stale_summary="临时备注：memory2 名称以后再定",
+        noise_summary="助手推断：memory2 可能是数据库名",
+        query_common="第二套记忆系统指的是哪个模块？",
+        query_hard="他说的那个第二套是什么？",
+        answer_contains=("memory2", "记忆"),
+        forbidden_contains=("数据库名",),
+        graph_topic="memory2",
+        primary_phase_target="phase2b",
+    ),
+    ScenarioSpec(
+        name="temporal_preference",
+        target_profile="version_provenance_only",
+        measurement_family="version_provenance",
+        memory_type="preference",
+        target_summary="用户现在希望先看百分比表格",
+        graph_summary="当前汇报偏好是百分比表格优先",
+        old_summary="用户以前希望先看长篇解释",
+        duplicate_summary="用户现在希望先看百分比表格",
+        conflict_summary="用户仍然希望先看长篇解释",
+        stale_summary="临时测试：这次先口头说一下",
+        noise_summary="助手推断：用户应该喜欢长篇解释",
+        query_common="汇报测试结果时先给什么形式？",
+        query_hard="最近那个展示偏好是什么？",
+        answer_contains=("百分比", "表格"),
+        forbidden_contains=("长篇解释",),
+        graph_topic="百分比表格",
+        primary_phase_target="phase4a",
+    ),
+    ScenarioSpec(
+        name="low_value_filter",
+        target_profile="write_value_only",
+        measurement_family="write_governance",
+        memory_type="event",
+        target_summary="有长期复用价值的偏好才写入长期记忆",
+        graph_summary="写入价值治理拦截低价值短期闲聊",
+        old_summary="所有聊天内容都写入长期记忆",
+        duplicate_summary="有长期复用价值的偏好才写入长期记忆",
+        conflict_summary="短期闲聊也必须写入长期记忆",
+        stale_summary="临时测试：今天午饭吃面",
+        noise_summary="助手推断：任何句子都应该记住",
+        query_common="什么内容适合写入长期记忆？",
+        query_hard="刚才闲聊要不要都记下来？",
+        answer_contains=("长期", "价值"),
+        forbidden_contains=("所有聊天",),
+        graph_topic="写入价值",
+        primary_phase_target="phase1",
+    ),
+    ScenarioSpec(
+        name="costly_call_preference",
+        target_profile="write_value_only",
+        measurement_family="write_governance",
+        memory_type="procedure",
+        target_summary="高风险或花费调用前必须确认",
+        graph_summary="工具边界治理要求费用调用前确认",
+        old_summary="模型选中工具后可以直接执行费用调用",
+        duplicate_summary="高风险或花费调用前必须确认",
+        conflict_summary="费用调用无需用户确认",
+        stale_summary="临时测试：这次先跳过确认",
+        noise_summary="助手推断：用户喜欢蓝色主题",
+        query_common="调用会产生费用的服务前要怎么处理？",
+        query_hard="花钱的工具模型选了就能跑吗？",
+        answer_contains=("确认",),
+        forbidden_contains=("直接执行", "模型自己确认"),
+        graph_topic="工具确认",
+        primary_phase_target="phase1",
+    ),
+    ScenarioSpec(
+        name="injection_noise",
+        target_profile="rerank_only",
+        measurement_family="rerank_injection",
+        memory_type="event",
+        target_summary="注入上下文只放和当前问题有关的证据",
+        graph_summary="注入治理会丢弃无关或低置信记忆",
+        old_summary="上下文越多越好",
+        duplicate_summary="注入上下文只放和当前问题有关的证据",
+        conflict_summary="无关记忆也应该全部注入",
+        stale_summary="临时测试：无关闲聊",
+        noise_summary="助手推断：多放上下文更安全",
+        query_common="回答前注入记忆时怎么控制范围？",
+        query_hard="所有记忆都塞进 prompt 合适吗？",
+        answer_contains=("有关", "证据"),
+        forbidden_contains=("越多越好", "全部注入"),
+        graph_topic="注入治理",
+        primary_phase_target="phase3b",
+    ),
+    ScenarioSpec(
+        name="source_ref_missing",
+        target_profile="version_provenance_only",
+        measurement_family="provenance",
+        memory_type="event",
+        target_summary="重要记忆应保留 source_ref 方便回源",
+        graph_summary="溯源 scheme 依赖 source_ref 和解析成功率",
+        old_summary="记忆不需要来源引用",
+        duplicate_summary="重要记忆应保留 source_ref 方便回源",
+        conflict_summary="source_ref 可以随意丢弃",
+        stale_summary="临时测试：来源未知",
+        noise_summary="助手推断：没有来源也可信",
+        query_common="为什么记忆要保留来源引用？",
+        query_hard="没有 source_ref 的记忆能不能当证据？",
+        answer_contains=("source_ref", "回源"),
+        forbidden_contains=("不需要来源",),
+        graph_topic="source_ref",
+        primary_phase_target="phase4b",
+    ),
+    ScenarioSpec(
+        name="session_boundary",
+        target_profile="version_provenance_only",
+        measurement_family="provenance",
+        memory_type="profile",
+        target_summary="telegram:123 和 qq:123 是不同会话",
+        graph_summary="session_key 由 channel 和 chat_id 共同组成",
+        old_summary="chat_id 相同就是同一个会话",
+        duplicate_summary="telegram:123 和 qq:123 是不同会话",
+        conflict_summary="不同平台相同 chat_id 可以共享运行状态",
+        stale_summary="临时测试：这次先混用 session",
+        noise_summary="助手推断：chat_id 相同即可共享",
+        query_common="telegram:123 和 qq:123 是同一个会话吗？",
+        query_hard="两个入口数字一样能共享 history 吗？",
+        answer_contains=("不同会话", "channel"),
+        forbidden_contains=("同一个会话",),
+        graph_topic="session_key",
+        primary_phase_target="phase4b",
+    ),
+    ScenarioSpec(
+        name="sleep_compaction",
+        target_profile="sleep_only",
+        measurement_family="sleep_consolidation",
+        memory_type="event",
+        target_summary="睡眠巩固要压缩重复内容并保留有效事实",
+        graph_summary="离线异步巩固减少 token 但保持召回",
+        old_summary="睡眠巩固可以随意删除有效事实",
+        duplicate_summary="睡眠巩固要压缩重复内容并保留有效事实",
+        conflict_summary="压缩时不需要考虑召回保持率",
+        stale_summary="临时测试：重复低价值片段",
+        noise_summary="助手推断：压缩越狠越好",
+        query_common="睡眠巩固压缩后最重要的约束是什么？",
+        query_hard="后台压缩能不能只看 token 下降？",
+        answer_contains=("保留", "召回"),
+        forbidden_contains=("随意删除", "越狠越好"),
+        graph_topic="睡眠巩固",
+        primary_phase_target="phase5",
+    ),
+    ScenarioSpec(
+        name="causal_consistency",
+        target_profile="version_provenance_only",
+        measurement_family="version_provenance",
+        memory_type="procedure",
+        target_summary="因果一致性版本链要按替换关系追踪当前有效记忆",
+        graph_summary="版本链记录 old -> new 的因果替换关系",
+        old_summary="版本之间没有先后因果关系",
+        duplicate_summary="因果一致性版本链要按替换关系追踪当前有效记忆",
+        conflict_summary="旧版本和新版本可以同时作为当前事实",
+        stale_summary="临时测试：版本顺序未确认",
+        noise_summary="助手推断：直接按时间排序即可",
+        query_common="因果一致性版本链解决什么问题？",
+        query_hard="旧事实和新事实冲突时怎么追踪？",
+        answer_contains=("替换", "当前"),
+        forbidden_contains=("同时作为当前事实",),
+        graph_topic="因果一致性",
+        primary_phase_target="phase4a",
+    ),
+    ScenarioSpec(
+        name="entropy_value",
+        target_profile="write_value_only",
+        measurement_family="write_governance",
+        memory_type="procedure",
+        target_summary="信息熵可以作为交互内容价值的量化参考",
+        graph_summary="写入治理可用信息量辅助判断是否值得记忆",
+        old_summary="低信息量重复内容也应大量写入",
+        duplicate_summary="信息熵可以作为交互内容价值的量化参考",
+        conflict_summary="信息量不影响写入决策",
+        stale_summary="临时测试：嗯嗯好的",
+        noise_summary="助手推断：短回复都值得长期保存",
+        query_common="信息熵在记忆写入里能起什么作用？",
+        query_hard="像嗯嗯好的这种内容值得长期写吗？",
+        answer_contains=("信息", "价值"),
+        forbidden_contains=("大量写入",),
+        graph_topic="信息熵",
+        primary_phase_target="phase1",
+    ),
+)
+
 
 def build_quantitative_eval_cases(
     case_set: str = "all",
     limit: int = 0,
+    case_pack: str = "standard",
 ) -> list[EvalCase]:
     normalized = str(case_set or "all").strip().lower()
     if normalized not in {"all", "common", "hard"}:
         raise ValueError("case_set must be 'all', 'common', or 'hard'")
+    normalized_pack = str(case_pack or "standard").strip().lower()
+    if normalized_pack not in EVAL_CASE_PACKS:
+        raise ValueError("case_pack must be 'standard' or 'comprehensive'")
 
     cases: list[EvalCase] = []
     sets = ("common", "hard") if normalized == "all" else (normalized,)
+    scenarios = (
+        _SCENARIOS
+        if normalized_pack == "standard"
+        else _SCENARIOS + _COMPREHENSIVE_EXTRA_SCENARIOS
+    )
+    variant_count = 4 if normalized_pack == "standard" else 8
     for current_set in sets:
-        for variant in range(1, 5):
-            for scenario in _SCENARIOS:
+        for variant in range(1, variant_count + 1):
+            for scenario in scenarios:
                 cases.append(_build_case(scenario, current_set, variant))
     if limit > 0:
         return cases[:limit]
@@ -400,12 +605,24 @@ def _build_case(scenario: ScenarioSpec, case_set: str, variant: int) -> EvalCase
     query = scenario.query_common if case_set == "common" else scenario.query_hard
     memory_items = _build_memory_items(prefix, scope, scenario, case_set)
     memorize_calls = _build_memorize_calls(prefix, scenario, case_set)
+    baseline_miss_recall_ids = _baseline_miss_recall_ids(
+        prefix,
+        scenario,
+        case_set,
+        variant,
+    )
     setup: dict[str, Any] = {
         "scope": scope,
         "measurement_family": scenario.measurement_family,
         "target_profile": scenario.target_profile,
         "memory_items": memory_items,
-        "memory_replacements": _build_memory_replacements(prefix, scenario, scope),
+        "memory_replacements": _build_memory_replacements(
+            prefix,
+            scenario,
+            scope,
+            case_set,
+            variant,
+        ),
         "memorize_calls": memorize_calls,
         "query": query,
     }
@@ -421,6 +638,14 @@ def _build_case(scenario: ScenarioSpec, case_set: str, variant: int) -> EvalCase
         ],
         "expected_trace_features": list(QUANTITATIVE_FEATURES),
         "expected_metric_keys": _EXPECTED_METRIC_KEYS,
+        "expected_graph_recall_ids": [f"{prefix}_graph"],
+        "expected_active_version_ids": [f"{prefix}_target"],
+        "expected_stale_version_ids": [f"{prefix}_old"],
+        "expected_conflict_chain_count": (
+            1
+            if scenario.name == "version_chain" and case_set == "hard" and variant == 4
+            else 0
+        ),
         "profile_expectations": _PROFILE_EXPECTATIONS,
         "answer_expectations": {
             "expected_answer_contains": list(scenario.answer_contains),
@@ -444,6 +669,8 @@ def _build_case(scenario: ScenarioSpec, case_set: str, variant: int) -> EvalCase
             "latency_ms_max": 5000,
         },
     }
+    if baseline_miss_recall_ids:
+        expectations["baseline_miss_recall_ids"] = baseline_miss_recall_ids
     return EvalCase(
         id=prefix,
         title=f"{scenario.name.replace('_', ' ').title()} ({case_set} #{variant})",
@@ -454,6 +681,21 @@ def _build_case(scenario: ScenarioSpec, case_set: str, variant: int) -> EvalCase
         expectations=expectations,
         source_path="",
     )
+
+
+def _baseline_miss_recall_ids(
+    prefix: str,
+    scenario: ScenarioSpec,
+    case_set: str,
+    variant: int,
+) -> list[str]:
+    if case_set != "hard" or variant not in {3, 4}:
+        return []
+    if scenario.measurement_family == "tri_retrieval":
+        return [f"{prefix}_target"]
+    if scenario.measurement_family == "graph_retrieval":
+        return [f"{prefix}_graph"]
+    return []
 
 
 def _build_memory_items(
@@ -585,8 +827,10 @@ def _build_memory_replacements(
     prefix: str,
     scenario: ScenarioSpec,
     scope: dict[str, str],
+    case_set: str,
+    variant: int,
 ) -> list[dict[str, object]]:
-    return [
+    replacements = [
         {
             "old_item_id": f"{prefix}_old",
             "new_item_id": f"{prefix}_target",
@@ -598,6 +842,20 @@ def _build_memory_replacements(
             "new_source_ref": f"{scope['session_key']}@post_response",
         }
     ]
+    if scenario.name == "version_chain" and case_set == "hard" and variant == 4:
+        replacements.append(
+            {
+                "old_item_id": f"{prefix}_old",
+                "new_item_id": f"{prefix}_alt",
+                "old_memory_type": scenario.memory_type,
+                "new_memory_type": scenario.memory_type,
+                "old_summary": scenario.old_summary,
+                "new_summary": f"{scenario.target_summary}（分叉备选）",
+                "old_source_ref": f"{scope['session_key']}@post_response",
+                "new_source_ref": f"{scope['session_key']}@post_response",
+            }
+        )
+    return replacements
 
 
 def _build_memorize_calls(

@@ -7,9 +7,12 @@ from typing import Any
 import pytest
 
 from agent.provider import LLMResponse
+from core.memory.engine import MemoryEngineRetrieveRequest, MemoryScope
 from memory2.eval_cases import load_eval_case
 from memory2.eval_llm_sample import (
     AnswerExpectation,
+    LLMSampleMemoryEngine,
+    LLMSampleRunSpec,
     answer_expectation_from_case,
     run_llm_sample_case,
     run_llm_sample_cases,
@@ -166,6 +169,127 @@ async def test_run_llm_sample_case_scores_fake_provider_answer(
     assert result.total_token_count == 12
     assert len(provider.calls) == 1
     assert (tmp_path / "workspace" / "sessions.db").exists()
+
+
+@pytest.mark.asyncio
+async def test_run_llm_sample_case_writes_answer_debug_only_when_requested(
+    tmp_path: Path,
+) -> None:
+    case = load_eval_case(FIXTURE_ROOT / "vague_reference_graph.json")
+    answer = "这个第三路方案采用 RRF 融合排序。"
+    provider = _FakeLLMProvider(answer)
+    debug_dir = tmp_path / "workspace" / "answer_debug"
+
+    result = await run_llm_sample_case(
+        LLMSampleRunSpec(case=case, prompt_variant="coached", repeat_index=0),
+        tmp_path / "workspace",
+        provider,
+        model="fake-model",
+        case_index=7,
+        answer_debug_dir=debug_dir,
+    )
+
+    assert result.passed is True
+    debug_path = debug_dir / "0007-coached-vague_reference_graph.json"
+    payload = json.loads(debug_path.read_text(encoding="utf-8"))
+    assert payload["case_id"] == "vague_reference_graph"
+    assert payload["case_index"] == 7
+    assert payload["prompt_variant"] == "coached"
+    assert payload["answer_text"] == answer
+    assert payload["used_memory_ids"] == ["m_graph_1", "m_graph_2"]
+    assert payload["evidence_block_text"]
+    assert payload["matched_expected_terms"] == ["RRF"]
+    assert payload["missing_expected_terms"] == []
+    assert payload["answer_rule_passed"] is True
+    assert payload["memory_grounding_passed"] is True
+
+
+@pytest.mark.asyncio
+async def test_answer_debug_is_off_by_default(tmp_path: Path) -> None:
+    case = load_eval_case(FIXTURE_ROOT / "vague_reference_graph.json")
+    provider = _FakeLLMProvider("这个第三路方案采用 RRF 融合排序。")
+
+    result = await run_llm_sample_case(
+        LLMSampleRunSpec(case=case, prompt_variant="baseline", repeat_index=0),
+        tmp_path / "workspace",
+        provider,
+        model="fake-model",
+        case_index=0,
+    )
+
+    assert result.passed is True
+    assert not (tmp_path / "workspace" / "answer_debug").exists()
+
+
+@pytest.mark.asyncio
+async def test_answer_debug_does_not_change_regular_report_privacy(
+    tmp_path: Path,
+) -> None:
+    case = load_eval_case(FIXTURE_ROOT / "vague_reference_graph.json")
+    answer = "这个第三路方案采用 RRF 融合排序。"
+    provider = _FakeLLMProvider(answer)
+
+    report = await run_llm_sample_cases(
+        [
+            LLMSampleRunSpec(case=case, prompt_variant="baseline", repeat_index=0),
+        ],
+        tmp_path / "workspace",
+        provider,
+        model="fake-model",
+        real_llm_enabled=False,
+        answer_debug_dir=tmp_path / "workspace" / "answer_debug",
+    )
+    json_path = tmp_path / "report.json"
+    md_path = tmp_path / "report.md"
+
+    write_llm_sample_json(report, json_path)
+    write_llm_sample_markdown(report, md_path)
+
+    combined = json_path.read_text(encoding="utf-8") + md_path.read_text(
+        encoding="utf-8"
+    )
+    assert answer not in combined
+    assert "三路召回结果使用 RRF 融合排序" not in combined
+    assert (
+        tmp_path
+        / "workspace"
+        / "answer_debug"
+        / "0000-baseline-vague_reference_graph.json"
+    ).exists()
+
+
+@pytest.mark.asyncio
+async def test_llm_sample_memory_block_changes_only_in_coached_variant() -> None:
+    case = load_eval_case(FIXTURE_ROOT / "vague_reference_graph.json")
+    baseline = LLMSampleMemoryEngine(case, prompt_variant="baseline")
+    coached = LLMSampleMemoryEngine(case, prompt_variant="coached")
+
+    baseline_result = await baseline.retrieve(
+        MemoryEngineRetrieveRequest(
+            query="之前那个第三路方案怎么排序？",
+            context={},
+            scope=MemoryScope(
+                session_key="cli:local",
+                channel="cli",
+                chat_id="local",
+            ),
+        )
+    )
+    coached_result = await coached.retrieve(
+        MemoryEngineRetrieveRequest(
+            query="之前那个第三路方案怎么排序？",
+            context={},
+            scope=MemoryScope(
+                session_key="cli:local",
+                channel="cli",
+                chat_id="local",
+            ),
+        )
+    )
+
+    assert "记忆评测说明" not in baseline_result.text_block
+    assert "记忆评测说明" in coached_result.text_block
+    assert "RRF" in coached_result.text_block
 
 
 @pytest.mark.asyncio

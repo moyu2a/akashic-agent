@@ -93,6 +93,32 @@ session history
 - 纠错成功率。
 - 跨 session 隔离正确率。
 
+### 5. 当前评测集仍需继续增强
+
+Phase 6f 的真实 baseline 版目标指标报告证明：如果 `before` 来自真实 trace baseline，而不是展示用的固定 `0%`，原 80 个离线 case 里三路召回、图谱召回、重排注入治理的目标召回率都是 `100% -> 100%`。这个结果不是“召回模块无效”，而是说明当时测试集太容易，baseline 已经能命中目标记忆。
+
+Phase 6g 已补充显式 hard miss，并修订版本链 active leaf 口径。Phase 6h 继续修订 graph 专用分母，并补入 forked replacement-chain fixture。当前离线目标指标变为：
+
+- 三路召回：`93.75% -> 100%`。
+- 图谱召回：`97.5% -> 100%`。
+- 重排与注入治理：`93.75% -> 100%`。
+- 版本链与溯源：`90% -> 100%`。
+- hard 子集三路召回：`87.5% -> 100%`。
+- hard 子集图谱召回：`95% -> 100%`。
+- hard 子集当前有效版本召回：`80% -> 100%`。
+- hard/overall 的 `conflict_chain_detection_rate.after`：`100%`。
+
+剩余要补充：
+
+- baseline 语义召回失败但三路召回成功的 case。
+- baseline 关键词召回失败但图谱桥接成功的 case。
+- 相似实体、模糊指代、跨 session 和旧版本干扰 case。
+- 写入治理和记忆库卫生 evidence，用于把 shadow estimate 和显式证据输入分开。
+
+当前 graph `98.75%` 缺口已定位为指标分母问题：图谱召回不应被 tri-retrieval-only 的 `_target` miss 惩罚。当前冲突链识别率也已经通过 forked replacement-chain fixture 变成可测。下一步应优先补写入治理和记忆库卫生的显式 evidence，再跑真实 LLM 续测或 checkpoint 转换。
+
+Phase 6j 已先补一版更大的目标导向测评集：默认 `standard` 仍是 80 case，新增显式 `comprehensive` 为 320 case，common 160 / hard 160。完整集覆盖 20 类场景和 8 个变体，并已通过 `scripts/run_memory_target_metrics_eval.py --case-pack comprehensive` 离线 smoke。这个改动解决“覆盖面不够”的一部分问题，但仍然不是线上真实 LLM 或真实 memory DB evidence。
+
 ## 优化目标
 
 ### P0：减少记忆污染

@@ -280,9 +280,9 @@ main_score = 0.7 * answer_rule_pass_rate
 - `case_count = 80`
 - `common_case_count = 40`
 - `hard_case_count = 40`
-- `baseline_main_score = 10.0`
-- `all_on_main_score = 69.6017`
-- `total_uplift_points = 59.6017`
+- `baseline_main_score = 94.375`
+- `all_on_main_score = 69.5543`
+- `total_uplift_points = -24.8207`
 - `total_uplift_pct = 596.017`
 
 单项 uplift：
@@ -316,9 +316,413 @@ main_score = 0.7 * answer_rule_pass_rate
 - 单项总表回答“单独打开某个能力，相比关闭状态提升多少”。
 - 链路总表回答“按工程链路累计打开能力，每一步相比上一步提升或下降多少”。
 - 链路里的 `uplift_points` 是相邻增益，不是相对 baseline 的总增益。
-- 当前离线结果：`chain_off = 10.0`，`chain_all_on = 69.6017`，`total_chain_uplift_points = 59.6017`。
+- 当前离线结果：`chain_memory_base = 94.375`，`chain_all_on = 69.5543`，`total_chain_uplift_points = -24.8207`；`chain_off` 只作为关闭增强控制组。
 - 当前相邻增益：写入价值 `+48.3345`，三路召回 `+19.5826`，图谱召回 `+0.1943`，重排与注入治理 `-2.8802`，版本链与溯源 `-2.1295`，睡眠巩固 `-3.5`，全开校验 `0`。
 - 负相邻增益不等于功能无效；它说明当前平均评分公式把即时回答能力、治理能力和后台维护能力放在同一张主分里，后续需要做组合权重、场景路由和 active 化策略。
+
+### Phase 6f 的目标指标百分比 report
+
+Phase 6f 不再用单一综合分解释所有 memory 模块，而是把评测拆成三组：
+
+```text
+回答效果组
+写入治理组
+记忆库卫生组
+```
+
+推荐展示方式：
+
+```text
+开启前百分比
+开启后百分比
+提升百分点 = 开启后百分比 - 开启前百分比
+相对提升 = 提升百分点 / 开启前百分比
+```
+
+如果开启前是 `0` 或 `unavailable`，不要强行说相对提升百分比，应展示“从不可用到 A%”或“提升 A 个百分点”。
+
+回答效果组主要评估三路召回、图谱召回、重排注入治理、版本链与溯源：
+
+- `target_recall_rate`：目标记忆召回率。
+- `answer_hit_rate`：回答命中率。
+- `evidence_hit_rate`：证据命中率。
+- `wrong_recall_rate`：错误召回率。
+- `wrong_injection_rate`：错误注入率。
+- `current_version_recall_rate`：当前有效版本召回率，只看版本链 active leaf 应命中的记忆。
+- `stale_version_misuse_rate`：旧版本误用率。
+- `conflict_chain_detection_rate`：冲突版本链识别率；如果 fixture 没有分叉版本链，应显示 `unavailable`。
+
+写入治理组主要评估写入价值治理：
+
+- `useful_write_precision`：有效写入精度。
+- `pollution_block_rate`：污染写入拦截率。
+- `duplicate_control_rate`：重复控制率。
+- `conflict_review_rate`：冲突转审率。
+- `write_reduction_rate`：写入减少率。
+- `false_reject_rate`：误拒率。
+- `false_accept_rate`：误收率。
+
+记忆库卫生组主要评估睡眠巩固、层级溯源和版本链库级信号：
+
+- `duplicate_merge_rate`：重复合并率。
+- `stale_cleanup_rate`：过期清理率。
+- `low_value_cleanup_rate`：低价值清理率。
+- `source_ref_coverage_rate`：source_ref 覆盖率。
+- `source_fetch_success_rate`：回源成功率。
+- `token_saving_rate`：token 节省率。
+- `post_consolidation_recall_retention_rate`：巩固后召回保持率。
+
+详细设计见 [05-memory-target-metric-eval-plan.md](./05-memory-target-metric-eval-plan.md)。
+
+Phase 6h 分母与冲突链修订版离线报表已经生成：
+
+- `my_md/memory_optimization/eval_reports/memory_target_metrics_eval.json`
+- `my_md/memory_optimization/eval_reports/memory_target_metrics_eval.md`
+
+当前报表元信息：
+
+```text
+measurement_mode = offline_trace_real_baseline_target_metrics
+online_status = gated_no_checkpoint
+online_row_count = 0
+```
+
+三张主表的 overall 结果：
+
+| 模块组 | 模块 | 关键结果 |
+| --- | --- | --- |
+| 召回与回答 | 三路召回 | 目标召回率 `93.75% -> 100%`，提升 `6.25` 个百分点；hard 子集为 `87.5% -> 100%` |
+| 召回与回答 | 图谱召回 | 目标召回率 `97.5% -> 100%`，提升 `2.5` 个百分点；hard 子集为 `95% -> 100%` |
+| 召回与回答 | 重排与注入治理 | 目标召回率 `93.75% -> 100%`，提升 `6.25` 个百分点；错误注入率 after 为 `0%` |
+| 召回与回答 | 版本链与溯源 | 目标召回率 `90% -> 100%`，当前有效版本召回率 `90% -> 100%`；hard 当前有效版本为 `80% -> 100%` |
+| 写入治理 | 写入价值治理 | 240 个候选，污染拦截率 after `100%`，重复控制率 after `80%`，写入减少率 after `100%`，误拒率 after `0%` |
+| 记忆库卫生 | 睡眠巩固 | 600 条扫描记忆，重复合并率 `10%`，source_ref 覆盖率 `86.6072%`，token 节省率 `33.482%`，巩固后召回保持率 `100%` |
+
+注意：
+
+- 第一版 `0% -> 100%` 是展示 baseline，已经废弃。当前正式报告的 `before` 来自 trace baseline 字段；如果没有真实 baseline 事件，则显示 `unavailable`。
+- Phase 6f 的 `100% -> 100%` 和版本链 `100% -> 50%` 已被 Phase 6g 修订。Phase 6h 进一步把图谱召回分母从 tri target 中拆出来，并把版本链 forked replacement-chain fixture 变成可测。
+- hard miss 是目标导向离线构造，不是线上真实用户自然分布；它用于证明模块能力和报表口径，不应直接解释成生产准确率。
+- 图谱召回 after 现在为 `100%`；上一轮 `98.75%` 的缺口是分母口径问题，不是 graph lane 真缺口。
+- 写入价值治理的 `有效写入精度 after` 为 `unavailable`，因为当前 80 case 的候选都被治理策略拒绝或转审，没有实际允许写入的候选；此时应主要看污染拦截率、重复控制率、写入减少率和误拒率。
+- 写入治理需要继续补“有用候选保留率”和“后续召回有用率”，防止全拒绝策略也拿到漂亮分数。
+- 睡眠巩固的回源成功率当前是基于 `provenance_shadow.parse_success_rate` 的离线代理，不是生产中真实执行 `fetch_messages` 的成功率；token 节省也是 shadow 估算。
+- 当前 fixture 已补一个 forked replacement chain，所以 `conflict_chain_detection_rate` 在 hard / overall 行上变成 `100%`。
+- Phase 6i 已把写入治理和记忆库卫生的 evidence 输入收紧为 schema 校验入口：支持 JSON 数组、`{"records": [...]}` 和 JSONL，但缺字段、字符串布尔值、非法 label / decision / state、负数或非数字 token 都会失败，不会进入线上 evidence 行。
+
+### Phase 6j 的完整目标导向测评集
+
+为了不用真实用户数据也能先覆盖更多目标场景，当前新增了两档 case pack：
+
+| case pack | case 数 | 用途 |
+| --- | ---: | --- |
+| `standard` | 80 | 默认标准集，用来复现前面已经记录的 Phase 6d-6i 报告。 |
+| `comprehensive` | 320 | 完整目标导向集，用来扩大覆盖面，后续适合做正式离线对比和真实 LLM 大样本测试。 |
+
+完整集不是手写最终分数，而是通过场景模板生成真实 `EvalCase`。它覆盖 20 类场景，每类包含 common / hard 两套样本和 8 个变体，总计：
+
+```text
+20 scenarios * 2 case sets * 8 variants = 320 cases
+320 cases * 3 memorize candidates = 960 write candidates
+320 cases * 约 7.5 scanned items = 2400 hygiene scan units
+```
+
+新增覆盖点包括：
+
+- 实体别名和图谱桥接。
+- 当前偏好覆盖旧偏好。
+- 低价值写入过滤。
+- 高风险 / 花费工具调用前确认。
+- 注入噪声控制。
+- 缺失 `source_ref` 的溯源风险。
+- `session_key` 边界。
+- 睡眠压缩后的召回保持。
+- 因果一致性版本链。
+- 信息熵 / 信息量写入价值。
+
+运行命令：
+
+```bash
+.venv/bin/python scripts/run_memory_target_metrics_eval.py \
+  --out-dir /tmp/akashic-memory-comprehensive-pack \
+  --case-pack comprehensive
+```
+
+本轮离线 smoke 已跑通，结果摘要：
+
+| 组 | 模块 | 规模 | before | after | 说明 |
+| --- | --- | ---: | ---: | ---: | --- |
+| 召回与回答 | 三路召回 | 320 case | `98.125%` | `100%` | hard 子集仍能制造 baseline miss。 |
+| 召回与回答 | 图谱召回 | 320 case | `98.75%` | `100%` | 使用 graph 专用目标分母。 |
+| 召回与回答 | 重排与注入治理 | 320 case | `98.125%` | `100%` | 错误注入率 after 为 `0%`。 |
+| 召回与回答 | 版本链与溯源 | 320 case | `97.5%` | `100%` | 当前有效版本召回率 after 为 `100%`。 |
+| 写入治理 | 写入价值治理 | 960 candidates | `unavailable` | `100%` 污染拦截 | before 没有真实决策计数，不能计算相对提升。 |
+| 记忆库卫生 | 睡眠巩固 | 2400 scanned units | `0%` token saving | `32.8125%` token saving | 仍是 shadow 估算，不是生产 token 实测。 |
+
+这个完整集的定位：
+
+- 可以直接用于更有说服力的离线开关对比。
+- 可以作为真实 LLM runner 的输入，但如果按 `8 profiles * 2 prompt variants * 2 repeats` 全量跑，会变成 `10240` 次调用，必须显式评估 token 和时间成本。
+- 它仍然不是线上真实自然分布。它是目标导向压力集，目的是证明“某个能力开关是否能处理我们关心的问题”。
+
+### Phase 6k 的真实 LLM core matrix
+
+本轮真实 LLM core matrix 已完成，并带 checkpoint 恢复：
+
+```text
+320 cases * 4 profiles * 1 prompt variant * 1 repeat = 1280 calls
+```
+
+真实报告路径：
+
+```text
+/tmp/akashic-memory-phase6k-real/reports/memory_comprehensive_online_eval.json
+/tmp/akashic-memory-phase6k-real/reports/memory_comprehensive_online_eval.md
+```
+
+checkpoint 重建版路径：
+
+```text
+/tmp/akashic-memory-phase6k-real/checkpoint-report/memory_comprehensive_online_eval.json
+/tmp/akashic-memory-phase6k-real/checkpoint-report/memory_comprehensive_online_eval.md
+```
+
+最终真实报告摘要：
+
+- `case_count = 1280`
+- `unique_case_count = 320`
+- `profile_count = 4`
+- `prompt_variant_count = 1`
+- `repeat_count = 1`
+- `answer_rule_pass_rate = 23.9844`
+- `memory_grounding_pass_rate = 75.0`
+- `forbidden_violation_rate = 15.7812`
+- `avg_latency_ms = 4639.9172`
+- `total_token_count = 6971048`
+
+这份结果只覆盖 answer/retrieval 核心矩阵，不包含写入治理和睡眠巩固的真实 evidence。
+
+### Phase 6e 的综合线上 answer-level report
+
+Phase 6e 把离线 80 个目标导向 case 接到真实 `AgentLoop.process_direct()` 和真实 LLM 上。完整设计规模是：
+
+```text
+80 cases * 8 chain profiles * 2 prompt variants * 2 repeats = 2560 runs
+```
+
+本轮真实执行过程中，外部 provider 在 checkpoint 已有 `1599` 条记录时返回 `402 Insufficient Balance`。按计划停止后，报告用 `--checkpoint-report-only --exclude-infra-failures` 从 checkpoint 重建，只统计没有 timeout / provider error 的有效样本：
+
+- `case_count = 1417`
+- `unique_case_count = 45`
+- `checkpoint_input_count = 1599`
+- `excluded_infra_failure_count = 182`
+- `partial_due_to_infra_failure = True`
+- `infra_passed = True`
+- `answer_quality_passed = False`
+- `passed_case_count = 315`
+- `failed_answer_case_count = 975`
+- `total_token_count = 7600606`
+- `avg_latency_ms = 4976.7276`
+
+这份报告可以回答“余额耗尽前的真实 answer-level 样本里，各 profile 表现如何”，不能回答“完整 2560-run 最终结论是什么”。
+报告 JSON 顶层 `passed = False`，表示答案质量没有全量通过；CLI 返回 0 只表示排除基础设施失败后的报告成功生成。
+
+answer-level 主指标仍沿用：
+
+```text
+main_score = 0.7 * answer_rule_pass_rate
+           + 0.2 * memory_grounding_pass_rate
+           + 0.1 * (100 - forbidden_violation_rate)
+```
+
+本轮有效样本的 profile 结果：
+
+| profile | main_score | uplift_vs_off | adjacent_uplift | answer_rule_pass_rate | memory_grounding_pass_rate | forbidden_violation_rate |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| chain_off | 18.4269 | 0 | 0 | 12.9213 | 0 | 6.1798 |
+| chain_write_value | 18.0791 | -0.3478 | -0.3478 | 12.4294 | 0 | 6.2147 |
+| chain_tri_retrieval | 53.9548 | 35.5279 | 35.8757 | 38.4181 | 100 | 29.3785 |
+| chain_graph_retrieval | 54.8588 | 36.4319 | 0.904 | 38.9831 | 100 | 24.2938 |
+| chain_rerank_injection | 61.5819 | 43.155 | 6.7231 | 46.3277 | 100 | 8.4746 |
+| chain_version_provenance | 42.3729 | 23.946 | -19.209 | 46.3277 | 0 | 0.565 |
+| chain_sleep_consolidation | 47.0057 | 28.5788 | 4.6328 | 28.2486 | 100 | 27.6836 |
+| chain_all_on | 45.4237 | 26.9968 | -1.582 | 25.9887 | 100 | 27.6836 |
+
+online balanced proxy 不是生产准确率。它把线上回答字段映射到回答、证据、治理、效率等维度，用来解释为什么某些中后段治理能力在单一 answer score 上不明显：
+
+| profile | balanced_proxy | adjacent_delta |
+| --- | ---: | ---: |
+| chain_off | 28.8221 | 0 |
+| chain_write_value | 28.6527 | -0.1694 |
+| chain_tri_retrieval | 63.4069 | 34.7542 |
+| chain_graph_retrieval | 64.1737 | 0.7668 |
+| chain_rerank_injection | 69.6528 | 5.4791 |
+| chain_version_provenance | 43.652 | -26.0008 |
+| chain_sleep_consolidation | 58.0787 | 14.4267 |
+| chain_all_on | 56.8747 | -1.204 |
+
+本轮结论：
+
+- 三路召回、图谱召回、重排与注入治理在真实 answer-level 有正向贡献，其中 `chain_rerank_injection` 当前主分最高。
+- 写入价值、睡眠巩固这类能力不一定直接提升当前回答命中，应继续结合离线写入污染率、去重率、token 节省和 balanced proxy 判断。
+- 版本链与溯源 profile 的 `memory_grounding_pass_rate = 0`，导致相邻主分明显下降。这不是版本链思想无效，而是当前受控证据 ID / active leaf 注入策略还没和答案级 grounding 规则对齐。
+- 全开不等于最优。当前结果更支持“先 active 三路召回 + 图谱召回 + 重排注入治理，再修订版本链、睡眠巩固和全开组合策略”。
+
+### 写入价值和睡眠巩固的正确评测口径
+
+Phase 6e 的 answer-level report 对三路召回、图谱召回、重排注入治理更公平，因为这些能力会直接改变“当前回答能看到什么证据”。但写入价值和睡眠巩固属于长期记忆治理能力，它们的收益主要体现在后续轮次、记忆库质量和成本控制上。
+
+#### 写入价值评分应该怎么测
+
+写入价值评分要回答的问题不是“当前回答有没有变好”，而是：
+
+- 这条候选记忆是否值得长期保存。
+- 是否拒绝了临时信息、重复信息和 assistant 推断。
+- 是否保留了真正稳定的用户偏好、长期约束和重要事实。
+- 被保留下来的记忆在未来轮次是否真的能被召回并改善回答。
+
+推荐测试方法：
+
+```text
+同一批对话输入
+  -> baseline：按旧逻辑生成候选写入
+  -> experimental：写入价值评分给出 allow / reject / reason
+  -> 延迟评测：用后续问题验证被保留记忆是否能被用上
+```
+
+推荐测试集：
+
+- 稳定偏好：例如长期语言偏好、工具偏好、格式偏好。
+- 长期事实：例如项目路径、常用命令、固定约束。
+- 临时状态：例如“今天先这样”“这次不用”等不应长期保存的信息。
+- assistant 推断：模型自己推测出的用户偏好，不应直接写入长期记忆。
+- 重复表达：用户多次表达同一偏好，应强化或合并，而不是写多条。
+- 冲突纠错：用户明确改口时，应写新版本并让旧版本失效。
+
+核心指标：
+
+| 指标 | 含义 |
+| --- | --- |
+| `candidate_count` | 候选记忆数量 |
+| `baseline_written_count` | 旧逻辑会写入的数量 |
+| `policy_allow_count` | 新策略建议写入数量 |
+| `policy_reject_count` | 新策略建议拒绝数量 |
+| `reject_reason_distribution` | 拒绝原因分布 |
+| `temporary_reject_count` | 临时信息拒写数量 |
+| `assistant_inference_reject_count` | assistant 推断拒写数量 |
+| `duplicate_risk_count` | 重复风险数量 |
+| `write_reduction_rate` | 写入减少比例 |
+| `memory_pollution_rate` | 错写、脏写、临时写入的比例 |
+| `useful_memory_precision` | 写入后被判定为有长期价值的比例 |
+| `future_recall_usefulness` | 后续问题中被正确召回并改善回答的比例 |
+| `false_reject_rate` | 不该拒绝却被拒绝的重要记忆比例 |
+| `false_accept_rate` | 不该写入却被放行的低价值记忆比例 |
+
+判断标准：
+
+- 好结果不是“写得越少越好”，而是污染率下降、重复率下降，同时关键偏好和长期约束没有被误拒。
+- 写入价值可以在 answer-level 上短期无提升甚至微降；只要后续轮次的有效召回率、记忆精度和污染控制提升，就是它的真实收益。
+
+#### 睡眠巩固应该怎么测
+
+睡眠巩固要回答的问题不是“当前这一问是否答得更准”，而是：
+
+- 长期记忆库是否变得更干净。
+- 重复、过期、低价值、冲突记忆是否被识别。
+- prompt 注入是否更省 token。
+- 巩固后是否没有伤害关键记忆召回。
+- 检索结果是否更集中、更少错误召回。
+
+推荐测试方法：
+
+```text
+同一份 memory DB 快照
+  -> before：直接跑检索和答案评测
+  -> dry-run：只输出睡眠巩固候选，不修改 DB
+  -> active-on-clone：在临时克隆 DB 上应用合并 / 过期 / 降权
+  -> after：用同一批检索问题和答案问题复测
+```
+
+推荐测试集：
+
+- 大量重复偏好：验证合并和强化。
+- 过期信息：验证 stale 检测和降权。
+- 低价值碎片：验证低价值候选识别。
+- 冲突记忆链：验证旧版本不再污染当前召回。
+- source_ref 缺失：验证缺少来源的记忆是否被标记为低可信。
+- 关键长期偏好：验证睡眠巩固不能误删、误降权重要记忆。
+
+核心指标：
+
+| 指标 | 含义 |
+| --- | --- |
+| `scanned_count` | 扫描记忆数量 |
+| `duplicate_group_count` | 重复组数量 |
+| `duplicate_item_count` | 重复记忆条数 |
+| `merge_candidate_count` | 可合并候选数量 |
+| `stale_candidate_count` | 过期候选数量 |
+| `low_value_candidate_count` | 低价值候选数量 |
+| `conflict_candidate_count` | 冲突候选数量 |
+| `missing_source_ref_count` | 缺少来源引用数量 |
+| `estimated_token_saving` | 预计节省 token |
+| `estimated_redundancy_drop` | 预计冗余下降 |
+| `before_active_count` / `after_active_count` | 巩固前后 active 记忆数量 |
+| `post_consolidation_recall_precision` | 巩固后的召回精度 |
+| `post_consolidation_wrong_recall_rate` | 巩固后的错误召回率 |
+| `protected_memory_recall_rate` | 关键记忆保护召回率 |
+| `prompt_token_delta` | 注入 prompt token 变化 |
+
+判断标准：
+
+- 好结果不是“删得越多越好”，而是在关键记忆不丢失的前提下降低重复、过期和低价值注入。
+- 睡眠巩固适合用 before/after 快照评测，而不是只看单轮 answer-level 分数。
+- 如果 answer-level 主分没有明显提升，但 token、重复率、错误召回率和治理分改善，仍然说明睡眠巩固有价值。
+
+报表文件：
+
+- `my_md/memory_optimization/eval_reports/memory_comprehensive_online_eval.json`
+- `my_md/memory_optimization/eval_reports/memory_comprehensive_online_eval.md`
+
+其中 `memory_quantitative_balanced_eval.md` 是分层 balanced 链路评测，用来缓解单一主分对后段治理能力不公平的问题。它不是把所有能力重新包装成一个更好看的分数，而是把指标拆成：
+
+- `answer_score`：回答规则或目标记忆命中代理分。
+- `retrieval_proxy_score`：召回相关链路步骤上的离线召回代理分，不是真实 `recall@k`。
+- `grounding_score`：来源、证据或可解释字段覆盖情况。
+- `governance_score`：综合 forbidden 控制和 grounding 的治理分。
+- `efficiency_score`：token 节省或 prompt token 控制的效率分；缺失时为 `unavailable`。
+- `balanced_score`：只用可用维度归一化后的综合代理分。
+
+公式为：
+
+```text
+balanced_score = 0.30 * answer_score
+               + 0.25 * retrieval_proxy_score
+               + 0.20 * grounding_score
+               + 0.15 * governance_score
+               + 0.10 * efficiency_score
+```
+
+如果某个维度是 `unavailable`，不会把它当成 0 或 50，而是从本次综合分里移除，并按剩余可用维度重新归一化权重。
+
+Balanced report 借鉴 RAG/Agent 分层评测共识，把回答、召回代理、证据、治理和效率分开；本项目的改进是把 memory 生命周期治理纳入评分，包括 forbidden、source_ref、版本链、scope 隔离和 token/sleep 信号。它仍然是离线代理评测，不是生产回答准确率。
+
+本轮 balanced 结果：
+
+- `case_count = 80`
+- `common_case_count = 40`
+- `hard_case_count = 40`
+- `baseline_balanced_score = 12.6923`
+- `final_balanced_score = 67.2022`
+- `total_balanced_uplift_points = 54.5099`
+- `common_final_balanced_score = 66.6972`
+- `hard_final_balanced_score = 67.7072`
+- 相邻增益最高：`chain_write_value = +33.1924`
+- 相邻增益最低：`chain_rerank_injection = -4.5898`
+
+报表文件：
+
+- `my_md/memory_optimization/eval_reports/memory_quantitative_balanced_eval.json`
+- `my_md/memory_optimization/eval_reports/memory_quantitative_balanced_eval.md`
 
 解释边界：
 
@@ -1047,6 +1451,29 @@ Phase 2b 的测试结论：
 - MRR。
 - 记忆污染率。
 - 纠错成功率。
+
+## 三层评分口径
+
+当前项目已经可以把记忆评测拆成三层：
+
+- 即时回答评分：看 `answer_rule_pass_rate`、`memory_grounding_pass_rate` 和 `forbidden_violation_rate`，主要反映当前回答是否命中。
+- 写入治理评分：看 `policy_reject_count`、`policy_review_count`、`duplicate_risk_count`、`temporary_risk_count`、`assistant_inference_risk_count` 和 `write_reduction_rate`，主要反映写入是否干净、是否少污染。
+- 记忆库卫生评分：看 `scanned_count`、`missing_source_ref_count`、`stale_candidate_count`、`duplicate_group_count`、`merge_candidate_count`、`conflict_candidate_count`、`low_value_candidate_count` 和 `estimated_token_saving`，主要反映睡眠巩固后记忆库是否更健康。
+
+当前离线报表路径：
+
+- `my_md/memory_optimization/eval_reports/memory_layered_scoring_eval.json`
+- `my_md/memory_optimization/eval_reports/memory_layered_scoring_eval.md`
+
+当前离线结果：
+
+- `baseline_total_layered_score = 94.375`
+- `final_total_layered_score = 54.9521`
+- `total_layered_uplift_points = -39.4229`
+- `chain_all_on` 的写入治理分 `49.3334`
+- `chain_all_on` 的记忆库卫生分 `35.4107`
+
+这组数值的含义不是“生产准确率”，而是说明写入和巩固类能力应当独立评价，不能只靠回答分数判断好坏。
 
 ## 面试表达
 

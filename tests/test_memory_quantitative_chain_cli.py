@@ -33,7 +33,7 @@ def test_memory_quantitative_chain_cli_writes_reports(tmp_path: Path) -> None:
         row for row in payload["profile_summaries"] if row["case_set"] == "overall"
     ]
     assert [row["profile_name"] for row in overall] == [
-        "chain_off",
+        "chain_memory_base",
         "chain_write_value",
         "chain_tri_retrieval",
         "chain_graph_retrieval",
@@ -41,14 +41,15 @@ def test_memory_quantitative_chain_cli_writes_reports(tmp_path: Path) -> None:
         "chain_version_provenance",
         "chain_sleep_consolidation",
         "chain_all_on",
+        "chain_off",
     ]
     assert overall[0]["uplift_points"] == 0.0
     assert overall[1]["uplift_points"] == round(
         overall[1]["main_score"] - overall[0]["main_score"],
         4,
     )
-    assert "## 链路阶段增益" in markdown
-    assert "相邻增益" in markdown
+    assert "## 链路主要结果" in markdown
+    assert "targets | success | miss | recall_rate" in markdown
     assert "不是单项分数相加" in markdown
 
 
