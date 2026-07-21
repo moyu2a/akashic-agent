@@ -577,6 +577,14 @@ Plan adjustment:
 - Resolver-only handling was insufficient because some hard duplicate leakage came from first-stage `allow`, not from `review`.
 - The implementation therefore adds a final write safety gate after first-stage allow / resolver promotion. It checks every provisional final write for duplicate, conflict, and pollution signals before final write counting.
 
+Gap to ideal state:
+
+- Useful final retention is `87.5%`; ideal is `100%`, so the gap is `50/400` useful candidates or `12.5` percentage points.
+- Hard useful final retention is `75.0%`; ideal is `100%`, so the gap is `50/200` hard useful candidates or `25` percentage points.
+- Conflict review preservation is `98.0%`; ideal is `100%`, so the gap is `4/200` conflict candidates or `2` percentage points.
+- Final pollution control is `100.0%` and hard duplicate leakage is `0.0%`, so those two are already at the strict ideal target in this offline set.
+- Main remaining weakness is useful hard-candidate recovery, not pollution control.
+
 Verification so far:
 
 - `.venv/bin/python -m pytest tests/test_memory_write_governance_counts.py -q -p no:cacheprovider` -> `26 passed in 0.98s`.

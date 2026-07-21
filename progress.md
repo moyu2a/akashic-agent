@@ -790,6 +790,12 @@
 - Current conclusion:
   - The offline chain now shows the intended write-governance shape: direct write stays conservative, useful review candidates can be recovered, conflicts stay in review, and duplicate/pollution candidates do not leak into final writes.
   - This is still offline shadow evaluation only. It does not change live AgentLoop, production memory DB writes, observe DB writes, or real LLM behavior.
+- Gap to ideal state:
+  - Useful final retention is `87.5%`; ideal is `100%`, so the gap is `50/400` useful candidates or `12.5` percentage points.
+  - Hard useful final retention is `75.0%`; ideal is `100%`, so the gap is `50/200` hard useful candidates or `25` percentage points.
+  - Conflict review preservation is `98.0%`; ideal is `100%`, so the gap is `4/200` conflict candidates or `2` percentage points.
+  - Final pollution control is `100.0%` and hard duplicate leakage is `0.0%`, so these two are already at the strict ideal target in this offline set.
+  - Main remaining weakness is useful hard-candidate recovery, not pollution control.
 - Focused verification:
   - `.venv/bin/python -m pytest tests/test_memory_write_governance_counts.py -q -p no:cacheprovider` -> `26 passed in 0.98s`.
   - `.venv/bin/python -m pytest tests/test_memory_write_governance_counts_cli.py -q -p no:cacheprovider` -> `1 passed in 0.20s`.
