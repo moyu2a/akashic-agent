@@ -79,15 +79,19 @@ def test_shell_safety_blocks_package_write_without_noconfirm(tmp_path: Path) -> 
     assert "--noconfirm" in result.output
 
 
-def test_shell_safety_allows_non_interactive_package_write(tmp_path: Path) -> None:
+def test_shell_safety_passes_non_interactive_package_write_to_policy(
+    tmp_path: Path,
+) -> None:
     result = _run_shell(_make_plugin_root(tmp_path), "sudo -n pacman -Syu --noconfirm")
 
-    assert result.status == "success"
+    assert result.status == "deferred"
     assert result.final_arguments["command"] == "sudo -n pacman -Syu --noconfirm"
+    assert result.policy_trace["reason"] == "risk_strategy_shell_requires_approval"
 
 
-def test_shell_safety_allows_package_query(tmp_path: Path) -> None:
+def test_shell_safety_passes_package_query_to_policy(tmp_path: Path) -> None:
     result = _run_shell(_make_plugin_root(tmp_path), "pacman -Q")
 
-    assert result.status == "success"
+    assert result.status == "deferred"
     assert result.final_arguments["command"] == "pacman -Q"
+    assert result.policy_trace["reason"] == "risk_strategy_shell_requires_approval"
