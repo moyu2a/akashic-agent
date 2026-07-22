@@ -172,6 +172,41 @@ def write_sleep_hygiene_report_markdown(
             "节省均表示候选识别或估算，不表示真实 DB 已经被清理。"
         ),
     ]
+    group_metrics = metrics.get("group_metrics")
+    if isinstance(group_metrics, dict):
+        lines.extend(
+            [
+                "",
+                "## standard / hard / overall",
+                "",
+                "| case_set | case 数 | evaluated item 数 | candidate recall | candidate precision | retained protection | false positive cleanup | safe evidence token saving |",
+                "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+            ]
+        )
+        for name in ("standard", "hard", "overall"):
+            group = group_metrics.get(name)
+            if not isinstance(group, dict):
+                continue
+            lines.append(
+                "| "
+                + " | ".join(
+                    [
+                        name,
+                        str(group.get("case_count")),
+                        str(group.get("evaluated_item_count")),
+                        _fmt_pct(
+                            group.get("candidate_recall"),
+                        ),
+                        _fmt_pct(group.get("candidate_precision")),
+                        _fmt_pct(group.get("retained_protection_rate")),
+                        _fmt_pct(group.get("false_positive_cleanup_rate")),
+                        _fmt_pct(
+                            group.get("safe_evidence_estimated_token_saving_rate")
+                        ),
+                    ]
+                )
+                + " |"
+            )
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
@@ -391,6 +426,12 @@ def _bool_pct(records: Sequence[dict[str, object]], field: str) -> float | str:
 
 def _token_estimate(text: object) -> int:
     return max(1, len(str(text or "")) // 4)
+
+
+def _fmt_pct(value: object) -> str:
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return f"{value}%"
+    return str(value)
 
 
 def _group_metrics(records: Sequence[dict[str, object]]) -> dict[str, dict[str, object]]:

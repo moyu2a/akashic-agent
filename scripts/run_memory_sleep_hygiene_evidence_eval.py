@@ -9,8 +9,10 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from memory2.eval_quantitative_cases import build_quantitative_eval_cases
+from memory2.eval_sleep_hygiene_cases import build_sleep_hygiene_cases
 from memory2.eval_sleep_hygiene_evidence import (
     run_sleep_hygiene_evidence_eval,
+    strip_sleep_hygiene_evidence_for_target_metrics,
     write_sleep_hygiene_evidence_jsonl,
     write_sleep_hygiene_report_json,
     write_sleep_hygiene_report_markdown,
@@ -32,16 +34,25 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--low-value-count", type=int, default=120)
     parser.add_argument("--retained-count", type=int, default=120)
     parser.add_argument("--missing-source-count", type=int, default=40)
+    parser.add_argument(
+        "--case-set",
+        choices=("standard", "hard", "all"),
+        default="standard",
+    )
+    parser.add_argument("--hard-per-scenario", type=int, default=40)
     parser.add_argument("--write-target-metrics", action="store_true")
     args = parser.parse_args(argv)
 
-    report = run_sleep_hygiene_evidence_eval(
+    cases = build_sleep_hygiene_cases(
+        case_set=args.case_set,
         duplicate_groups=args.duplicate_groups,
         stale_count=args.stale_count,
         low_value_count=args.low_value_count,
         retained_count=args.retained_count,
+        hard_per_scenario=args.hard_per_scenario,
         missing_source_count=args.missing_source_count,
     )
+    report = run_sleep_hygiene_evidence_eval(cases=cases)
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
     write_sleep_hygiene_evidence_jsonl(
@@ -60,7 +71,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.write_target_metrics:
         target_report = build_target_metric_report(
             build_quantitative_eval_cases(limit=8),
-            online_hygiene_records=report.records,
+            online_hygiene_records=strip_sleep_hygiene_evidence_for_target_metrics(
+                report.records
+            ),
             online_checkpoint_source="sleep_hygiene_evidence_eval_proxy",
         )
         write_target_metric_json(
@@ -74,6 +87,7 @@ def main(argv: list[str] | None = None) -> int:
 
     print(
         "sleep hygiene evidence eval complete: "
+        f"case_set={args.case_set} "
         f"cases={report.metrics['case_count']} "
         f"scanned_active_items={report.metrics['scanned_active_item_count']} "
         f"evidence_rows={report.metrics['evaluated_evidence_row_count']} "
