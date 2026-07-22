@@ -131,6 +131,88 @@ V2 报告分为 standard、hard、overall 三组。standard 看基础链路，ha
 
 V2 的主要结论是：当前 shadow 对应该清理的候选召回很强，standard 集里是 100%；但 hard 集暴露出 `near_merge_not_duplicate` 这类边界场景会被 merge 语义标成候选，导致 hard 的 candidate precision 只有 75.0%，retained protection 为 90.0%。因此不能再说“睡眠巩固完全安全”，更准确的表述是“基础候选识别稳定，但边界保留策略还需要继续治理”。
 
+## V2 结果解读
+
+这轮数据应分三层理解：
+
+| 层次 | 当前数据 | 说明 |
+| --- | --- | --- |
+| 候选召回能力 | hard candidate recall `100.0%` | 应该被清理或合并的目标候选都能被 shadow 找到，说明重复、过期、低价值规则的覆盖是有效的。 |
+| 候选精度 | hard candidate precision `75.0%` | shadow 也把一部分应该保留的相似记忆放进了非 active 候选，说明仅看 recall 会高估安全性。 |
+| 关键记忆保护 | hard retained protection `90.0%` | 大部分关键记忆被保留，但 hard 集中仍有 10% retained row 被误伤，不能直接进入真实清理。 |
+
+误伤主要来自 `near_merge_not_duplicate`：这类样本是“相似但不应清理”的边界场景。当前算法把它识别成 merge candidate，从 evidence 口径看 after_state 变成 `merged`，因此被统计为 retained false positive。这个结果不是测试失败，而是评测集发挥作用：它把 V1 standard 集看不到的边界风险暴露出来了。
+
+## 后续完善方案
+
+### 1. 区分 merge 建议和 cleanup 动作
+
+当前 evidence 把 `merged`、`stale`、`low_value_removed` 都视为非 active 状态，因此 near-merge 建议会影响 retained protection。下一步应把候选分成两类：
+
+| 类型 | 示例 | 是否可直接清理 |
+| --- | --- | --- |
+| cleanup candidate | stale、low_value_removed、明确重复的冗余项 | 可以进入严格 dry-run patch |
+| review / merge suggestion | near-merge、弱相似、信息互补 | 只能进入人工或策略复核，不能直接删除 |
+
+这样可以保留 merge 的提示价值，同时避免把相似但互补的记忆当作可删除收益。
+
+### 2. 给 hard 集增加按场景指标
+
+目前 V2 已经有 standard / hard / overall 三组指标，但 hard 内部还没有按 scenario 单独出表。下一步应输出：
+
+```text
+near_merge_not_duplicate precision / false positive
+old_high_value retained protection
+temporary_but_pinned retained protection
+cross_scope_identical scope safety
+opposite_preference_conflict conflict protection
+multi_duplicate_pairwise duplicate recall
+missing_source_but_important missing-source protection
+mixed_signal_low_value cleanup recall
+```
+
+这样能直接定位是哪一类边界拉低了 hard precision，而不是只看到 hard 总分。
+
+### 3. 增加真实回源 evidence
+
+当前 `source_fetch_success_rate = 100.0%` 是 proxy 口径，只表示带 `source_ref` 的记录被视为可回源。下一步需要真的调用消息查询能力，验证：
+
+- `source_ref` 能否解析。
+- 原始消息是否还存在。
+- 原始消息是否支持当前记忆摘要。
+- 跨 session / 跨 channel 是否被正确隔离。
+
+只有真实回源通过，才能把“来源覆盖率”升级成“证据可信度”指标。
+
+### 4. 做 active dry-run patch，但不落库
+
+在不修改真实 DB 的前提下，生成拟执行变更：
+
+```text
+would_merge: [...]
+would_mark_stale: [...]
+would_remove_low_value: [...]
+would_keep: [...]
+requires_review: [...]
+```
+
+报告中要展示每条拟变更的原因、source_ref、是否可恢复、预计 token 变化和风险等级。这样可以从“候选识别评测”推进到“治理动作评测”，但仍保持安全边界。
+
+### 5. 等 hard precision 稳定后再讨论真实启用
+
+建议进入真实启用前至少满足：
+
+| 指标 | 建议门槛 |
+| --- | ---: |
+| cleanup candidate recall | >= 98% |
+| cleanup candidate precision | >= 98% |
+| retained protection | >= 99% |
+| false positive cleanup | <= 1% |
+| 真实 source_ref 回源成功率 | >= 95% |
+| active dry-run 可恢复率 | 100% |
+
+在达到这些门槛前，睡眠巩固适合作为 shadow evidence、Dashboard 观测和离线评测模块，不适合直接执行真实删除或合并。
+
 ## 当前限制
 
 - 当前数据集是目标导向的确定性集合，不是真实线上自然分布。

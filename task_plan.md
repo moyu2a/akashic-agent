@@ -974,3 +974,11 @@ Boundary:
 - No real DB cleanup happened.
 - No real prompt token reduction is claimed.
 - The hard result exposes a real boundary issue: merge candidates can hurt retained protection if treated as cleanup.
+
+Next improvement sequence:
+
+1. Scenario split report: add per-scenario hard metrics so `near_merge_not_duplicate`, scope safety, conflict safety, missing-source safety and low-value cleanup are visible independently.
+2. Candidate taxonomy: split `merge suggestion` from `cleanup candidate`; near-merge should default to review and should not count as safe cleanup token saving.
+3. Real provenance evidence: replace proxy `source_fetch_success` with real `source_ref` lookup and support/mismatch counters.
+4. Active dry-run patch: output `would_merge`, `would_mark_stale`, `would_remove_low_value`, `would_keep`, and `requires_review` without writing DB.
+5. Activation gate: do not enable real merge / supersede until hard precision, retained protection, real source fetch, and recoverability meet explicit thresholds.

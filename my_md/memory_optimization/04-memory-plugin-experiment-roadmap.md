@@ -1098,6 +1098,12 @@ Phase 6q 当前状态：
 - hard：candidate recall `100.0%`，candidate precision `75.0%`，retained protection `90.0%`，false positive cleanup `10.0%`，safe evidence token saving 为 `unsafe`。
 - overall：candidate recall `100.0%`，candidate precision `93.4426%`，retained protection `92.7273%`，false positive cleanup `7.2727%`。
 - 当前结论：基础候选识别稳定，但 hard 集证明边界保留策略还不够安全；后续应区分“merge 建议”和“cleanup 行为”，不能把所有非 active candidate 都直接当作可删除收益。
+- 后续完善顺序：
+  1. 报告层先按 hard scenario 拆分指标，定位 near-merge、scope、conflict、missing-source 分别贡献多少误伤。
+  2. 治理层把 `merge suggestion` 和 `cleanup candidate` 分开，near-merge 默认进入 review，不计入安全 token saving。
+  3. evidence 层接入真实 `source_ref` 回源，替换当前 proxy source fetch 口径。
+  4. 动作层生成 active dry-run patch，只输出拟合并、拟过期、拟低价值清理和 requires_review，不落库。
+  5. 达到 hard precision、retained protection、真实回源和可恢复门槛后，再讨论真实 merge / supersede。
 
 后续计划：
 

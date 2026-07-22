@@ -201,6 +201,23 @@ V2 hard / adversarial 报告结果：
 
 这说明 standard 集可以证明基础链路稳定，hard 集可以暴露边界误伤。当前 hard 集里主要问题是相似但不应清理的 near-merge 场景会进入候选，从而把安全 token saving 标记为 `unsafe`。
 
+因此记忆库卫生表后续不应只展示“重复合并率 / token 节省率”，还要展示两个安全指标：
+
+```text
+候选精度 = 正确候选数 / 实际候选数
+关键记忆保护率 = 未被误伤的 retained 记忆数 / retained 记忆数
+```
+
+推荐把睡眠巩固的指标拆成三类：
+
+| 指标组 | 用途 | 当前 V2 数据 |
+| --- | --- | --- |
+| cleanup recall | 证明该清理的东西能不能找出来 | hard `100.0%` |
+| cleanup / candidate precision | 证明找出来的候选是否真的该动 | hard `75.0%` |
+| retained protection | 证明关键记忆不会被误伤 | hard `90.0%` |
+
+后续只有当 hard precision 和 retained protection 稳定后，才适合把 shadow 候选推进到 active dry-run patch。真实删除、合并或 supersede 还需要额外满足真实回源、可恢复和用户确认策略。
+
 推荐展示：
 
 ```text

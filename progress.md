@@ -1106,3 +1106,10 @@
   - V1 standard 100% was a functionality/happy-path result;
   - V2 hard set reveals boundary risk;
   - current shadow identifies intended cleanup candidates well, but near-merge retained memories can become non-active candidates, so merge suggestion must not be presented as safe cleanup.
+- Follow-up direction recorded in docs:
+  - split hard metrics by scenario;
+  - separate `merge suggestion` from real `cleanup candidate`;
+  - route near-merge to review instead of cleanup;
+  - replace proxy source fetch with real `source_ref` lookup evidence;
+  - generate active dry-run patch without writing DB;
+  - require high hard precision, retained protection, real source fetch, and recoverability before any real merge / supersede.
