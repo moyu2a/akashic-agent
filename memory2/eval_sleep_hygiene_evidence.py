@@ -89,15 +89,16 @@ def run_sleep_hygiene_evidence_eval(
     )
     records = build_sleep_hygiene_evidence_records(selected_cases, now=FIXED_NOW)
     candidate_state_by_id = _candidate_state_by_id(shadow.experimental_result)
+    shadow_metrics = _stable_shadow_metrics(shadow.metrics)
     return SleepHygieneEvidenceReport(
         records=records,
         metrics=_metrics(
             records,
             case_count=len(selected_cases),
-            scanned_active_item_count=int(shadow.metrics.get("scanned_count", 0) or 0),
+            scanned_active_item_count=int(shadow_metrics.get("scanned_count", 0) or 0),
             candidate_state_by_id=candidate_state_by_id,
         ),
-        shadow_metrics=dict(shadow.metrics),
+        shadow_metrics=shadow_metrics,
     )
 
 
@@ -178,6 +179,12 @@ def _candidate_state_by_id(experimental_result: dict[str, object]) -> dict[str, 
     for item_id in _str_set(experimental_result.get("low_value_candidate_ids")):
         states[item_id] = "low_value_removed"
     return states
+
+
+def _stable_shadow_metrics(metrics: dict[str, object]) -> dict[str, object]:
+    stable = dict(metrics)
+    stable["job_latency_ms"] = 0.0
+    return stable
 
 
 def _after_state_for_label(

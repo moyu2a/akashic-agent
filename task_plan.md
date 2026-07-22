@@ -895,3 +895,50 @@ Documentation follow-up:
   - acceptance criteria;
   - provider failure and checkpoint handling;
   - production-boundary caveats.
+
+## 2026-07-22 Sleep Hygiene Evidence Eval
+
+Goal: 补齐睡眠巩固在“记忆库卫生表”中的可量化 evidence，回答打开睡眠巩固后重复/过期/低价值候选识别和关键记忆误伤情况。
+
+Implemented:
+
+- Added deterministic sleep hygiene case builder: `memory2/eval_sleep_hygiene_cases.py`.
+- Added shadow-to-evidence converter and report writer: `memory2/eval_sleep_hygiene_evidence.py`.
+- Added CLI: `scripts/run_memory_sleep_hygiene_evidence_eval.py`.
+- Added tests:
+  - `tests/test_memory_sleep_hygiene_cases.py`;
+  - `tests/test_memory_sleep_hygiene_evidence.py`;
+  - `tests/test_memory_sleep_hygiene_evidence_cli.py`.
+- Added report output under `my_md/memory_optimization/eval_reports/sleep_hygiene_evidence/`.
+- Added dedicated docs: `my_md/memory_optimization/08-memory-sleep-hygiene-eval.md`.
+
+Design boundary:
+
+- Uses current `sleep_consolidation_shadow`.
+- Does not change `AgentLoop`, `Reasoner`, `ToolExecutor`, retrieval, prompt injection, or production memory storage.
+- Does not merge, delete, supersede, or write real memory rows.
+- `source_fetch_success_rate` is proxy-only in this phase.
+- `shadow_estimated_token_saving_rate` is an estimate, not real DB or prompt token reduction.
+
+Current 600-case result:
+
+- `case_count = 600`
+- `scanned_active_item_count = 750`
+- `evaluated_evidence_row_count = 600`
+- duplicate candidate identification rate `100.0%`
+- stale candidate identification rate `100.0%`
+- low-value candidate identification rate `100.0%`
+- source_ref coverage `90.0%`
+- proxy source fetch success `100.0%`
+- shadow estimated token saving `64.0138%`
+- retained memory retention `100.0%`
+- retained candidate leak count `0`
+- unexpected candidate count `0`
+- false positive cleanup rate `0.0%`
+- applied change count `0`
+
+Next:
+
+- Add real `source_ref` fetch evidence.
+- Add harder false-positive cases.
+- Consider active dry-run patch generation only after shadow precision remains stable.

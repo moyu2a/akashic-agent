@@ -96,3 +96,21 @@ def test_retained_rows_are_not_hard_coded_safe_when_shadow_marks_candidate() -> 
     assert report.metrics["retained_candidate_leak_count"] > 0
     assert report.metrics["false_positive_cleanup_rate"] > 0
     assert report.metrics["post_consolidation_recall_retention_rate"] < 100.0
+
+
+def test_sleep_hygiene_report_normalizes_runtime_latency_for_stable_reports() -> None:
+    first = run_sleep_hygiene_evidence_eval(
+        duplicate_groups=2,
+        stale_count=2,
+        low_value_count=2,
+        retained_count=2,
+    )
+    second = run_sleep_hygiene_evidence_eval(
+        duplicate_groups=2,
+        stale_count=2,
+        low_value_count=2,
+        retained_count=2,
+    )
+
+    assert first.shadow_metrics["job_latency_ms"] == 0.0
+    assert first.shadow_metrics == second.shadow_metrics

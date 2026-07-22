@@ -57,6 +57,8 @@
 
 睡眠巩固不需要证明“下一句回答立刻更好”，它只需要证明重复合并、过期清理、低价值清理、回源健康度和 token 节省变好。
 
+补充：睡眠巩固 evidence 评测已经把这个口径落到可运行脚本。`scripts/run_memory_sleep_hygiene_evidence_eval.py` 默认构造 600 个目标导向 case，扫描 750 条 active item，并输出 `online_hygiene_records` 兼容 evidence。当前结果用于第三张主表“记忆库卫生表”，不用于回答层召回增益表。
+
 ### 2. 百分比比综合分更容易解释
 
 推荐表达：
@@ -165,6 +167,27 @@ source_ref 覆盖率 = 带可用 source_ref 的记忆 / 总记忆
 token 节省率 = 预计减少 token / 原始注入 token
 巩固后召回保持率 = 巩固后仍能召回目标记忆的 case / 巩固前可召回 case
 ```
+
+当前睡眠巩固 evidence 评测结果：
+
+| 指标 | 数值 |
+| --- | ---: |
+| case 数 | 600 |
+| 扫描 active item 数 | 750 |
+| evidence row 数 | 600 |
+| 重复候选识别率 | 100.0% |
+| 过期候选识别率 | 100.0% |
+| 低价值候选识别率 | 100.0% |
+| 来源覆盖率 | 90.0% |
+| proxy 回源成功率 | 100.0% |
+| shadow 估算 token 节省率 | 64.0138% |
+| 关键记忆保持率 | 100.0% |
+| 关键记忆误伤候选数 | 0 |
+| 非预期候选数 | 0 |
+| 误伤候选率 | 0.0% |
+| 实际应用变更数 | 0 |
+
+这些数值来自离线 evidence / shadow-only 评测。`source_fetch_success_rate` 当前只表示有 `source_ref` 的行在 proxy 口径下可回源，不代表已经真实读取历史消息；`shadow_estimated_token_saving_rate` 也只是候选层估算，不代表真实 DB 或真实 prompt token 已下降。
 
 推荐展示：
 

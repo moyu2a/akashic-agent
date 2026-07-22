@@ -6629,7 +6629,7 @@
     "duplicate_item_count": 300,
     "estimated_redundancy_drop": 0.4,
     "estimated_token_saving": 2600,
-    "job_latency_ms": 632.6801,
+    "job_latency_ms": 0.0,
     "low_value_candidate_count": 150,
     "low_value_candidate_truncated_count": 0,
     "merge_candidate_count": 0,

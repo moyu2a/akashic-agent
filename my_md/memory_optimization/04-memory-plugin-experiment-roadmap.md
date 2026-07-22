@@ -752,6 +752,17 @@ Phase 5 验证结论：
 - `compileall` 和 `git diff --check`：通过。
 - 当前仍是 shadow-only / dry-run，不改变真实写入、真实召回、真实 `recall_memory` 工具结果和 prompt 注入。
 
+Phase 5 补充 evidence 评测：
+
+- 新增目标导向的记忆库卫生 evidence 评测，默认 600 个 case，扫描 750 条 active item。
+- 它把 `sleep_consolidation_shadow` 的 dry-run 判断转换为 `online_hygiene_records`，可以接入第三张主表“记忆库卫生表”。
+- 当前仍不修改真实 memory DB，`applied_change_count` 必须保持 0。
+- 当前结果：重复候选识别率 `100.0%`，过期候选识别率 `100.0%`，低价值候选识别率 `100.0%`，来源覆盖率 `90.0%`，proxy 回源成功率 `100.0%`，shadow 估算 token 节省率 `64.0138%`，关键记忆保持率 `100.0%`。
+- 安全指标：关键记忆误伤候选数 `0`，非预期候选数 `0`，误伤候选率 `0.0%`。
+- 这能回答“打开睡眠巩固后，有多少重复/过期/低价值记忆被成功识别，以及关键记忆是否被误伤”。
+- `source_fetch_success_rate` 当前是 proxy：只在有 `source_ref` 的行中计算，不代表已经真实取回原消息。
+- `shadow_estimated_token_saving_rate` 是估算值，不代表真实 DB 体积或真实 prompt token 已下降。
+
 ### Phase 6：评测集和 Dashboard
 
 - 固定 memory eval。
@@ -995,7 +1006,8 @@ Phase 6c-1 已完成第一版：离线 uplift report。
 5. Phase 6d-layered：已经完成三层评分评测，输出 `memory_layered_scoring_eval.json` 和 `memory_layered_scoring_eval.md`。当前结果为 `baseline_total_layered_score = 94.375`、`final_total_layered_score = 54.9521`、`total_layered_uplift_points = -39.4229`，common 最终分 `54.773`，hard 最终分 `55.1312`，`chain_all_on` 的写入治理分 `49.3334`，记忆库卫生分 `35.4107`。这一步的意义是把即时回答、写入治理、记忆库卫生拆开，避免后两者被单一回答分误伤。
 6. Phase 6e：已经完成第一轮综合线上 answer-level 评测，但外部 provider 在 checkpoint `1599` 条时返回 `402 Insufficient Balance`，排除基础设施失败后得到 `1417` 条有效真实调用。该报告证明真实 LLM 接入链路可用，但不能作为完整 2560-run 结论。
 7. Phase 6f-target-metrics：计划把三层分数继续拆成三组目标指标百分比。回答效果组只看召回、证据、回答和错误注入；写入治理组只看写入价值治理的污染拦截、有效写入、重复控制和误拒误收；记忆库卫生组只看睡眠巩固、层级溯源和版本链库级信号。目标是用“打开某模块后，某个可解释指标从 A% 到 B%”替代“综合性能提升多少”。
-8. Phase 6g：基于连续评测结果决定哪些策略可以从 shadow 切到 active。
+8. Phase 6p-sleep-hygiene-evidence：已经完成 600 case 睡眠巩固 evidence 评测，输出 `my_md/memory_optimization/eval_reports/sleep_hygiene_evidence/` 下的 JSONL、JSON 和 Markdown。当前结果显示：扫描 active item `750`，evidence row `600`，重复/过期/低价值候选识别率均为 `100.0%`，关键记忆误伤候选数 `0`，误伤候选率 `0.0%`，实际应用变更数 `0`。这一步补齐的是记忆库卫生表的离线 evidence，不是生产清理效果。
+9. Phase 6g：基于连续评测结果决定哪些策略可以从 shadow 切到 active。
 
 ## Phase 6f 目标指标评测
 

@@ -1028,3 +1028,35 @@
 - Focused verification:
   - `.venv/bin/python -m pytest tests/test_memory_write_governance_online_eval.py tests/test_memory_write_governance_online_cli.py tests/test_memory_target_metrics_cli.py -q -p no:cacheprovider` -> `21 passed in 15.51s`.
 - Real LLM pilot was not run in this step because it consumes provider quota and the plan requires explicit approval at execution time.
+
+## 2026-07-22 Sleep Hygiene Evidence Eval
+
+- Executed the revised sleep hygiene evidence plan.
+- Added deterministic case generation for duplicate, stale, low-value, and retained cohorts.
+- Added evidence conversion from `sleep_consolidation_shadow` to target-metric-compatible `online_hygiene_records`.
+- Added retained safety counters so retained memories are not hard-coded as safe:
+  - `retained_candidate_leak_count`;
+  - `unexpected_candidate_count`;
+  - `false_positive_cleanup_rate`.
+- Added CLI report generation via `scripts/run_memory_sleep_hygiene_evidence_eval.py`.
+- Generated formal reports under `my_md/memory_optimization/eval_reports/sleep_hygiene_evidence/`.
+- Current 600-case output:
+  - `case_count = 600`;
+  - `scanned_active_item_count = 750`;
+  - `evaluated_evidence_row_count = 600`;
+  - duplicate candidate identification `100.0%`;
+  - stale candidate identification `100.0%`;
+  - low-value candidate identification `100.0%`;
+  - source_ref coverage `90.0%`;
+  - proxy source fetch success `100.0%`;
+  - shadow estimated token saving `64.0138%`;
+  - retained memory retention `100.0%`;
+  - retained candidate leak count `0`;
+  - unexpected candidate count `0`;
+  - false positive cleanup rate `0.0%`;
+  - applied change count `0`.
+- Boundary:
+  - this remains offline evidence / shadow-only;
+  - no real memory DB cleanup happened;
+  - no production prompt token reduction is claimed;
+  - proxy source fetch success is not real message lookup.
