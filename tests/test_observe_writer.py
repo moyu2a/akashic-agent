@@ -57,6 +57,50 @@ def test_observe_slim_trace_preserves_boundary_metadata() -> None:
     assert flat_call["error_code"] == "react_boundary_batch_skip"
 
 
+def test_observe_slim_trace_preserves_bounded_audit_metadata() -> None:
+    tool_chain = [
+        {
+            "text": "",
+            "calls": [
+                {
+                    "name": "write_file",
+                    "arguments": {"path": "notes.md"},
+                    "status": "deferred",
+                    "result": '{"ok": false, "error_code": "risk_strategy_write_requires_approval"}',
+                    "audit_trace": {
+                        "event_type": "tool_invocation_policy_decision",
+                        "request_id": "call_1",
+                        "session_key": "cli:1",
+                        "channel": "cli",
+                        "chat_id": "1",
+                        "tool_name": "write_file",
+                        "source": "passive",
+                        "risk": "write",
+                        "policy_action": "defer",
+                        "policy_reason": "risk_strategy_write_requires_approval",
+                        "args_hash": "abc123",
+                        "args_summary": {"content": {"sha256": "secret"}},
+                        "invoker_reached": False,
+                        "invoker_succeeded": False,
+                    },
+                }
+            ],
+        }
+    ]
+
+    slim_chain = _slim_tool_chain(tool_chain)
+    slim_calls = _slim_tool_calls(tool_chain)
+
+    audit = slim_chain[0]["calls"][0]["audit_trace"]
+    flat_audit = slim_calls[0]["audit_trace"]
+    assert audit["policy_action"] == "defer"
+    assert audit["policy_reason"] == "risk_strategy_write_requires_approval"
+    assert audit["args_hash"] == "abc123"
+    assert audit["invoker_reached"] is False
+    assert "args_summary" not in audit
+    assert flat_audit["tool_name"] == "write_file"
+
+
 def test_write_turn_persists_raw_output_and_meme_fields(tmp_path):
     db_path = tmp_path / "observe.db"
     conn = open_db(db_path)

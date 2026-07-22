@@ -45,6 +45,10 @@ from agent.policies.tool_approval import (
     canonical_args_hash,
     summarize_arguments,
 )
+from agent.policies.tool_audit import (
+    ToolAuditEvent,
+    build_tool_audit_event,
+)
 from agent.policies.tool_invocation_policy import (
     ToolInvocationContext,
     ToolInvocationDecision,
@@ -86,10 +90,12 @@ __all__ = [
     "ToolAccessGateway",
     "ToolAccessPlan",
     "ToolExecutionGateResult",
+    "ToolAuditEvent",
     "ToolInvocationContext",
     "ToolInvocationDecision",
     "ToolInvocationPolicyEngine",
     "build_approval_payload",
+    "build_tool_audit_event",
     "canonical_args_hash",
     "decide_doc_rag_preload",
     "infer_task_execution_contract",

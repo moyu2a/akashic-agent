@@ -79,3 +79,4 @@ class ToolExecutionResult:
     pre_hook_trace: list[HookTraceItem] = field(default_factory=_empty_pre_trace)
     post_hook_trace: list[HookTraceItem] = field(default_factory=_empty_post_trace)
     policy_trace: dict[str, object] = field(default_factory=dict)
+    audit_trace: dict[str, object] = field(default_factory=dict)

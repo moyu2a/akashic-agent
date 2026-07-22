@@ -2201,38 +2201,39 @@ class DefaultReasoner(Reasoner):
                             )
                     # tool_chain 持久化的是“执行后的事实”：
                     # 最终参数、hook trace、结果预览，供后续回放与 session 复原。
-                    iter_calls.append(
-                        {
-                            "call_id": tool_call.id,
-                            "name": tool_call.name,
-                            "status": exec_result.status,
-                            "arguments": tool_call.arguments,
-                            "final_arguments": exec_result.final_arguments,
-                            "pre_hook_trace": [
-                                {
-                                    "hook_name": item.hook_name,
-                                    "event": item.event,
-                                    "matched": item.matched,
-                                    "decision": item.decision,
-                                    "reason": item.reason,
-                                    "extra_message": item.extra_message,
-                                }
-                                for item in exec_result.pre_hook_trace
-                            ],
-                            "post_hook_trace": [
-                                {
-                                    "hook_name": item.hook_name,
-                                    "event": item.event,
-                                    "matched": item.matched,
-                                    "decision": item.decision,
-                                    "reason": item.reason,
-                                    "extra_message": item.extra_message,
-                                }
-                                for item in exec_result.post_hook_trace
-                            ],
-                            "result": normalized.preview(),
-                        }
-                    )
+                    trace_item: dict[str, object] = {
+                        "call_id": tool_call.id,
+                        "name": tool_call.name,
+                        "status": exec_result.status,
+                        "arguments": tool_call.arguments,
+                        "final_arguments": exec_result.final_arguments,
+                        "pre_hook_trace": [
+                            {
+                                "hook_name": item.hook_name,
+                                "event": item.event,
+                                "matched": item.matched,
+                                "decision": item.decision,
+                                "reason": item.reason,
+                                "extra_message": item.extra_message,
+                            }
+                            for item in exec_result.pre_hook_trace
+                        ],
+                        "post_hook_trace": [
+                            {
+                                "hook_name": item.hook_name,
+                                "event": item.event,
+                                "matched": item.matched,
+                                "decision": item.decision,
+                                "reason": item.reason,
+                                "extra_message": item.extra_message,
+                            }
+                            for item in exec_result.post_hook_trace
+                        ],
+                        "result": normalized.preview(),
+                    }
+                    if exec_result.audit_trace:
+                        trace_item["audit_trace"] = exec_result.audit_trace
+                    iter_calls.append(trace_item)
                     if _is_tool_loop_guard_denial(exec_result):
                         logger.warning(
                             "[循环检测] 插件截断重复工具调用，进入收尾 (iteration=%d, tool=%s)",

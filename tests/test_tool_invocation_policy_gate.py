@@ -208,6 +208,28 @@ def test_passive_registered_write_defers_with_approval_request() -> None:
     assert "preview" not in payload["approval_request"]["args_summary"]["content"]
 
 
+def test_audit_source_uses_policy_source_for_task_execution() -> None:
+    result = _run(
+        ToolExecutor().execute(
+            ToolExecutionRequest(
+                call_id="call-task-audit",
+                tool_name="read_file",
+                arguments={"path": "README.md"},
+                source="passive",
+                registered=True,
+                registry_risk="read-only",
+                task_execution_active=True,
+                task_execution_phase="work",
+            ),
+            _recording_invoker,
+        )
+    )
+
+    assert result.status == "success"
+    assert result.audit_trace["source"] == "task_execution"
+    assert result.audit_trace["policy_action"] == "allow"
+
+
 class DummyTool(Tool):
     name = "dummy"
     description = "dummy tool"

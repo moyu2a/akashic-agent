@@ -5,6 +5,7 @@ from collections.abc import Sequence
 from typing import Any, Awaitable, Callable, Protocol
 
 from agent.policies.tool_approval import build_approval_payload
+from agent.policies.tool_audit import build_tool_audit_event
 from agent.policies.tool_invocation_policy import (
     ToolInvocationContext,
     ToolInvocationDecision,
@@ -103,6 +104,7 @@ class ToolExecutor:
         policy_decision = self._policy_engine.evaluate(
             _build_policy_context(request, final_arguments)
         )
+        policy_trace = policy_decision.to_trace_metadata()
         if policy_decision.action == "deny":
             return ToolExecutionResult(
                 status="denied",
@@ -113,7 +115,14 @@ class ToolExecutor:
                 extra_messages=extra_messages,
                 pre_hook_trace=pre_trace,
                 post_hook_trace=post_trace,
-                policy_trace=policy_decision.to_trace_metadata(),
+                policy_trace=policy_trace,
+                audit_trace=_audit_trace(
+                    request,
+                    final_arguments,
+                    policy_decision,
+                    invoker_reached=False,
+                    invoker_succeeded=False,
+                ),
             )
         if policy_decision.action == "defer":
             return ToolExecutionResult(
@@ -129,7 +138,14 @@ class ToolExecutor:
                 extra_messages=extra_messages,
                 pre_hook_trace=pre_trace,
                 post_hook_trace=post_trace,
-                policy_trace=policy_decision.to_trace_metadata(),
+                policy_trace=policy_trace,
+                audit_trace=_audit_trace(
+                    request,
+                    final_arguments,
+                    policy_decision,
+                    invoker_reached=False,
+                    invoker_succeeded=False,
+                ),
             )
 
         try:
@@ -159,7 +175,14 @@ class ToolExecutor:
                     extra_messages=extra_messages,
                     pre_hook_trace=pre_trace,
                     post_hook_trace=post_trace,
-                    policy_trace=policy_decision.to_trace_metadata(),
+                    policy_trace=policy_trace,
+                    audit_trace=_audit_trace(
+                        request,
+                        final_arguments,
+                        policy_decision,
+                        invoker_reached=True,
+                        invoker_succeeded=False,
+                    ),
                 )
             return ToolExecutionResult(
                 status="error",
@@ -170,7 +193,14 @@ class ToolExecutor:
                 extra_messages=extra_messages,
                 pre_hook_trace=pre_trace,
                 post_hook_trace=post_trace,
-                policy_trace=policy_decision.to_trace_metadata(),
+                policy_trace=policy_trace,
+                audit_trace=_audit_trace(
+                    request,
+                    final_arguments,
+                    policy_decision,
+                    invoker_reached=True,
+                    invoker_succeeded=False,
+                ),
             )
 
         try:
@@ -196,7 +226,14 @@ class ToolExecutor:
                 extra_messages=extra_messages,
                 pre_hook_trace=pre_trace,
                 post_hook_trace=post_trace,
-                policy_trace=policy_decision.to_trace_metadata(),
+                policy_trace=policy_trace,
+                audit_trace=_audit_trace(
+                    request,
+                    final_arguments,
+                    policy_decision,
+                    invoker_reached=True,
+                    invoker_succeeded=True,
+                ),
             )
         return ToolExecutionResult(
             status="success",
@@ -207,7 +244,14 @@ class ToolExecutor:
             extra_messages=extra_messages,
             pre_hook_trace=pre_trace,
             post_hook_trace=post_trace,
-            policy_trace=policy_decision.to_trace_metadata(),
+            policy_trace=policy_trace,
+            audit_trace=_audit_trace(
+                request,
+                final_arguments,
+                policy_decision,
+                invoker_reached=True,
+                invoker_succeeded=True,
+            ),
         )
 
     async def preflight(
@@ -412,6 +456,30 @@ def _build_policy_context(
             "resource_roots": tuple(request.resource_roots),
         },
     )
+
+
+def _audit_trace(
+    request: ToolExecutionRequest,
+    arguments: dict[str, Any],
+    decision: ToolInvocationDecision,
+    *,
+    invoker_reached: bool,
+    invoker_succeeded: bool,
+) -> dict[str, object]:
+    return build_tool_audit_event(
+        request_id=request.call_id,
+        session_key=request.session_key,
+        channel=request.channel,
+        chat_id=request.chat_id,
+        tool_name=request.tool_name,
+        source=_policy_source(request),
+        risk=decision.risk,
+        policy_action=decision.action,
+        policy_reason=decision.reason,
+        arguments=arguments,
+        invoker_reached=invoker_reached,
+        invoker_succeeded=invoker_succeeded,
+    ).to_trace_metadata()
 
 
 def _policy_block_output(decision: ToolInvocationDecision) -> str:

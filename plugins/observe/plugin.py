@@ -162,7 +162,7 @@ def _to_memory_write_trace(event: MemoryWritten):
     )
 
 
-def _slim_tool_calls(tool_chain: list[dict[str, object]]) -> list[dict[str, str]]:
+def _slim_tool_calls(tool_chain: list[dict[str, object]]) -> list[dict[str, object]]:
     return [
         _slim_call(call, args_limit=300, result_limit=500)
         for group in tool_chain
@@ -199,7 +199,7 @@ def _tool_error_code(call: dict[str, object]) -> str:
 
 def _slim_call(
     call: dict[str, object], *, args_limit: int, result_limit: int
-) -> dict[str, str]:
+) -> dict[str, object]:
     out = {
         "name": str(call.get("name", "")),
         "args": str(call.get("arguments", ""))[:args_limit],
@@ -212,6 +212,27 @@ def _slim_call(
     error_code = _tool_error_code(call)
     if error_code:
         out["error_code"] = error_code
+    audit_trace = call.get("audit_trace")
+    if isinstance(audit_trace, Mapping):
+        out["audit_trace"] = {
+            key: audit_trace.get(key)
+            for key in (
+                "event_type",
+                "request_id",
+                "session_key",
+                "channel",
+                "chat_id",
+                "tool_name",
+                "source",
+                "risk",
+                "policy_action",
+                "policy_reason",
+                "args_hash",
+                "invoker_reached",
+                "invoker_succeeded",
+            )
+            if key in audit_trace
+        }
     return out
 
 
