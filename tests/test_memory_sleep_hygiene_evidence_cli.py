@@ -144,3 +144,33 @@ def test_sleep_hygiene_cli_rejects_session_store_mode_without_db(
 
     assert result.returncode != 0
     assert "--session-db is required" in result.stderr
+
+
+def test_sleep_hygiene_cli_can_write_dry_run_patch(tmp_path: Path) -> None:
+    output_dir = tmp_path / "reports"
+    result = subprocess.run(
+        [
+            sys.executable,
+            "scripts/run_memory_sleep_hygiene_evidence_eval.py",
+            "--output-dir",
+            str(output_dir),
+            "--case-set",
+            "hard",
+            "--hard-per-scenario",
+            "2",
+            "--write-dry-run-patch",
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    patch = json.loads(
+        (output_dir / "memory_sleep_hygiene_dry_run_patch.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert patch["applied_change_count"] == 0
+    assert patch["would_remove_low_value"]
+    assert patch["requires_review"]

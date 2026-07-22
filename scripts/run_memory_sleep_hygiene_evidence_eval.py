@@ -17,6 +17,10 @@ from memory2.eval_sleep_hygiene_evidence import (
     write_sleep_hygiene_report_json,
     write_sleep_hygiene_report_markdown,
 )
+from memory2.eval_sleep_hygiene_patch import (
+    build_sleep_hygiene_dry_run_patch,
+    write_sleep_hygiene_dry_run_patch_json,
+)
 from memory2.eval_sleep_hygiene_provenance import build_source_ref_resolver
 from memory2.eval_target_metrics import (
     build_target_metric_report,
@@ -42,6 +46,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--hard-per-scenario", type=int, default=40)
     parser.add_argument("--write-target-metrics", action="store_true")
+    parser.add_argument("--write-dry-run-patch", action="store_true")
     parser.add_argument(
         "--source-fetch-mode",
         choices=("proxy", "session-store"),
@@ -84,6 +89,11 @@ def main(argv: list[str] | None = None) -> int:
         report,
         args.output_dir / "memory_sleep_hygiene_evidence_eval.md",
     )
+    if args.write_dry_run_patch:
+        write_sleep_hygiene_dry_run_patch_json(
+            build_sleep_hygiene_dry_run_patch(report.records),
+            args.output_dir / "memory_sleep_hygiene_dry_run_patch.json",
+        )
 
     if args.write_target_metrics:
         target_report = build_target_metric_report(
