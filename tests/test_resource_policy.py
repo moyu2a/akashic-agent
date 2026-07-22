@@ -218,3 +218,133 @@ def test_all_known_protected_runtime_arguments_are_denied(tmp_path: Path) -> Non
         )
         assert decision.action == "deny", key
         assert decision.reason == "resource_policy_protected_argument_forged"
+
+
+def test_simple_shell_read_command_is_allowed(tmp_path: Path) -> None:
+    decision = ResourcePolicyEngine().evaluate(
+        ResourcePolicyContext(
+            tool_name="shell",
+            arguments={"command": "pwd"},
+            resource_roots=(str(tmp_path),),
+        )
+    )
+
+    assert decision.action == "allow"
+    assert decision.reason == "resource_policy_shell_command_allowed"
+
+
+def test_shell_pipe_xargs_rm_is_denied(tmp_path: Path) -> None:
+    decision = ResourcePolicyEngine().evaluate(
+        ResourcePolicyContext(
+            tool_name="shell",
+            arguments={"command": "echo a | xargs rm file.txt"},
+            resource_roots=(str(tmp_path),),
+        )
+    )
+
+    assert decision.action == "deny"
+    assert decision.reason == "resource_policy_shell_destructive_compound_denied"
+
+
+def test_shell_unspaced_pipe_xargs_rm_is_denied(tmp_path: Path) -> None:
+    decision = ResourcePolicyEngine().evaluate(
+        ResourcePolicyContext(
+            tool_name="shell",
+            arguments={"command": "echo a|xargs rm file.txt"},
+            resource_roots=(str(tmp_path),),
+        )
+    )
+
+    assert decision.action == "deny"
+    assert decision.reason == "resource_policy_shell_destructive_compound_denied"
+
+
+def test_shell_unspaced_semicolon_rm_is_denied(tmp_path: Path) -> None:
+    decision = ResourcePolicyEngine().evaluate(
+        ResourcePolicyContext(
+            tool_name="shell",
+            arguments={"command": "echo ok;rm file.txt"},
+            resource_roots=(str(tmp_path),),
+        )
+    )
+
+    assert decision.action == "deny"
+    assert decision.reason == "resource_policy_shell_destructive_compound_denied"
+
+
+def test_shell_rm_is_denied(tmp_path: Path) -> None:
+    decision = ResourcePolicyEngine().evaluate(
+        ResourcePolicyContext(
+            tool_name="shell",
+            arguments={"command": "rm file.txt"},
+            resource_roots=(str(tmp_path),),
+        )
+    )
+
+    assert decision.action == "deny"
+    assert decision.reason == "resource_policy_shell_destructive_command_denied"
+
+
+def test_shell_sudo_rm_is_denied(tmp_path: Path) -> None:
+    decision = ResourcePolicyEngine().evaluate(
+        ResourcePolicyContext(
+            tool_name="shell",
+            arguments={"command": "sudo -n rm file.txt"},
+            resource_roots=(str(tmp_path),),
+        )
+    )
+
+    assert decision.action == "deny"
+    assert decision.reason == "resource_policy_shell_destructive_command_denied"
+
+
+def test_shell_xargs_rm_without_pipe_is_denied(tmp_path: Path) -> None:
+    decision = ResourcePolicyEngine().evaluate(
+        ResourcePolicyContext(
+            tool_name="shell",
+            arguments={"command": "xargs rm file.txt"},
+            resource_roots=(str(tmp_path),),
+        )
+    )
+
+    assert decision.action == "deny"
+    assert decision.reason == "resource_policy_shell_destructive_command_denied"
+
+
+def test_shell_python_inline_remove_is_denied(tmp_path: Path) -> None:
+    decision = ResourcePolicyEngine().evaluate(
+        ResourcePolicyContext(
+            tool_name="shell",
+            arguments={"command": "python -c \"import os\\nos.remove('/tmp/a')\""},
+            resource_roots=(str(tmp_path),),
+        )
+    )
+
+    assert decision.action == "deny"
+    assert decision.reason == "resource_policy_shell_inline_interpreter_denied"
+
+
+def test_shell_quoted_semicolon_is_not_treated_as_compound(tmp_path: Path) -> None:
+    decision = ResourcePolicyEngine().evaluate(
+        ResourcePolicyContext(
+            tool_name="shell",
+            arguments={"command": "python -c \"print('a;b')\""},
+            resource_roots=(str(tmp_path),),
+        )
+    )
+
+    assert decision.action == "allow"
+    assert decision.reason == "resource_policy_shell_command_allowed"
+
+
+def test_shell_quoted_command_substitution_text_is_allowed(tmp_path: Path) -> None:
+    decision = ResourcePolicyEngine().evaluate(
+        ResourcePolicyContext(
+            tool_name="shell",
+            arguments={"command": "python -c \"print('$(not shell)')\""},
+            resource_roots=(str(tmp_path),),
+        )
+    )
+
+    assert decision.action == "allow"
+    assert decision.reason == "resource_policy_shell_command_allowed"

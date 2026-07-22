@@ -189,3 +189,28 @@ def test_executor_denies_protected_argument_before_invoker(tmp_path: Path) -> No
         payload["policy"]["metadata"]["resource_policy"]["metadata"]["argument"]
         == "_session_key"
     )
+
+
+def test_executor_denies_shell_pipe_before_invoker(tmp_path: Path) -> None:
+    result = _run(
+        ToolExecutor().execute(
+            ToolExecutionRequest(
+                call_id="call-shell-pipe",
+                tool_name="shell",
+                arguments={"command": "echo a|xargs rm file.txt"},
+                source="passive",
+                registered=True,
+                registry_risk="external-side-effect",
+                resource_roots=(str(tmp_path),),
+            ),
+            _raising_invoker,
+        )
+    )
+
+    assert result.status == "denied"
+    assert result.invoker_reached is False
+    payload = json.loads(result.output)
+    assert (
+        payload["policy"]["reason"]
+        == "resource_policy_shell_destructive_compound_denied"
+    )

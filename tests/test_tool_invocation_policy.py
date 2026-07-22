@@ -317,3 +317,27 @@ def test_invocation_policy_denies_protected_argument_with_resource_metadata(
     assert (
         decision.metadata["resource_policy"]["metadata"]["argument"] == "_session_key"
     )
+
+
+def test_invocation_policy_records_shell_resource_allow_then_defers_task_execution(
+    tmp_path: Path,
+) -> None:
+    decision = ToolInvocationPolicyEngine().evaluate(
+        ToolInvocationContext(
+            tool_name="shell",
+            arguments={"command": "pwd"},
+            registered=True,
+            registry_risk="external-side-effect",
+            source="task_execution",
+            task_execution_active=True,
+            task_execution_phase="work",
+            metadata={"resource_roots": (str(tmp_path),)},
+        )
+    )
+
+    assert decision.action == "defer"
+    assert decision.reason == "tool_invocation_task_execution_authorization_required"
+    assert (
+        decision.metadata["resource_policy"]["reason"]
+        == "resource_policy_shell_command_allowed"
+    )
