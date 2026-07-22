@@ -45,6 +45,11 @@ from agent.policies.tool_invocation_policy import (
     ToolInvocationDecision,
     ToolInvocationPolicyEngine,
 )
+from agent.policies.tool_risk_strategy import (
+    DefaultToolRiskStrategy,
+    RiskStrategyContext,
+    RiskStrategyDecision,
+)
 
 __all__ = [
     "DecisionMeta",
@@ -52,6 +57,7 @@ __all__ = [
     "DOC_RAG_TOOL_NAMES",
     "DocRagIntentConfidence",
     "DocRagPreloadDecision",
+    "DefaultToolRiskStrategy",
     "HistoryRoutePolicy",
     "RouteDecision",
     "RouteDecisionConfidence",
@@ -60,6 +66,8 @@ __all__ = [
     "ResourcePolicyContext",
     "ResourcePolicyDecision",
     "ResourcePolicyEngine",
+    "RiskStrategyContext",
+    "RiskStrategyDecision",
     "SpawnDecision",
     "SpawnDecisionConfidence",
     "SpawnDecisionMeta",

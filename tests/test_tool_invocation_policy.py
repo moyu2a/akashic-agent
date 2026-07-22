@@ -113,10 +113,13 @@ def test_read_only_tool_is_allowed() -> None:
 
     assert decision.action == "allow"
     assert decision.allowed is True
-    assert decision.reason == "tool_invocation_read_only_allowed"
+    assert decision.reason == "risk_strategy_read_only_allowed"
+    assert decision.metadata["risk_strategy"]["reason"] == (
+        "risk_strategy_read_only_allowed"
+    )
 
 
-def test_non_task_execution_write_external_and_unknown_are_default_allowed() -> None:
+def test_non_task_execution_write_external_and_unknown_require_approval() -> None:
     engine = ToolInvocationPolicyEngine()
 
     write = engine.evaluate(
@@ -132,10 +135,27 @@ def test_non_task_execution_write_external_and_unknown_are_default_allowed() -> 
         ToolInvocationContext(tool_name="custom_tool", registry_risk="unknown")
     )
 
-    assert write.action == "allow"
-    assert external.action == "allow"
-    assert unknown.action == "allow"
-    assert write.reason == "tool_invocation_default_allow"
+    assert write.action == "defer"
+    assert external.action == "defer"
+    assert unknown.action == "defer"
+    assert write.reason == "risk_strategy_write_requires_approval"
+    assert external.reason == "risk_strategy_external_side_effect_requires_approval"
+    assert unknown.reason == "risk_strategy_unknown_requires_approval"
+    assert write.metadata["approval_scope"] == "tool_call"
+
+
+def test_passive_read_only_shell_capability_requires_approval() -> None:
+    decision = ToolInvocationPolicyEngine().evaluate(
+        ToolInvocationContext(
+            tool_name="shell",
+            registered=True,
+            registry_risk="read-only",
+            capabilities=frozenset({"shell.execute"}),
+        )
+    )
+
+    assert decision.action == "defer"
+    assert decision.reason == "risk_strategy_shell_requires_approval"
 
 
 def test_task_execution_work_allows_read_only() -> None:
@@ -249,14 +269,25 @@ def test_task_execution_unregistered_and_destructive_precedence() -> None:
 
 def test_policy_types_are_exported_from_policies_package() -> None:
     from agent.policies import (
+        DefaultToolRiskStrategy,
+        RiskStrategyContext,
+        RiskStrategyDecision,
         ToolInvocationContext as ExportedContext,
         ToolInvocationDecision as ExportedDecision,
         ToolInvocationPolicyEngine as ExportedEngine,
+    )
+    from agent.policies.tool_risk_strategy import (
+        DefaultToolRiskStrategy as DirectStrategy,
+        RiskStrategyContext as DirectStrategyContext,
+        RiskStrategyDecision as DirectStrategyDecision,
     )
 
     assert ExportedContext is ToolInvocationContext
     assert ExportedDecision is ToolInvocationDecision
     assert ExportedEngine is ToolInvocationPolicyEngine
+    assert DefaultToolRiskStrategy is DirectStrategy
+    assert RiskStrategyContext is DirectStrategyContext
+    assert RiskStrategyDecision is DirectStrategyDecision
 
 
 def test_invocation_policy_denies_file_path_outside_resource_roots(
@@ -293,7 +324,7 @@ def test_invocation_policy_allows_workspace_file_then_existing_read_only_rule(
     )
 
     assert decision.action == "allow"
-    assert decision.reason == "tool_invocation_read_only_allowed"
+    assert decision.reason == "risk_strategy_read_only_allowed"
     assert decision.metadata["resource_policy"]["reason"] == (
         "resource_policy_file_path_allowed"
     )
@@ -388,5 +419,5 @@ def test_invocation_policy_records_url_resource_allow_metadata(tmp_path: Path) -
     )
 
     assert decision.action == "allow"
-    assert decision.reason == "tool_invocation_read_only_allowed"
+    assert decision.reason == "risk_strategy_read_only_allowed"
     assert decision.metadata["resource_policy"]["reason"] == "resource_policy_url_allowed"

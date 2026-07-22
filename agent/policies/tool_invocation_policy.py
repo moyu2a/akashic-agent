@@ -10,6 +10,10 @@ from agent.policies.resource_policy import (
     ResourcePolicyDecision,
     ResourcePolicyEngine,
 )
+from agent.policies.tool_risk_strategy import (
+    DefaultToolRiskStrategy,
+    RiskStrategyContext,
+)
 
 ToolInvocationAction = Literal["allow", "deny", "defer"]
 ToolInvocationSource = Literal["passive", "proactive", "subagent", "task_execution"]
@@ -107,8 +111,13 @@ class ToolInvocationDecision:
 class ToolInvocationPolicyEngine:
     policy_name = "ToolInvocationPolicyEngine"
 
-    def __init__(self, resource_policy: ResourcePolicy | None = None) -> None:
+    def __init__(
+        self,
+        resource_policy: ResourcePolicy | None = None,
+        risk_strategy: DefaultToolRiskStrategy | None = None,
+    ) -> None:
         self._resource_policy = resource_policy or ResourcePolicyEngine()
+        self._risk_strategy = risk_strategy or DefaultToolRiskStrategy()
 
     def evaluate(self, context: ToolInvocationContext) -> ToolInvocationDecision:
         risk = _normalize_risk(context.registry_risk)
@@ -161,13 +170,28 @@ class ToolInvocationPolicyEngine:
                 policy_name=self.policy_name,
                 metadata=metadata,
             )
-        if risk == "read-only":
+        strategy_decision = self._risk_strategy.evaluate(
+            RiskStrategyContext(
+                tool_name=context.tool_name,
+                registry_risk=risk,
+                capabilities=context.capabilities,
+                source=context.source,
+                task_execution_active=context.task_execution_active,
+                task_execution_phase=context.task_execution_phase,
+            )
+        )
+        if strategy_decision.effective:
             return ToolInvocationDecision(
-                action="allow",
-                reason="tool_invocation_read_only_allowed",
+                action=strategy_decision.action,
+                reason=strategy_decision.reason,
                 risk=risk,
                 policy_name=self.policy_name,
-                metadata=metadata,
+                metadata={
+                    **metadata,
+                    "risk_strategy": strategy_decision.to_trace_metadata(),
+                    "approval_scope": strategy_decision.approval_scope,
+                    "approval_user_prompt": strategy_decision.user_prompt,
+                },
             )
         return ToolInvocationDecision(
             action="allow",
