@@ -209,6 +209,18 @@ V3 安全候选口径已经把这个问题拆开：`cleanup candidate` 表示可
 | hard | 320 | 520 | 100.0% | 100.0% | 100.0% | 0.0% | 40 | 120 | 23.7952% |
 | overall | 920 | 1120 | 100.0% | 100.0% | 100.0% | 0.0% | 40 | 120 | 42.5121% |
 
+这张表的解释口径：
+
+| 字段 | 含义 |
+| --- | --- |
+| `cleanup recall` | 应该被清理的记忆里，有多少被识别为安全清理候选。 |
+| `cleanup precision` | 被识别为安全清理候选的记忆里，有多少确实应该清理。 |
+| `retained protection` | 应该保留的关键记忆里，有多少没有被误伤。 |
+| `false positive cleanup` | 应该保留的记忆被错误当成清理候选的比例。 |
+| `merge suggestion` | 相似但不确定的合并建议数量，只进入复核，不直接清理。 |
+| `review required` | 需要人工或策略继续判断的候选数量。 |
+| `safe cleanup token saving` | 只按安全清理候选估算的 token 节省比例，不代表真实 prompt token 已下降。 |
+
 near-merge 专项结果是 `40` 个 case / `80` 行，`merge_suggestion_count = 40`，`review_required_count = 40`，`retained_protection = 100.0%`，`safe_cleanup_token_saving = 0.0%`。这说明 V3 保留了原始相似合并信号，但不把它计入安全清理收益。
 
 V3 还新增 evaluator 侧 `source_ref` resolver 和 non-mutating dry-run patch：

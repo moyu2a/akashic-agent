@@ -247,6 +247,43 @@ V3 主表：
 | hard | 320 | 520 | 100.0% | 100.0% | 100.0% | 0.0% | 40 | 120 | 23.7952% |
 | overall | 920 | 1120 | 100.0% | 100.0% | 100.0% | 0.0% | 40 | 120 | 42.5121% |
 
+### V3 测试内容
+
+本轮 V3 测试不是重新证明“基础候选能不能找到”，而是专门验证 V2 暴露出来的安全边界：
+
+| 测试内容 | 验证目标 | 当前结果 |
+| --- | --- | --- |
+| standard 基础集 | 重复、过期、低价值候选是否能稳定识别，关键记忆是否保留 | cleanup recall / precision / retained protection 均为 `100.0%` |
+| hard 边界集 | near-merge、跨 scope、冲突、缺 source_ref、高价值旧记忆等场景是否会误伤 | cleanup precision 和 retained protection 均为 `100.0%` |
+| near-merge 专项 | 相似但不应合并的记忆是否会被当作自动清理对象 | `40` 个 merge signal 全部进入 review，不计入 cleanup |
+| source_ref 证据模式 | source_ref 是否能按 proxy / mapping / session-store 三种模式表达证据强度 | 正式合成报告使用 proxy；单元测试覆盖 mapping 和 session-store |
+| dry-run patch | 拟执行动作是否能拆成清理、保留和复核，并保证不写真实 DB | patch 中 `writes_real_db = false` |
+
+### V3 主表字段含义
+
+| 字段 | 含义 | 如何解读 |
+| --- | --- | --- |
+| 分组 / `case_set` | 测试集类型。`standard` 是基础场景，`hard` 是边界场景，`overall` 是两者合并。 | 面试时重点看 `hard`，因为它更能说明安全性。 |
+| `case 数` | 测试 case 数量。一个 case 可以包含一条或多条 memory item。 | 说明测试覆盖规模。 |
+| `evaluated item 数` | 实际进入 evidence 评估的 memory item 数。 | hard 集可能大于 case 数，因为一个 case 内可能评估多条记忆。 |
+| `cleanup recall` | 应该被清理的记忆中，有多少被识别成安全清理候选。 | 越高越好，表示“该清理的能找出来”。 |
+| `cleanup precision` | 被系统标成安全清理候选的记忆中，有多少确实应该清理。 | 越高越好，表示“不乱清理”。 |
+| `retained protection` | 应该保留的关键记忆中，有多少没有被误伤。 | 安全性核心指标，越高越好。 |
+| `false positive cleanup` | 应该保留的记忆被错误当成清理候选的比例。 | 越低越好，理想是 `0.0%`。 |
+| `merge suggestion` | 系统发现的相似合并建议数量。 | 不是自动清理，只是进入复核队列。 |
+| `review required` | 需要人工或策略进一步复核的候选数量。 | 数量高说明系统选择谨慎处理，而不是直接自动修改。 |
+| `safe cleanup token saving` | 只统计安全清理候选后，按 evidence 估算的 token 节省比例。 | 是 dry-run 估算，不代表真实 prompt token 已下降。 |
+
+### V3 数据结论
+
+| 结论点 | 数据依据 | 说明 |
+| --- | --- | --- |
+| 基础候选识别稳定 | standard cleanup recall / precision 均为 `100.0%` | 重复、过期、低价值这类基础场景仍能被识别。 |
+| hard 集安全口径改善 | hard false positive cleanup 从 V2 的 `10.0%` 变成 V3 的 `0.0%` | V3 不再把 near-merge 当作自动清理。 |
+| 关键记忆保护恢复 | hard retained protection 从 V2 的 `90.0%` 变成 V3 的 `100.0%` | 相似但应保留的记忆不会被计入 cleanup。 |
+| 相似信号没有被隐藏 | hard merge suggestion 为 `40` | 原始 merge signal 仍然可观测，只是进入 review。 |
+| 仍不能宣称生产清理有效 | `writes_real_db = false`，正式报告为 proxy source mode | 当前是评测和治理口径改进，不是真实 DB 清理。 |
+
 near-merge 专项：
 
 | scenario | case 数 | evaluated item 数 | cleanup recall | cleanup precision | retained protection | merge suggestion | review required | safe cleanup token saving |
