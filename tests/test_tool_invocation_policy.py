@@ -319,6 +319,39 @@ def test_invocation_policy_denies_protected_argument_with_resource_metadata(
     )
 
 
+def test_resource_policy_path_deny_precedes_unknown_risk_default(tmp_path: Path) -> None:
+    decision = ToolInvocationPolicyEngine().evaluate(
+        ToolInvocationContext(
+            tool_name="read_file",
+            arguments={"path": "/etc/passwd"},
+            registered=True,
+            registry_risk="unknown",
+            metadata={"resource_roots": (str(tmp_path),)},
+        )
+    )
+
+    assert decision.action == "deny"
+    assert decision.reason == "resource_policy_protected_system_path"
+    assert decision.metadata["resource_policy"]["metadata"]["invoker_reached"] is False
+
+
+def test_resource_policy_protected_argument_deny_precedes_write_risk() -> None:
+    decision = ToolInvocationPolicyEngine().evaluate(
+        ToolInvocationContext(
+            tool_name="write_file",
+            arguments={"path": "notes.md", "_session_key": "forged"},
+            registered=True,
+            registry_risk="write",
+        )
+    )
+
+    assert decision.action == "deny"
+    assert decision.reason == "resource_policy_protected_argument_forged"
+    assert (
+        decision.metadata["resource_policy"]["metadata"]["argument"] == "_session_key"
+    )
+
+
 def test_invocation_policy_records_shell_resource_allow_then_defers_task_execution(
     tmp_path: Path,
 ) -> None:
