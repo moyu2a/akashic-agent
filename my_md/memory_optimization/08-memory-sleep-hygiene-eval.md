@@ -74,6 +74,63 @@
 - `source_ref` 覆盖率为 `90.0%`，proxy 回源成功率为 `100.0%`；这里的回源成功仍只是 evidence proxy，不是实际查询历史消息。
 - `shadow_estimated_token_saving_rate = 64.0138%` 说明候选层有压缩空间，但当前没有真实落库清理，所以不能说真实数据库体积或真实 prompt token 已下降。
 
+## V2 hard / adversarial 评测
+
+V1 的 600-case standard 集主要验证功能链路，所以出现 100% 是合理的。V2 新增 hard 集，目标是验证边界，而不是追求满分。
+
+V2 和 V1 的关键差异是：V2 为每个参与评测的 memory item 都标注 `expected_after_state`，而不是只评估少数 expected id。这样如果 shadow 误伤了同一个 case 里的另一条 item，precision 和 false positive 指标也能捕捉到。
+
+hard 集覆盖：
+
+| scenario | 目的 |
+| --- | --- |
+| near_merge_not_duplicate | 相似内容进入 merge 边界，但不能被当作 duplicate |
+| old_high_value | 旧但高价值，不应清理 |
+| temporary_but_pinned | 临时词存在，但用户明确强化保存 |
+| cross_scope_identical | 不同 scope 的相同内容不应合并 |
+| opposite_preference_conflict | 正反偏好不应当重复合并 |
+| multi_duplicate_pairwise | 多条重复在当前 pairwise 语义下识别冗余成员 |
+| missing_source_but_important | 缺 source_ref 但高价值不应清理 |
+| mixed_signal_low_value | 低价值必须满足当前 stale-derived 规则 |
+
+V2 报告分为 standard、hard、overall 三组。standard 看基础链路，hard 看边界能力，overall 看综合表现。
+
+正式报告路径：
+
+- `my_md/memory_optimization/eval_reports/sleep_hygiene_evidence_v2/memory_sleep_hygiene_evidence_eval.json`
+- `my_md/memory_optimization/eval_reports/sleep_hygiene_evidence_v2/memory_sleep_hygiene_evidence_eval.md`
+- `my_md/memory_optimization/eval_reports/sleep_hygiene_evidence_v2/memory_target_metric_sleep_hygiene.json`
+- `my_md/memory_optimization/eval_reports/sleep_hygiene_evidence_v2/memory_target_metric_sleep_hygiene.md`
+
+## V2 当前结果
+
+| case_set | case 数 | evaluated item 数 | candidate recall | candidate precision | retained protection | false positive cleanup | safe evidence token saving |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| standard | 600 | 600 | 100.0% | 100.0% | 100.0% | 0.0% | 64.0138% |
+| hard | 320 | 520 | 100.0% | 75.0% | 90.0% | 10.0% | unsafe |
+| overall | 920 | 1120 | 100.0% | 93.4426% | 92.7273% | 7.2727% | unsafe |
+
+补充汇总：
+
+| 指标 | 数值 |
+| --- | ---: |
+| case 数 | 920 |
+| 扫描 active item 数 | 1270 |
+| evidence row 数 | 1120 |
+| 重复候选识别率 | 100.0% |
+| 过期候选识别率 | 100.0% |
+| 低价值候选识别率 | 100.0% |
+| 来源覆盖率 | 89.2857% |
+| proxy 回源成功率 | 100.0% |
+| shadow 估算 token 节省率 | 46.8599% |
+| 关键记忆保持率 | 92.7273% |
+| 关键记忆误伤候选数 | 40 |
+| 非预期候选数 | 40 |
+| 误伤候选率 | 7.2727% |
+| 实际应用变更数 | 0 |
+
+V2 的主要结论是：当前 shadow 对应该清理的候选召回很强，standard 集里是 100%；但 hard 集暴露出 `near_merge_not_duplicate` 这类边界场景会被 merge 语义标成候选，导致 hard 的 candidate precision 只有 75.0%，retained protection 为 90.0%。因此不能再说“睡眠巩固完全安全”，更准确的表述是“基础候选识别稳定，但边界保留策略还需要继续治理”。
+
 ## 当前限制
 
 - 当前数据集是目标导向的确定性集合，不是真实线上自然分布。
@@ -83,7 +140,7 @@
 
 ## 下一步
 
-1. 引入真实 `source_ref` 回源检查，区分可解析和真的能取回原消息。
-2. 增加更难的误伤测试：相似但不应合并、旧但高强化、临时但被用户明确要求长期保存。
+1. 针对 hard 集误伤，细分 merge 候选和 cleanup 候选，避免“可合并建议”被直接等同于“可清理”。
+2. 引入真实 `source_ref` 回源检查，区分可解析和真的能取回原消息。
 3. 在安全开关下做 active dry-run patch，不落库，只输出拟执行变更计划。
-4. 等 dry-run 精度稳定后，再讨论是否允许真实 merge / supersede。
+4. 等 hard precision 和 retained protection 稳定后，再讨论是否允许真实 merge / supersede。

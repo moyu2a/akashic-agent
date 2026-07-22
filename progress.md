@@ -1060,3 +1060,49 @@
   - no real memory DB cleanup happened;
   - no production prompt token reduction is claimed;
   - proxy source fetch success is not real message lookup.
+
+## 2026-07-22 Sleep Hygiene Hard Eval V2
+
+- Executed the hard / adversarial sleep hygiene V2 plan.
+- Added per-item expected states in `SleepHygieneCase`:
+  - `case_set`;
+  - `scenario`;
+  - `expected_item_states`;
+  - `evaluated_item_ids()`;
+  - `expected_state_for()`.
+- Added hard case generation for:
+  - near merge but not duplicate;
+  - old high-value retained memory;
+  - temporary-looking but pinned memory;
+  - identical content across scopes;
+  - opposite preference conflict;
+  - multi-duplicate pairwise semantics;
+  - missing source but important memory;
+  - stale-derived low-value memory.
+- Added evidence rows for every evaluated item, including:
+  - `case_id`;
+  - `case_set`;
+  - `scenario`;
+  - `expected_after_state`.
+- Added `strip_sleep_hygiene_evidence_for_target_metrics()` so dedicated report records can include extra fields while target metrics receive the strict schema.
+- Added group metrics for `standard`, `hard`, and `overall`:
+  - `case_count`;
+  - `evaluated_item_count`;
+  - `evidence_row_count`;
+  - `candidate_recall`;
+  - `candidate_precision`;
+  - `retained_protection_rate`;
+  - `false_positive_cleanup_rate`;
+  - `safe_evidence_estimated_token_saving_rate`.
+- Added CLI flags:
+  - `--case-set standard|hard|all`;
+  - `--hard-per-scenario`.
+- Generated formal V2 reports under `my_md/memory_optimization/eval_reports/sleep_hygiene_evidence_v2/`.
+- Current V2 result:
+  - standard: `600` cases, `600` evaluated items, candidate recall `100.0%`, candidate precision `100.0%`, retained protection `100.0%`, false positive cleanup `0.0%`, safe evidence token saving `64.0138%`;
+  - hard: `320` cases, `520` evaluated items, candidate recall `100.0%`, candidate precision `75.0%`, retained protection `90.0%`, false positive cleanup `10.0%`, safe evidence token saving `unsafe`;
+  - overall: `920` cases, `1120` evaluated items, candidate recall `100.0%`, candidate precision `93.4426%`, retained protection `92.7273%`, false positive cleanup `7.2727%`, safe evidence token saving `unsafe`.
+- Key conclusion:
+  - V1 standard 100% was a functionality/happy-path result;
+  - V2 hard set reveals boundary risk;
+  - current shadow identifies intended cleanup candidates well, but near-merge retained memories can become non-active candidates, so merge suggestion must not be presented as safe cleanup.

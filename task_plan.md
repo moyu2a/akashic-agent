@@ -942,3 +942,35 @@ Next:
 - Add real `source_ref` fetch evidence.
 - Add harder false-positive cases.
 - Consider active dry-run patch generation only after shadow precision remains stable.
+
+## 2026-07-22 Sleep Hygiene Hard Eval V2
+
+Goal: upgrade sleep hygiene evaluation from standard-only correctness to standard/hard/overall boundary evaluation.
+
+Implemented:
+
+- Added per-item `expected_after_state` so false positives inside multi-item hard cases cannot be hidden.
+- Added hard scenarios:
+  - `near_merge_not_duplicate`;
+  - `old_high_value`;
+  - `temporary_but_pinned`;
+  - `cross_scope_identical`;
+  - `opposite_preference_conflict`;
+  - `multi_duplicate_pairwise`;
+  - `missing_source_but_important`;
+  - `mixed_signal_low_value`.
+- Added CLI support for `--case-set standard|hard|all` and `--hard-per-scenario`.
+- Generated V2 reports under `my_md/memory_optimization/eval_reports/sleep_hygiene_evidence_v2/`.
+
+Current V2 result:
+
+- standard: `600` cases, `600` evaluated items, candidate recall `100.0%`, candidate precision `100.0%`, retained protection `100.0%`, false positive cleanup `0.0%`, safe evidence token saving `64.0138%`.
+- hard: `320` cases, `520` evaluated items, candidate recall `100.0%`, candidate precision `75.0%`, retained protection `90.0%`, false positive cleanup `10.0%`, safe evidence token saving `unsafe`.
+- overall: `920` cases, `1120` evaluated items, candidate recall `100.0%`, candidate precision `93.4426%`, retained protection `92.7273%`, false positive cleanup `7.2727%`, safe evidence token saving `unsafe`.
+
+Boundary:
+
+- Still offline evidence / shadow-only.
+- No real DB cleanup happened.
+- No real prompt token reduction is claimed.
+- The hard result exposes a real boundary issue: merge candidates can hurt retained protection if treated as cleanup.

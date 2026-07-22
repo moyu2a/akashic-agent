@@ -189,6 +189,18 @@ token 节省率 = 预计减少 token / 原始注入 token
 
 这些数值来自离线 evidence / shadow-only 评测。`source_fetch_success_rate` 当前只表示有 `source_ref` 的行在 proxy 口径下可回源，不代表已经真实读取历史消息；`shadow_estimated_token_saving_rate` 也只是候选层估算，不代表真实 DB 或真实 prompt token 已下降。
 
+睡眠巩固 V2 不只看候选识别率，还看 `candidate precision` 和 `retained protection`。这样能避免“只要把所有东西都标成可清理，recall 就很好看”的问题。当前 `memory_target_metric_sleep_hygiene.md` 仍只输出一行 `online_evidence` 记忆库卫生指标；standard / hard / overall 的细分结果在 dedicated sleep hygiene report 中展示。
+
+V2 hard / adversarial 报告结果：
+
+| case_set | case 数 | evaluated item 数 | candidate recall | candidate precision | retained protection | false positive cleanup | safe evidence token saving |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| standard | 600 | 600 | 100.0% | 100.0% | 100.0% | 0.0% | 64.0138% |
+| hard | 320 | 520 | 100.0% | 75.0% | 90.0% | 10.0% | unsafe |
+| overall | 920 | 1120 | 100.0% | 93.4426% | 92.7273% | 7.2727% | unsafe |
+
+这说明 standard 集可以证明基础链路稳定，hard 集可以暴露边界误伤。当前 hard 集里主要问题是相似但不应清理的 near-merge 场景会进入候选，从而把安全 token saving 标记为 `unsafe`。
+
 推荐展示：
 
 ```text

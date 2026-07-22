@@ -1087,10 +1087,22 @@ Phase 6o 当前状态：
 - 真实 LLM 扩展样本摘要：common `120`、hard `120`，6 类各 `40`，`infra_passed = True`、`provider_error_count = 0`、`timeout_count = 0`、`total_token_count = 1236228`、`avg_latency_ms = 2366.625`；target metrics 行仍为有效写入精度 `33.3333% -> 100%`，污染拦截率、重复控制率、冲突复核率均 `0% -> 100%`，写入减少率 `0% -> 66.6667%`。
 - 这仍是测试集驱动的线上 shadow 链路验证，不是自然生产流量；候选和标签来自测试集，不是 LLM 自动抽取候选记忆。
 
+Phase 6q 当前状态：
+
+- 新增 hard / adversarial 睡眠巩固评测，继续复用现有 `sleep_consolidation_shadow`，不改变真实 DB、不合并、不删除、不修改 prompt 注入。
+- V2 的关键变化是每个被评估 memory item 都有 `expected_after_state`，evidence 不再只输出少数 expected id，因此同一个 case 内的误伤也会被统计。
+- hard 场景覆盖 near merge 但不应 duplicate、旧但高价值、临时但被强化、跨 scope 相同内容、正反偏好冲突、多条重复 pairwise、缺 source_ref 但重要、stale-derived 低价值。
+- 正式 V2 报告路径：`my_md/memory_optimization/eval_reports/sleep_hygiene_evidence_v2/`。
+- V2 结果：standard `600` case / `600` rows，hard `320` case / `520` rows，overall `920` case / `1120` rows。
+- standard：candidate recall `100.0%`，candidate precision `100.0%`，retained protection `100.0%`，false positive cleanup `0.0%`。
+- hard：candidate recall `100.0%`，candidate precision `75.0%`，retained protection `90.0%`，false positive cleanup `10.0%`，safe evidence token saving 为 `unsafe`。
+- overall：candidate recall `100.0%`，candidate precision `93.4426%`，retained protection `92.7273%`，false positive cleanup `7.2727%`。
+- 当前结论：基础候选识别稳定，但 hard 集证明边界保留策略还不够安全；后续应区分“merge 建议”和“cleanup 行为”，不能把所有非 active candidate 都直接当作可删除收益。
+
 后续计划：
 
 1. 如果继续扩大真实模型测试，复用 Phase 6o runner 和 checkpoint 机制，把 `240` 条扩展样本推进到可选 `1200` 条全量；默认不继续消耗这部分 token。
-2. 补睡眠巩固的真实 token / active 数 evidence 输入，区分 dry-run 估算和真实效果。
+2. 继续治理睡眠巩固 hard 集误伤，优先把 merge candidate 与 cleanup candidate 分开评价，再补真实 token / active 数 evidence 输入，区分 dry-run 估算和真实效果。
 3. 扩展冲突链 fixture 类型，例如多层分叉、回滚分叉和跨 source_ref 分叉。
 4. 再从 Phase 6e checkpoint 重建真实 LLM 目标指标表；如果 checkpoint 不完整，再考虑 `--resume` 补跑。
 
