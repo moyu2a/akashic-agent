@@ -82,7 +82,7 @@ P1.1 阶段没有接入：
 - approval workflow
 - ToolAuditLedger 持久化
 
-P1.2 已接入 `ToolExecutor` 和 passive reasoner 的真实执行路径。P1.3a/P1.3b 进一步接入文件路径参数级资源判断，但仍没有引入 shell/code 解析、URL/network 策略、sandbox、approval UI 或完整审计账本。
+P1.2 已接入 `ToolExecutor` 和 passive reasoner 的真实执行路径。P1.3a/P1.3b 进一步接入文件路径参数级资源判断。P1.3 completion 已补齐 subagent per-tool roots、protected runtime argument、shell command 参数 gate 和 URL/network 参数 gate，但仍没有引入 sandbox、approval UI 或完整审计账本。
 
 ## P1.3a/P1.3b ResourcePolicy 接入结果
 
@@ -105,6 +105,28 @@ P1.2 已接入 `ToolExecutor` 和 passive reasoner 的真实执行路径。P1.3a
 - 仍不是 Docker/chroot/seccomp sandbox。
 - 仍不是 approval workflow。
 - `resource_roots` 为空时当前兼容 allow；非 passive / subagent / 其他直接 `ToolExecutor` 调用方需要后续继续传 root，才能声称全局硬保护。
+
+## P1.3 Completion 接入结果
+
+日期：2026-07-22
+
+本阶段完成 P1.3 收尾：
+
+- `SubAgent` 支持默认 `resource_roots` 和 `resource_roots_by_tool`，subagent tool calls 在进入真实 invoker 前带上 per-tool roots。
+- subagent profiles 按工具类别传 root：`read_file/list_dir` 使用 workspace root，`write_file/edit_file` 使用 task-dir root。
+- `ResourcePolicyEngine` 会在 file/shell/URL 检查前拒绝伪造 runtime protected arguments，包括 `_session_key`、TaskExecution protected keys、`_request_id`、`_attempt_id`、`_transport_request_id`。
+- `ResourcePolicyEngine` 对 `shell.command` 增加保守参数 gate：拦截高置信 destructive command、compound destructive command、`sudo/xargs` wrapper 场景，以及有限的 inline interpreter 高危 marker。
+- shell gate 使用 quote-aware + punctuation-aware tokenization，覆盖 `a|xargs rm`、`a;rm` 这类无空格 operator，同时不把 quoted `;` 或 quoted `$()` 文本当作 top-level shell operator。
+- `ResourcePolicyEngine` 对 `web_fetch.url` 增加 URL 参数 gate：拒绝 unsupported scheme、localhost、`.localhost`、`.local`、trailing-dot localhost、private/loopback/link-local/reserved/unspecified IP 和 no-host URL。
+- `ToolInvocationPolicyEngine` composition 测试覆盖 protected argument deny、shell allow 后 TaskExecution work-phase 仍 defer、URL allow metadata 保真。
+
+边界：
+
+- Shell command policy 不是完整 shell AST，也不是 sandbox；它只是 invoker 前的保守参数 gate。
+- URL policy 不做 DNS 解析，不检查 redirect 后目标；`web_fetch` 自身 runtime SSRF 校验仍是第二道保护。
+- `send_webhook` URL 参数映射仅作为 future-compatible policy map；当前不声明该工具已在 runtime 注册。
+- `message_push.file/image` 这类 mixed local path / URL 参数不在 P1.3 completion 范围内，需要后续 dedicated mixed-resource policy。
+- Docker/chroot/seccomp、approval workflow、ToolAuditLedger 持久化仍属于 P2/P3/P4。
 
 ## 验证结果
 
@@ -186,11 +208,44 @@ PYTHONDONTWRITEBYTECODE=1 uv run --with pytest --with pytest-asyncio pytest test
 164 passed in 0.86s
 ```
 
+P1.3 completion focused 回归：
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 uv run --with pytest --with pytest-asyncio pytest tests/test_resource_policy.py tests/test_tool_invocation_resource_policy.py tests/test_subagent_resource_policy.py -q -p no:cacheprovider
+```
+
+结果：
+
+```text
+41 passed in 0.20s
+```
+
+P1.2/P1.3 completion 相关回归：
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 uv run --with pytest --with pytest-asyncio pytest tests/test_resource_policy.py tests/test_tool_invocation_resource_policy.py tests/test_subagent_resource_policy.py tests/test_tool_invocation_policy_gate.py tests/test_tool_invocation_policy.py tests/test_tool_executor.py tests/test_tool_boundary_manager.py tests/test_task_execution_access.py tests/test_shell_safety_plugin.py tests/test_tool_access_gateway.py tests/test_task_plan_gateway.py tests/test_task_plan_contract.py tests/test_tool_access_gateway_reasoner.py::test_reasoner_policy_gate_blocks_destructive_registered_tool_as_json tests/test_tool_access_gateway_reasoner.py::test_reasoner_resource_policy_blocks_parent_escape_read_file tests/test_tool_access_gateway_reasoner.py::test_reasoner_resource_roots_come_from_context_workspace tests/test_task_execution_reasoner.py::test_read_only_execution_is_begin_work_finish_final tests/test_task_execution_reasoner.py::test_write_proposal_defers_without_executor tests/test_subagent_spawn_task_dir.py tests/test_tool_loop_guard.py -q -p no:cacheprovider
+```
+
+结果：
+
+```text
+221 passed in 1.66s
+```
+
+编译与 whitespace 检查：
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 uv run python -m compileall agent/policies agent/tool_hooks agent/core/passive_turn.py agent/subagent.py agent/background/subagent_profiles.py tests/test_resource_policy.py tests/test_tool_invocation_resource_policy.py tests/test_subagent_resource_policy.py
+git diff --check
+```
+
+结果：均通过，退出码 0；`git diff --check` 无输出。
+
 ## 后续步骤
 
-下一步不应直接上 sandbox，而是继续补齐 P1.3 / P2 前置能力：
+下一步进入 P2，不应直接上完整 sandbox，而是先补默认 workspace / approval / deny 策略和最小审计证据：
 
-1. 扩展参数级 `ResourcePolicy`：shell/code 参数、URL/network 参数、protected context。
-2. 明确普通 passive turn 的 write/external/unknown 什么时候继续 allow、什么时候 approval、什么时候 deny。
-3. 设计 `ToolAuditLedger` 的最小字段：request/turn/session/tool/policy/action/args hash/result preview/invoker 状态。
-4. 将 `resource_roots` 继续传入非 passive / subagent / 其他直接 `ToolExecutor` 调用方，消除 no-root 兼容 allow 的覆盖缺口。
+1. 明确普通 passive turn 的 write/external/unknown 什么时候继续 allow、什么时候 approval、什么时候 deny。
+2. 设计 `ToolAuditLedger` 的最小字段：request/turn/session/tool/policy/action/args hash/result preview/invoker 状态。
+3. 继续收敛 no-root 兼容 allow，只让明确无法提供 workspace 的直接调用方走兼容路径。
+4. 再评估 sandbox 形态：Docker/Podman、non-root user、read-only rootfs、resource limits、filesystem snapshot/diff/rollback。
