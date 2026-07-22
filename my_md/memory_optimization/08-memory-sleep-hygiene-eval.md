@@ -34,7 +34,58 @@
 | session ref not fetchable count | 37 |
 | malformed source_ref count | 29 |
 
+### Source-backed V1 测试方案
+
+这轮测试采用目标导向 fixture，不追求自然分布，而是故意把不同来源状态放进同一批样本，验证安全门能否识别风险：
+
+| 来源状态 | 构造方式 | 期望结果 |
+| --- | --- | --- |
+| supported | `source_ref` 指向真实 `SessionStore` message id，原文包含 expected terms | 可回源，且原文支持摘要 |
+| missing | `source_ref` 格式正确，但 fixture DB 里没有对应 message | 解析成功，但回源失败 |
+| unsupported | `source_ref` 指向真实 message id，但原文不支持当前摘要 | 回源成功，但不能作为执行依据 |
+| session_ref_not_fetchable | 使用 `cli:local@post_response` 这类 session 级来源 | 可解析，但不能按 message id 恢复原文 |
+| parse_failed | 构造 malformed `source_ref` | 解析失败 |
+| missing_source_ref | 不提供 `source_ref` | 直接标记来源缺失 |
+
+执行链路：
+
+```text
+build_sleep_hygiene_source_fixture()
+  -> 生成 all-case sleep hygiene 测试集
+  -> 写入受控 fixture_sessions.db
+  -> 用 SessionStoreSourceRefResolver.fetch_by_ids() 回源
+  -> run_sleep_hygiene_evidence_eval()
+  -> 输出 source_evidence_metrics / by_action
+  -> 生成 dry-run patch，不写真实 DB
+```
+
+CLI 命令：
+
+```bash
+.venv/bin/python scripts/run_memory_sleep_hygiene_evidence_eval.py \
+  --output-dir my_md/memory_optimization/eval_reports/sleep_hygiene_source_backed_v1 \
+  --case-set all \
+  --duplicate-groups 24 \
+  --stale-count 24 \
+  --low-value-count 24 \
+  --retained-count 24 \
+  --hard-per-scenario 8 \
+  --source-fixture-mode balanced \
+  --source-fixture-db my_md/memory_optimization/eval_reports/sleep_hygiene_source_backed_v1/fixture_sessions.db \
+  --write-target-metrics \
+  --write-dry-run-patch
+```
+
 按动作分组看，安全清理候选一共有 `96` 条，其中 `source_ref` 覆盖率 `79.1667%`、真实回源成功率 `30.2632%`、原文支持率 `15.7895%`。这说明 V3 的 cleanup 规则本身仍然稳定，但如果把“可恢复、可审计”作为真实执行前置条件，很多候选还不能直接 active 化。
+
+按动作分组的来源证据：
+
+| action | rows | source_ref 覆盖率 | 解析成功率 | 回源成功率 | 原文支持率 | 主要问题 |
+| --- | ---: | ---: | ---: | ---: | ---: | --- |
+| safe_cleanup_candidates | 96 | 79.1667% | 82.8947% | 30.2632% | 15.7895% | 可清理候选里大量来源缺失、不可取回或原文不支持 |
+| review_required | 24 | 87.5% | 85.7143% | 42.8571% | 19.0476% | 复核队列中也存在来源不可审计问题 |
+| merge_suggestions | 8 | 87.5% | 85.7143% | 42.8571% | 14.2857% | 相似合并建议不能直接当清理动作 |
+| retained_rows | 104 | 83.6538% | 81.6092% | 41.3793% | 20.6897% | 应保留记忆也需要来源质量治理 |
 
 dry-run patch 已新增 source-backed 安全门：
 
@@ -50,6 +101,45 @@ dry-run patch 已新增 source-backed 安全门：
 这个 gate 的含义是：只有同时满足 `safe_cleanup_candidate = true`、`source_fetch_mode = session-store`、`source_fetch_success = true`、`source_support_status = supported` 的记录，才会标记 `source_backed_action_safe = true`。proxy 模式即使显示支持，也不会被当作真实可执行依据。
 
 Fixture DB 也加了覆盖保护：如果 `--source-fixture-db` 指向一个已经存在但没有 fixture marker、也不像旧版 sleep hygiene fixture 的普通 `sessions.db`，构建器会直接失败，不会删除或覆盖它。这样可以避免误把生产会话库作为评测 fixture 路径传入。
+
+### 为什么这轮比例偏低
+
+这轮低比例是测试设计造成的，不是候选识别能力突然下降。V3 已经验证 cleanup recall、cleanup precision、retained protection 都可以在 synthetic hard 集达到 `100.0%`；Phase 6s 进一步把问题换成“候选能不能被真实来源支撑”。
+
+| 低比例项 | 原因 | 正确解读 |
+| --- | --- | --- |
+| `source_ref 覆盖率 81.5%` | fixture 故意放入缺来源样本 | 用来验证无来源记忆会被挡住 |
+| `解析成功率 82.2086%` | fixture 故意放入 malformed `source_ref` | 用来验证格式错误可统计、可阻断 |
+| `真实回源成功率 36.1963%` | 分母里包含缺失 message、session 级 ref 和格式错误 ref | 只有能按 message id 找到原文才算成功 |
+| `原文支持率 18.4049%` | fixture 故意放入 unsupported 原文 | 证明“能取回消息”不等于“消息支持摘要” |
+| `source-backed safe 12/200` | gate 同时要求安全清理候选、真实回源成功、原文支持摘要 | 大多数候选目前只能 blocked 或 review |
+
+因此本轮的核心结论不是“睡眠巩固性能低”，而是：
+
+```text
+候选识别已经能找到可疑记忆，但真实执行前还必须补 source_ref 质量、消息级回源和原文支持校验。
+```
+
+### 当前存在的问题
+
+| 问题 | 当前表现 | 影响 |
+| --- | --- | --- |
+| `source_ref` 质量不足 | 覆盖率 `81.5%`，缺来源合计 `75` 条 | 没有来源或来源缺失的候选不能安全清理 |
+| 可按消息回源比例低 | 真实回源成功率 `36.1963%` | 很多来源不能还原到具体历史消息 |
+| 原文支持率低 | 原文支持率 `18.4049%` | 不能只凭记忆摘要执行清理，需要原文支撑 |
+| 可安全执行候选少 | `source-backed safe = 12/200` | 当前 active cleanup 仍应关闭 |
+| session 级来源不可恢复 | `session_ref_not_fetchable = 37` | `cli:local@post_response` 只能定位阶段，不能定位消息 |
+| malformed 来源存在 | `malformed_source_ref = 29` | 需要统一 source_ref schema 和写入校验 |
+| 当前是受控 fixture | 使用 `fixture_sessions.db` | 能证明机制，不代表生产自然流量 |
+| 当前仍是 dry-run | `writes_real_db = false` | 没有真实 DB 体积下降或真实 prompt token 下降 |
+
+后续改进方向：
+
+1. 写入长期记忆时优先记录消息级 `source_ref`，避免只写 session 级来源。
+2. 对 `source_ref` 做 schema 校验，拒绝 malformed 来源进入长期记忆。
+3. 在记忆摘要写入或巩固时增加“摘要是否被原文支持”的校验。
+4. 把 source-backed safe 作为 active cleanup 的硬门槛，未通过的候选只进 review 或 blocked。
+5. 用真实样本 DB 重跑 source-backed evidence，区分 fixture 风险覆盖和生产来源质量。
 
 ## 当前项目真实状态
 

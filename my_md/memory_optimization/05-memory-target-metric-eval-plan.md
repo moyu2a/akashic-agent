@@ -262,6 +262,24 @@ Source-backed V1 的关键结果：
 
 dry-run patch 已新增 `source_backed_action_safe` 和 `source_backed_block_reason`。当前 `200` 条 patch 记录里只有 `12` 条满足真实回源且原文支持；其余被分到 `requires_review = 24`、`source_not_fetchable = 73`、`source_not_supporting_summary = 11`、`not_cleanup_candidate = 80`。这说明真实执行前的来源门禁已经可观测，但 active cleanup 仍然关闭。
 
+Source-backed V1 的比例偏低是测试方案刻意设计的结果：fixture 同时覆盖 supported、missing、unsupported、session-ref-not-fetchable、parse-failed 和 missing-source-ref 六类来源状态。它的目标不是证明 cleanup recall 继续提升，而是证明未来执行真实清理前，系统能识别“没有来源、来源不可查、原文不支持摘要”的候选，并把它们挡在 active cleanup 之外。
+
+因此三张主表里应这样表达：
+
+```text
+V3 说明候选识别和动作分层稳定；
+Source-backed V1 说明真实执行证据还不足，大多数候选只能 review / blocked。
+```
+
+后续如果要把记忆库卫生表推进到真实效果，需要新增生产样本 evidence：
+
+- 真实记忆的消息级 `source_ref` 覆盖率。
+- 真实 `SessionStore.fetch_by_ids()` 回源成功率。
+- 摘要被原文支持的比例。
+- 清理前后 active 记忆数量变化。
+- 清理前后 prompt token 变化。
+- 清理后关键记忆召回保持率。
+
 因此记忆库卫生表后续不应只展示“重复合并率 / token 节省率”，还要展示两个安全指标：
 
 ```text

@@ -70,6 +70,16 @@
   - active cleanup is still closed because most candidates do not yet satisfy source-backed safety;
   - source support is deterministic term matching, not full semantic entailment;
   - fixture `sessions.db` is controlled test data, not production natural traffic.
+- Interpretation of low source-backed rates:
+  - low `source_fetch_success_rate` and `source_support_rate` are expected for this fixture because it intentionally mixes supported, missing, unsupported, session-level, malformed, and missing source states;
+  - the result should be read as a safety-gate validation, not as cleanup candidate recall regression;
+  - V3 still owns cleanup recall / precision interpretation, while Phase 6s owns evidence trust and active-cleanup eligibility.
+- Current problems to solve next:
+  - message-level `source_ref` quality is not high enough for active cleanup;
+  - session-level refs such as `cli:local@post_response` cannot restore exact source messages;
+  - malformed source refs need schema validation before long-term memory write;
+  - original-message support is only deterministic term matching and needs stronger semantic evidence if used for real deletion;
+  - no production natural traffic or real memory DB cleanup has been measured yet.
 
 ## 2026-07-22 Memory Phase 6o Expanded Write Governance Real LLM Eval
 
