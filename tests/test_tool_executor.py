@@ -68,6 +68,7 @@ def test_tool_executor_pre_hook_can_update_arguments() -> None:
                 tool_name="dummy",
                 arguments={"x": 1},
                 source="passive",
+                registry_risk="read-only",
             ),
             _invoke,
         )
@@ -94,6 +95,7 @@ def test_tool_executor_denied_is_not_error() -> None:
                 tool_name="dummy",
                 arguments={"x": 1},
                 source="passive",
+                registry_risk="read-only",
             ),
             _invoke,
         )
@@ -120,6 +122,7 @@ def test_tool_executor_post_hook_only_adds_extra_message() -> None:
                 tool_name="dummy",
                 arguments={"x": 1},
                 source="passive",
+                registry_risk="read-only",
             ),
             _invoke,
         )
@@ -148,6 +151,7 @@ def test_tool_executor_post_error_hook_cannot_swallow_error() -> None:
                 tool_name="dummy",
                 arguments={},
                 source="passive",
+                registry_risk="read-only",
             ),
             _broken,
         )
@@ -172,6 +176,7 @@ def test_execution_context_propagates_registry_tool_error_to_executor() -> None:
                 tool_name="throwing",
                 arguments={},
                 source="passive",
+                registry_risk="read-only",
             ),
             lambda name, arguments: registry.execute(
                 name,
@@ -200,6 +205,7 @@ def test_tool_executor_hook_exception_becomes_controlled_error() -> None:
                 tool_name="dummy",
                 arguments={"x": 1},
                 source="passive",
+                registry_risk="read-only",
             ),
             _invoke,
         )
@@ -222,6 +228,7 @@ def test_tool_executor_post_tool_use_hook_failure_does_not_pollute_success() -> 
                 tool_name="dummy",
                 arguments={"x": 1},
                 source="passive",
+                registry_risk="read-only",
             ),
             _invoke,
         )

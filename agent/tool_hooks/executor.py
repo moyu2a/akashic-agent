@@ -4,6 +4,7 @@ import json
 from collections.abc import Sequence
 from typing import Any, Awaitable, Callable, Protocol
 
+from agent.policies.tool_approval import build_approval_payload
 from agent.policies.tool_invocation_policy import (
     ToolInvocationContext,
     ToolInvocationDecision,
@@ -117,7 +118,11 @@ class ToolExecutor:
         if policy_decision.action == "defer":
             return ToolExecutionResult(
                 status="deferred",
-                output=_policy_defer_output(policy_decision),
+                output=_policy_defer_output(
+                    policy_decision,
+                    tool_name=request.tool_name,
+                    arguments=final_arguments,
+                ),
                 final_arguments=final_arguments,
                 invoker_reached=False,
                 invoker_succeeded=False,
@@ -424,17 +429,38 @@ def _policy_block_output(decision: ToolInvocationDecision) -> str:
     )
 
 
-def _policy_defer_output(decision: ToolInvocationDecision) -> str:
+def _approval_scope_from_trace(trace: dict[str, object]) -> str:
+    metadata = trace.get("metadata")
+    if not isinstance(metadata, dict):
+        return "tool_call"
+    direct_scope = metadata.get("approval_scope")
+    if isinstance(direct_scope, str) and direct_scope:
+        return direct_scope
+    strategy = metadata.get("risk_strategy")
+    if isinstance(strategy, dict):
+        strategy_scope = strategy.get("approval_scope")
+        if isinstance(strategy_scope, str) and strategy_scope:
+            return strategy_scope
+    return "tool_call"
+
+
+def _policy_defer_output(
+    decision: ToolInvocationDecision,
+    *,
+    tool_name: str,
+    arguments: dict[str, Any],
+) -> str:
     trace = decision.to_trace_metadata()
+    payload = build_approval_payload(
+        tool_name=tool_name,
+        arguments=arguments,
+        action="defer",
+        reason=str(trace["reason"]),
+        risk=str(trace["risk"]),
+        approval_scope=_approval_scope_from_trace(trace),
+    )
+    payload["policy"] = trace
     return json.dumps(
-        {
-            "ok": False,
-            "blocked": True,
-            "deferred": True,
-            "error_code": trace["reason"],
-            "message": "工具调用需要授权后才能执行。",
-            "policy": trace,
-            "invoker_reached": False,
-        },
+        payload,
         ensure_ascii=False,
     )

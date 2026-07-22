@@ -40,6 +40,11 @@ from agent.policies.tool_access_types import (
     ToolAccessPlan,
     ToolExecutionGateResult,
 )
+from agent.policies.tool_approval import (
+    build_approval_payload,
+    canonical_args_hash,
+    summarize_arguments,
+)
 from agent.policies.tool_invocation_policy import (
     ToolInvocationContext,
     ToolInvocationDecision,
@@ -84,6 +89,9 @@ __all__ = [
     "ToolInvocationContext",
     "ToolInvocationDecision",
     "ToolInvocationPolicyEngine",
+    "build_approval_payload",
+    "canonical_args_hash",
     "decide_doc_rag_preload",
     "infer_task_execution_contract",
+    "summarize_arguments",
 ]

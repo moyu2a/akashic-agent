@@ -183,7 +183,7 @@ def test_executor_passes_resource_roots_to_policy_context(tmp_path: Path) -> Non
     assert policy.contexts[0].metadata["resource_roots"] == (str(tmp_path),)
 
 
-def test_passive_registered_write_remains_default_allowed() -> None:
+def test_passive_registered_write_defers_with_approval_request() -> None:
     result = _run(
         ToolExecutor().execute(
             ToolExecutionRequest(
@@ -198,10 +198,14 @@ def test_passive_registered_write_remains_default_allowed() -> None:
         )
     )
 
-    assert result.status == "success"
-    assert result.invoker_reached is True
-    assert result.invoker_succeeded is True
-    assert result.policy_trace["reason"] == "tool_invocation_default_allow"
+    payload = json.loads(result.output)
+    assert result.status == "deferred"
+    assert result.invoker_reached is False
+    assert result.invoker_succeeded is False
+    assert result.policy_trace["reason"] == "risk_strategy_write_requires_approval"
+    assert payload["approval_request"]["tool_name"] == "write_file"
+    assert payload["approval_request"]["args_hash"]
+    assert "preview" not in payload["approval_request"]["args_summary"]["content"]
 
 
 class DummyTool(Tool):
