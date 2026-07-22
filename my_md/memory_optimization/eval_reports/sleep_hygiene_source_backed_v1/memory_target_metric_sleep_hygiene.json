@@ -1,0 +1,1805 @@
+{
+  "answer_retrieval_rows": [
+    {
+      "case_count": 8,
+      "case_set": "common",
+      "checkpoint_source": "none",
+      "gated_reason": "",
+      "group_name": "召回与回答",
+      "measurement_layer": "offline_trace",
+      "measurement_source": "eval_runner_trace",
+      "metrics": {
+        "answer_hit_rate": {
+          "after": 100.0,
+          "before": 100.0,
+          "delta_points": 0.0,
+          "name": "answer_hit_rate",
+          "relative_uplift_pct": 0.0
+        },
+        "conflict_chain_detection_rate": {
+          "after": "unavailable",
+          "before": "unavailable",
+          "delta_points": "unavailable",
+          "name": "conflict_chain_detection_rate",
+          "relative_uplift_pct": "unavailable"
+        },
+        "current_version_recall_rate": {
+          "after": "unavailable",
+          "before": "unavailable",
+          "delta_points": "unavailable",
+          "name": "current_version_recall_rate",
+          "relative_uplift_pct": "unavailable"
+        },
+        "evidence_hit_rate": {
+          "after": 92.855,
+          "before": "unavailable",
+          "delta_points": "unavailable",
+          "name": "evidence_hit_rate",
+          "relative_uplift_pct": "unavailable"
+        },
+        "stale_version_misuse_rate": {
+          "after": "unavailable",
+          "before": "unavailable",
+          "delta_points": "unavailable",
+          "name": "stale_version_misuse_rate",
+          "relative_uplift_pct": "unavailable"
+        },
+        "target_recall_rate": {
+          "after": 100.0,
+          "before": 100.0,
+          "delta_points": 0.0,
+          "name": "target_recall_rate",
+          "relative_uplift_pct": 0.0
+        },
+        "wrong_injection_rate": {
+          "after": "unavailable",
+          "before": "unavailable",
+          "delta_points": "unavailable",
+          "name": "wrong_injection_rate",
+          "relative_uplift_pct": "unavailable"
+        },
+        "wrong_recall_rate": {
+          "after": 25.0,
+          "before": 0.0,
+          "delta_points": 25.0,
+          "name": "wrong_recall_rate",
+          "relative_uplift_pct": "unavailable"
+        }
+      },
+      "module_name": "三路召回",
+      "profile_name": "chain_tri_retrieval",
+      "unit_count": 8
+    },
+    {
+      "case_count": 8,
+      "case_set": "common",
+      "checkpoint_source": "none",
+      "gated_reason": "",
+      "group_name": "召回与回答",
+      "measurement_layer": "offline_trace",
+      "measurement_source": "eval_runner_trace",
+      "metrics": {
+        "answer_hit_rate": {
+          "after": 100.0,
+          "before": 100.0,
+          "delta_points": 0.0,
+          "name": "answer_hit_rate",
+          "relative_uplift_pct": 0.0
+        },
+        "conflict_chain_detection_rate": {
+          "after": "unavailable",
+          "before": "unavailable",
+          "delta_points": "unavailable",
+          "name": "conflict_chain_detection_rate",
+          "relative_uplift_pct": "unavailable"
+        },
+        "current_version_recall_rate": {
+          "after": "unavailable",
+          "before": "unavailable",
+          "delta_points": "unavailable",
+          "name": "current_version_recall_rate",
+          "relative_uplift_pct": "unavailable"
+        },
+        "evidence_hit_rate": {
+          "after": "unavailable",
+          "before": "unavailable",
+          "delta_points": "unavailable",
+          "name": "evidence_hit_rate",
+          "relative_uplift_pct": "unavailable"
+        },
+        "stale_version_misuse_rate": {
+          "after": "unavailable",
+          "before": "unavailable",
+          "delta_points": "unavailable",
+          "name": "stale_version_misuse_rate",
+          "relative_uplift_pct": "unavailable"
+        },
+        "target_recall_rate": {
+          "after": 100.0,
+          "before": 100.0,
+          "delta_points": 0.0,
+          "name": "target_recall_rate",
+          "relative_uplift_pct": 0.0
+        },
+        "wrong_injection_rate": {
+          "after": "unavailable",
+          "before": "unavailable",
+          "delta_points": "unavailable",
+          "name": "wrong_injection_rate",
+          "relative_uplift_pct": "unavailable"
+        },
+        "wrong_recall_rate": {
+          "after": 25.0,
+          "before": 25.0,
+          "delta_points": 0.0,
+          "name": "wrong_recall_rate",
+          "relative_uplift_pct": 0.0
+        }
+      },
+      "module_name": "图谱召回",
+      "profile_name": "chain_graph_retrieval",
+      "unit_count": 8
+    },
+    {
+      "case_count": 8,
+      "case_set": "common",
+      "checkpoint_source": "none",
+      "gated_reason": "",
+      "group_name": "召回与回答",
+      "measurement_layer": "offline_trace",
+      "measurement_source": "eval_runner_trace",
+      "metrics": {
+        "answer_hit_rate": {
+          "after": 100.0,
+          "before": 100.0,
+          "delta_points": 0.0,
+          "name": "answer_hit_rate",
+          "relative_uplift_pct": 0.0
+        },
+        "conflict_chain_detection_rate": {
+          "after": "unavailable",
+          "before": "unavailable",
+          "delta_points": "unavailable",
+          "name": "conflict_chain_detection_rate",
+          "relative_uplift_pct": "unavailable"
+        },
+        "current_version_recall_rate": {
+          "after": "unavailable",
+          "before": "unavailable",
+          "delta_points": "unavailable",
+          "name": "current_version_recall_rate",
+          "relative_uplift_pct": "unavailable"
+        },
+        "evidence_hit_rate": {
+          "after": "unavailable",
+          "before": "unavailable",
+          "delta_points": "unavailable",
+          "name": "evidence_hit_rate",
+          "relative_uplift_pct": "unavailable"
+        },
+        "stale_version_misuse_rate": {
+          "after": "unavailable",
+          "before": "unavailable",
+          "delta_points": "unavailable",
+          "name": "stale_version_misuse_rate",
+          "relative_uplift_pct": "unavailable"
+        },
+        "target_recall_rate": {
+          "after": 100.0,
+          "before": 100.0,
+          "delta_points": 0.0,
+          "name": "target_recall_rate",
+          "relative_uplift_pct": 0.0
+        },
+        "wrong_injection_rate": {
+          "after": 0.0,
+          "before": 0.0,
+          "delta_points": 0.0,
+          "name": "wrong_injection_rate",
+          "relative_uplift_pct": "unavailable"
+        },
+        "wrong_recall_rate": {
+          "after": 0.0,
+          "before": 0.0,
+          "delta_points": 0.0,
+          "name": "wrong_recall_rate",
+          "relative_uplift_pct": "unavailable"
+        }
+      },
+      "module_name": "重排与注入治理",
+      "profile_name": "chain_rerank_injection",
+      "unit_count": 8
+    },
+    {
+      "case_count": 8,
+      "case_set": "common",
+      "checkpoint_source": "none",
+      "gated_reason": "",
+      "group_name": "召回与回答",
+      "measurement_layer": "offline_trace",
+      "measurement_source": "eval_runner_trace",
+      "metrics": {
+        "answer_hit_rate": {
+          "after": 100.0,
+          "before": 100.0,
+          "delta_points": 0.0,
+          "name": "answer_hit_rate",
+          "relative_uplift_pct": 0.0
+        },
+        "conflict_chain_detection_rate": {
+          "after": "unavailable",
+          "before": "unavailable",
+          "delta_points": "unavailable",
+          "name": "conflict_chain_detection_rate",
+          "relative_uplift_pct": "unavailable"
+        },
+        "current_version_recall_rate": {
+          "after": 100.0,
+          "before": 100.0,
+          "delta_points": 0.0,
+          "name": "current_version_recall_rate",
+          "relative_uplift_pct": 0.0
+        },
+        "evidence_hit_rate": {
+          "after": 93.75,
+          "before": "unavailable",
+          "delta_points": "unavailable",
+          "name": "evidence_hit_rate",
+          "relative_uplift_pct": "unavailable"
+        },
+        "stale_version_misuse_rate": {
+          "after": 0.0,
+          "before": 0.0,
+          "delta_points": 0.0,
+          "name": "stale_version_misuse_rate",
+          "relative_uplift_pct": "unavailable"
+        },
+        "target_recall_rate": {
+          "after": 100.0,
+          "before": 100.0,
+          "delta_points": 0.0,
+          "name": "target_recall_rate",
+          "relative_uplift_pct": 0.0
+        },
+        "wrong_injection_rate": {
+          "after": "unavailable",
+          "before": "unavailable",
+          "delta_points": "unavailable",
+          "name": "wrong_injection_rate",
+          "relative_uplift_pct": "unavailable"
+        },
+        "wrong_recall_rate": {
+          "after": 0.0,
+          "before": 0.0,
+          "delta_points": 0.0,
+          "name": "wrong_recall_rate",
+          "relative_uplift_pct": "unavailable"
+        }
+      },
+      "module_name": "版本链与溯源",
+      "profile_name": "chain_version_provenance",
+      "unit_count": 8
+    },
+    {
+      "case_count": 8,
+      "case_set": "overall",
+      "checkpoint_source": "none",
+      "gated_reason": "",
+      "group_name": "召回与回答",
+      "measurement_layer": "offline_trace",
+      "measurement_source": "eval_runner_trace",
+      "metrics": {
+        "answer_hit_rate": {
+          "after": 100.0,
+          "before": 100.0,
+          "delta_points": 0.0,
+          "name": "answer_hit_rate",
+          "relative_uplift_pct": 0.0
+        },
+        "conflict_chain_detection_rate": {
+          "after": "unavailable",
+          "before": "unavailable",
+          "delta_points": "unavailable",
+          "name": "conflict_chain_detection_rate",
+          "relative_uplift_pct": "unavailable"
+        },
+        "current_version_recall_rate": {
+          "after": "unavailable",
+          "before": "unavailable",
+          "delta_points": "unavailable",
+          "name": "current_version_recall_rate",
+          "relative_uplift_pct": "unavailable"
+        },
+        "evidence_hit_rate": {
+          "after": 92.855,
+          "before": "unavailable",
+          "delta_points": "unavailable",
+          "name": "evidence_hit_rate",
+          "relative_uplift_pct": "unavailable"
+        },
+        "stale_version_misuse_rate": {
+          "after": "unavailable",
+          "before": "unavailable",
+          "delta_points": "unavailable",
+          "name": "stale_version_misuse_rate",
+          "relative_uplift_pct": "unavailable"
+        },
+        "target_recall_rate": {
+          "after": 100.0,
+          "before": 100.0,
+          "delta_points": 0.0,
+          "name": "target_recall_rate",
+          "relative_uplift_pct": 0.0
+        },
+        "wrong_injection_rate": {
+          "after": "unavailable",
+          "before": "unavailable",
+          "delta_points": "unavailable",
+          "name": "wrong_injection_rate",
+          "relative_uplift_pct": "unavailable"
+        },
+        "wrong_recall_rate": {
+          "after": 25.0,
+          "before": 0.0,
+          "delta_points": 25.0,
+          "name": "wrong_recall_rate",
+          "relative_uplift_pct": "unavailable"
+        }
+      },
+      "module_name": "三路召回",
+      "profile_name": "chain_tri_retrieval",
+      "unit_count": 8
+    },
+    {
+      "case_count": 8,
+      "case_set": "overall",
+      "checkpoint_source": "none",
+      "gated_reason": "",
+      "group_name": "召回与回答",
+      "measurement_layer": "offline_trace",
+      "measurement_source": "eval_runner_trace",
+      "metrics": {
+        "answer_hit_rate": {
+          "after": 100.0,
+          "before": 100.0,
+          "delta_points": 0.0,
+          "name": "answer_hit_rate",
+          "relative_uplift_pct": 0.0
+        },
+        "conflict_chain_detection_rate": {
+          "after": "unavailable",
+          "before": "unavailable",
+          "delta_points": "unavailable",
+          "name": "conflict_chain_detection_rate",
+          "relative_uplift_pct": "unavailable"
+        },
+        "current_version_recall_rate": {
+          "after": "unavailable",
+          "before": "unavailable",
+          "delta_points": "unavailable",
+          "name": "current_version_recall_rate",
+          "relative_uplift_pct": "unavailable"
+        },
+        "evidence_hit_rate": {
+          "after": "unavailable",
+          "before": "unavailable",
+          "delta_points": "unavailable",
+          "name": "evidence_hit_rate",
+          "relative_uplift_pct": "unavailable"
+        },
+        "stale_version_misuse_rate": {
+          "after": "unavailable",
+          "before": "unavailable",
+          "delta_points": "unavailable",
+          "name": "stale_version_misuse_rate",
+          "relative_uplift_pct": "unavailable"
+        },
+        "target_recall_rate": {
+          "after": 100.0,
+          "before": 100.0,
+          "delta_points": 0.0,
+          "name": "target_recall_rate",
+          "relative_uplift_pct": 0.0
+        },
+        "wrong_injection_rate": {
+          "after": "unavailable",
+          "before": "unavailable",
+          "delta_points": "unavailable",
+          "name": "wrong_injection_rate",
+          "relative_uplift_pct": "unavailable"
+        },
+        "wrong_recall_rate": {
+          "after": 25.0,
+          "before": 25.0,
+          "delta_points": 0.0,
+          "name": "wrong_recall_rate",
+          "relative_uplift_pct": 0.0
+        }
+      },
+      "module_name": "图谱召回",
+      "profile_name": "chain_graph_retrieval",
+      "unit_count": 8
+    },
+    {
+      "case_count": 8,
+      "case_set": "overall",
+      "checkpoint_source": "none",
+      "gated_reason": "",
+      "group_name": "召回与回答",
+      "measurement_layer": "offline_trace",
+      "measurement_source": "eval_runner_trace",
+      "metrics": {
+        "answer_hit_rate": {
+          "after": 100.0,
+          "before": 100.0,
+          "delta_points": 0.0,
+          "name": "answer_hit_rate",
+          "relative_uplift_pct": 0.0
+        },
+        "conflict_chain_detection_rate": {
+          "after": "unavailable",
+          "before": "unavailable",
+          "delta_points": "unavailable",
+          "name": "conflict_chain_detection_rate",
+          "relative_uplift_pct": "unavailable"
+        },
+        "current_version_recall_rate": {
+          "after": "unavailable",
+          "before": "unavailable",
+          "delta_points": "unavailable",
+          "name": "current_version_recall_rate",
+          "relative_uplift_pct": "unavailable"
+        },
+        "evidence_hit_rate": {
+          "after": "unavailable",
+          "before": "unavailable",
+          "delta_points": "unavailable",
+          "name": "evidence_hit_rate",
+          "relative_uplift_pct": "unavailable"
+        },
+        "stale_version_misuse_rate": {
+          "after": "unavailable",
+          "before": "unavailable",
+          "delta_points": "unavailable",
+          "name": "stale_version_misuse_rate",
+          "relative_uplift_pct": "unavailable"
+        },
+        "target_recall_rate": {
+          "after": 100.0,
+          "before": 100.0,
+          "delta_points": 0.0,
+          "name": "target_recall_rate",
+          "relative_uplift_pct": 0.0
+        },
+        "wrong_injection_rate": {
+          "after": 0.0,
+          "before": 0.0,
+          "delta_points": 0.0,
+          "name": "wrong_injection_rate",
+          "relative_uplift_pct": "unavailable"
+        },
+        "wrong_recall_rate": {
+          "after": 0.0,
+          "before": 0.0,
+          "delta_points": 0.0,
+          "name": "wrong_recall_rate",
+          "relative_uplift_pct": "unavailable"
+        }
+      },
+      "module_name": "重排与注入治理",
+      "profile_name": "chain_rerank_injection",
+      "unit_count": 8
+    },
+    {
+      "case_count": 8,
+      "case_set": "overall",
+      "checkpoint_source": "none",
+      "gated_reason": "",
+      "group_name": "召回与回答",
+      "measurement_layer": "offline_trace",
+      "measurement_source": "eval_runner_trace",
+      "metrics": {
+        "answer_hit_rate": {
+          "after": 100.0,
+          "before": 100.0,
+          "delta_points": 0.0,
+          "name": "answer_hit_rate",
+          "relative_uplift_pct": 0.0
+        },
+        "conflict_chain_detection_rate": {
+          "after": "unavailable",
+          "before": "unavailable",
+          "delta_points": "unavailable",
+          "name": "conflict_chain_detection_rate",
+          "relative_uplift_pct": "unavailable"
+        },
+        "current_version_recall_rate": {
+          "after": 100.0,
+          "before": 100.0,
+          "delta_points": 0.0,
+          "name": "current_version_recall_rate",
+          "relative_uplift_pct": 0.0
+        },
+        "evidence_hit_rate": {
+          "after": 93.75,
+          "before": "unavailable",
+          "delta_points": "unavailable",
+          "name": "evidence_hit_rate",
+          "relative_uplift_pct": "unavailable"
+        },
+        "stale_version_misuse_rate": {
+          "after": 0.0,
+          "before": 0.0,
+          "delta_points": 0.0,
+          "name": "stale_version_misuse_rate",
+          "relative_uplift_pct": "unavailable"
+        },
+        "target_recall_rate": {
+          "after": 100.0,
+          "before": 100.0,
+          "delta_points": 0.0,
+          "name": "target_recall_rate",
+          "relative_uplift_pct": 0.0
+        },
+        "wrong_injection_rate": {
+          "after": "unavailable",
+          "before": "unavailable",
+          "delta_points": "unavailable",
+          "name": "wrong_injection_rate",
+          "relative_uplift_pct": "unavailable"
+        },
+        "wrong_recall_rate": {
+          "after": 0.0,
+          "before": 0.0,
+          "delta_points": 0.0,
+          "name": "wrong_recall_rate",
+          "relative_uplift_pct": "unavailable"
+        }
+      },
+      "module_name": "版本链与溯源",
+      "profile_name": "chain_version_provenance",
+      "unit_count": 8
+    }
+  ],
+  "case_records": [
+    {
+      "answer_hit_rate_after": 100.0,
+      "answer_hit_rate_before": 100.0,
+      "case_id": "common_preference_recall_01",
+      "case_set": "common",
+      "evidence_hit_rate_after": 100.0,
+      "evidence_hit_rate_before": "unavailable",
+      "module_key": "tri_retrieval",
+      "stale_version_misuse_rate_after": "unavailable",
+      "stale_version_misuse_rate_before": "unavailable",
+      "target_recall_rate_after": 100.0,
+      "target_recall_rate_before": 100.0,
+      "wrong_injection_rate_after": "unavailable",
+      "wrong_injection_rate_before": "unavailable",
+      "wrong_recall_rate_after": 0.0,
+      "wrong_recall_rate_before": 0.0
+    },
+    {
+      "answer_hit_rate_after": 100.0,
+      "answer_hit_rate_before": 100.0,
+      "case_id": "common_preference_recall_01",
+      "case_set": "common",
+      "evidence_hit_rate_after": "unavailable",
+      "evidence_hit_rate_before": "unavailable",
+      "module_key": "graph_retrieval",
+      "stale_version_misuse_rate_after": "unavailable",
+      "stale_version_misuse_rate_before": "unavailable",
+      "target_recall_rate_after": 100.0,
+      "target_recall_rate_before": 100.0,
+      "wrong_injection_rate_after": "unavailable",
+      "wrong_injection_rate_before": "unavailable",
+      "wrong_recall_rate_after": 0.0,
+      "wrong_recall_rate_before": 0.0
+    },
+    {
+      "answer_hit_rate_after": 100.0,
+      "answer_hit_rate_before": 100.0,
+      "case_id": "common_preference_recall_01",
+      "case_set": "common",
+      "evidence_hit_rate_after": "unavailable",
+      "evidence_hit_rate_before": "unavailable",
+      "module_key": "rerank_injection",
+      "stale_version_misuse_rate_after": "unavailable",
+      "stale_version_misuse_rate_before": "unavailable",
+      "target_recall_rate_after": 100.0,
+      "target_recall_rate_before": 100.0,
+      "wrong_injection_rate_after": 0.0,
+      "wrong_injection_rate_before": 0.0,
+      "wrong_recall_rate_after": 0.0,
+      "wrong_recall_rate_before": 0.0
+    },
+    {
+      "answer_hit_rate_after": 100.0,
+      "answer_hit_rate_before": 100.0,
+      "case_id": "common_preference_recall_01",
+      "case_set": "common",
+      "conflict_chain_detection_rate_after": "unavailable",
+      "conflict_chain_detection_rate_before": "unavailable",
+      "current_version_recall_rate_after": 100.0,
+      "current_version_recall_rate_before": 100.0,
+      "evidence_hit_rate_after": 93.75,
+      "evidence_hit_rate_before": "unavailable",
+      "module_key": "version_provenance",
+      "stale_version_misuse_rate_after": 0.0,
+      "stale_version_misuse_rate_before": 0.0,
+      "target_recall_rate_after": 100.0,
+      "target_recall_rate_before": 100.0,
+      "wrong_injection_rate_after": "unavailable",
+      "wrong_injection_rate_before": "unavailable",
+      "wrong_recall_rate_after": 0.0,
+      "wrong_recall_rate_before": 0.0
+    },
+    {
+      "candidate_count": 3,
+      "case_id": "common_preference_recall_01",
+      "case_set": "common",
+      "conflict_review_rate_after": 33.3333,
+      "conflict_review_rate_before": "unavailable",
+      "duplicate_control_rate_after": 66.6667,
+      "duplicate_control_rate_before": "unavailable",
+      "false_accept_rate_after": 0.0,
+      "false_accept_rate_before": 100.0,
+      "false_reject_rate_after": 0.0,
+      "false_reject_rate_before": "unavailable",
+      "module_key": "write_value",
+      "pollution_block_rate_after": 100.0,
+      "pollution_block_rate_before": "unavailable",
+      "useful_write_precision_after": "unavailable",
+      "useful_write_precision_before": 0.0,
+      "write_reduction_rate_after": 100.0,
+      "write_reduction_rate_before": 0.0
+    },
+    {
+      "case_id": "common_preference_recall_01",
+      "case_set": "common",
+      "duplicate_merge_rate_after": 0.0,
+      "duplicate_merge_rate_before": "unavailable",
+      "low_value_cleanup_rate_after": 14.2857,
+      "low_value_cleanup_rate_before": "unavailable",
+      "module_key": "sleep_consolidation",
+      "post_consolidation_recall_retention_rate_after": 100.0,
+      "post_consolidation_recall_retention_rate_before": 100.0,
+      "scanned_count": 7,
+      "source_fetch_success_rate_after": 100.0,
+      "source_fetch_success_rate_before": "unavailable",
+      "source_ref_coverage_rate_after": 85.7143,
+      "source_ref_coverage_rate_before": "unavailable",
+      "stale_cleanup_rate_after": 14.2857,
+      "stale_cleanup_rate_before": "unavailable",
+      "token_saving_rate_after": 57.14,
+      "token_saving_rate_before": 0.0
+    },
+    {
+      "answer_hit_rate_after": 100.0,
+      "answer_hit_rate_before": 100.0,
+      "case_id": "common_tool_preference_01",
+      "case_set": "common",
+      "evidence_hit_rate_after": 100.0,
+      "evidence_hit_rate_before": "unavailable",
+      "module_key": "tri_retrieval",
+      "stale_version_misuse_rate_after": "unavailable",
+      "stale_version_misuse_rate_before": "unavailable",
+      "target_recall_rate_after": 100.0,
+      "target_recall_rate_before": 100.0,
+      "wrong_injection_rate_after": "unavailable",
+      "wrong_injection_rate_before": "unavailable",
+      "wrong_recall_rate_after": 0.0,
+      "wrong_recall_rate_before": 0.0
+    },
+    {
+      "answer_hit_rate_after": 100.0,
+      "answer_hit_rate_before": 100.0,
+      "case_id": "common_tool_preference_01",
+      "case_set": "common",
+      "evidence_hit_rate_after": "unavailable",
+      "evidence_hit_rate_before": "unavailable",
+      "module_key": "graph_retrieval",
+      "stale_version_misuse_rate_after": "unavailable",
+      "stale_version_misuse_rate_before": "unavailable",
+      "target_recall_rate_after": 100.0,
+      "target_recall_rate_before": 100.0,
+      "wrong_injection_rate_after": "unavailable",
+      "wrong_injection_rate_before": "unavailable",
+      "wrong_recall_rate_after": 0.0,
+      "wrong_recall_rate_before": 0.0
+    },
+    {
+      "answer_hit_rate_after": 100.0,
+      "answer_hit_rate_before": 100.0,
+      "case_id": "common_tool_preference_01",
+      "case_set": "common",
+      "evidence_hit_rate_after": "unavailable",
+      "evidence_hit_rate_before": "unavailable",
+      "module_key": "rerank_injection",
+      "stale_version_misuse_rate_after": "unavailable",
+      "stale_version_misuse_rate_before": "unavailable",
+      "target_recall_rate_after": 100.0,
+      "target_recall_rate_before": 100.0,
+      "wrong_injection_rate_after": 0.0,
+      "wrong_injection_rate_before": 0.0,
+      "wrong_recall_rate_after": 0.0,
+      "wrong_recall_rate_before": 0.0
+    },
+    {
+      "answer_hit_rate_after": 100.0,
+      "answer_hit_rate_before": 100.0,
+      "case_id": "common_tool_preference_01",
+      "case_set": "common",
+      "conflict_chain_detection_rate_after": "unavailable",
+      "conflict_chain_detection_rate_before": "unavailable",
+      "current_version_recall_rate_after": 100.0,
+      "current_version_recall_rate_before": 100.0,
+      "evidence_hit_rate_after": 93.75,
+      "evidence_hit_rate_before": "unavailable",
+      "module_key": "version_provenance",
+      "stale_version_misuse_rate_after": 0.0,
+      "stale_version_misuse_rate_before": 0.0,
+      "target_recall_rate_after": 100.0,
+      "target_recall_rate_before": 100.0,
+      "wrong_injection_rate_after": "unavailable",
+      "wrong_injection_rate_before": "unavailable",
+      "wrong_recall_rate_after": 0.0,
+      "wrong_recall_rate_before": 0.0
+    },
+    {
+      "candidate_count": 3,
+      "case_id": "common_tool_preference_01",
+      "case_set": "common",
+      "conflict_review_rate_after": 33.3333,
+      "conflict_review_rate_before": "unavailable",
+      "duplicate_control_rate_after": 100.0,
+      "duplicate_control_rate_before": "unavailable",
+      "false_accept_rate_after": 0.0,
+      "false_accept_rate_before": 100.0,
+      "false_reject_rate_after": 0.0,
+      "false_reject_rate_before": "unavailable",
+      "module_key": "write_value",
+      "pollution_block_rate_after": 100.0,
+      "pollution_block_rate_before": "unavailable",
+      "useful_write_precision_after": "unavailable",
+      "useful_write_precision_before": 0.0,
+      "write_reduction_rate_after": 100.0,
+      "write_reduction_rate_before": 0.0
+    },
+    {
+      "case_id": "common_tool_preference_01",
+      "case_set": "common",
+      "duplicate_merge_rate_after": 0.0,
+      "duplicate_merge_rate_before": "unavailable",
+      "low_value_cleanup_rate_after": 14.2857,
+      "low_value_cleanup_rate_before": "unavailable",
+      "module_key": "sleep_consolidation",
+      "post_consolidation_recall_retention_rate_after": 100.0,
+      "post_consolidation_recall_retention_rate_before": 100.0,
+      "scanned_count": 7,
+      "source_fetch_success_rate_after": 100.0,
+      "source_fetch_success_rate_before": "unavailable",
+      "source_ref_coverage_rate_after": 85.7143,
+      "source_ref_coverage_rate_before": "unavailable",
+      "stale_cleanup_rate_after": 14.2857,
+      "stale_cleanup_rate_before": "unavailable",
+      "token_saving_rate_after": 28.57,
+      "token_saving_rate_before": 0.0
+    },
+    {
+      "answer_hit_rate_after": 100.0,
+      "answer_hit_rate_before": 100.0,
+      "case_id": "common_style_preference_01",
+      "case_set": "common",
+      "evidence_hit_rate_after": 100.0,
+      "evidence_hit_rate_before": "unavailable",
+      "module_key": "tri_retrieval",
+      "stale_version_misuse_rate_after": "unavailable",
+      "stale_version_misuse_rate_before": "unavailable",
+      "target_recall_rate_after": 100.0,
+      "target_recall_rate_before": 100.0,
+      "wrong_injection_rate_after": "unavailable",
+      "wrong_injection_rate_before": "unavailable",
+      "wrong_recall_rate_after": 0.0,
+      "wrong_recall_rate_before": 0.0
+    },
+    {
+      "answer_hit_rate_after": 100.0,
+      "answer_hit_rate_before": 100.0,
+      "case_id": "common_style_preference_01",
+      "case_set": "common",
+      "evidence_hit_rate_after": "unavailable",
+      "evidence_hit_rate_before": "unavailable",
+      "module_key": "graph_retrieval",
+      "stale_version_misuse_rate_after": "unavailable",
+      "stale_version_misuse_rate_before": "unavailable",
+      "target_recall_rate_after": 100.0,
+      "target_recall_rate_before": 100.0,
+      "wrong_injection_rate_after": "unavailable",
+      "wrong_injection_rate_before": "unavailable",
+      "wrong_recall_rate_after": 0.0,
+      "wrong_recall_rate_before": 0.0
+    },
+    {
+      "answer_hit_rate_after": 100.0,
+      "answer_hit_rate_before": 100.0,
+      "case_id": "common_style_preference_01",
+      "case_set": "common",
+      "evidence_hit_rate_after": "unavailable",
+      "evidence_hit_rate_before": "unavailable",
+      "module_key": "rerank_injection",
+      "stale_version_misuse_rate_after": "unavailable",
+      "stale_version_misuse_rate_before": "unavailable",
+      "target_recall_rate_after": 100.0,
+      "target_recall_rate_before": 100.0,
+      "wrong_injection_rate_after": 0.0,
+      "wrong_injection_rate_before": 0.0,
+      "wrong_recall_rate_after": 0.0,
+      "wrong_recall_rate_before": 0.0
+    },
+    {
+      "answer_hit_rate_after": 100.0,
+      "answer_hit_rate_before": 100.0,
+      "case_id": "common_style_preference_01",
+      "case_set": "common",
+      "conflict_chain_detection_rate_after": "unavailable",
+      "conflict_chain_detection_rate_before": "unavailable",
+      "current_version_recall_rate_after": 100.0,
+      "current_version_recall_rate_before": 100.0,
+      "evidence_hit_rate_after": 93.75,
+      "evidence_hit_rate_before": "unavailable",
+      "module_key": "version_provenance",
+      "stale_version_misuse_rate_after": 0.0,
+      "stale_version_misuse_rate_before": 0.0,
+      "target_recall_rate_after": 100.0,
+      "target_recall_rate_before": 100.0,
+      "wrong_injection_rate_after": "unavailable",
+      "wrong_injection_rate_before": "unavailable",
+      "wrong_recall_rate_after": 0.0,
+      "wrong_recall_rate_before": 0.0
+    },
+    {
+      "candidate_count": 3,
+      "case_id": "common_style_preference_01",
+      "case_set": "common",
+      "conflict_review_rate_after": 33.3333,
+      "conflict_review_rate_before": "unavailable",
+      "duplicate_control_rate_after": 100.0,
+      "duplicate_control_rate_before": "unavailable",
+      "false_accept_rate_after": 0.0,
+      "false_accept_rate_before": 100.0,
+      "false_reject_rate_after": 0.0,
+      "false_reject_rate_before": "unavailable",
+      "module_key": "write_value",
+      "pollution_block_rate_after": 100.0,
+      "pollution_block_rate_before": "unavailable",
+      "useful_write_precision_after": "unavailable",
+      "useful_write_precision_before": 0.0,
+      "write_reduction_rate_after": 100.0,
+      "write_reduction_rate_before": 0.0
+    },
+    {
+      "case_id": "common_style_preference_01",
+      "case_set": "common",
+      "duplicate_merge_rate_after": 0.0,
+      "duplicate_merge_rate_before": "unavailable",
+      "low_value_cleanup_rate_after": 14.2857,
+      "low_value_cleanup_rate_before": "unavailable",
+      "module_key": "sleep_consolidation",
+      "post_consolidation_recall_retention_rate_after": 100.0,
+      "post_consolidation_recall_retention_rate_before": 100.0,
+      "scanned_count": 7,
+      "source_fetch_success_rate_after": 100.0,
+      "source_fetch_success_rate_before": "unavailable",
+      "source_ref_coverage_rate_after": 85.7143,
+      "source_ref_coverage_rate_before": "unavailable",
+      "stale_cleanup_rate_after": 14.2857,
+      "stale_cleanup_rate_before": "unavailable",
+      "token_saving_rate_after": 28.57,
+      "token_saving_rate_before": 0.0
+    },
+    {
+      "answer_hit_rate_after": 100.0,
+      "answer_hit_rate_before": 100.0,
+      "case_id": "common_tri_rrf_01",
+      "case_set": "common",
+      "evidence_hit_rate_after": 85.71,
+      "evidence_hit_rate_before": "unavailable",
+      "module_key": "tri_retrieval",
+      "stale_version_misuse_rate_after": "unavailable",
+      "stale_version_misuse_rate_before": "unavailable",
+      "target_recall_rate_after": 100.0,
+      "target_recall_rate_before": 100.0,
+      "wrong_injection_rate_after": "unavailable",
+      "wrong_injection_rate_before": "unavailable",
+      "wrong_recall_rate_after": 50.0,
+      "wrong_recall_rate_before": 0.0
+    },
+    {
+      "answer_hit_rate_after": 100.0,
+      "answer_hit_rate_before": 100.0,
+      "case_id": "common_tri_rrf_01",
+      "case_set": "common",
+      "evidence_hit_rate_after": "unavailable",
+      "evidence_hit_rate_before": "unavailable",
+      "module_key": "graph_retrieval",
+      "stale_version_misuse_rate_after": "unavailable",
+      "stale_version_misuse_rate_before": "unavailable",
+      "target_recall_rate_after": 100.0,
+      "target_recall_rate_before": 100.0,
+      "wrong_injection_rate_after": "unavailable",
+      "wrong_injection_rate_before": "unavailable",
+      "wrong_recall_rate_after": 50.0,
+      "wrong_recall_rate_before": 50.0
+    },
+    {
+      "answer_hit_rate_after": 100.0,
+      "answer_hit_rate_before": 100.0,
+      "case_id": "common_tri_rrf_01",
+      "case_set": "common",
+      "evidence_hit_rate_after": "unavailable",
+      "evidence_hit_rate_before": "unavailable",
+      "module_key": "rerank_injection",
+      "stale_version_misuse_rate_after": "unavailable",
+      "stale_version_misuse_rate_before": "unavailable",
+      "target_recall_rate_after": 100.0,
+      "target_recall_rate_before": 100.0,
+      "wrong_injection_rate_after": 0.0,
+      "wrong_injection_rate_before": 0.0,
+      "wrong_recall_rate_after": 0.0,
+      "wrong_recall_rate_before": 0.0
+    },
+    {
+      "answer_hit_rate_after": 100.0,
+      "answer_hit_rate_before": 100.0,
+      "case_id": "common_tri_rrf_01",
+      "case_set": "common",
+      "conflict_chain_detection_rate_after": "unavailable",
+      "conflict_chain_detection_rate_before": "unavailable",
+      "current_version_recall_rate_after": 100.0,
+      "current_version_recall_rate_before": 100.0,
+      "evidence_hit_rate_after": 93.75,
+      "evidence_hit_rate_before": "unavailable",
+      "module_key": "version_provenance",
+      "stale_version_misuse_rate_after": 0.0,
+      "stale_version_misuse_rate_before": 0.0,
+      "target_recall_rate_after": 100.0,
+      "target_recall_rate_before": 100.0,
+      "wrong_injection_rate_after": "unavailable",
+      "wrong_injection_rate_before": "unavailable",
+      "wrong_recall_rate_after": 0.0,
+      "wrong_recall_rate_before": 0.0
+    },
+    {
+      "candidate_count": 3,
+      "case_id": "common_tri_rrf_01",
+      "case_set": "common",
+      "conflict_review_rate_after": 33.3333,
+      "conflict_review_rate_before": "unavailable",
+      "duplicate_control_rate_after": 100.0,
+      "duplicate_control_rate_before": "unavailable",
+      "false_accept_rate_after": 0.0,
+      "false_accept_rate_before": 100.0,
+      "false_reject_rate_after": 0.0,
+      "false_reject_rate_before": "unavailable",
+      "module_key": "write_value",
+      "pollution_block_rate_after": 100.0,
+      "pollution_block_rate_before": "unavailable",
+      "useful_write_precision_after": "unavailable",
+      "useful_write_precision_before": 0.0,
+      "write_reduction_rate_after": 100.0,
+      "write_reduction_rate_before": 0.0
+    },
+    {
+      "case_id": "common_tri_rrf_01",
+      "case_set": "common",
+      "duplicate_merge_rate_after": 100.0,
+      "duplicate_merge_rate_before": "unavailable",
+      "low_value_cleanup_rate_after": 14.2857,
+      "low_value_cleanup_rate_before": "unavailable",
+      "module_key": "sleep_consolidation",
+      "post_consolidation_recall_retention_rate_after": 100.0,
+      "post_consolidation_recall_retention_rate_before": 100.0,
+      "scanned_count": 7,
+      "source_fetch_success_rate_after": 100.0,
+      "source_fetch_success_rate_before": "unavailable",
+      "source_ref_coverage_rate_after": 85.7143,
+      "source_ref_coverage_rate_before": "unavailable",
+      "stale_cleanup_rate_after": 14.2857,
+      "stale_cleanup_rate_before": "unavailable",
+      "token_saving_rate_after": 28.57,
+      "token_saving_rate_before": 0.0
+    },
+    {
+      "answer_hit_rate_after": 100.0,
+      "answer_hit_rate_before": 100.0,
+      "case_id": "common_graph_bridge_01",
+      "case_set": "common",
+      "evidence_hit_rate_after": 100.0,
+      "evidence_hit_rate_before": "unavailable",
+      "module_key": "tri_retrieval",
+      "stale_version_misuse_rate_after": "unavailable",
+      "stale_version_misuse_rate_before": "unavailable",
+      "target_recall_rate_after": 100.0,
+      "target_recall_rate_before": 100.0,
+      "wrong_injection_rate_after": "unavailable",
+      "wrong_injection_rate_before": "unavailable",
+      "wrong_recall_rate_after": 0.0,
+      "wrong_recall_rate_before": 0.0
+    },
+    {
+      "answer_hit_rate_after": 100.0,
+      "answer_hit_rate_before": 100.0,
+      "case_id": "common_graph_bridge_01",
+      "case_set": "common",
+      "evidence_hit_rate_after": "unavailable",
+      "evidence_hit_rate_before": "unavailable",
+      "module_key": "graph_retrieval",
+      "stale_version_misuse_rate_after": "unavailable",
+      "stale_version_misuse_rate_before": "unavailable",
+      "target_recall_rate_after": 100.0,
+      "target_recall_rate_before": 100.0,
+      "wrong_injection_rate_after": "unavailable",
+      "wrong_injection_rate_before": "unavailable",
+      "wrong_recall_rate_after": 0.0,
+      "wrong_recall_rate_before": 0.0
+    },
+    {
+      "answer_hit_rate_after": 100.0,
+      "answer_hit_rate_before": 100.0,
+      "case_id": "common_graph_bridge_01",
+      "case_set": "common",
+      "evidence_hit_rate_after": "unavailable",
+      "evidence_hit_rate_before": "unavailable",
+      "module_key": "rerank_injection",
+      "stale_version_misuse_rate_after": "unavailable",
+      "stale_version_misuse_rate_before": "unavailable",
+      "target_recall_rate_after": 100.0,
+      "target_recall_rate_before": 100.0,
+      "wrong_injection_rate_after": 0.0,
+      "wrong_injection_rate_before": 0.0,
+      "wrong_recall_rate_after": 0.0,
+      "wrong_recall_rate_before": 0.0
+    },
+    {
+      "answer_hit_rate_after": 100.0,
+      "answer_hit_rate_before": 100.0,
+      "case_id": "common_graph_bridge_01",
+      "case_set": "common",
+      "conflict_chain_detection_rate_after": "unavailable",
+      "conflict_chain_detection_rate_before": "unavailable",
+      "current_version_recall_rate_after": 100.0,
+      "current_version_recall_rate_before": 100.0,
+      "evidence_hit_rate_after": 93.75,
+      "evidence_hit_rate_before": "unavailable",
+      "module_key": "version_provenance",
+      "stale_version_misuse_rate_after": 0.0,
+      "stale_version_misuse_rate_before": 0.0,
+      "target_recall_rate_after": 100.0,
+      "target_recall_rate_before": 100.0,
+      "wrong_injection_rate_after": "unavailable",
+      "wrong_injection_rate_before": "unavailable",
+      "wrong_recall_rate_after": 0.0,
+      "wrong_recall_rate_before": 0.0
+    },
+    {
+      "candidate_count": 3,
+      "case_id": "common_graph_bridge_01",
+      "case_set": "common",
+      "conflict_review_rate_after": 33.3333,
+      "conflict_review_rate_before": "unavailable",
+      "duplicate_control_rate_after": 66.6667,
+      "duplicate_control_rate_before": "unavailable",
+      "false_accept_rate_after": 0.0,
+      "false_accept_rate_before": 100.0,
+      "false_reject_rate_after": 0.0,
+      "false_reject_rate_before": "unavailable",
+      "module_key": "write_value",
+      "pollution_block_rate_after": 100.0,
+      "pollution_block_rate_before": "unavailable",
+      "useful_write_precision_after": "unavailable",
+      "useful_write_precision_before": 0.0,
+      "write_reduction_rate_after": 100.0,
+      "write_reduction_rate_before": 0.0
+    },
+    {
+      "case_id": "common_graph_bridge_01",
+      "case_set": "common",
+      "duplicate_merge_rate_after": 0.0,
+      "duplicate_merge_rate_before": "unavailable",
+      "low_value_cleanup_rate_after": 14.2857,
+      "low_value_cleanup_rate_before": "unavailable",
+      "module_key": "sleep_consolidation",
+      "post_consolidation_recall_retention_rate_after": 100.0,
+      "post_consolidation_recall_retention_rate_before": 100.0,
+      "scanned_count": 7,
+      "source_fetch_success_rate_after": 100.0,
+      "source_fetch_success_rate_before": "unavailable",
+      "source_ref_coverage_rate_after": 85.7143,
+      "source_ref_coverage_rate_before": "unavailable",
+      "stale_cleanup_rate_after": 14.2857,
+      "stale_cleanup_rate_before": "unavailable",
+      "token_saving_rate_after": 28.57,
+      "token_saving_rate_before": 0.0
+    },
+    {
+      "answer_hit_rate_after": 100.0,
+      "answer_hit_rate_before": 100.0,
+      "case_id": "common_version_chain_01",
+      "case_set": "common",
+      "evidence_hit_rate_after": 85.71,
+      "evidence_hit_rate_before": "unavailable",
+      "module_key": "tri_retrieval",
+      "stale_version_misuse_rate_after": "unavailable",
+      "stale_version_misuse_rate_before": "unavailable",
+      "target_recall_rate_after": 100.0,
+      "target_recall_rate_before": 100.0,
+      "wrong_injection_rate_after": "unavailable",
+      "wrong_injection_rate_before": "unavailable",
+      "wrong_recall_rate_after": 50.0,
+      "wrong_recall_rate_before": 0.0
+    },
+    {
+      "answer_hit_rate_after": 100.0,
+      "answer_hit_rate_before": 100.0,
+      "case_id": "common_version_chain_01",
+      "case_set": "common",
+      "evidence_hit_rate_after": "unavailable",
+      "evidence_hit_rate_before": "unavailable",
+      "module_key": "graph_retrieval",
+      "stale_version_misuse_rate_after": "unavailable",
+      "stale_version_misuse_rate_before": "unavailable",
+      "target_recall_rate_after": 100.0,
+      "target_recall_rate_before": 100.0,
+      "wrong_injection_rate_after": "unavailable",
+      "wrong_injection_rate_before": "unavailable",
+      "wrong_recall_rate_after": 50.0,
+      "wrong_recall_rate_before": 50.0
+    },
+    {
+      "answer_hit_rate_after": 100.0,
+      "answer_hit_rate_before": 100.0,
+      "case_id": "common_version_chain_01",
+      "case_set": "common",
+      "evidence_hit_rate_after": "unavailable",
+      "evidence_hit_rate_before": "unavailable",
+      "module_key": "rerank_injection",
+      "stale_version_misuse_rate_after": "unavailable",
+      "stale_version_misuse_rate_before": "unavailable",
+      "target_recall_rate_after": 100.0,
+      "target_recall_rate_before": 100.0,
+      "wrong_injection_rate_after": 0.0,
+      "wrong_injection_rate_before": 0.0,
+      "wrong_recall_rate_after": 0.0,
+      "wrong_recall_rate_before": 0.0
+    },
+    {
+      "answer_hit_rate_after": 100.0,
+      "answer_hit_rate_before": 100.0,
+      "case_id": "common_version_chain_01",
+      "case_set": "common",
+      "conflict_chain_detection_rate_after": "unavailable",
+      "conflict_chain_detection_rate_before": "unavailable",
+      "current_version_recall_rate_after": 100.0,
+      "current_version_recall_rate_before": 100.0,
+      "evidence_hit_rate_after": 93.75,
+      "evidence_hit_rate_before": "unavailable",
+      "module_key": "version_provenance",
+      "stale_version_misuse_rate_after": 0.0,
+      "stale_version_misuse_rate_before": 0.0,
+      "target_recall_rate_after": 100.0,
+      "target_recall_rate_before": 100.0,
+      "wrong_injection_rate_after": "unavailable",
+      "wrong_injection_rate_before": "unavailable",
+      "wrong_recall_rate_after": 0.0,
+      "wrong_recall_rate_before": 0.0
+    },
+    {
+      "candidate_count": 3,
+      "case_id": "common_version_chain_01",
+      "case_set": "common",
+      "conflict_review_rate_after": 0.0,
+      "conflict_review_rate_before": "unavailable",
+      "duplicate_control_rate_after": 66.6667,
+      "duplicate_control_rate_before": "unavailable",
+      "false_accept_rate_after": 0.0,
+      "false_accept_rate_before": 100.0,
+      "false_reject_rate_after": 0.0,
+      "false_reject_rate_before": "unavailable",
+      "module_key": "write_value",
+      "pollution_block_rate_after": 100.0,
+      "pollution_block_rate_before": "unavailable",
+      "useful_write_precision_after": "unavailable",
+      "useful_write_precision_before": 0.0,
+      "write_reduction_rate_after": 100.0,
+      "write_reduction_rate_before": 0.0
+    },
+    {
+      "case_id": "common_version_chain_01",
+      "case_set": "common",
+      "duplicate_merge_rate_after": 0.0,
+      "duplicate_merge_rate_before": "unavailable",
+      "low_value_cleanup_rate_after": 14.2857,
+      "low_value_cleanup_rate_before": "unavailable",
+      "module_key": "sleep_consolidation",
+      "post_consolidation_recall_retention_rate_after": 100.0,
+      "post_consolidation_recall_retention_rate_before": 100.0,
+      "scanned_count": 7,
+      "source_fetch_success_rate_after": 100.0,
+      "source_fetch_success_rate_before": "unavailable",
+      "source_ref_coverage_rate_after": 85.7143,
+      "source_ref_coverage_rate_before": "unavailable",
+      "stale_cleanup_rate_after": 14.2857,
+      "stale_cleanup_rate_before": "unavailable",
+      "token_saving_rate_after": 28.57,
+      "token_saving_rate_before": 0.0
+    },
+    {
+      "answer_hit_rate_after": 100.0,
+      "answer_hit_rate_before": 100.0,
+      "case_id": "common_cross_scope_01",
+      "case_set": "common",
+      "evidence_hit_rate_after": 85.71,
+      "evidence_hit_rate_before": "unavailable",
+      "module_key": "tri_retrieval",
+      "stale_version_misuse_rate_after": "unavailable",
+      "stale_version_misuse_rate_before": "unavailable",
+      "target_recall_rate_after": 100.0,
+      "target_recall_rate_before": 100.0,
+      "wrong_injection_rate_after": "unavailable",
+      "wrong_injection_rate_before": "unavailable",
+      "wrong_recall_rate_after": 50.0,
+      "wrong_recall_rate_before": 0.0
+    },
+    {
+      "answer_hit_rate_after": 100.0,
+      "answer_hit_rate_before": 100.0,
+      "case_id": "common_cross_scope_01",
+      "case_set": "common",
+      "evidence_hit_rate_after": "unavailable",
+      "evidence_hit_rate_before": "unavailable",
+      "module_key": "graph_retrieval",
+      "stale_version_misuse_rate_after": "unavailable",
+      "stale_version_misuse_rate_before": "unavailable",
+      "target_recall_rate_after": 100.0,
+      "target_recall_rate_before": 100.0,
+      "wrong_injection_rate_after": "unavailable",
+      "wrong_injection_rate_before": "unavailable",
+      "wrong_recall_rate_after": 50.0,
+      "wrong_recall_rate_before": 50.0
+    },
+    {
+      "answer_hit_rate_after": 100.0,
+      "answer_hit_rate_before": 100.0,
+      "case_id": "common_cross_scope_01",
+      "case_set": "common",
+      "evidence_hit_rate_after": "unavailable",
+      "evidence_hit_rate_before": "unavailable",
+      "module_key": "rerank_injection",
+      "stale_version_misuse_rate_after": "unavailable",
+      "stale_version_misuse_rate_before": "unavailable",
+      "target_recall_rate_after": 100.0,
+      "target_recall_rate_before": 100.0,
+      "wrong_injection_rate_after": 0.0,
+      "wrong_injection_rate_before": 0.0,
+      "wrong_recall_rate_after": 0.0,
+      "wrong_recall_rate_before": 0.0
+    },
+    {
+      "answer_hit_rate_after": 100.0,
+      "answer_hit_rate_before": 100.0,
+      "case_id": "common_cross_scope_01",
+      "case_set": "common",
+      "conflict_chain_detection_rate_after": "unavailable",
+      "conflict_chain_detection_rate_before": "unavailable",
+      "current_version_recall_rate_after": 100.0,
+      "current_version_recall_rate_before": 100.0,
+      "evidence_hit_rate_after": 93.75,
+      "evidence_hit_rate_before": "unavailable",
+      "module_key": "version_provenance",
+      "stale_version_misuse_rate_after": 0.0,
+      "stale_version_misuse_rate_before": 0.0,
+      "target_recall_rate_after": 100.0,
+      "target_recall_rate_before": 100.0,
+      "wrong_injection_rate_after": "unavailable",
+      "wrong_injection_rate_before": "unavailable",
+      "wrong_recall_rate_after": 0.0,
+      "wrong_recall_rate_before": 0.0
+    },
+    {
+      "candidate_count": 3,
+      "case_id": "common_cross_scope_01",
+      "case_set": "common",
+      "conflict_review_rate_after": 33.3333,
+      "conflict_review_rate_before": "unavailable",
+      "duplicate_control_rate_after": 66.6667,
+      "duplicate_control_rate_before": "unavailable",
+      "false_accept_rate_after": 0.0,
+      "false_accept_rate_before": 100.0,
+      "false_reject_rate_after": 0.0,
+      "false_reject_rate_before": "unavailable",
+      "module_key": "write_value",
+      "pollution_block_rate_after": 100.0,
+      "pollution_block_rate_before": "unavailable",
+      "useful_write_precision_after": "unavailable",
+      "useful_write_precision_before": 0.0,
+      "write_reduction_rate_after": 100.0,
+      "write_reduction_rate_before": 0.0
+    },
+    {
+      "case_id": "common_cross_scope_01",
+      "case_set": "common",
+      "duplicate_merge_rate_after": 0.0,
+      "duplicate_merge_rate_before": "unavailable",
+      "low_value_cleanup_rate_after": 14.2857,
+      "low_value_cleanup_rate_before": "unavailable",
+      "module_key": "sleep_consolidation",
+      "post_consolidation_recall_retention_rate_after": 100.0,
+      "post_consolidation_recall_retention_rate_before": 100.0,
+      "scanned_count": 7,
+      "source_fetch_success_rate_after": 100.0,
+      "source_fetch_success_rate_before": "unavailable",
+      "source_ref_coverage_rate_after": 85.7143,
+      "source_ref_coverage_rate_before": "unavailable",
+      "stale_cleanup_rate_after": 14.2857,
+      "stale_cleanup_rate_before": "unavailable",
+      "token_saving_rate_after": 42.86,
+      "token_saving_rate_before": 0.0
+    },
+    {
+      "answer_hit_rate_after": 100.0,
+      "answer_hit_rate_before": 100.0,
+      "case_id": "common_duplicate_cleanup_01",
+      "case_set": "common",
+      "evidence_hit_rate_after": 85.71,
+      "evidence_hit_rate_before": "unavailable",
+      "module_key": "tri_retrieval",
+      "stale_version_misuse_rate_after": "unavailable",
+      "stale_version_misuse_rate_before": "unavailable",
+      "target_recall_rate_after": 100.0,
+      "target_recall_rate_before": 100.0,
+      "wrong_injection_rate_after": "unavailable",
+      "wrong_injection_rate_before": "unavailable",
+      "wrong_recall_rate_after": 50.0,
+      "wrong_recall_rate_before": 0.0
+    },
+    {
+      "answer_hit_rate_after": 100.0,
+      "answer_hit_rate_before": 100.0,
+      "case_id": "common_duplicate_cleanup_01",
+      "case_set": "common",
+      "evidence_hit_rate_after": "unavailable",
+      "evidence_hit_rate_before": "unavailable",
+      "module_key": "graph_retrieval",
+      "stale_version_misuse_rate_after": "unavailable",
+      "stale_version_misuse_rate_before": "unavailable",
+      "target_recall_rate_after": 100.0,
+      "target_recall_rate_before": 100.0,
+      "wrong_injection_rate_after": "unavailable",
+      "wrong_injection_rate_before": "unavailable",
+      "wrong_recall_rate_after": 50.0,
+      "wrong_recall_rate_before": 50.0
+    },
+    {
+      "answer_hit_rate_after": 100.0,
+      "answer_hit_rate_before": 100.0,
+      "case_id": "common_duplicate_cleanup_01",
+      "case_set": "common",
+      "evidence_hit_rate_after": "unavailable",
+      "evidence_hit_rate_before": "unavailable",
+      "module_key": "rerank_injection",
+      "stale_version_misuse_rate_after": "unavailable",
+      "stale_version_misuse_rate_before": "unavailable",
+      "target_recall_rate_after": 100.0,
+      "target_recall_rate_before": 100.0,
+      "wrong_injection_rate_after": 0.0,
+      "wrong_injection_rate_before": 0.0,
+      "wrong_recall_rate_after": 0.0,
+      "wrong_recall_rate_before": 0.0
+    },
+    {
+      "answer_hit_rate_after": 100.0,
+      "answer_hit_rate_before": 100.0,
+      "case_id": "common_duplicate_cleanup_01",
+      "case_set": "common",
+      "conflict_chain_detection_rate_after": "unavailable",
+      "conflict_chain_detection_rate_before": "unavailable",
+      "current_version_recall_rate_after": 100.0,
+      "current_version_recall_rate_before": 100.0,
+      "evidence_hit_rate_after": 93.75,
+      "evidence_hit_rate_before": "unavailable",
+      "module_key": "version_provenance",
+      "stale_version_misuse_rate_after": 0.0,
+      "stale_version_misuse_rate_before": 0.0,
+      "target_recall_rate_after": 100.0,
+      "target_recall_rate_before": 100.0,
+      "wrong_injection_rate_after": "unavailable",
+      "wrong_injection_rate_before": "unavailable",
+      "wrong_recall_rate_after": 0.0,
+      "wrong_recall_rate_before": 0.0
+    },
+    {
+      "candidate_count": 3,
+      "case_id": "common_duplicate_cleanup_01",
+      "case_set": "common",
+      "conflict_review_rate_after": 33.3333,
+      "conflict_review_rate_before": "unavailable",
+      "duplicate_control_rate_after": 66.6667,
+      "duplicate_control_rate_before": "unavailable",
+      "false_accept_rate_after": 0.0,
+      "false_accept_rate_before": 100.0,
+      "false_reject_rate_after": 0.0,
+      "false_reject_rate_before": "unavailable",
+      "module_key": "write_value",
+      "pollution_block_rate_after": 100.0,
+      "pollution_block_rate_before": "unavailable",
+      "useful_write_precision_after": "unavailable",
+      "useful_write_precision_before": 0.0,
+      "write_reduction_rate_after": 100.0,
+      "write_reduction_rate_before": 0.0
+    },
+    {
+      "case_id": "common_duplicate_cleanup_01",
+      "case_set": "common",
+      "duplicate_merge_rate_after": 0.0,
+      "duplicate_merge_rate_before": "unavailable",
+      "low_value_cleanup_rate_after": 14.2857,
+      "low_value_cleanup_rate_before": "unavailable",
+      "module_key": "sleep_consolidation",
+      "post_consolidation_recall_retention_rate_after": 100.0,
+      "post_consolidation_recall_retention_rate_before": 100.0,
+      "scanned_count": 7,
+      "source_fetch_success_rate_after": 100.0,
+      "source_fetch_success_rate_before": "unavailable",
+      "source_ref_coverage_rate_after": 85.7143,
+      "source_ref_coverage_rate_before": "unavailable",
+      "stale_cleanup_rate_after": 14.2857,
+      "stale_cleanup_rate_before": "unavailable",
+      "token_saving_rate_after": 42.86,
+      "token_saving_rate_before": 0.0
+    }
+  ],
+  "generated_at": "2026-07-20T00:00:00+00:00",
+  "memory_hygiene_rows": [
+    {
+      "case_count": 8,
+      "case_set": "common",
+      "checkpoint_source": "none",
+      "gated_reason": "",
+      "group_name": "记忆库卫生",
+      "measurement_layer": "offline_trace",
+      "measurement_source": "eval_runner_trace",
+      "metrics": {
+        "duplicate_merge_rate": {
+          "after": 12.5,
+          "before": "unavailable",
+          "delta_points": "unavailable",
+          "name": "duplicate_merge_rate",
+          "relative_uplift_pct": "unavailable"
+        },
+        "low_value_cleanup_rate": {
+          "after": 14.2857,
+          "before": "unavailable",
+          "delta_points": "unavailable",
+          "name": "low_value_cleanup_rate",
+          "relative_uplift_pct": "unavailable"
+        },
+        "post_consolidation_recall_retention_rate": {
+          "after": 100.0,
+          "before": 100.0,
+          "delta_points": 0.0,
+          "name": "post_consolidation_recall_retention_rate",
+          "relative_uplift_pct": 0.0
+        },
+        "source_fetch_success_rate": {
+          "after": 100.0,
+          "before": "unavailable",
+          "delta_points": "unavailable",
+          "name": "source_fetch_success_rate",
+          "relative_uplift_pct": "unavailable"
+        },
+        "source_ref_coverage_rate": {
+          "after": 85.7143,
+          "before": "unavailable",
+          "delta_points": "unavailable",
+          "name": "source_ref_coverage_rate",
+          "relative_uplift_pct": "unavailable"
+        },
+        "stale_cleanup_rate": {
+          "after": 14.2857,
+          "before": "unavailable",
+          "delta_points": "unavailable",
+          "name": "stale_cleanup_rate",
+          "relative_uplift_pct": "unavailable"
+        },
+        "token_saving_rate": {
+          "after": 35.7137,
+          "before": 0.0,
+          "delta_points": 35.7137,
+          "name": "token_saving_rate",
+          "relative_uplift_pct": "unavailable"
+        }
+      },
+      "module_name": "睡眠巩固",
+      "profile_name": "chain_sleep_consolidation",
+      "unit_count": 56
+    },
+    {
+      "case_count": 8,
+      "case_set": "overall",
+      "checkpoint_source": "none",
+      "gated_reason": "",
+      "group_name": "记忆库卫生",
+      "measurement_layer": "offline_trace",
+      "measurement_source": "eval_runner_trace",
+      "metrics": {
+        "duplicate_merge_rate": {
+          "after": 12.5,
+          "before": "unavailable",
+          "delta_points": "unavailable",
+          "name": "duplicate_merge_rate",
+          "relative_uplift_pct": "unavailable"
+        },
+        "low_value_cleanup_rate": {
+          "after": 14.2857,
+          "before": "unavailable",
+          "delta_points": "unavailable",
+          "name": "low_value_cleanup_rate",
+          "relative_uplift_pct": "unavailable"
+        },
+        "post_consolidation_recall_retention_rate": {
+          "after": 100.0,
+          "before": 100.0,
+          "delta_points": 0.0,
+          "name": "post_consolidation_recall_retention_rate",
+          "relative_uplift_pct": 0.0
+        },
+        "source_fetch_success_rate": {
+          "after": 100.0,
+          "before": "unavailable",
+          "delta_points": "unavailable",
+          "name": "source_fetch_success_rate",
+          "relative_uplift_pct": "unavailable"
+        },
+        "source_ref_coverage_rate": {
+          "after": 85.7143,
+          "before": "unavailable",
+          "delta_points": "unavailable",
+          "name": "source_ref_coverage_rate",
+          "relative_uplift_pct": "unavailable"
+        },
+        "stale_cleanup_rate": {
+          "after": 14.2857,
+          "before": "unavailable",
+          "delta_points": "unavailable",
+          "name": "stale_cleanup_rate",
+          "relative_uplift_pct": "unavailable"
+        },
+        "token_saving_rate": {
+          "after": 35.7137,
+          "before": 0.0,
+          "delta_points": 35.7137,
+          "name": "token_saving_rate",
+          "relative_uplift_pct": "unavailable"
+        }
+      },
+      "module_name": "睡眠巩固",
+      "profile_name": "chain_sleep_consolidation",
+      "unit_count": 56
+    },
+    {
+      "case_count": 200,
+      "case_set": "online",
+      "checkpoint_source": "sleep_hygiene_source_backed_fixture",
+      "gated_reason": "",
+      "group_name": "记忆库卫生",
+      "measurement_layer": "online_evidence",
+      "measurement_source": "memory_hygiene_evidence_json",
+      "metrics": {
+        "duplicate_merge_rate": {
+          "after": 100.0,
+          "before": 0.0,
+          "delta_points": 100.0,
+          "name": "duplicate_merge_rate",
+          "relative_uplift_pct": "unavailable"
+        },
+        "low_value_cleanup_rate": {
+          "after": 100.0,
+          "before": 0.0,
+          "delta_points": 100.0,
+          "name": "low_value_cleanup_rate",
+          "relative_uplift_pct": "unavailable"
+        },
+        "post_consolidation_recall_retention_rate": {
+          "after": 100.0,
+          "before": 100.0,
+          "delta_points": 0.0,
+          "name": "post_consolidation_recall_retention_rate",
+          "relative_uplift_pct": 0.0
+        },
+        "source_fetch_success_rate": {
+          "after": 36.1963,
+          "before": 36.1963,
+          "delta_points": 0.0,
+          "name": "source_fetch_success_rate",
+          "relative_uplift_pct": 0.0
+        },
+        "source_ref_coverage_rate": {
+          "after": 81.5,
+          "before": 81.5,
+          "delta_points": 0.0,
+          "name": "source_ref_coverage_rate",
+          "relative_uplift_pct": 0.0
+        },
+        "stale_cleanup_rate": {
+          "after": 100.0,
+          "before": 0.0,
+          "delta_points": 100.0,
+          "name": "stale_cleanup_rate",
+          "relative_uplift_pct": "unavailable"
+        },
+        "token_saving_rate": {
+          "after": 40.5157,
+          "before": 0.0,
+          "delta_points": 40.5157,
+          "name": "token_saving_rate",
+          "relative_uplift_pct": "unavailable"
+        }
+      },
+      "module_name": "睡眠巩固",
+      "profile_name": "chain_sleep_consolidation",
+      "unit_count": 200
+    }
+  ],
+  "metrics": {
+    "answer_retrieval_row_count": 8,
+    "case_count": 8,
+    "case_record_count": 48,
+    "common_case_count": 8,
+    "hard_case_count": 0,
+    "measurement_mode": "offline_trace_real_baseline_plus_online_checkpoint_target_metrics",
+    "memory_hygiene_row_count": 3,
+    "online_answer_record_count": 0,
+    "online_hygiene_record_count": 200,
+    "online_row_count": 1,
+    "online_status": "available",
+    "online_write_record_count": 0,
+    "real_llm_checkpoint_reuse_supported": true,
+    "real_llm_used": false,
+    "report_tables": [
+      "answer_retrieval",
+      "write_governance",
+      "memory_hygiene"
+    ],
+    "write_governance_row_count": 2
+  },
+  "run_id": "995d83458aba54de",
+  "write_governance_rows": [
+    {
+      "case_count": 8,
+      "case_set": "common",
+      "checkpoint_source": "none",
+      "gated_reason": "",
+      "group_name": "写入治理",
+      "measurement_layer": "offline_trace",
+      "measurement_source": "eval_runner_trace",
+      "metrics": {
+        "conflict_review_rate": {
+          "after": 29.1666,
+          "before": "unavailable",
+          "delta_points": "unavailable",
+          "name": "conflict_review_rate",
+          "relative_uplift_pct": "unavailable"
+        },
+        "duplicate_control_rate": {
+          "after": 79.1667,
+          "before": "unavailable",
+          "delta_points": "unavailable",
+          "name": "duplicate_control_rate",
+          "relative_uplift_pct": "unavailable"
+        },
+        "false_accept_rate": {
+          "after": 0.0,
+          "before": 100.0,
+          "delta_points": -100.0,
+          "name": "false_accept_rate",
+          "relative_uplift_pct": -100.0
+        },
+        "false_reject_rate": {
+          "after": 0.0,
+          "before": "unavailable",
+          "delta_points": "unavailable",
+          "name": "false_reject_rate",
+          "relative_uplift_pct": "unavailable"
+        },
+        "pollution_block_rate": {
+          "after": 100.0,
+          "before": "unavailable",
+          "delta_points": "unavailable",
+          "name": "pollution_block_rate",
+          "relative_uplift_pct": "unavailable"
+        },
+        "useful_write_precision": {
+          "after": "unavailable",
+          "before": 0.0,
+          "delta_points": "unavailable",
+          "name": "useful_write_precision",
+          "relative_uplift_pct": "unavailable"
+        },
+        "write_reduction_rate": {
+          "after": 100.0,
+          "before": 0.0,
+          "delta_points": 100.0,
+          "name": "write_reduction_rate",
+          "relative_uplift_pct": "unavailable"
+        }
+      },
+      "module_name": "写入价值治理",
+      "profile_name": "chain_write_value",
+      "unit_count": 24
+    },
+    {
+      "case_count": 8,
+      "case_set": "overall",
+      "checkpoint_source": "none",
+      "gated_reason": "",
+      "group_name": "写入治理",
+      "measurement_layer": "offline_trace",
+      "measurement_source": "eval_runner_trace",
+      "metrics": {
+        "conflict_review_rate": {
+          "after": 29.1666,
+          "before": "unavailable",
+          "delta_points": "unavailable",
+          "name": "conflict_review_rate",
+          "relative_uplift_pct": "unavailable"
+        },
+        "duplicate_control_rate": {
+          "after": 79.1667,
+          "before": "unavailable",
+          "delta_points": "unavailable",
+          "name": "duplicate_control_rate",
+          "relative_uplift_pct": "unavailable"
+        },
+        "false_accept_rate": {
+          "after": 0.0,
+          "before": 100.0,
+          "delta_points": -100.0,
+          "name": "false_accept_rate",
+          "relative_uplift_pct": -100.0
+        },
+        "false_reject_rate": {
+          "after": 0.0,
+          "before": "unavailable",
+          "delta_points": "unavailable",
+          "name": "false_reject_rate",
+          "relative_uplift_pct": "unavailable"
+        },
+        "pollution_block_rate": {
+          "after": 100.0,
+          "before": "unavailable",
+          "delta_points": "unavailable",
+          "name": "pollution_block_rate",
+          "relative_uplift_pct": "unavailable"
+        },
+        "useful_write_precision": {
+          "after": "unavailable",
+          "before": 0.0,
+          "delta_points": "unavailable",
+          "name": "useful_write_precision",
+          "relative_uplift_pct": "unavailable"
+        },
+        "write_reduction_rate": {
+          "after": 100.0,
+          "before": 0.0,
+          "delta_points": 100.0,
+          "name": "write_reduction_rate",
+          "relative_uplift_pct": "unavailable"
+        }
+      },
+      "module_name": "写入价值治理",
+      "profile_name": "chain_write_value",
+      "unit_count": 24
+    }
+  ]
+}

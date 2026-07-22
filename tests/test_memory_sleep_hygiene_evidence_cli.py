@@ -146,6 +146,101 @@ def test_sleep_hygiene_cli_rejects_session_store_mode_without_db(
     assert "--session-db is required" in result.stderr
 
 
+def test_sleep_hygiene_cli_can_run_source_backed_fixture_mode(
+    tmp_path: Path,
+) -> None:
+    output_dir = tmp_path / "reports"
+    fixture_db = tmp_path / "fixture" / "sessions.db"
+    result = subprocess.run(
+        [
+            sys.executable,
+            "scripts/run_memory_sleep_hygiene_evidence_eval.py",
+            "--output-dir",
+            str(output_dir),
+            "--source-fixture-mode",
+            "balanced",
+            "--source-fixture-db",
+            str(fixture_db),
+            "--write-dry-run-patch",
+            "--write-target-metrics",
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert fixture_db.exists()
+    summary = json.loads(
+        (output_dir / "memory_sleep_hygiene_evidence_eval.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    source = summary["metrics"]["source_evidence_metrics"]
+
+    assert source["source_fetch_mode"] == "session-store"
+    assert source["source_fetch_success_rate"] < 100.0
+    assert source["source_support_rate"] < 100.0
+    assert source["missing_source_count"] > 0
+    assert source["unsupported_source_count"] > 0
+    assert "source evidence metrics" in (
+        output_dir / "memory_sleep_hygiene_evidence_eval.md"
+    ).read_text(encoding="utf-8")
+
+
+def test_sleep_hygiene_cli_does_not_mark_non_fixture_session_store_as_fixture(
+    tmp_path: Path,
+) -> None:
+    from session.store import SessionStore
+
+    session_db = tmp_path / "sessions.db"
+    store = SessionStore(session_db)
+    store.create_session(key="cli:local")
+    store.close()
+    output_dir = tmp_path / "reports"
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "scripts/run_memory_sleep_hygiene_evidence_eval.py",
+            "--output-dir",
+            str(output_dir),
+            "--duplicate-groups",
+            "1",
+            "--stale-count",
+            "1",
+            "--low-value-count",
+            "1",
+            "--retained-count",
+            "1",
+            "--source-fetch-mode",
+            "session-store",
+            "--session-db",
+            str(session_db),
+            "--write-target-metrics",
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    target = json.loads(
+        (output_dir / "memory_target_metric_sleep_hygiene.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    online_hygiene_rows = [
+        row
+        for row in target["memory_hygiene_rows"]
+        if row["measurement_layer"] == "online_evidence"
+    ]
+    assert online_hygiene_rows
+    assert {
+        row["checkpoint_source"] for row in online_hygiene_rows
+    } == {"sleep_hygiene_session_store"}
+
+
 def test_sleep_hygiene_cli_can_write_dry_run_patch(tmp_path: Path) -> None:
     output_dir = tmp_path / "reports"
     result = subprocess.run(

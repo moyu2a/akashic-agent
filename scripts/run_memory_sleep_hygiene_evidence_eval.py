@@ -22,6 +22,9 @@ from memory2.eval_sleep_hygiene_patch import (
     write_sleep_hygiene_dry_run_patch_json,
 )
 from memory2.eval_sleep_hygiene_provenance import build_source_ref_resolver
+from memory2.eval_sleep_hygiene_source_fixture import (
+    build_sleep_hygiene_source_fixture,
+)
 from memory2.eval_target_metrics import (
     build_target_metric_report,
     write_target_metric_json,
@@ -53,17 +56,37 @@ def main(argv: list[str] | None = None) -> int:
         default="proxy",
     )
     parser.add_argument("--session-db", type=Path)
+    parser.add_argument(
+        "--source-fixture-mode",
+        choices=("none", "balanced"),
+        default="none",
+    )
+    parser.add_argument("--source-fixture-db", type=Path)
     args = parser.parse_args(argv)
 
-    cases = build_sleep_hygiene_cases(
-        case_set=args.case_set,
-        duplicate_groups=args.duplicate_groups,
-        stale_count=args.stale_count,
-        low_value_count=args.low_value_count,
-        retained_count=args.retained_count,
-        hard_per_scenario=args.hard_per_scenario,
-        missing_source_count=args.missing_source_count,
-    )
+    if args.source_fixture_mode == "balanced":
+        fixture_db = args.source_fixture_db or args.output_dir / "fixture_sessions.db"
+        fixture = build_sleep_hygiene_source_fixture(
+            fixture_db,
+            duplicate_groups=args.duplicate_groups,
+            stale_count=args.stale_count,
+            low_value_count=args.low_value_count,
+            retained_count=args.retained_count,
+            hard_per_scenario=args.hard_per_scenario,
+        )
+        cases = fixture.cases
+        args.source_fetch_mode = "session-store"
+        args.session_db = fixture.session_db_path
+    else:
+        cases = build_sleep_hygiene_cases(
+            case_set=args.case_set,
+            duplicate_groups=args.duplicate_groups,
+            stale_count=args.stale_count,
+            low_value_count=args.low_value_count,
+            retained_count=args.retained_count,
+            hard_per_scenario=args.hard_per_scenario,
+            missing_source_count=args.missing_source_count,
+        )
     try:
         source_ref_resolver = build_source_ref_resolver(
             args.source_fetch_mode,
@@ -101,7 +124,13 @@ def main(argv: list[str] | None = None) -> int:
             online_hygiene_records=strip_sleep_hygiene_evidence_for_target_metrics(
                 report.records
             ),
-            online_checkpoint_source="sleep_hygiene_evidence_eval_proxy",
+            online_checkpoint_source=(
+                "sleep_hygiene_source_backed_fixture"
+                if args.source_fixture_mode == "balanced"
+                else "sleep_hygiene_session_store"
+                if args.source_fetch_mode == "session-store"
+                else "sleep_hygiene_evidence_eval_proxy"
+            ),
         )
         write_target_metric_json(
             target_report,
@@ -122,6 +151,7 @@ def main(argv: list[str] | None = None) -> int:
         f"stale_candidate_rate={report.metrics['stale_cleanup_rate']} "
         f"low_value_candidate_rate={report.metrics['low_value_cleanup_rate']} "
         f"source_fetch_mode={args.source_fetch_mode} "
+        f"source_fixture_mode={args.source_fixture_mode} "
         f"retention_rate={report.metrics['post_consolidation_recall_retention_rate']} "
         f"false_positive_cleanup_rate={report.metrics['false_positive_cleanup_rate']}"
     )
