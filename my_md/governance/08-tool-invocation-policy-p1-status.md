@@ -66,7 +66,7 @@ P1.2 将 `ToolInvocationPolicyEngine` 接入真实工具 invoker 前置路径：
 
 - 当前不是 Shell AST 解析。
 - 当前不是 Docker/chroot/seccomp sandbox。
-- 当前不是参数级 `ResourcePolicy`。
+- 当前只接入文件路径参数级 `ResourcePolicy`；shell/code、URL/network 和 protected context 仍未接入。
 - 当前不是完整 `ToolAuditLedger`。
 - executor 的 `defer` 只是“未执行真实 invoker”的结构化结果；TaskExecution 的 durable 授权等待仍由既有 boundary/coordinator 路径负责。
 
@@ -82,7 +82,29 @@ P1.1 阶段没有接入：
 - approval workflow
 - ToolAuditLedger 持久化
 
-P1.2 已接入 `ToolExecutor` 和 passive reasoner 的真实执行路径，但仍没有引入参数级资源判断、sandbox、approval UI 或完整审计账本。
+P1.2 已接入 `ToolExecutor` 和 passive reasoner 的真实执行路径。P1.3a/P1.3b 进一步接入文件路径参数级资源判断，但仍没有引入 shell/code 解析、URL/network 策略、sandbox、approval UI 或完整审计账本。
+
+## P1.3a/P1.3b ResourcePolicy 接入结果
+
+日期：2026-07-22
+
+本阶段完成参数级文件资源策略：
+
+- 新增 `ResourcePolicyContext`、`ResourcePolicyDecision`、`ResourcePolicyEngine`。
+- `ToolInvocationPolicyEngine` 在工具级 unregistered/destructive deny 之后、TaskExecution work-phase defer 之前调用 `ResourcePolicyEngine`。
+- `ToolExecutionRequest.resource_roots` 通过 `ToolExecutor` 进入 `ToolInvocationContext.metadata`。
+- `DefaultReasoner.run_turn()` 为真实 passive turn 传入 `ContextBuilder.workspace` 解析出的 workspace root；仅在缺少 context 时 fallback 到 process cwd。
+- `read_file/list_dir/write_file/edit_file` 的 `path` 参数会进行 workspace scope 判断。
+- workspace 内相对路径、绝对路径、缺失文件和缺失写入父目录允许继续交给真实工具处理。
+- workspace 外路径、受保护系统路径、symlink 逃逸和畸形路径会在 invoker 前被拒绝，返回结构化 JSON，`invoker_reached=false`。
+
+边界：
+
+- 仍不是 shell AST。
+- 仍不是 URL/network 策略。
+- 仍不是 Docker/chroot/seccomp sandbox。
+- 仍不是 approval workflow。
+- `resource_roots` 为空时当前兼容 allow；非 passive / subagent / 其他直接 `ToolExecutor` 调用方需要后续继续传 root，才能声称全局硬保护。
 
 ## 验证结果
 
@@ -140,11 +162,35 @@ python3 -m compileall agent/tool_hooks agent/policies agent/tools/registry.py ag
 
 独立审阅结果：未发现阻断问题。剩余风险是非 `DefaultReasoner` 调用方如果直接使用 `ToolExecutor`，仍必须显式传入 registered/risk/capabilities metadata；否则只能得到兼容默认值下的策略判断。
 
+P1.3a/P1.3b focused 回归：
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 uv run --with pytest --with pytest-asyncio pytest tests/test_resource_policy.py tests/test_tool_invocation_resource_policy.py -q -p no:cacheprovider
+```
+
+结果：
+
+```text
+16 passed in 0.12s
+```
+
+P1.2 + P1.3 相关回归：
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 uv run --with pytest --with pytest-asyncio pytest tests/test_tool_invocation_policy_gate.py tests/test_tool_invocation_resource_policy.py tests/test_resource_policy.py tests/test_tool_invocation_policy.py tests/test_tool_executor.py tests/test_tool_boundary_manager.py tests/test_task_execution_access.py tests/test_shell_safety_plugin.py tests/test_tool_access_gateway.py tests/test_task_plan_gateway.py tests/test_task_plan_contract.py tests/test_tool_access_gateway_reasoner.py::test_reasoner_policy_gate_blocks_destructive_registered_tool_as_json tests/test_tool_access_gateway_reasoner.py::test_reasoner_resource_policy_blocks_parent_escape_read_file tests/test_tool_access_gateway_reasoner.py::test_reasoner_resource_roots_come_from_context_workspace tests/test_task_execution_reasoner.py::test_read_only_execution_is_begin_work_finish_final tests/test_task_execution_reasoner.py::test_write_proposal_defers_without_executor -q -p no:cacheprovider
+```
+
+结果：
+
+```text
+164 passed in 0.86s
+```
+
 ## 后续步骤
 
-下一步不应直接上 sandbox，而是先做 P1.3 / P2 前置设计：
+下一步不应直接上 sandbox，而是继续补齐 P1.3 / P2 前置能力：
 
-1. 设计参数级 `ResourcePolicy`：文件路径、URL、shell/code 参数、protected context。
+1. 扩展参数级 `ResourcePolicy`：shell/code 参数、URL/network 参数、protected context。
 2. 明确普通 passive turn 的 write/external/unknown 什么时候继续 allow、什么时候 approval、什么时候 deny。
 3. 设计 `ToolAuditLedger` 的最小字段：request/turn/session/tool/policy/action/args hash/result preview/invoker 状态。
-4. 继续保持普通 passive turn 行为兼容，直到 ResourcePolicy 和 approval 策略准备好。
+4. 将 `resource_roots` 继续传入非 passive / subagent / 其他直接 `ToolExecutor` 调用方，消除 no-root 兼容 allow 的覆盖缺口。

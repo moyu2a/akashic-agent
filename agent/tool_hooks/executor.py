@@ -404,6 +404,7 @@ def _build_policy_context(
             "channel": request.channel,
             "chat_id": request.chat_id,
             "tool_batch_index": request.tool_batch_index,
+            "resource_roots": tuple(request.resource_roots),
         },
     )
 

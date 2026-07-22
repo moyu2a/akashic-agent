@@ -26,6 +26,7 @@ class ToolExecutionRequest:
     registry_capabilities: frozenset[str] = field(default_factory=frozenset)
     task_execution_active: bool = False
     task_execution_phase: str = ""
+    resource_roots: tuple[str, ...] = ()
 
 
 @dataclass

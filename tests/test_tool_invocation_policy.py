@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from agent.policies.tool_invocation_policy import (
@@ -255,3 +257,43 @@ def test_policy_types_are_exported_from_policies_package() -> None:
     assert ExportedContext is ToolInvocationContext
     assert ExportedDecision is ToolInvocationDecision
     assert ExportedEngine is ToolInvocationPolicyEngine
+
+
+def test_invocation_policy_denies_file_path_outside_resource_roots(
+    tmp_path: Path,
+) -> None:
+    decision = ToolInvocationPolicyEngine().evaluate(
+        ToolInvocationContext(
+            tool_name="read_file",
+            arguments={"path": "../secret.txt"},
+            registered=True,
+            registry_risk="read-only",
+            metadata={"resource_roots": (str(tmp_path),)},
+        )
+    )
+
+    assert decision.action == "deny"
+    assert decision.reason == "resource_policy_file_path_outside_roots"
+    assert decision.metadata["resource_policy"]["metadata"]["invoker_reached"] is False
+
+
+def test_invocation_policy_allows_workspace_file_then_existing_read_only_rule(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "README.md").write_text("ok", encoding="utf-8")
+
+    decision = ToolInvocationPolicyEngine().evaluate(
+        ToolInvocationContext(
+            tool_name="read_file",
+            arguments={"path": "README.md"},
+            registered=True,
+            registry_risk="read-only",
+            metadata={"resource_roots": (str(tmp_path),)},
+        )
+    )
+
+    assert decision.action == "allow"
+    assert decision.reason == "tool_invocation_read_only_allowed"
+    assert decision.metadata["resource_policy"]["reason"] == (
+        "resource_policy_file_path_allowed"
+    )

@@ -10,7 +10,7 @@ from typing import Any, cast
 
 import pytest
 
-from agent.core.passive_turn import DefaultReasoner
+from agent.core.passive_turn import DefaultReasoner, _resource_roots_from_context
 from agent.core.runtime_support import LLMServices, ToolDiscoveryState
 from agent.core.types import ContextRenderResult, ContextRequest
 from agent.looping.ports import LLMConfig
@@ -356,6 +356,53 @@ async def test_reasoner_policy_gate_blocks_destructive_registered_tool_as_json()
     assert payload["policy"]["reason"] == "tool_invocation_destructive_denied"
     assert payload["policy"]["metadata"]["registered"] is True
     assert payload["policy"]["metadata"]["risk"] == "destructive"
+
+
+@pytest.mark.asyncio
+async def test_reasoner_resource_policy_blocks_parent_escape_read_file() -> None:
+    read_file = _RecordingTool("read_file")
+    provider = _Provider(
+        [
+            LLMResponse(
+                content="",
+                tool_calls=[
+                    ToolCall("call-escape", "read_file", {"path": "../secret.txt"})
+                ],
+            ),
+            LLMResponse(content="final", tool_calls=[]),
+        ]
+    )
+    reasoner = _make_reasoner(
+        provider,
+        read_file=read_file,
+        read_file_risk="read-only",
+    )
+
+    result = await reasoner.run_turn(
+        msg=_msg("read ../secret.txt"),
+        session=cast(Any, _session()),
+    )
+
+    assert result.reply == "final"
+    assert read_file.calls == []
+    second_messages = provider.calls[1]["messages"]
+    tool_messages = [
+        message for message in second_messages if message.get("role") == "tool"
+    ]
+    payload = json.loads(tool_messages[-1]["content"])
+    assert payload["blocked"] is True
+    assert payload["invoker_reached"] is False
+    assert payload["policy"]["reason"] == "resource_policy_file_path_outside_roots"
+    assert payload["policy"]["metadata"]["resource_policy"]["metadata"][
+        "invoker_reached"
+    ] is False
+
+
+def test_reasoner_resource_roots_come_from_context_workspace(tmp_path: Path) -> None:
+    class Context:
+        workspace = tmp_path
+
+    assert _resource_roots_from_context(Context()) == (str(tmp_path.resolve()),)
 
 
 def test_tool_search_result_is_filtered_before_model_can_see_blocked_tool() -> None:

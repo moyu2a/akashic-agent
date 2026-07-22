@@ -29,6 +29,11 @@ from agent.policies.task_execution_contract import (
     TaskExecutionTurnContract,
     infer_task_execution_contract,
 )
+from agent.policies.resource_policy import (
+    ResourcePolicyContext,
+    ResourcePolicyDecision,
+    ResourcePolicyEngine,
+)
 from agent.policies.tool_access import ToolAccessGateway
 from agent.policies.tool_access_types import (
     ToolAccessContext,
@@ -52,6 +57,9 @@ __all__ = [
     "RouteDecisionConfidence",
     "RouteDecisionReasonCode",
     "RouteDecisionSource",
+    "ResourcePolicyContext",
+    "ResourcePolicyDecision",
+    "ResourcePolicyEngine",
     "SpawnDecision",
     "SpawnDecisionConfidence",
     "SpawnDecisionMeta",

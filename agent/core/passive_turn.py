@@ -7,6 +7,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Awaitable, Callable, cast
 
 import agent.core.passive_support as support
@@ -151,6 +152,13 @@ def _invocation_capabilities(value: object) -> frozenset[str]:
     if isinstance(value, (set, list, tuple)):
         return frozenset(item for item in value if isinstance(item, str))
     return frozenset()
+
+
+def _resource_roots_from_context(context: object | None) -> tuple[str, ...]:
+    workspace = getattr(context, "workspace", None)
+    if workspace is None:
+        return (str(Path.cwd().resolve()),)
+    return (str(Path(workspace).expanduser().resolve()),)
 
 
 def _completion_trace(
@@ -1943,6 +1951,7 @@ class DefaultReasoner(Reasoner):
                             and execution_contract.active
                             else ""
                         ),
+                        resource_roots=_resource_roots_from_context(self._context),
                     )
                     if (
                         self._task_execution_coordinator is not None

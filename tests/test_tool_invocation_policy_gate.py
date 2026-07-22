@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from pathlib import Path
 from typing import Any
 
 from agent.policies.tool_invocation_policy import (
@@ -159,6 +160,27 @@ def test_policy_runs_after_pre_hook_argument_rewrite() -> None:
     assert result.final_arguments == {"path": "safe.md"}
     assert result.policy_trace["action"] == "allow"
     assert dict(policy.contexts[0].arguments) == {"path": "safe.md"}
+
+
+def test_executor_passes_resource_roots_to_policy_context(tmp_path: Path) -> None:
+    policy = CapturingPolicyEngine()
+    result = _run(
+        ToolExecutor(policy_engine=policy).execute(
+            ToolExecutionRequest(
+                call_id="call-roots",
+                tool_name="read_file",
+                arguments={"path": "README.md"},
+                source="passive",
+                registered=True,
+                registry_risk="read-only",
+                resource_roots=(str(tmp_path),),
+            ),
+            _echo_invoker,
+        )
+    )
+
+    assert result.status == "success"
+    assert policy.contexts[0].metadata["resource_roots"] == (str(tmp_path),)
 
 
 def test_passive_registered_write_remains_default_allowed() -> None:

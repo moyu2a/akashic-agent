@@ -3,7 +3,13 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from types import MappingProxyType
-from typing import Any, Literal
+from typing import Any, Literal, Protocol
+
+from agent.policies.resource_policy import (
+    ResourcePolicyContext,
+    ResourcePolicyDecision,
+    ResourcePolicyEngine,
+)
 
 ToolInvocationAction = Literal["allow", "deny", "defer"]
 ToolInvocationSource = Literal["passive", "proactive", "subagent", "task_execution"]
@@ -39,6 +45,10 @@ _TASK_EXECUTION_CONTROL_CAPABILITIES = frozenset(
         "task_execution.abort",
     }
 )
+
+
+class ResourcePolicy(Protocol):
+    def evaluate(self, context: ResourcePolicyContext) -> ResourcePolicyDecision: ...
 
 
 @dataclass(frozen=True)
@@ -97,6 +107,9 @@ class ToolInvocationDecision:
 class ToolInvocationPolicyEngine:
     policy_name = "ToolInvocationPolicyEngine"
 
+    def __init__(self, resource_policy: ResourcePolicy | None = None) -> None:
+        self._resource_policy = resource_policy or ResourcePolicyEngine()
+
     def evaluate(self, context: ToolInvocationContext) -> ToolInvocationDecision:
         risk = _normalize_risk(context.registry_risk)
         metadata = _base_metadata(context, risk)
@@ -116,6 +129,31 @@ class ToolInvocationPolicyEngine:
                 policy_name=self.policy_name,
                 metadata=metadata,
             )
+        resource_decision = self._resource_policy.evaluate(
+            ResourcePolicyContext(
+                tool_name=context.tool_name,
+                arguments=context.arguments,
+                resource_roots=_resource_roots(context.metadata.get("resource_roots")),
+                source=context.source,
+                registry_risk=risk,
+            )
+        )
+        if resource_decision.action in {"deny", "defer"}:
+            return ToolInvocationDecision(
+                action=resource_decision.action,
+                reason=resource_decision.reason,
+                risk=risk,
+                policy_name=self.policy_name,
+                metadata={
+                    **metadata,
+                    "resource_policy": resource_decision.to_trace_metadata(),
+                },
+            )
+        if resource_decision.action == "allow":
+            metadata = {
+                **metadata,
+                "resource_policy": resource_decision.to_trace_metadata(),
+            }
         if context.task_execution_active and context.task_execution_phase == "work":
             return _task_execution_work_decision(
                 context=context,
@@ -157,6 +195,14 @@ def _base_metadata(
         "task_execution_active": context.task_execution_active,
         "task_execution_phase": context.task_execution_phase,
     }
+
+
+def _resource_roots(value: object) -> tuple[str, ...]:
+    if isinstance(value, str):
+        return (value,)
+    if isinstance(value, (tuple, list)):
+        return tuple(item for item in value if isinstance(item, str) and item)
+    return ()
 
 
 def _task_execution_work_decision(
