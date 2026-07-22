@@ -390,6 +390,119 @@ Evidence 分布：
 
 为了避免 `24` 条 pilot 样本过小，本轮先修复了在线评测的有限样本选择逻辑：`--case-set all --limit 240` 现在同时按 `common / hard` 和 6 个类别分层抽样，而不是只按类别轮询。扩展样本构成为 common `120`、hard `120`，6 个类别各 `40` 条。
 
+### 测试方案详解
+
+这轮测试的目标不是评估“模型能不能自己总结记忆候选”，而是评估写入治理链路在真实 AgentLoop 和真实 LLM provider 路径下，能否稳定地产生可量化的写入 evidence，并把这些 evidence 接入目标指标报表。
+
+测试分三层：
+
+| 层级 | 目的 | 样本数 | 是否调用真实 LLM | 结论用途 |
+| --- | --- | ---: | --- | --- |
+| fake-provider 全量预检 | 验证 1200 个候选都能穿过 AgentLoop、生成 checkpoint 和 evidence | `1200` | 否 | 排除 runner、evidence schema、target metrics 转换问题 |
+| 真实 LLM 24 条 pilot | 验证真实 provider 可用、延迟和 token 记录正常 | `24` | 是 | 链路冒烟，不作为主结论 |
+| 真实 LLM 240 条扩展样本 | 在 common/hard 和类别平衡样本上复核治理效果 | `240` | 是 | 当前主展示数据 |
+
+样本来源是 `memory2/eval_write_governance_cases.py` 的目标导向模板候选，总量为 `1200`：
+
+| 维度 | 分布 |
+| --- | ---: |
+| common | `600` |
+| hard | `600` |
+| valuable_preference | `200` |
+| stable_fact | `200` |
+| temporary | `200` |
+| assistant_inference | `200` |
+| duplicate | `200` |
+| conflict | `200` |
+
+240 条扩展样本的抽样规则：
+
+| 维度 | 数量 |
+| --- | ---: |
+| common | `120` |
+| hard | `120` |
+| valuable_preference | `40` |
+| stable_fact | `40` |
+| temporary | `40` |
+| assistant_inference | `40` |
+| duplicate | `40` |
+| conflict | `40` |
+| useful label | `80` |
+| pollution label | `80` |
+| duplicate label | `40` |
+| conflict label | `40` |
+
+标签映射规则：
+
+| category | evidence label | 理想治理动作 |
+| --- | --- | --- |
+| valuable_preference | useful | allow |
+| stable_fact | useful | allow |
+| temporary | pollution | reject |
+| assistant_inference | pollution | reject |
+| duplicate | duplicate | reject |
+| conflict | conflict | review |
+
+运行链路：
+
+```text
+测试集候选
+  -> select_write_governance_online_candidates 分层抽样
+  -> AgentLoop.process_direct()
+  -> 真实 LLM provider 返回普通回答
+  -> build_write_evidence_record()
+  -> score_write_candidate_shadow()
+  -> resolve_write_review_candidate()
+  -> apply_final_write_safety_gate()
+  -> memory_write_governance_online_evidence.jsonl
+  -> run_memory_target_metrics_eval.py
+  -> 写入治理线上 evidence 指标行
+```
+
+这里的真实 LLM 只参与真实 AgentLoop 运行路径，帮助验证 provider 调用、token、延迟、checkpoint 和 runtime 行为。写入治理的最终决策来自项目代码，不来自模型自评。
+
+关键指标计算口径：
+
+| 指标 | 计算方式 | 含义 |
+| --- | --- | --- |
+| 有效写入精度 | 正确 allow 的 useful 数 / 所有 after allow 数 | 写进去的内容有多干净 |
+| 污染拦截率 | 被 reject 的 pollution 数 / 所有 pollution 数 | 临时信息和助手推断是否被挡住 |
+| 重复控制率 | 被 reject 或 review 的 duplicate 数 / 所有 duplicate 数 | 重复记忆是否被控制 |
+| 冲突复核率 | 被 review 的 conflict 数 / 所有 conflict 数 | 冲突记忆是否进入复核而不是直接写入 |
+| 写入减少率 | `1 - after allow 数 / baseline allow 数` | 相比原本全写入少写了多少 |
+| 误拒率 | useful 中 after reject 的数量 / useful 总数 | 有用记忆是否被错误拒绝 |
+| 误收率 | 非 useful 中 after allow 的数量 / 非 useful 总数 | 污染、重复、冲突是否被错误写入 |
+
+基线定义：
+
+```text
+baseline_decision = allow
+```
+
+也就是原本方式默认全部写入。这个基线的优点是不会漏写有用候选，缺点是污染、重复和冲突也会进入长期记忆。写入治理的目标是在保留 useful 的同时，拒绝 pollution/duplicate，并把 conflict 转入 review。
+
+验收条件：
+
+| 条件 | 目标 |
+| --- | --- |
+| checkpoint 行数 | 等于候选数 |
+| evidence 行数 | 等于候选数 |
+| provider_error_count | `0` |
+| timeout_count | `0` |
+| common/hard 分布 | `120 / 120` |
+| 6 类分布 | 每类 `40` |
+| useful | 不被 reject |
+| pollution | 不被 allow |
+| duplicate | 不被 allow |
+| conflict | 不被 allow，进入 review |
+
+失败处理方式：
+
+- 如果 provider 超时或报错，计入基础设施失败，不计为治理策略失败。
+- checkpoint 会保留已完成行，后续用同一命令加 `--resume` 续跑。
+- 如果 evidence schema 不合法，`run_memory_target_metrics_eval.py` 会失败，不会把坏数据写入报表。
+- 如果样本分布不满足 common/hard 和类别双维度平衡，不能用该结果作为主展示数据。
+
 真实扩展评测命令：
 
 ```bash

@@ -879,3 +879,19 @@ Boundary:
 - It does not prove production natural traffic quality.
 - It does not evaluate LLM-generated memory candidate extraction.
 - It does not write production memory DB because the runner uses `skip_post_memory=True`.
+
+Documentation follow-up:
+
+- Added a detailed test scheme to `my_md/memory_optimization/07-memory-write-governance-count-eval.md`.
+- The section records:
+  - test purpose;
+  - fake full / 24 pilot / 240 expanded three-layer design;
+  - 1200 candidate universe;
+  - 240-case common/hard + category stratified sampling;
+  - category-to-label mapping;
+  - AgentLoop and write governance runtime chain;
+  - metric formulas;
+  - baseline definition;
+  - acceptance criteria;
+  - provider failure and checkpoint handling;
+  - production-boundary caveats.

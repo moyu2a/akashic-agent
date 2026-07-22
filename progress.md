@@ -68,6 +68,7 @@
   - false accept rate `100.0% -> 0.0%`
 - Optional real 1200 run was not executed by default. The 240 run is the current main result; 1200 should require explicit cost/time approval.
 - Boundary: this is still test-set-driven real LLM shadow evaluation. It is not natural production traffic, not LLM-generated memory candidate extraction quality, and it does not write production memory because `skip_post_memory=True`.
+- Follow-up documentation update: expanded `my_md/memory_optimization/07-memory-write-governance-count-eval.md` with a detailed test scheme covering test purpose, three evaluation layers, candidate universe, 240-case stratified sampling, label mapping, runtime chain, metric formulas, baseline definition, acceptance criteria, failure handling, and boundaries.
 
 ## 2026-07-21 Memory Phase 6o Write Governance Real LLM Pilot
 
