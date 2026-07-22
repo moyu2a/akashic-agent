@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import ipaddress
 import shlex
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import MappingProxyType
 from typing import Any, Literal
+from urllib.parse import urlparse
 
 from agent.tools.execution_context import TASK_EXECUTION_PROTECTED_KEYS
 
@@ -45,6 +47,11 @@ _INLINE_DANGEROUS_MARKERS = (
     "exec(",
     "eval(",
 )
+_URL_TOOL_ARGUMENTS = {
+    "web_fetch": ("url",),
+    "send_webhook": ("url", "webhook_url", "callback_url"),
+}
+_LOCAL_HOSTNAMES = frozenset({"localhost", "0.0.0.0"})
 _PROTECTED_PREFIXES = (
     Path("/etc"),
     Path("/root"),
@@ -113,6 +120,9 @@ class ResourcePolicyEngine:
             )
         if context.tool_name in _SHELL_TOOL_NAMES:
             return _evaluate_shell_command(context)
+        url_arg = _first_url_argument(context)
+        if url_arg is not None:
+            return _evaluate_url_argument(context, url_arg)
         path_arg = _FILE_PATH_ARGUMENTS.get(context.tool_name)
         if path_arg is None:
             return ResourcePolicyDecision(
@@ -344,6 +354,115 @@ def _xargs_target_executable(tokens: list[str]) -> str:
             continue
         return token.rsplit("/", 1)[-1]
     return ""
+
+
+def _first_url_argument(context: ResourcePolicyContext) -> str | None:
+    names = _URL_TOOL_ARGUMENTS.get(context.tool_name, ())
+    for name in names:
+        value = context.arguments.get(name)
+        if isinstance(value, str) and value.strip():
+            return name
+    return None
+
+
+def _evaluate_url_argument(
+    context: ResourcePolicyContext,
+    arg_name: str,
+) -> ResourcePolicyDecision:
+    url = str(context.arguments[arg_name]).strip()
+    try:
+        parsed = urlparse(url)
+    except ValueError as exc:
+        return ResourcePolicyDecision(
+            action="deny",
+            reason="resource_policy_url_invalid",
+            resource_type="url",
+            target=url,
+            metadata={
+                "tool_name": context.tool_name,
+                "argument": arg_name,
+                "error": type(exc).__name__,
+                "invoker_reached": False,
+            },
+        )
+    if parsed.scheme not in {"http", "https"}:
+        return ResourcePolicyDecision(
+            action="deny",
+            reason="resource_policy_url_scheme_denied",
+            resource_type="url",
+            target=url,
+            metadata={
+                "tool_name": context.tool_name,
+                "argument": arg_name,
+                "scheme": parsed.scheme,
+                "invoker_reached": False,
+            },
+        )
+    hostname = (parsed.hostname or "").strip().lower().rstrip(".")
+    if not hostname:
+        return ResourcePolicyDecision(
+            action="deny",
+            reason="resource_policy_url_invalid",
+            resource_type="url",
+            target=url,
+            metadata={
+                "tool_name": context.tool_name,
+                "argument": arg_name,
+                "invoker_reached": False,
+            },
+        )
+    if (
+        hostname in _LOCAL_HOSTNAMES
+        or hostname.endswith(".localhost")
+        or hostname.endswith(".local")
+    ):
+        return ResourcePolicyDecision(
+            action="deny",
+            reason="resource_policy_url_local_target_denied",
+            resource_type="url",
+            target=url,
+            metadata={
+                "tool_name": context.tool_name,
+                "argument": arg_name,
+                "hostname": hostname,
+                "invoker_reached": False,
+            },
+        )
+    try:
+        ip = ipaddress.ip_address(hostname)
+    except ValueError:
+        ip = None
+    if ip is not None and (
+        ip.is_private
+        or ip.is_loopback
+        or ip.is_link_local
+        or ip.is_multicast
+        or ip.is_reserved
+        or ip.is_unspecified
+    ):
+        return ResourcePolicyDecision(
+            action="deny",
+            reason="resource_policy_url_private_ip_denied",
+            resource_type="url",
+            target=url,
+            metadata={
+                "tool_name": context.tool_name,
+                "argument": arg_name,
+                "hostname": hostname,
+                "invoker_reached": False,
+            },
+        )
+    return ResourcePolicyDecision(
+        action="allow",
+        reason="resource_policy_url_allowed",
+        resource_type="url",
+        target=url,
+        metadata={
+            "tool_name": context.tool_name,
+            "argument": arg_name,
+            "hostname": hostname,
+        },
+    )
 
 
 def _is_within(path: Path, root: Path) -> bool:

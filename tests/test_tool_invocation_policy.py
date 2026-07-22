@@ -341,3 +341,19 @@ def test_invocation_policy_records_shell_resource_allow_then_defers_task_executi
         decision.metadata["resource_policy"]["reason"]
         == "resource_policy_shell_command_allowed"
     )
+
+
+def test_invocation_policy_records_url_resource_allow_metadata(tmp_path: Path) -> None:
+    decision = ToolInvocationPolicyEngine().evaluate(
+        ToolInvocationContext(
+            tool_name="web_fetch",
+            arguments={"url": "https://example.com/page"},
+            registered=True,
+            registry_risk="read-only",
+            metadata={"resource_roots": (str(tmp_path),)},
+        )
+    )
+
+    assert decision.action == "allow"
+    assert decision.reason == "tool_invocation_read_only_allowed"
+    assert decision.metadata["resource_policy"]["reason"] == "resource_policy_url_allowed"

@@ -214,3 +214,25 @@ def test_executor_denies_shell_pipe_before_invoker(tmp_path: Path) -> None:
         payload["policy"]["reason"]
         == "resource_policy_shell_destructive_compound_denied"
     )
+
+
+def test_executor_denies_localhost_web_fetch_before_invoker(tmp_path: Path) -> None:
+    result = _run(
+        ToolExecutor().execute(
+            ToolExecutionRequest(
+                call_id="call-url-localhost",
+                tool_name="web_fetch",
+                arguments={"url": "http://localhost:8080"},
+                source="passive",
+                registered=True,
+                registry_risk="read-only",
+                resource_roots=(str(tmp_path),),
+            ),
+            _raising_invoker,
+        )
+    )
+
+    assert result.status == "denied"
+    assert result.invoker_reached is False
+    payload = json.loads(result.output)
+    assert payload["policy"]["reason"] == "resource_policy_url_local_target_denied"

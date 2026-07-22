@@ -348,3 +348,101 @@ def test_shell_quoted_command_substitution_text_is_allowed(tmp_path: Path) -> No
 
     assert decision.action == "allow"
     assert decision.reason == "resource_policy_shell_command_allowed"
+
+
+def test_public_https_url_is_allowed(tmp_path: Path) -> None:
+    decision = ResourcePolicyEngine().evaluate(
+        ResourcePolicyContext(
+            tool_name="web_fetch",
+            arguments={"url": "https://example.com/page"},
+            resource_roots=(str(tmp_path),),
+            registry_risk="read-only",
+        )
+    )
+
+    assert decision.action == "allow"
+    assert decision.reason == "resource_policy_url_allowed"
+
+
+def test_file_url_is_denied(tmp_path: Path) -> None:
+    decision = ResourcePolicyEngine().evaluate(
+        ResourcePolicyContext(
+            tool_name="web_fetch",
+            arguments={"url": "file:///etc/passwd"},
+            resource_roots=(str(tmp_path),),
+            registry_risk="read-only",
+        )
+    )
+
+    assert decision.action == "deny"
+    assert decision.reason == "resource_policy_url_scheme_denied"
+
+
+def test_localhost_url_is_denied(tmp_path: Path) -> None:
+    decision = ResourcePolicyEngine().evaluate(
+        ResourcePolicyContext(
+            tool_name="web_fetch",
+            arguments={"url": "http://localhost:8080"},
+            resource_roots=(str(tmp_path),),
+            registry_risk="read-only",
+        )
+    )
+
+    assert decision.action == "deny"
+    assert decision.reason == "resource_policy_url_local_target_denied"
+
+
+def test_localhost_trailing_dot_url_is_denied(tmp_path: Path) -> None:
+    decision = ResourcePolicyEngine().evaluate(
+        ResourcePolicyContext(
+            tool_name="web_fetch",
+            arguments={"url": "http://localhost./"},
+            resource_roots=(str(tmp_path),),
+            registry_risk="read-only",
+        )
+    )
+
+    assert decision.action == "deny"
+    assert decision.reason == "resource_policy_url_local_target_denied"
+
+
+def test_dot_local_url_is_denied(tmp_path: Path) -> None:
+    decision = ResourcePolicyEngine().evaluate(
+        ResourcePolicyContext(
+            tool_name="web_fetch",
+            arguments={"url": "http://device.local/status"},
+            resource_roots=(str(tmp_path),),
+            registry_risk="read-only",
+        )
+    )
+
+    assert decision.action == "deny"
+    assert decision.reason == "resource_policy_url_local_target_denied"
+
+
+def test_private_ip_url_is_denied(tmp_path: Path) -> None:
+    decision = ResourcePolicyEngine().evaluate(
+        ResourcePolicyContext(
+            tool_name="web_fetch",
+            arguments={"url": "http://10.0.0.5/data"},
+            resource_roots=(str(tmp_path),),
+            registry_risk="read-only",
+        )
+    )
+
+    assert decision.action == "deny"
+    assert decision.reason == "resource_policy_url_private_ip_denied"
+
+
+def test_http_url_without_hostname_is_denied(tmp_path: Path) -> None:
+    decision = ResourcePolicyEngine().evaluate(
+        ResourcePolicyContext(
+            tool_name="web_fetch",
+            arguments={"url": "https:///missing-host"},
+            resource_roots=(str(tmp_path),),
+            registry_risk="read-only",
+        )
+    )
+
+    assert decision.action == "deny"
+    assert decision.reason == "resource_policy_url_invalid"
