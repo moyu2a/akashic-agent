@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Sequence
@@ -38,6 +39,8 @@ class SubagentSpec:
     system_prompt: str = ""
     max_iterations: int = 30
     mandatory_exit_tools: Sequence[str] = field(default_factory=tuple)
+    resource_roots: tuple[str, ...] = ()
+    resource_roots_by_tool: Mapping[str, tuple[str, ...]] = field(default_factory=dict)
 
     def build(self, runtime: SubagentRuntime) -> SubAgent:
         agent = SubAgent(
@@ -48,6 +51,8 @@ class SubagentSpec:
             max_iterations=self.max_iterations,
             max_tokens=runtime.max_tokens,
             mandatory_exit_tools=self.mandatory_exit_tools,
+            resource_roots=self.resource_roots,
+            resource_roots_by_tool=self.resource_roots_by_tool,
         )
         if runtime.tool_hooks:
             agent.add_tool_hooks(runtime.tool_hooks)
@@ -64,6 +69,7 @@ def build_research_spec(
     multimodal: bool = True,
 ) -> SubagentSpec:
     """只读调研：搜索、读文件、抓网页；禁止执行命令和写文件。"""
+    workspace_root = str(workspace.expanduser().resolve())
     tools = build_readonly_research_tools(
         fetch_requester=fetch_requester,
         allowed_dir=workspace,
@@ -74,6 +80,11 @@ def build_research_spec(
         tools=tools,
         system_prompt=system_prompt,
         max_iterations=max_iterations,
+        resource_roots=(workspace_root,),
+        resource_roots_by_tool={
+            "read_file": (workspace_root,),
+            "list_dir": (workspace_root,),
+        },
     )
 
 
@@ -87,6 +98,8 @@ def build_scripting_spec(
     multimodal: bool = True,
 ) -> SubagentSpec:
     """执行型：运行命令、读写文件（仅限 task_dir）；禁止网络访问。"""
+    workspace_root = str(workspace.expanduser().resolve())
+    task_root = str(task_dir.expanduser().resolve())
     tools: list[Tool] = [
         ReadFileTool(allowed_dir=workspace, multimodal=multimodal),
         ListDirTool(allowed_dir=workspace),
@@ -101,6 +114,13 @@ def build_scripting_spec(
         tools=tools,
         system_prompt=system_prompt,
         max_iterations=max_iterations,
+        resource_roots=(workspace_root,),
+        resource_roots_by_tool={
+            "read_file": (workspace_root,),
+            "list_dir": (workspace_root,),
+            "write_file": (task_root,),
+            "edit_file": (task_root,),
+        },
     )
 
 
@@ -114,6 +134,8 @@ def build_general_spec(
     multimodal: bool = True,
 ) -> SubagentSpec:
     """通用型：调研与执行兼有；仅在任务明确需要两者时使用。"""
+    workspace_root = str(workspace.expanduser().resolve())
+    task_root = str(task_dir.expanduser().resolve())
     tools = build_readonly_research_tools(
         fetch_requester=fetch_requester,
         allowed_dir=workspace,
@@ -131,6 +153,13 @@ def build_general_spec(
         tools=tools,
         system_prompt=system_prompt,
         max_iterations=max_iterations,
+        resource_roots=(workspace_root,),
+        resource_roots_by_tool={
+            "read_file": (workspace_root,),
+            "list_dir": (workspace_root,),
+            "write_file": (task_root,),
+            "edit_file": (task_root,),
+        },
     )
 
 

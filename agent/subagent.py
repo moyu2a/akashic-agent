@@ -17,6 +17,7 @@ SubAgent — 通用子 Agent
 from __future__ import annotations
 
 import logging
+from collections.abc import Mapping
 from typing import Any, Sequence
 
 from agent.provider import LLMProvider
@@ -130,6 +131,8 @@ class SubAgent:
         max_iterations: int = 30,
         max_tokens: int = 8192,
         mandatory_exit_tools: Sequence[str] = (),
+        resource_roots: tuple[str, ...] = (),
+        resource_roots_by_tool: Mapping[str, tuple[str, ...]] | None = None,
     ) -> None:
         self._provider = provider
         self._model = model
@@ -137,6 +140,11 @@ class SubAgent:
         self._max_iterations = max_iterations
         self._max_tokens = max_tokens
         self._mandatory_exit_tools = list(mandatory_exit_tools)
+        self._resource_roots = tuple(resource_roots)
+        self._resource_roots_by_tool = {
+            str(name): tuple(roots)
+            for name, roots in (resource_roots_by_tool or {}).items()
+        }
         self.last_exit_reason: str = "idle"
         self.iterations_used: int = 0  # 实际使用的迭代次数
         self.tools_called: list[str] = []  # 实际调用的工具名称列表
@@ -148,6 +156,9 @@ class SubAgent:
 
     def add_tool_hooks(self, hooks: list[ToolHook]) -> None:
         self._tool_executor.add_hooks(hooks)
+
+    def _resource_roots_for_tool(self, tool_name: str) -> tuple[str, ...]:
+        return self._resource_roots_by_tool.get(tool_name, self._resource_roots)
 
     async def run(self, task: str) -> str:
         """执行任务并返回文本结果。
@@ -411,6 +422,7 @@ class SubAgent:
                 session_key=session_key,
                 tool_batch=tool_batch,
                 tool_batch_index=tool_batch_index,
+                resource_roots=self._resource_roots_for_tool(tool_name),
             ),
             _invoke,
         )
