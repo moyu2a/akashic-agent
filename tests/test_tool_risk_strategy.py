@@ -68,6 +68,20 @@ def test_passive_read_only_process_capability_requires_approval() -> None:
     assert decision.reason == "risk_strategy_shell_requires_approval"
 
 
+def test_task_plan_control_capability_is_allowed() -> None:
+    decision = DefaultToolRiskStrategy().evaluate(
+        RiskStrategyContext(
+            tool_name="create_task_plan",
+            registry_risk="write",
+            source="passive",
+            capabilities=frozenset({"task_plan.create"}),
+        )
+    )
+
+    assert decision.action == "allow"
+    assert decision.reason == "risk_strategy_task_plan_control_allowed"
+
+
 def test_external_side_effect_requires_approval() -> None:
     decision = _decision("external-side-effect")
 

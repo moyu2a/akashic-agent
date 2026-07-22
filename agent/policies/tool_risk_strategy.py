@@ -8,6 +8,9 @@ RiskStrategyAction = Literal["allow", "deny", "defer", "not_applicable"]
 
 _ACTIONS = frozenset({"allow", "deny", "defer", "not_applicable"})
 _SHELL_CAPABILITIES = frozenset({"shell.execute", "process.execute"})
+_TASK_PLAN_CONTROL_CAPABILITIES = frozenset(
+    {"task_plan.create", "task_plan.update", "task_plan.inspect"}
+)
 
 
 @dataclass(frozen=True)
@@ -76,6 +79,12 @@ class DefaultToolRiskStrategy:
                 risk=risk,
                 approval_scope="tool_call",
                 user_prompt="This shell command needs explicit approval before execution.",
+            )
+        if context.capabilities & _TASK_PLAN_CONTROL_CAPABILITIES:
+            return RiskStrategyDecision(
+                action="allow",
+                reason="risk_strategy_task_plan_control_allowed",
+                risk=risk,
             )
         if risk == "destructive":
             return RiskStrategyDecision(

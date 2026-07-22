@@ -1971,12 +1971,17 @@ class DefaultReasoner(Reasoner):
                             # hook 只负责拦截与记录，不替代 registry。
                             _invoke_tool,
                         )
-                    if exec_result.status == "success":
+                    real_tool_executed = (
+                        exec_result.status == "success"
+                        and exec_result.invoker_reached
+                        and exec_result.invoker_succeeded
+                    )
+                    if real_tool_executed:
                         tools_used.append(tool_call.name)
                     result = exec_result.output
                     tool_search_blocked: tuple[str, ...] = ()
                     if (
-                        exec_result.status == "success"
+                        real_tool_executed
                         and tool_call.name == "tool_search"
                         and tool_boundary_context is not None
                     ):
@@ -2167,7 +2172,7 @@ class DefaultReasoner(Reasoner):
 
                     # 6.3 tool_search 的结果会扩展下一轮可见工具。
                     if (
-                        exec_result.status == "success"
+                        real_tool_executed
                         and tool_call.name == "tool_search"
                         and visible_names is not None
                     ):

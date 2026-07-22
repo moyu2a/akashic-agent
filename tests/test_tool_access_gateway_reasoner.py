@@ -148,22 +148,28 @@ def _make_reasoner(
     tools = ToolRegistry()
     tools.set_context(_session_key="cli:1")
     tools.register(tool_search_type(tools), always_on=True, risk="read-only")
-    tools.register(_RecordingTool("search_docs"))
-    tools.register(_RecordingTool("fetch_doc_chunk"))
+    tools.register(_RecordingTool("search_docs"), risk="read-only")
+    tools.register(_RecordingTool("fetch_doc_chunk"), risk="read-only")
     tools.register(
         read_file or _RecordingTool("read_file"),
         always_on=True,
         risk=read_file_risk,
     )
-    tools.register(_RecordingTool("shell"), always_on=True)
-    tools.register(_RecordingTool("list_dir"), always_on=True)
+    tools.register(
+        _RecordingTool("shell"),
+        always_on=True,
+        risk="external-side-effect",
+        capabilities=frozenset({"shell.execute"}),
+    )
+    tools.register(_RecordingTool("list_dir"), always_on=True, risk="read-only")
     tools.register(
         recall_memory
         or _RecordingTool(
             "recall_memory",
             '{"ok": true, "memories": []}',
             capabilities=frozenset({"memory.recall"}),
-        )
+        ),
+        risk="read-only",
     )
     tools.register(
         search_messages
@@ -171,12 +177,13 @@ def _make_reasoner(
             "search_messages",
             '{"ok": true, "messages": []}',
             capabilities=frozenset({"history.search"}),
-        )
+        ),
+        risk="read-only",
     )
     if task_plan_service is not None:
-        tools.register(CreateTaskPlanTool(task_plan_service))
-        tools.register(UpdateTaskStepTool(task_plan_service))
-        tools.register(InspectTaskPlanTool(task_plan_service))
+        tools.register(CreateTaskPlanTool(task_plan_service), risk="write")
+        tools.register(UpdateTaskStepTool(task_plan_service), risk="write")
+        tools.register(InspectTaskPlanTool(task_plan_service), risk="read-only")
     for tool in extra_tools or []:
         tools.register(tool, risk=(extra_tool_risks or {}).get(tool.name, "unknown"))
 
@@ -264,6 +271,7 @@ async def _run_reasoner_visibility_case(
                 result='{"ok": true, "summary": {"real_tools": {"read_file": 3}}}',
             )
         ],
+        extra_tool_risks={"inspect_turn_trace": "read-only"},
         discovery=discovery,
     )
 
@@ -356,6 +364,50 @@ async def test_reasoner_policy_gate_blocks_destructive_registered_tool_as_json()
     assert payload["policy"]["reason"] == "tool_invocation_destructive_denied"
     assert payload["policy"]["metadata"]["registered"] is True
     assert payload["policy"]["metadata"]["risk"] == "destructive"
+
+
+@pytest.mark.asyncio
+async def test_passive_write_tool_deferred_before_invoker_and_not_recorded_as_used() -> None:
+    read_file = _RecordingTool("read_file")
+    provider = _Provider(
+        [
+            LLMResponse(
+                content="",
+                tool_calls=[
+                    ToolCall(
+                        "read-call",
+                        "read_file",
+                        {"path": "notes.md"},
+                    )
+                ],
+            ),
+            LLMResponse(content="final", tool_calls=[]),
+        ]
+    )
+    reasoner = _make_reasoner(
+        provider,
+        read_file=read_file,
+        read_file_risk="write",
+    )
+
+    result = await reasoner.run_turn(
+        msg=_msg("write a file named notes.md"),
+        session=cast(Any, _session()),
+    )
+
+    assert result.reply == "final"
+    assert "read_file" not in result.tools_used
+    assert read_file.calls == []
+    call = result.tool_chain[0]["calls"][0]
+    assert call["name"] == "read_file"
+    assert call["status"] == "deferred"
+    second_messages = provider.calls[1]["messages"]
+    tool_messages = [
+        message for message in second_messages if message.get("role") == "tool"
+    ]
+    payload = json.loads(tool_messages[-1]["content"])
+    assert payload["approval_request"]["tool_name"] == "read_file"
+    assert payload["invoker_reached"] is False
 
 
 @pytest.mark.asyncio
