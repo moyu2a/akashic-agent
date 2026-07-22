@@ -68,6 +68,43 @@ def test_sleep_hygiene_report_exposes_counts_percentages_and_safety() -> None:
     assert report.shadow_metrics["applied_change_count"] == 0
 
 
+def test_sleep_hygiene_report_exposes_source_evidence_metrics() -> None:
+    cases = build_sleep_hygiene_cases(
+        case_set="hard",
+        hard_per_scenario=2,
+        missing_source_count=1,
+    )
+    resolver = MappingSourceRefResolver(
+        {
+            "cli:local:hard-near-merge-000": "用户稳定偏好：回答技术问题时先给整体方案",
+            "cli:local:hard-old-high-value-000": "用户长期偏好：架构讨论要先讲主链路再讲边界",
+        }
+    )
+
+    report = run_sleep_hygiene_evidence_eval(
+        cases=cases,
+        source_ref_resolver=resolver,
+    )
+
+    source = report.metrics["source_evidence_metrics"]
+    by_action = report.metrics["source_evidence_metrics_by_action"]
+
+    assert source["source_fetch_mode"] == "mapping"
+    assert source["source_ref_available_count"] > 0
+    assert source["source_ref_parse_success_rate"] > 0
+    assert source["source_fetch_success_rate"] < 100.0
+    assert source["missing_source_count"] > 0
+    assert "safe_cleanup_candidates" in by_action
+    assert "merge_suggestions" in by_action
+    assert "review_required" in by_action
+    assert "retained_rows" in by_action
+    assert by_action["merge_suggestions"]["row_count"] > 0
+    assert (
+        by_action["review_required"]["row_count"]
+        >= by_action["merge_suggestions"]["row_count"]
+    )
+
+
 def test_retained_rows_are_not_hard_coded_safe_when_shadow_marks_candidate() -> None:
     cases = build_sleep_hygiene_cases(
         duplicate_groups=0,

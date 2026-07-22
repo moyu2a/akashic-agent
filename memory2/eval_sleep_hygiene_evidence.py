@@ -286,6 +286,54 @@ def write_sleep_hygiene_report_markdown(
                 )
                 + " |"
             )
+    source_metrics = metrics.get("source_evidence_metrics")
+    if isinstance(source_metrics, dict):
+        lines.extend(
+            [
+                "",
+                "## source evidence metrics",
+                "",
+                "| metric | value |",
+                "| --- | ---: |",
+                f"| source fetch mode | {source_metrics.get('source_fetch_mode')} |",
+                f"| source_ref coverage | {_fmt_pct(source_metrics.get('source_ref_coverage_rate'))} |",
+                f"| source_ref parse success | {_fmt_pct(source_metrics.get('source_ref_parse_success_rate'))} |",
+                f"| source fetch success | {_fmt_pct(source_metrics.get('source_fetch_success_rate'))} |",
+                f"| source support rate | {_fmt_pct(source_metrics.get('source_support_rate'))} |",
+                f"| missing source count | {source_metrics.get('missing_source_count')} |",
+                f"| unsupported source count | {source_metrics.get('unsupported_source_count')} |",
+                f"| session ref not fetchable count | {source_metrics.get('session_ref_not_fetchable_count')} |",
+                f"| malformed source_ref count | {source_metrics.get('malformed_source_ref_count')} |",
+            ]
+        )
+    by_action = metrics.get("source_evidence_metrics_by_action")
+    if isinstance(by_action, dict) and by_action:
+        lines.extend(
+            [
+                "",
+                "## source evidence by action",
+                "",
+                "| action | rows | source_ref coverage | parse success | fetch success | support rate |",
+                "| --- | ---: | ---: | ---: | ---: | ---: |",
+            ]
+        )
+        for action, action_metrics in sorted(by_action.items()):
+            if not isinstance(action_metrics, dict):
+                continue
+            lines.append(
+                "| "
+                + " | ".join(
+                    [
+                        action,
+                        str(action_metrics.get("row_count")),
+                        _fmt_pct(action_metrics.get("source_ref_coverage_rate")),
+                        _fmt_pct(action_metrics.get("source_ref_parse_success_rate")),
+                        _fmt_pct(action_metrics.get("source_fetch_success_rate")),
+                        _fmt_pct(action_metrics.get("source_support_rate")),
+                    ]
+                )
+                + " |"
+            )
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
@@ -483,6 +531,9 @@ def _candidate_member_ids(groups: object) -> set[str]:
 
 
 def _expected_terms_for_item(item: dict[str, object]) -> tuple[str, ...]:
+    fixture_terms = item.get("_source_expected_terms")
+    if isinstance(fixture_terms, (list, tuple)):
+        return tuple(str(term) for term in fixture_terms if str(term).strip())
     summary = str(item.get("summary") or "")
     terms = [term for term in ("用户", "memory", "偏好", "临时", "架构") if term in summary]
     return tuple(terms[:2])
@@ -538,8 +589,92 @@ def _metrics(
             retained_candidate_leak_count / max(1, _count_label(records, "retained")) * 100,
             4,
         ),
+        "source_evidence_metrics": _source_evidence_metrics(records),
+        "source_evidence_metrics_by_action": _source_evidence_metrics_by_action(records),
         "group_metrics": _group_metrics(records),
         "scenario_metrics": _scenario_metrics(records),
+    }
+
+
+def _source_evidence_metrics(records: Sequence[dict[str, object]]) -> dict[str, object]:
+    source_rows = [
+        record for record in records if record.get("source_ref_available") is True
+    ]
+    parse_success_count = sum(
+        1 for record in source_rows if record.get("source_ref_parse_success") is True
+    )
+    fetch_success_count = sum(
+        1 for record in source_rows if record.get("source_fetch_success") is True
+    )
+    status_counts = _source_status_counts(records)
+    mode_values = sorted(
+        {
+            str(record.get("source_fetch_mode") or "")
+            for record in records
+            if str(record.get("source_fetch_mode") or "").strip()
+        }
+    )
+    return {
+        "row_count": len(records),
+        "source_fetch_mode": mode_values[0] if len(mode_values) == 1 else "mixed",
+        "source_ref_available_count": len(source_rows),
+        "source_ref_missing_count": len(records) - len(source_rows),
+        "source_ref_coverage_rate": _ratio_pct(len(source_rows), len(records)),
+        "source_ref_parse_success_count": parse_success_count,
+        "source_ref_parse_success_rate": _ratio_pct(
+            parse_success_count,
+            len(source_rows),
+        ),
+        "source_fetch_success_count": fetch_success_count,
+        "source_fetch_success_rate": _ratio_pct(fetch_success_count, len(source_rows)),
+        "source_support_count": status_counts.get("supported", 0),
+        "source_support_rate": _ratio_pct(
+            status_counts.get("supported", 0),
+            len(source_rows),
+        ),
+        "missing_source_count": status_counts.get("missing_source_ref", 0)
+        + status_counts.get("missing", 0),
+        "unsupported_source_count": status_counts.get("unsupported", 0),
+        "session_ref_not_fetchable_count": status_counts.get(
+            "session_ref_not_fetchable",
+            0,
+        ),
+        "malformed_source_ref_count": status_counts.get("parse_failed", 0),
+        "source_support_status_counts": status_counts,
+    }
+
+
+def _source_status_counts(records: Sequence[dict[str, object]]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for record in records:
+        status = str(record.get("source_support_status") or "unknown")
+        counts[status] = counts.get(status, 0) + 1
+    return counts
+
+
+def _source_evidence_metrics_by_action(
+    records: Sequence[dict[str, object]],
+) -> dict[str, dict[str, object]]:
+    groups: dict[str, list[dict[str, object]]] = {
+        "safe_cleanup_candidates": [
+            record for record in records if record.get("safe_cleanup_candidate") is True
+        ],
+        "merge_suggestions": [
+            record
+            for record in records
+            if record.get("candidate_action") == "merge_suggestion"
+        ],
+        "review_required": [
+            record for record in records if record.get("requires_review") is True
+        ],
+        "retained_rows": [
+            record for record in records if record.get("expected_after_state") == "active"
+        ],
+    }
+    return {
+        action: _source_evidence_metrics(action_records)
+        for action, action_records in sorted(groups.items())
+        if action_records
     }
 
 
