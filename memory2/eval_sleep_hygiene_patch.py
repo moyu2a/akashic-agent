@@ -74,7 +74,10 @@ def _patch_entry(record: dict[str, object]) -> dict[str, object]:
         "after_token_estimate": record.get("after_token_estimate", 0),
         "source_ref_available": record.get("source_ref_available", False),
         "source_fetch_success": record.get("source_fetch_success", False),
+        "source_fetch_mode": record.get("source_fetch_mode", ""),
         "source_support_status": record.get("source_support_status", ""),
+        "source_backed_action_safe": _source_backed_action_safe(record),
+        "source_backed_block_reason": _source_backed_block_reason(record),
         "operation_type": _operation_type(record),
         "recoverability_status": _recoverability_status(record),
         "recoverability_reason": _recoverability_reason(record),
@@ -119,3 +122,27 @@ def _recoverability_reason(record: dict[str, object]) -> str:
     if status == "review_only":
         return "candidate is a review suggestion, not a cleanup action"
     return "record lacks verified source evidence for restoration"
+
+
+def _source_backed_action_safe(record: dict[str, object]) -> bool:
+    if not bool(record.get("safe_cleanup_candidate")):
+        return False
+    return (
+        str(record.get("source_fetch_mode") or "") == "session-store"
+        and record.get("source_fetch_success") is True
+        and str(record.get("source_support_status") or "") == "supported"
+    )
+
+
+def _source_backed_block_reason(record: dict[str, object]) -> str:
+    if bool(record.get("requires_review")):
+        return "requires_review"
+    if not bool(record.get("safe_cleanup_candidate")):
+        return "not_cleanup_candidate"
+    if str(record.get("source_fetch_mode") or "") != "session-store":
+        return "not_session_store_source"
+    if record.get("source_fetch_success") is not True:
+        return "source_not_fetchable"
+    if str(record.get("source_support_status") or "") != "supported":
+        return "source_not_supporting_summary"
+    return ""
