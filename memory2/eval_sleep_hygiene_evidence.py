@@ -207,6 +207,35 @@ def write_sleep_hygiene_report_markdown(
                 )
                 + " |"
             )
+    scenario_metrics = metrics.get("scenario_metrics")
+    if isinstance(scenario_metrics, dict) and scenario_metrics:
+        lines.extend(
+            [
+                "",
+                "## hard scenario breakdown",
+                "",
+                "| scenario | case 数 | evaluated item 数 | candidate recall | candidate precision | retained protection | false positive cleanup |",
+                "| --- | ---: | ---: | ---: | ---: | ---: | ---: |",
+            ]
+        )
+        for scenario, scenario_metric in sorted(scenario_metrics.items()):
+            if not isinstance(scenario_metric, dict):
+                continue
+            lines.append(
+                "| "
+                + " | ".join(
+                    [
+                        scenario,
+                        str(scenario_metric.get("case_count")),
+                        str(scenario_metric.get("evaluated_item_count")),
+                        _fmt_pct(scenario_metric.get("candidate_recall")),
+                        _fmt_pct(scenario_metric.get("candidate_precision")),
+                        _fmt_pct(scenario_metric.get("retained_protection_rate")),
+                        _fmt_pct(scenario_metric.get("false_positive_cleanup_rate")),
+                    ]
+                )
+                + " |"
+            )
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
@@ -387,6 +416,7 @@ def _metrics(
             4,
         ),
         "group_metrics": _group_metrics(records),
+        "scenario_metrics": _scenario_metrics(records),
     }
 
 
@@ -446,6 +476,19 @@ def _group_metrics(records: Sequence[dict[str, object]]) -> dict[str, dict[str, 
         name: _metrics_for_records(group_records)
         for name, group_records in groups.items()
         if group_records
+    }
+
+
+def _scenario_metrics(records: Sequence[dict[str, object]]) -> dict[str, dict[str, object]]:
+    groups: dict[str, list[dict[str, object]]] = {}
+    for record in records:
+        scenario = str(record.get("scenario") or "").strip()
+        if not scenario:
+            continue
+        groups.setdefault(scenario, []).append(record)
+    return {
+        scenario: _metrics_for_records(group_records)
+        for scenario, group_records in sorted(groups.items())
     }
 
 

@@ -134,6 +134,34 @@ def test_sleep_hygiene_evidence_emits_rows_for_all_expected_item_states() -> Non
     assert all(record["expected_after_state"] for record in records)
 
 
+def test_sleep_hygiene_report_splits_hard_metrics_by_scenario() -> None:
+    report = run_sleep_hygiene_evidence_eval(
+        cases=build_sleep_hygiene_cases(
+            case_set="hard",
+            hard_per_scenario=2,
+            missing_source_count=1,
+        )
+    )
+
+    scenarios = report.metrics["scenario_metrics"]
+
+    assert set(scenarios) == {
+        "near_merge_not_duplicate",
+        "old_high_value",
+        "temporary_but_pinned",
+        "cross_scope_identical",
+        "opposite_preference_conflict",
+        "multi_duplicate_pairwise",
+        "missing_source_but_important",
+        "mixed_signal_low_value",
+    }
+    assert scenarios["near_merge_not_duplicate"]["case_count"] == 2
+    assert scenarios["near_merge_not_duplicate"]["evaluated_item_count"] == 4
+    assert scenarios["near_merge_not_duplicate"]["candidate_recall"] == "unavailable"
+    assert scenarios["multi_duplicate_pairwise"]["candidate_recall"] == 100.0
+    assert scenarios["mixed_signal_low_value"]["candidate_recall"] == 100.0
+
+
 def test_sleep_hygiene_all_report_splits_case_and_item_counts() -> None:
     cases = build_sleep_hygiene_cases(
         case_set="all",
