@@ -396,7 +396,7 @@ online_row_count = 0
 | 召回与回答 | 重排与注入治理 | 目标召回率 `93.75% -> 100%`，提升 `6.25` 个百分点；错误注入率 after 为 `0%` |
 | 召回与回答 | 版本链与溯源 | 目标召回率 `90% -> 100%`，当前有效版本召回率 `90% -> 100%`；hard 当前有效版本为 `80% -> 100%` |
 | 写入治理 | 写入价值治理 | Phase 6n 独立离线计数报告使用 1200 个候选：原本写入 `1200/1200`，治理后直接写入 `172/1200`，最终写入 `400/1200`，有用候选最终保留率 `100%`，最终污染控制率 `100%`，冲突复核保持率 `100%`，hard 重复泄漏率 `0%` |
-| 写入治理 | 写入价值治理线上 shadow | Phase 6o 真实 LLM pilot 使用 24 个平衡候选：`infra_passed = True`，`provider_error_count = 0`，`timeout_count = 0`，有效写入精度 `33.3333% -> 100%`，污染拦截率 `0% -> 100%`，重复控制率 `0% -> 100%`，冲突复核率 `0% -> 100%`，写入减少率 `0% -> 66.6667%` |
+| 写入治理 | 写入价值治理线上 shadow | Phase 6o 真实 LLM 扩展评测使用 240 个 common/hard 与类别双维度平衡候选：`infra_passed = True`，`provider_error_count = 0`，`timeout_count = 0`，有效写入精度 `33.3333% -> 100%`，污染拦截率 `0% -> 100%`，重复控制率 `0% -> 100%`，冲突复核率 `0% -> 100%`，写入减少率 `0% -> 66.6667%` |
 | 记忆库卫生 | 睡眠巩固 | 600 条扫描记忆，重复合并率 `10%`，source_ref 覆盖率 `86.6072%`，token 节省率 `33.482%`，巩固后召回保持率 `100%` |
 
 注意：
@@ -406,7 +406,7 @@ online_row_count = 0
 - hard miss 是目标导向离线构造，不是线上真实用户自然分布；它用于证明模块能力和报表口径，不应直接解释成生产准确率。
 - 图谱召回 after 现在为 `100%`；上一轮 `98.75%` 的缺口是分母口径问题，不是 graph lane 真缺口。
 - 写入价值治理的 `有效写入精度 after` 为 `unavailable`，因为当前 80 case 的候选都被治理策略拒绝或转审，没有实际允许写入的候选；此时应主要看污染拦截率、重复控制率、写入减少率和误拒率。
-- 写入治理的离线模板集已经补齐“有用候选最终保留率”和误拒控制，避免了全拒绝策略拿到漂亮分数；Phase 6o 也已经补了 `24` 条真实 LLM 线上 shadow evidence，证明真实 provider 路径能产出可消费 evidence。但它仍是测试集候选，不是生产自然流量，也没有覆盖 LLM 自动抽取候选和后续召回有用率，所以不能把离线或 pilot 的 `100%` 直接解释成生产效果。
+- 写入治理的离线模板集已经补齐“有用候选最终保留率”和误拒控制，避免了全拒绝策略拿到漂亮分数；Phase 6o 也已经补了 `240` 条真实 LLM 线上 shadow evidence，证明真实 provider 路径能在更大平衡样本下产出可消费 evidence。但它仍是测试集候选，不是生产自然流量，也没有覆盖 LLM 自动抽取候选和后续召回有用率，所以不能把离线或线上 shadow 的 `100%` 直接解释成生产效果。
 - 睡眠巩固的回源成功率当前是基于 `provenance_shadow.parse_success_rate` 的离线代理，不是生产中真实执行 `fetch_messages` 的成功率；token 节省也是 shadow 估算。
 - 当前 fixture 已补一个 forked replacement chain，所以 `conflict_chain_detection_rate` 在 hard / overall 行上变成 `100%`。
 - Phase 6i 已把写入治理和记忆库卫生的 evidence 输入收紧为 schema 校验入口：支持 JSON 数组、`{"records": [...]}` 和 JSONL，但缺字段、字符串布尔值、非法 label / decision / state、负数或非数字 token 都会失败，不会进入线上 evidence 行。
@@ -501,7 +501,7 @@ checkpoint 重建版路径：
 - `avg_latency_ms = 4639.9172`
 - `total_token_count = 6971048`
 
-这份结果只覆盖 answer/retrieval 核心矩阵，不包含写入治理和睡眠巩固的真实 evidence。写入治理后续已通过 Phase 6o 单独补了 `24` 条真实 LLM 线上 shadow evidence；睡眠巩固仍缺真实 evidence。
+这份结果只覆盖 answer/retrieval 核心矩阵，不包含写入治理和睡眠巩固的真实 evidence。写入治理后续已通过 Phase 6o 单独补了 `240` 条真实 LLM 线上 shadow evidence；睡眠巩固仍缺真实 evidence。
 
 ### Phase 6e 的综合线上 answer-level report
 

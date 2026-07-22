@@ -164,6 +164,18 @@ def select_write_governance_online_candidates(
     candidates = build_write_governance_candidates(case_set=case_set)
     if limit <= 0 or limit >= len(candidates):
         return tuple(candidates)
+    if str(case_set or "all").strip().lower() == "all":
+        return _select_write_governance_candidates_by_case_set_and_category(
+            candidates,
+            limit,
+        )
+    return _select_write_governance_candidates_by_category(candidates, limit)
+
+
+def _select_write_governance_candidates_by_category(
+    candidates: Sequence[WriteGovernanceCandidate],
+    limit: int,
+) -> tuple[WriteGovernanceCandidate, ...]:
     by_category: dict[str, list[WriteGovernanceCandidate]] = {
         category: [] for category in _CATEGORY_ORDER
     }
@@ -179,6 +191,38 @@ def select_write_governance_online_candidates(
                 progressed = True
                 if len(selected) >= limit:
                     break
+        if not progressed:
+            break
+    return tuple(selected)
+
+
+def _select_write_governance_candidates_by_case_set_and_category(
+    candidates: Sequence[WriteGovernanceCandidate],
+    limit: int,
+) -> tuple[WriteGovernanceCandidate, ...]:
+    case_set_order = ("common", "hard")
+    by_stratum: dict[tuple[str, str], list[WriteGovernanceCandidate]] = {
+        (current_case_set, category): []
+        for current_case_set in case_set_order
+        for category in _CATEGORY_ORDER
+    }
+    for candidate in candidates:
+        by_stratum.setdefault((candidate.case_set, candidate.category), []).append(
+            candidate
+        )
+    selected: list[WriteGovernanceCandidate] = []
+    while len(selected) < limit:
+        progressed = False
+        for current_case_set in case_set_order:
+            for category in _CATEGORY_ORDER:
+                bucket = by_stratum.get((current_case_set, category)) or []
+                if bucket:
+                    selected.append(bucket.pop(0))
+                    progressed = True
+                    if len(selected) >= limit:
+                        break
+            if len(selected) >= limit:
+                break
         if not progressed:
             break
     return tuple(selected)

@@ -386,6 +386,78 @@ Evidence 分布：
 
 这说明真实 LLM 参与运行路径后，write evidence 仍能稳定生成并被 target metrics 消费；本轮 24 条样本中没有 provider error 或 timeout。它仍然不是生产流量评测，也不是 LLM 自动抽取候选记忆评测，因为候选和标签仍来自测试集。
 
+## 真实 LLM 扩展样本评测
+
+为了避免 `24` 条 pilot 样本过小，本轮先修复了在线评测的有限样本选择逻辑：`--case-set all --limit 240` 现在同时按 `common / hard` 和 6 个类别分层抽样，而不是只按类别轮询。扩展样本构成为 common `120`、hard `120`，6 个类别各 `40` 条。
+
+真实扩展评测命令：
+
+```bash
+.venv/bin/python scripts/run_memory_write_governance_online_eval.py \
+  --config /home/jjh/git_work/akashic-agent/config.toml \
+  --workspace /tmp/akashic-memory-write-governance-expanded-real-240/workspace \
+  --out-dir /tmp/akashic-memory-write-governance-expanded-real-240/reports \
+  --enable-real-llm \
+  --case-set all \
+  --limit 240 \
+  --timeout-s 60 \
+  --concurrency 1 \
+  --checkpoint-jsonl /tmp/akashic-memory-write-governance-expanded-real-240/reports/checkpoint.jsonl \
+  --resume
+```
+
+真实扩展 evidence 接入 target metrics：
+
+```bash
+.venv/bin/python scripts/run_memory_target_metrics_eval.py \
+  --out-dir /tmp/akashic-memory-write-governance-expanded-real-240/target \
+  --online-checkpoint-source real_llm \
+  --online-write-evidence-json /tmp/akashic-memory-write-governance-expanded-real-240/reports/memory_write_governance_online_evidence.jsonl
+```
+
+真实扩展运行结果：
+
+| 项目 | 数值 |
+| --- | ---: |
+| candidate_count | `240` |
+| checkpoint rows | `240` |
+| evidence rows | `240` |
+| common / hard | `120 / 120` |
+| 每个类别样本数 | `40` |
+| real_llm_enabled | `True` |
+| infra_passed | `True` |
+| provider_error_count | `0` |
+| timeout_count | `0` |
+| completed_call_count | `240` |
+| skipped_from_checkpoint_count | `0` |
+| total_token_count | `1236228` |
+| avg_latency_ms | `2366.625` |
+
+真实扩展 evidence 分布：
+
+| label | count | after allow | after reject | after review |
+| --- | ---: | ---: | ---: | ---: |
+| useful | `80` | `80` | `0` | `0` |
+| pollution | `80` | `0` | `80` | `0` |
+| duplicate | `40` | `0` | `40` | `0` |
+| conflict | `40` | `0` | `0` | `40` |
+
+真实扩展 target metrics 线上 evidence 行：
+
+| 指标 | before | after | 变化 |
+| --- | ---: | ---: | ---: |
+| 有效写入精度 | `33.3333%` | `100.0%` | `+66.6667` 个百分点 |
+| 污染拦截率 | `0.0%` | `100.0%` | `+100.0` 个百分点 |
+| 重复控制率 | `0.0%` | `100.0%` | `+100.0` 个百分点 |
+| 冲突复核率 | `0.0%` | `100.0%` | `+100.0` 个百分点 |
+| 写入减少率 | `0.0%` | `66.6667%` | `+66.6667` 个百分点 |
+| 误拒率 | `0.0%` | `0.0%` | `0.0` 个百分点 |
+| 误收率 | `100.0%` | `0.0%` | `-100.0` 个百分点 |
+
+这轮结果把主展示从 `24` 条 pilot 升级到 `240` 条真实 LLM shadow 扩展样本。它证明测试集驱动的 AgentLoop + 真实 provider + write evidence + target metrics 链路在更大平衡样本下仍能稳定运行，并且治理决策继续符合预期。但边界不变：候选摘要和标签来自测试集，治理决策来自项目代码，`skip_post_memory=True` 阻止写入生产记忆库；它不是自然生产流量，也不是 LLM 自动抽取候选记忆的质量评测。
+
+本轮没有默认运行真实 LLM `1200` 条全量评测。原因是 `240` 条已经覆盖 common/hard 和 6 类平衡样本，且全量 `1200` 预计还会消耗约 `6.2M` token；应在确认需要更强统计展示时再用同一 checkpoint 机制执行。
+
 ## 复核候选处理链路
 
 当前已补齐离线版 `review` 后续处理。原因是调优后 hard 有用候选已经从“直接拒绝”更多转成“进入复核”，如果没有复核处理链路，这些候选仍然不会成为长期记忆。

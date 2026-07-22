@@ -351,20 +351,20 @@ avg_latency_ms = 34.5417
 
 这仍然只是 fake-provider 在线路径验证，不是真实 LLM 结论。真实 LLM pilot 需要显式启用 `--enable-real-llm` 并保留 checkpoint。
 
-真实 LLM pilot 已用同一批 `24` 个平衡候选跑通：
+真实 LLM pilot 已用同一批 `24` 个平衡候选跑通，随后又扩展到 `240` 个 common/hard 与类别双维度平衡候选。当前正式展示优先使用 `240` 条扩展样本，`24` 条 pilot 保留为链路验证历史。
 
 ```text
-candidate_count = 24
-online_write_record_count = 24
+candidate_count = 240
+online_write_record_count = 240
 real_llm_enabled = True
 infra_passed = True
 provider_error_count = 0
 timeout_count = 0
-total_token_count = 124099
-avg_latency_ms = 2790.7917
+total_token_count = 1236228
+avg_latency_ms = 2366.625
 ```
 
-真实 LLM pilot 的 evidence 分布和 fake-provider smoke 一致：useful `8` 条全部 allow，pollution `8` 条全部 reject，duplicate `4` 条全部 reject，conflict `4` 条全部 review。接入 `--online-write-evidence-json` 后，target metrics 线上 evidence 行仍为：有效写入精度 `33.3333% -> 100.0%`、污染拦截率 `0.0% -> 100.0%`、重复控制率 `0.0% -> 100.0%`、冲突复核率 `0.0% -> 100.0%`、写入减少率 `0.0% -> 66.6667%`、误拒率 `0.0% -> 0.0%`、误收率 `100.0% -> 0.0%`。
+真实 LLM 扩展样本的 evidence 分布为：useful `80` 条全部 allow，pollution `80` 条全部 reject，duplicate `40` 条全部 reject，conflict `40` 条全部 review。接入 `--online-write-evidence-json` 后，target metrics 线上 evidence 行为：有效写入精度 `33.3333% -> 100.0%`、污染拦截率 `0.0% -> 100.0%`、重复控制率 `0.0% -> 100.0%`、冲突复核率 `0.0% -> 100.0%`、写入减少率 `0.0% -> 66.6667%`、误拒率 `0.0% -> 0.0%`、误收率 `100.0% -> 0.0%`。
 
 这说明真实 LLM 接入后，测试集驱动的线上 shadow 链路和 evidence 转换是可用的。但它仍然不是生产流量评测，也不是 LLM 自动抽取候选记忆的评测；候选摘要和标签仍来自测试集，治理决策来自项目代码，且 `skip_post_memory=True` 阻止写入生产记忆库。
 
@@ -453,7 +453,7 @@ Phase 6n 独立写入治理计数: candidate_count = 1200
 hard 重复泄漏率 = 0.0%
 ```
 
-其中 `240` 候选 trace 行保留为历史 target-metric 口径；真正用于说明写入治理质量的当前主数据应看 Phase 6n 的 `1200` 候选离线计数报告。`污染拦截率 before`、`重复控制率 before` 等没有真实 baseline 决策计数的字段会显示 `unavailable`，不再假写 0。
+其中旧 `240` 候选 trace 行保留为历史 target-metric 口径；离线写入治理质量应看 Phase 6n 的 `1200` 候选离线计数报告。线上 shadow 质量现在优先看 Phase 6o 的真实 LLM `240` 条扩展 evidence：common/hard 各 `120`，6 类各 `40`，有效写入精度 `33.3333% -> 100%`，污染拦截率、重复控制率、冲突复核率均 `0% -> 100%`。`污染拦截率 before`、`重复控制率 before` 等没有真实 baseline 决策计数的离线字段会显示 `unavailable`，不再假写 0。
 
 记忆库卫生组：
 
@@ -482,7 +482,7 @@ Phase 6h 比上一轮更可信，因为它解决了两个展示误导：
 但它仍有局限：
 
 - hard miss 是目标导向离线构造，不是线上真实用户自然分布。
-- 写入治理和睡眠巩固仍是 shadow / dry-run 指标，不代表真实 DB 已写少、已清理或真实 prompt token 已下降。
+- 写入治理已经有测试集驱动的真实 LLM 线上 shadow evidence，但仍不代表生产自然流量、LLM 候选抽取质量或真实 DB 写入效果；睡眠巩固仍是 shadow / dry-run 指标，不代表真实 DB 已清理或真实 prompt token 已下降。
 - 冲突链识别当前仅由一个 forked replacement chain 支撑，还需要更多分叉类型和回滚场景。
 
 ### 治理类指标和版本链审阅结论
@@ -490,7 +490,7 @@ Phase 6h 比上一轮更可信，因为它解决了两个展示误导：
 | 模块 | 当前判断 | 问题 | 后续修订方向 |
 | --- | --- | --- | --- |
 | 重排与注入治理 | 相对合理 | 目标召回率没有提升，但错误召回率和错误注入率 after 都是 `0%`，说明它主要体现过滤和注入治理价值。 | 继续保留该指标，但后续补更多 forbidden / 相似干扰 case。 |
-| 写入价值治理 | 离线写入阶段已补强，线上 evidence 仍待补 | Phase 6n 的 1200 候选离线计数已经验证最终有用保留 `100%`、最终污染控制 `100%`、冲突复核保持 `100%`、hard 重复泄漏 `0%`；但这些来自模板离线集。 | 继续补真实线上候选 evidence、真实写入结果、后续召回有用率、真实误拒率和误收率。 |
+| 写入价值治理 | 离线写入阶段已补强，线上 shadow evidence 已有 240 条扩展样本 | Phase 6n 的 1200 候选离线计数已经验证最终有用保留 `100%`、最终污染控制 `100%`、冲突复核保持 `100%`、hard 重复泄漏 `0%`；Phase 6o 的 240 条真实 LLM shadow evidence 也验证了 provider 路径和 target metrics 输入。但这些仍来自测试集候选，不是生产自然流量。 | 继续补生产自然流量 evidence、LLM 自动候选抽取质量、真实写入结果、后续召回有用率、真实误拒率和误收率。 |
 | 睡眠巩固 | 方向合理但仍是 shadow | token 节省率 after `33.482%`、召回保持率 after `100%` 是 dry-run 估算，不代表真实 DB 已清理或真实 prompt token 已下降。 | 补真实执行或线上 evidence：巩固前后 active 数、真实 prompt token、关键记忆保护率、巩固后真实召回准确率。 |
 | 版本链与溯源 | 口径已修订且冲突链可测 | 当前有效版本召回率已经可解释，冲突链识别率 after 为 `100%`。 | 后续补更多冲突链类型和线上 evidence。 |
 

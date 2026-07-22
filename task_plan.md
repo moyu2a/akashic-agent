@@ -787,3 +787,95 @@ Updated boundary after pilot:
 - The pilot proves the test-set-driven write-governance online shadow path can run with a real LLM provider and produce target-metric-compatible evidence.
 - It still does not prove natural production traffic quality.
 - It still does not evaluate LLM-generated memory candidate extraction.
+
+## 2026-07-22 Memory Phase 6o Expanded Write Governance Real LLM Eval
+
+Goal: execute the reviewed plan for a larger write-governance real LLM shadow evaluation, while fixing the limited sampler so the expanded sample is fair across common/hard and category dimensions.
+
+1. Preflight candidate universe and current limited sampler - complete
+2. Add failing sampler test and verify RED - complete
+3. Implement common/hard + category stratified limited selection - complete
+4. Run fake-provider full 1200 shadow and target metrics - complete
+5. Run real LLM expanded 240 shadow and target metrics - complete
+6. Skip optional real 1200 unless explicitly approved - complete
+7. Update memory optimization docs and recovery records - in progress
+8. Run focused tests, diff checks, stage intended files, and commit - pending
+
+Preflight:
+
+- `build_write_governance_candidates(case_set="all")` returned `1200`.
+- `common = 600`, `hard = 600`.
+- Each category had `200` candidates.
+- Old `limit=240` returned `common = 240`, `hard = 0`, so the plan correctly required sampler repair before real 240 evaluation.
+
+Sampler repair:
+
+- Added regression test in `tests/test_memory_write_governance_online_eval.py`.
+- RED result: `Counter({'common': 24})` failed against expected common `12` / hard `12`.
+- Implemented common/hard + category stratified selection in `memory2/eval_write_governance_online.py`.
+- Focused sampler tests: `2 passed in 0.21s`.
+
+Fake full 1200:
+
+- reports: `/tmp/akashic-memory-write-governance-expanded-fake/reports`
+- target metrics: `/tmp/akashic-memory-write-governance-expanded-fake/target`
+- `candidate_count = 1200`
+- `checkpoint rows = 1200`
+- `evidence rows = 1200`
+- `infra_passed = True`
+- `provider_error_count = 0`
+- `timeout_count = 0`
+- `total_token_count = 36000`
+- `avg_latency_ms = 31.8925`
+
+Real LLM expanded 240:
+
+- reports: `/tmp/akashic-memory-write-governance-expanded-real-240/reports`
+- target metrics: `/tmp/akashic-memory-write-governance-expanded-real-240/target`
+- checkpoint: `/tmp/akashic-memory-write-governance-expanded-real-240/reports/checkpoint.jsonl`
+- evidence: `/tmp/akashic-memory-write-governance-expanded-real-240/reports/memory_write_governance_online_evidence.jsonl`
+- `candidate_count = 240`
+- `checkpoint rows = 240`
+- `evidence rows = 240`
+- `common = 120`
+- `hard = 120`
+- each category count = `40`
+- `real_llm_enabled = True`
+- `infra_passed = True`
+- `provider_error_count = 0`
+- `timeout_count = 0`
+- `completed_call_count = 240`
+- `skipped_from_checkpoint_count = 0`
+- `total_token_count = 1236228`
+- `avg_latency_ms = 2366.625`
+
+Real 240 evidence distribution:
+
+- useful `80`: allow `80`, reject `0`, review `0`
+- pollution `80`: allow `0`, reject `80`, review `0`
+- duplicate `40`: allow `0`, reject `40`, review `0`
+- conflict `40`: allow `0`, reject `0`, review `40`
+
+Real 240 target metric online evidence row:
+
+- `online_write_record_count = 240`
+- useful write precision `33.3333% -> 100.0%`
+- pollution block rate `0.0% -> 100.0%`
+- duplicate control rate `0.0% -> 100.0%`
+- conflict review rate `0.0% -> 100.0%`
+- write reduction rate `0.0% -> 66.6667%`
+- false reject rate `0.0% -> 0.0%`
+- false accept rate `100.0% -> 0.0%`
+
+Optional real 1200:
+
+- Not executed by default.
+- Reason: it is estimated at about `6.2M` tokens and the 240 run already provides common/hard + category balanced evidence.
+- It should require explicit user approval before spending that cost.
+
+Boundary:
+
+- This is test-set-driven real LLM shadow evaluation.
+- It does not prove production natural traffic quality.
+- It does not evaluate LLM-generated memory candidate extraction.
+- It does not write production memory DB because the runner uses `skip_post_memory=True`.

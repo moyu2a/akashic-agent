@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import Counter
 import json
 from pathlib import Path
 
@@ -69,6 +70,39 @@ def test_select_write_governance_online_candidates_balances_categories() -> None
     assert "pollution" in labels
     assert "duplicate" in labels
     assert "conflict" in labels
+
+
+def test_select_write_governance_online_candidates_balances_case_set_and_category() -> None:
+    pilot_candidates = select_write_governance_online_candidates(case_set="all", limit=24)
+    candidates = select_write_governance_online_candidates(case_set="all", limit=240)
+
+    assert len(pilot_candidates) == 24
+    assert Counter(candidate.case_set for candidate in pilot_candidates) == {
+        "common": 12,
+        "hard": 12,
+    }
+    assert Counter(candidate.category for candidate in pilot_candidates) == {
+        "valuable_preference": 4,
+        "stable_fact": 4,
+        "temporary": 4,
+        "assistant_inference": 4,
+        "duplicate": 4,
+        "conflict": 4,
+    }
+
+    assert len(candidates) == 240
+    assert Counter(candidate.case_set for candidate in candidates) == {
+        "common": 120,
+        "hard": 120,
+    }
+    assert Counter(candidate.category for candidate in candidates) == {
+        "valuable_preference": 40,
+        "stable_fact": 40,
+        "temporary": 40,
+        "assistant_inference": 40,
+        "duplicate": 40,
+        "conflict": 40,
+    }
 
 
 @pytest.mark.asyncio

@@ -1,5 +1,74 @@
 # Document RAG P10a Progress
 
+## 2026-07-22 Memory Phase 6o Expanded Write Governance Real LLM Eval
+
+- User asked to execute the reviewed plan for expanding write-governance real LLM shadow evaluation.
+- Preflight confirmed the total write-governance candidate universe:
+  - `total = 1200`
+  - `common = 600`
+  - `hard = 600`
+  - six categories with `200` candidates each.
+- Preflight also reproduced the sampler issue:
+  - old `select_write_governance_online_candidates(case_set="all", limit=240)` returned `common = 240`, `hard = 0`;
+  - categories were balanced, but common/hard was not.
+- Added TDD regression in `tests/test_memory_write_governance_online_eval.py`:
+  - `limit=24` must return common `12` / hard `12`, six categories with `4` each;
+  - `limit=240` must return common `120` / hard `120`, six categories with `40` each.
+- Verified RED:
+  - `.venv/bin/python -m pytest tests/test_memory_write_governance_online_eval.py::test_select_write_governance_online_candidates_balances_case_set_and_category -q -p no:cacheprovider`
+  - failed because `Counter({'common': 24})` did not match common `12` / hard `12`.
+- Implemented common/hard + category stratified limited selection in `memory2/eval_write_governance_online.py`.
+- Focused sampler tests passed:
+  - `.venv/bin/python -m pytest tests/test_memory_write_governance_online_eval.py::test_select_write_governance_online_candidates_balances_categories tests/test_memory_write_governance_online_eval.py::test_select_write_governance_online_candidates_balances_case_set_and_category -q -p no:cacheprovider`
+  - `2 passed in 0.21s`.
+- Ran fake-provider full 1200 online shadow:
+  - reports: `/tmp/akashic-memory-write-governance-expanded-fake/reports`
+  - target metrics: `/tmp/akashic-memory-write-governance-expanded-fake/target`
+  - `candidate_count = 1200`
+  - `checkpoint rows = 1200`
+  - `evidence rows = 1200`
+  - `infra_passed = True`
+  - `provider_error_count = 0`
+  - `timeout_count = 0`
+  - `total_token_count = 36000`
+  - `avg_latency_ms = 31.8925`
+- Ran real LLM expanded 240 online shadow with external provider access:
+  - reports: `/tmp/akashic-memory-write-governance-expanded-real-240/reports`
+  - target metrics: `/tmp/akashic-memory-write-governance-expanded-real-240/target`
+  - checkpoint: `/tmp/akashic-memory-write-governance-expanded-real-240/reports/checkpoint.jsonl`
+  - evidence: `/tmp/akashic-memory-write-governance-expanded-real-240/reports/memory_write_governance_online_evidence.jsonl`
+- Real 240 run summary:
+  - `candidate_count = 240`
+  - `checkpoint rows = 240`
+  - `evidence rows = 240`
+  - `common = 120`
+  - `hard = 120`
+  - six categories with `40` candidates each
+  - `real_llm_enabled = True`
+  - `infra_passed = True`
+  - `provider_error_count = 0`
+  - `timeout_count = 0`
+  - `completed_call_count = 240`
+  - `skipped_from_checkpoint_count = 0`
+  - `total_token_count = 1236228`
+  - `avg_latency_ms = 2366.625`
+- Real 240 evidence distribution:
+  - useful `80`: after `allow = 80`, reject `0`, review `0`;
+  - pollution `80`: after `reject = 80`, allow `0`, review `0`;
+  - duplicate `40`: after `reject = 40`, allow `0`, review `0`;
+  - conflict `40`: after `review = 40`, allow `0`, reject `0`.
+- Target metrics online evidence row:
+  - `online_write_record_count = 240`
+  - useful write precision `33.3333% -> 100.0%`
+  - pollution block rate `0.0% -> 100.0%`
+  - duplicate control rate `0.0% -> 100.0%`
+  - conflict review rate `0.0% -> 100.0%`
+  - write reduction rate `0.0% -> 66.6667%`
+  - false reject rate `0.0% -> 0.0%`
+  - false accept rate `100.0% -> 0.0%`
+- Optional real 1200 run was not executed by default. The 240 run is the current main result; 1200 should require explicit cost/time approval.
+- Boundary: this is still test-set-driven real LLM shadow evaluation. It is not natural production traffic, not LLM-generated memory candidate extraction quality, and it does not write production memory because `skip_post_memory=True`.
+
 ## 2026-07-21 Memory Phase 6o Write Governance Real LLM Pilot
 
 - Continued the write-governance online shadow work after commit `cfe0569`.
