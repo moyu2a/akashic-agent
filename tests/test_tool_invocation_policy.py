@@ -297,3 +297,23 @@ def test_invocation_policy_allows_workspace_file_then_existing_read_only_rule(
     assert decision.metadata["resource_policy"]["reason"] == (
         "resource_policy_file_path_allowed"
     )
+
+
+def test_invocation_policy_denies_protected_argument_with_resource_metadata(
+    tmp_path: Path,
+) -> None:
+    decision = ToolInvocationPolicyEngine().evaluate(
+        ToolInvocationContext(
+            tool_name="tool_search",
+            arguments={"query": "x", "_session_key": "forged"},
+            registered=True,
+            registry_risk="read-only",
+            metadata={"resource_roots": (str(tmp_path),)},
+        )
+    )
+
+    assert decision.action == "deny"
+    assert decision.reason == "resource_policy_protected_argument_forged"
+    assert (
+        decision.metadata["resource_policy"]["metadata"]["argument"] == "_session_key"
+    )

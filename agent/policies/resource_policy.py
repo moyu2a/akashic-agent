@@ -6,6 +6,8 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Any, Literal
 
+from agent.tools.execution_context import TASK_EXECUTION_PROTECTED_KEYS
+
 ResourcePolicyAction = Literal["allow", "deny", "defer", "not_applicable"]
 
 _ACTIONS = frozenset({"allow", "deny", "defer", "not_applicable"})
@@ -15,6 +17,14 @@ _FILE_PATH_ARGUMENTS = {
     "write_file": "path",
     "edit_file": "path",
 }
+_PROTECTED_ARGUMENT_KEYS = frozenset(
+    {
+        "_session_key",
+        "_request_id",
+        "_attempt_id",
+        "_transport_request_id",
+    }
+) | TASK_EXECUTION_PROTECTED_KEYS
 _PROTECTED_PREFIXES = (
     Path("/etc"),
     Path("/root"),
@@ -68,6 +78,19 @@ class ResourcePolicyEngine:
     policy_name = "ResourcePolicyEngine"
 
     def evaluate(self, context: ResourcePolicyContext) -> ResourcePolicyDecision:
+        protected_key = _first_protected_argument(context.arguments)
+        if protected_key is not None:
+            return ResourcePolicyDecision(
+                action="deny",
+                reason="resource_policy_protected_argument_forged",
+                resource_type="runtime_context",
+                target=protected_key,
+                metadata={
+                    "tool_name": context.tool_name,
+                    "argument": protected_key,
+                    "invoker_reached": False,
+                },
+            )
         path_arg = _FILE_PATH_ARGUMENTS.get(context.tool_name)
         if path_arg is None:
             return ResourcePolicyDecision(
@@ -150,6 +173,13 @@ class ResourcePolicyEngine:
                 "within_roots": True,
             },
         )
+
+
+def _first_protected_argument(arguments: Mapping[str, Any]) -> str | None:
+    for key in sorted(_PROTECTED_ARGUMENT_KEYS):
+        if key in arguments:
+            return key
+    return None
 
 
 def _is_within(path: Path, root: Path) -> bool:

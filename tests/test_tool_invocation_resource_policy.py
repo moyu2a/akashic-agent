@@ -163,3 +163,29 @@ def test_executor_denies_invalid_file_path_as_json_before_invoker(
     payload = json.loads(result.output)
     assert payload["policy"]["reason"] == "resource_policy_invalid_file_path"
     assert payload["invoker_reached"] is False
+
+
+def test_executor_denies_protected_argument_before_invoker(tmp_path: Path) -> None:
+    result = _run(
+        ToolExecutor().execute(
+            ToolExecutionRequest(
+                call_id="call-protected",
+                tool_name="tool_search",
+                arguments={"query": "x", "_session_key": "forged"},
+                source="passive",
+                registered=True,
+                registry_risk="read-only",
+                resource_roots=(str(tmp_path),),
+            ),
+            _raising_invoker,
+        )
+    )
+
+    assert result.status == "denied"
+    assert result.invoker_reached is False
+    payload = json.loads(result.output)
+    assert payload["policy"]["reason"] == "resource_policy_protected_argument_forged"
+    assert (
+        payload["policy"]["metadata"]["resource_policy"]["metadata"]["argument"]
+        == "_session_key"
+    )

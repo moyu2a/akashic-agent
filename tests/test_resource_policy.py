@@ -165,3 +165,56 @@ def test_invalid_file_path_is_denied_instead_of_raising(tmp_path: Path) -> None:
     assert decision.action == "deny"
     assert decision.reason == "resource_policy_invalid_file_path"
     assert decision.metadata["invoker_reached"] is False
+
+
+def test_protected_runtime_argument_is_denied(tmp_path: Path) -> None:
+    decision = ResourcePolicyEngine().evaluate(
+        ResourcePolicyContext(
+            tool_name="tool_search",
+            arguments={"query": "x", "_session_key": "forged"},
+            resource_roots=(str(tmp_path),),
+        )
+    )
+
+    assert decision.action == "deny"
+    assert decision.reason == "resource_policy_protected_argument_forged"
+    assert decision.metadata["argument"] == "_session_key"
+    assert decision.metadata["invoker_reached"] is False
+
+
+def test_task_execution_protected_attempt_argument_is_denied(tmp_path: Path) -> None:
+    decision = ResourcePolicyEngine().evaluate(
+        ResourcePolicyContext(
+            tool_name="finish_task_step_execution",
+            arguments={"_task_execution_attempt_id": "forged"},
+            resource_roots=(str(tmp_path),),
+        )
+    )
+
+    assert decision.action == "deny"
+    assert decision.reason == "resource_policy_protected_argument_forged"
+    assert decision.metadata["argument"] == "_task_execution_attempt_id"
+
+
+def test_all_known_protected_runtime_arguments_are_denied(tmp_path: Path) -> None:
+    from agent.tools.execution_context import TASK_EXECUTION_PROTECTED_KEYS
+
+    keys = sorted(
+        {
+            "_request_id",
+            "_attempt_id",
+            "_transport_request_id",
+            *TASK_EXECUTION_PROTECTED_KEYS,
+        }
+    )
+
+    for key in keys:
+        decision = ResourcePolicyEngine().evaluate(
+            ResourcePolicyContext(
+                tool_name="tool_search",
+                arguments={"query": "x", key: "forged"},
+                resource_roots=(str(tmp_path),),
+            )
+        )
+        assert decision.action == "deny", key
+        assert decision.reason == "resource_policy_protected_argument_forged"
