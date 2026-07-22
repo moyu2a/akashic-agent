@@ -145,6 +145,14 @@ def _is_tool_loop_guard_denial(exec_result: object) -> bool:
     )
 
 
+def _invocation_capabilities(value: object) -> frozenset[str]:
+    if isinstance(value, frozenset):
+        return value
+    if isinstance(value, (set, list, tuple)):
+        return frozenset(item for item in value if isinstance(item, str))
+    return frozenset()
+
+
 def _completion_trace(
     decision: TurnCompletionDecision | None,
 ) -> dict[str, object] | None:
@@ -1881,6 +1889,34 @@ class DefaultReasoner(Reasoner):
                             execution_context=execution_context,
                         )
 
+                    metadata_getter = getattr(
+                        self._tools,
+                        "get_invocation_metadata",
+                        None,
+                    )
+                    invocation_metadata = (
+                        metadata_getter(tool_call.name)
+                        if callable(metadata_getter)
+                        else {
+                            "registered": self._tools.has_tool(tool_call.name),
+                            "registry_risk": (
+                                tool_boundary_context.access_context.tool_risks.get(
+                                    tool_call.name,
+                                    "unknown",
+                                )
+                                if tool_boundary_context is not None
+                                else "unknown"
+                            ),
+                            "registry_capabilities": (
+                                tool_boundary_context.access_context.tool_capabilities.get(
+                                    tool_call.name,
+                                    frozenset(),
+                                )
+                                if tool_boundary_context is not None
+                                else frozenset()
+                            ),
+                        }
+                    )
                     execution_request = ToolExecutionRequest(
                         call_id=tool_call.id,
                         tool_name=tool_call.name,
@@ -1889,8 +1925,24 @@ class DefaultReasoner(Reasoner):
                         session_key=tool_event_session_key,
                         channel=tool_event_channel,
                         chat_id=tool_event_chat_id,
+                        request_text=user_text,
                         tool_batch=tool_batch,
                         tool_batch_index=tool_batch_index,
+                        registered=bool(invocation_metadata["registered"]),
+                        registry_risk=str(invocation_metadata["registry_risk"]),
+                        registry_capabilities=_invocation_capabilities(
+                            invocation_metadata["registry_capabilities"]
+                        ),
+                        task_execution_active=bool(
+                            execution_contract is not None
+                            and execution_contract.active
+                        ),
+                        task_execution_phase=(
+                            execution_contract.phase
+                            if execution_contract is not None
+                            and execution_contract.active
+                            else ""
+                        ),
                     )
                     if (
                         self._task_execution_coordinator is not None

@@ -1,8 +1,16 @@
 from __future__ import annotations
 
+import json
 from collections.abc import Sequence
-from typing import Any, Awaitable, Callable
+from typing import Any, Awaitable, Callable, Protocol
 
+from agent.policies.tool_invocation_policy import (
+    ToolInvocationContext,
+    ToolInvocationDecision,
+    ToolInvocationPolicyEngine,
+    ToolInvocationSource,
+    ToolInvocationTaskExecutionPhase,
+)
 from agent.tool_hooks.base import ToolHook
 from agent.tool_hooks.types import (
     HookContext,
@@ -14,6 +22,10 @@ from agent.tool_hooks.types import (
 ToolInvoker = Callable[[str, dict[str, Any]], Awaitable[Any]]
 
 
+class ToolInvocationPolicy(Protocol):
+    def evaluate(self, context: ToolInvocationContext) -> ToolInvocationDecision: ...
+
+
 class HookExecutionError(RuntimeError):
     def __init__(self, hook_name: str, event: str, cause: Exception) -> None:
         self.hook_name = hook_name
@@ -23,8 +35,13 @@ class HookExecutionError(RuntimeError):
 
 
 class ToolExecutor:
-    def __init__(self, hooks: Sequence[ToolHook] | None = None) -> None:
+    def __init__(
+        self,
+        hooks: Sequence[ToolHook] | None = None,
+        policy_engine: ToolInvocationPolicy | None = None,
+    ) -> None:
         self._hooks = list(hooks or [])
+        self._policy_engine = policy_engine or ToolInvocationPolicyEngine()
 
     def add_hooks(self, hooks: Sequence[ToolHook]) -> None:
         self._hooks.extend(hooks)
@@ -41,8 +58,9 @@ class ToolExecutor:
 
         固定流程：
         1. pre hooks：匹配、改参、必要时拒绝
-        2. invoker：用最终参数执行真实工具
-        3. post hooks：记录成功或错误后的附加信息与 trace
+        2. core invocation policy：最终参数进入真实 invoker 前的硬 gate
+        3. invoker：用最终参数执行真实工具
+        4. post hooks：记录成功或错误后的附加信息与 trace
         """
         current_arguments = dict(request.arguments)
         extra_messages: list[str] = []
@@ -81,6 +99,34 @@ class ToolExecutor:
                 post_hook_trace=post_trace,
             )
 
+        policy_decision = self._policy_engine.evaluate(
+            _build_policy_context(request, final_arguments)
+        )
+        if policy_decision.action == "deny":
+            return ToolExecutionResult(
+                status="denied",
+                output=_policy_block_output(policy_decision),
+                final_arguments=final_arguments,
+                invoker_reached=False,
+                invoker_succeeded=False,
+                extra_messages=extra_messages,
+                pre_hook_trace=pre_trace,
+                post_hook_trace=post_trace,
+                policy_trace=policy_decision.to_trace_metadata(),
+            )
+        if policy_decision.action == "defer":
+            return ToolExecutionResult(
+                status="deferred",
+                output=_policy_defer_output(policy_decision),
+                final_arguments=final_arguments,
+                invoker_reached=False,
+                invoker_succeeded=False,
+                extra_messages=extra_messages,
+                pre_hook_trace=pre_trace,
+                post_hook_trace=post_trace,
+                policy_trace=policy_decision.to_trace_metadata(),
+            )
+
         try:
             # 这里才进入真实工具执行；hook 本身不直接替代工具实现。
             output = await invoker(request.tool_name, final_arguments)
@@ -108,6 +154,7 @@ class ToolExecutor:
                     extra_messages=extra_messages,
                     pre_hook_trace=pre_trace,
                     post_hook_trace=post_trace,
+                    policy_trace=policy_decision.to_trace_metadata(),
                 )
             return ToolExecutionResult(
                 status="error",
@@ -118,6 +165,7 @@ class ToolExecutor:
                 extra_messages=extra_messages,
                 pre_hook_trace=pre_trace,
                 post_hook_trace=post_trace,
+                policy_trace=policy_decision.to_trace_metadata(),
             )
 
         try:
@@ -143,6 +191,7 @@ class ToolExecutor:
                 extra_messages=extra_messages,
                 pre_hook_trace=pre_trace,
                 post_hook_trace=post_trace,
+                policy_trace=policy_decision.to_trace_metadata(),
             )
         return ToolExecutionResult(
             status="success",
@@ -153,6 +202,7 @@ class ToolExecutor:
             extra_messages=extra_messages,
             pre_hook_trace=pre_trace,
             post_hook_trace=post_trace,
+            policy_trace=policy_decision.to_trace_metadata(),
         )
 
     async def preflight(
@@ -311,3 +361,79 @@ class ToolExecutor:
                     extra_message=outcome.extra_message,
                 )
             )
+
+
+def _policy_source(request: ToolExecutionRequest) -> ToolInvocationSource:
+    if request.task_execution_active:
+        return "task_execution"
+    if request.source in {"passive", "proactive", "subagent"}:
+        return request.source
+    return "passive"
+
+
+def _policy_task_execution_phase(value: str) -> ToolInvocationTaskExecutionPhase:
+    phases: dict[str, ToolInvocationTaskExecutionPhase] = {
+        "": "",
+        "inactive": "inactive",
+        "claim": "claim",
+        "work": "work",
+        "waiting_authorization": "waiting_authorization",
+        "finish": "finish",
+        "terminal": "terminal",
+    }
+    return phases.get(value, "")
+
+
+def _build_policy_context(
+    request: ToolExecutionRequest,
+    arguments: dict[str, Any],
+) -> ToolInvocationContext:
+    return ToolInvocationContext(
+        tool_name=request.tool_name,
+        arguments=arguments,
+        registered=request.registered,
+        registry_risk=request.registry_risk,
+        capabilities=request.registry_capabilities,
+        source=_policy_source(request),
+        session_key=request.session_key,
+        request_id=request.call_id,
+        user_text=request.request_text,
+        task_execution_active=request.task_execution_active,
+        task_execution_phase=_policy_task_execution_phase(request.task_execution_phase),
+        metadata={
+            "channel": request.channel,
+            "chat_id": request.chat_id,
+            "tool_batch_index": request.tool_batch_index,
+        },
+    )
+
+
+def _policy_block_output(decision: ToolInvocationDecision) -> str:
+    trace = decision.to_trace_metadata()
+    return json.dumps(
+        {
+            "ok": False,
+            "blocked": True,
+            "error_code": trace["reason"],
+            "message": "工具调用被调用级安全策略拒绝。",
+            "policy": trace,
+            "invoker_reached": False,
+        },
+        ensure_ascii=False,
+    )
+
+
+def _policy_defer_output(decision: ToolInvocationDecision) -> str:
+    trace = decision.to_trace_metadata()
+    return json.dumps(
+        {
+            "ok": False,
+            "blocked": True,
+            "deferred": True,
+            "error_code": trace["reason"],
+            "message": "工具调用需要授权后才能执行。",
+            "policy": trace,
+            "invoker_reached": False,
+        },
+        ensure_ascii=False,
+    )

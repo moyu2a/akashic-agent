@@ -5,7 +5,7 @@ from typing import Any, Literal
 
 HookEvent = Literal["pre_tool_use", "post_tool_use", "post_tool_error"]
 ToolSource = Literal["passive", "proactive", "subagent"]
-ToolExecStatus = Literal["success", "denied", "error"]
+ToolExecStatus = Literal["success", "denied", "deferred", "error"]
 HookDecision = Literal["pass", "deny"]
 
 
@@ -21,6 +21,11 @@ class ToolExecutionRequest:
     request_text: str = ""
     tool_batch: tuple[dict[str, Any], ...] = field(default_factory=tuple)
     tool_batch_index: int = 0
+    registered: bool = True
+    registry_risk: str = "unknown"
+    registry_capabilities: frozenset[str] = field(default_factory=frozenset)
+    task_execution_active: bool = False
+    task_execution_phase: str = ""
 
 
 @dataclass
@@ -72,3 +77,4 @@ class ToolExecutionResult:
     extra_messages: list[str] = field(default_factory=_empty_str_list)
     pre_hook_trace: list[HookTraceItem] = field(default_factory=_empty_pre_trace)
     post_hook_trace: list[HookTraceItem] = field(default_factory=_empty_post_trace)
+    policy_trace: dict[str, object] = field(default_factory=dict)

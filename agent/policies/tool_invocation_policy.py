@@ -30,6 +30,15 @@ _TASK_EXECUTION_PHASES = frozenset(
         "terminal",
     }
 )
+_TASK_EXECUTION_CONTROL_CAPABILITIES = frozenset(
+    {
+        "task_execution.begin",
+        "task_execution.finish",
+        "task_execution.defer",
+        "task_execution.inspect",
+        "task_execution.abort",
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -157,6 +166,14 @@ def _task_execution_work_decision(
     policy_name: str,
     metadata: dict[str, object],
 ) -> ToolInvocationDecision:
+    if context.capabilities & _TASK_EXECUTION_CONTROL_CAPABILITIES:
+        return ToolInvocationDecision(
+            action="allow",
+            reason="tool_invocation_task_execution_control_allowed",
+            risk=risk,
+            policy_name=policy_name,
+            metadata=metadata,
+        )
     if context.tool_name != "shell" and risk == "read-only":
         return ToolInvocationDecision(
             action="allow",

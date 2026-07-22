@@ -35,6 +35,11 @@ from agent.policies.tool_access_types import (
     ToolAccessPlan,
     ToolExecutionGateResult,
 )
+from agent.policies.tool_invocation_policy import (
+    ToolInvocationContext,
+    ToolInvocationDecision,
+    ToolInvocationPolicyEngine,
+)
 
 __all__ = [
     "DecisionMeta",
@@ -60,6 +65,9 @@ __all__ = [
     "ToolAccessGateway",
     "ToolAccessPlan",
     "ToolExecutionGateResult",
+    "ToolInvocationContext",
+    "ToolInvocationDecision",
+    "ToolInvocationPolicyEngine",
     "decide_doc_rag_preload",
     "infer_task_execution_contract",
 ]

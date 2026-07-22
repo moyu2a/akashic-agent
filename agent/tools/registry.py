@@ -237,6 +237,17 @@ class ToolRegistry:
         """Return a defensive snapshot for runtime access decisions."""
         return {name: meta.risk for name, meta in self._metadata.items()}
 
+    def get_invocation_metadata(self, name: str) -> dict[str, object]:
+        """Return the registry metadata needed by invocation-time policy."""
+        meta = self._metadata.get(name)
+        return {
+            "registered": name in self._tools,
+            "registry_risk": meta.risk if meta is not None else "unknown",
+            "registry_capabilities": (
+                frozenset(meta.capabilities) if meta is not None else frozenset()
+            ),
+        }
+
     def get_documents(self) -> list[ToolDocument]:
         """返回所有已注册工具的索引文档列表。"""
         return list(self._documents.values())

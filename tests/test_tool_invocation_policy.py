@@ -151,6 +151,23 @@ def test_task_execution_work_allows_read_only() -> None:
     assert decision.reason == "tool_invocation_task_execution_read_only_allowed"
 
 
+def test_task_execution_work_allows_control_capability_even_when_write_risk() -> None:
+    decision = ToolInvocationPolicyEngine().evaluate(
+        ToolInvocationContext(
+            tool_name="finish_task_step_execution",
+            registered=True,
+            registry_risk="write",
+            capabilities=frozenset({"task_execution.finish"}),
+            source="task_execution",
+            task_execution_active=True,
+            task_execution_phase="work",
+        )
+    )
+
+    assert decision.action == "allow"
+    assert decision.reason == "tool_invocation_task_execution_control_allowed"
+
+
 def test_task_execution_work_defers_write_shell_external_and_unknown() -> None:
     engine = ToolInvocationPolicyEngine()
 
@@ -226,3 +243,15 @@ def test_task_execution_unregistered_and_destructive_precedence() -> None:
     assert unregistered.reason == "tool_invocation_unregistered_tool"
     assert destructive.action == "deny"
     assert destructive.reason == "tool_invocation_destructive_denied"
+
+
+def test_policy_types_are_exported_from_policies_package() -> None:
+    from agent.policies import (
+        ToolInvocationContext as ExportedContext,
+        ToolInvocationDecision as ExportedDecision,
+        ToolInvocationPolicyEngine as ExportedEngine,
+    )
+
+    assert ExportedContext is ToolInvocationContext
+    assert ExportedDecision is ToolInvocationDecision
+    assert ExportedEngine is ToolInvocationPolicyEngine

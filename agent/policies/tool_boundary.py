@@ -246,6 +246,10 @@ class TurnToolBoundaryManager:
                 tool_name=tool_name,
                 registered=registered,
                 registry_risk=context.access_context.tool_risks.get(tool_name, "unknown"),
+                registry_capabilities=context.access_context.tool_capabilities.get(
+                    tool_name,
+                    frozenset(),
+                ),
             )
             if risk_decision is not None and risk_decision.action == "unknown_tool":
                 return self._boundary_block(

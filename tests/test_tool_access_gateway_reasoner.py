@@ -134,6 +134,7 @@ def _make_reasoner(
     provider: _Provider,
     *,
     read_file: _RecordingTool | None = None,
+    read_file_risk: str = "unknown",
     extra_tools: list[Tool] | None = None,
     extra_tool_risks: dict[str, str] | None = None,
     discovery: ToolDiscoveryState | None = None,
@@ -149,7 +150,11 @@ def _make_reasoner(
     tools.register(tool_search_type(tools), always_on=True, risk="read-only")
     tools.register(_RecordingTool("search_docs"))
     tools.register(_RecordingTool("fetch_doc_chunk"))
-    tools.register(read_file or _RecordingTool("read_file"), always_on=True)
+    tools.register(
+        read_file or _RecordingTool("read_file"),
+        always_on=True,
+        risk=read_file_risk,
+    )
     tools.register(_RecordingTool("shell"), always_on=True)
     tools.register(_RecordingTool("list_dir"), always_on=True)
     tools.register(
@@ -314,6 +319,43 @@ def test_strong_doc_prompt_suppresses_local_file_schemas_even_if_always_on() -> 
     names = _tool_names(provider.calls[0])
     assert {"search_docs", "fetch_doc_chunk", "tool_search"} <= names
     assert names.isdisjoint({"read_file", "shell", "list_dir"})
+
+
+@pytest.mark.asyncio
+async def test_reasoner_policy_gate_blocks_destructive_registered_tool_as_json() -> None:
+    read_file = _RecordingTool("read_file")
+    provider = _Provider(
+        [
+            LLMResponse(
+                content="",
+                tool_calls=[ToolCall("call-1", "read_file", {"path": "README.md"})],
+            ),
+            LLMResponse(content="final", tool_calls=[]),
+        ]
+    )
+    reasoner = _make_reasoner(
+        provider,
+        read_file=read_file,
+        read_file_risk="destructive",
+    )
+
+    result = await reasoner.run_turn(
+        msg=_msg("read README"),
+        session=cast(Any, _session()),
+    )
+
+    assert result.reply == "final"
+    assert read_file.calls == []
+    second_messages = provider.calls[1]["messages"]
+    tool_messages = [
+        message for message in second_messages if message.get("role") == "tool"
+    ]
+    payload = json.loads(tool_messages[-1]["content"])
+    assert payload["blocked"] is True
+    assert payload["invoker_reached"] is False
+    assert payload["policy"]["reason"] == "tool_invocation_destructive_denied"
+    assert payload["policy"]["metadata"]["registered"] is True
+    assert payload["policy"]["metadata"]["risk"] == "destructive"
 
 
 def test_tool_search_result_is_filtered_before_model_can_see_blocked_tool() -> None:

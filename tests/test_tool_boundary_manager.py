@@ -7,9 +7,14 @@ from pathlib import Path
 
 import pytest
 
+from agent.policies.task_execution_boundary import TaskExecutionRiskPolicy
 from agent.policies.tool_access import ToolAccessContext
 from agent.policies.tool_boundary import TurnToolBoundaryManager
 from agent.policies.task_execution_contract import TaskExecutionTurnContract
+from agent.policies.tool_invocation_policy import (
+    ToolInvocationContext,
+    ToolInvocationDecision,
+)
 from agent.tools.base import ToolResult
 from agent.tools.filesystem import ReadFileTool
 
@@ -147,6 +152,75 @@ def test_registered_write_returns_typed_defer_before_visibility_block() -> None:
 
     assert decision.action == "defer"
     assert decision.execute is False
+    assert decision.metadata["durable_transition"] == "waiting_authorization"
+
+
+class _FakeInvocationPolicy:
+    def __init__(self) -> None:
+        self.calls: list[ToolInvocationContext] = []
+
+    def evaluate(self, context: ToolInvocationContext) -> ToolInvocationDecision:
+        self.calls.append(context)
+        return ToolInvocationDecision(
+            action="defer",
+            reason="fake_invocation_defer",
+            risk=context.registry_risk,
+            metadata={"durable_transition": "waiting_authorization"},
+        )
+
+
+def test_task_execution_risk_policy_delegates_to_invocation_policy() -> None:
+    fake = _FakeInvocationPolicy()
+
+    decision = TaskExecutionRiskPolicy(invocation_policy=fake).evaluate(
+        contract=_execution_ctx().turn_metadata["task_execution_contract"],
+        tool_name="write_file",
+        registered=True,
+        registry_risk="write",
+        registry_capabilities=frozenset({"filesystem.write"}),
+    )
+
+    assert len(fake.calls) == 1
+    assert fake.calls[0].source == "task_execution"
+    assert fake.calls[0].task_execution_phase == "work"
+    assert fake.calls[0].capabilities == frozenset({"filesystem.write"})
+    assert decision is not None
+    assert decision.action == "defer"
+    assert decision.reason == "task_execution_authorization_required"
+    assert decision.metadata["policy_reason"] == "fake_invocation_defer"
+
+
+def test_task_execution_risk_policy_allows_control_capability_directly() -> None:
+    decision = TaskExecutionRiskPolicy().evaluate(
+        contract=_execution_ctx().turn_metadata["task_execution_contract"],
+        tool_name="finish_task_step_execution",
+        registered=True,
+        registry_risk="write",
+        registry_capabilities=frozenset({"task_execution.finish"}),
+    )
+
+    assert decision is not None
+    assert decision.action == "allow"
+    assert decision.reason == "task_execution_control_allowed"
+    assert decision.metadata["policy_reason"] == (
+        "tool_invocation_task_execution_control_allowed"
+    )
+
+
+def test_task_execution_defer_uses_invocation_policy_engine_before_executor() -> None:
+    manager = TurnToolBoundaryManager()
+    context = manager.build_context(_execution_ctx())
+
+    decision = manager.evaluate_tool_call(
+        context,
+        tool_name="write_file",
+        arguments={"path": "x.txt", "content": "x"},
+        visible_names=manager.compute_visible_names(context),
+    )
+
+    assert decision.action == "defer"
+    assert decision.execute is False
+    assert decision.reason == "task_execution_authorization_required"
     assert decision.metadata["durable_transition"] == "waiting_authorization"
 
 
