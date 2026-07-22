@@ -128,6 +128,28 @@ P1.2 已接入 `ToolExecutor` 和 passive reasoner 的真实执行路径。P1.3a
 - `message_push.file/image` 这类 mixed local path / URL 参数不在 P1.3 completion 范围内，需要后续 dedicated mixed-resource policy。
 - Docker/chroot/seccomp、approval workflow、ToolAuditLedger 持久化仍属于 P2/P3/P4。
 
+## P2 Approval Policy 接入结果
+
+日期：2026-07-22
+
+本阶段在 P1 hard gate 之上完成默认风险策略、结构化授权/延迟协议和最小审计 trace：
+
+- 新增 `agent/policies/tool_risk_strategy.py`，把 passive turn 中的工具风险收束为统一矩阵：`read-only` 自动允许，`write`、`external-side-effect`、`unknown` 默认 `defer`，`destructive` 默认 `deny`。
+- `shell` 工具和带 `shell.execute` / `process.execute` capability 的工具，即使 registry risk 被标成 `read-only`，也会默认 `defer`，等待显式授权，不再依赖 shell safety pre-hook 的 allow 结论直接执行。
+- TaskExecution work phase 仍由既有 durable authorization path 负责；executor 层 P2 defer 是非执行 fallback，不替代 `waiting_authorization` 的持久化所有权。
+- TaskPlan 控制面能力（`task_plan.create/update/inspect`）作为 session 内部控制工具被显式允许，避免 P2 unknown/write 默认 defer 误伤计划创建和更新。
+- 新增 `agent/policies/tool_approval.py`，`defer` 结果返回结构化 `approval_request`，包含 tool、risk、reason、approval scope、参数 hash 和脱敏参数摘要。
+- 新增 `agent/policies/tool_audit.py`，每次进入 invocation policy 后的结果都会生成最小审计 metadata：request/session/channel/chat/tool/source/risk/action/reason/args hash/invoker reached/succeeded。
+- `ToolExecutionResult.audit_trace` 进入 passive turn tool trace；observe slim trace 只保留固定白名单审计字段，不保存 `args_summary` 这类可能含敏感内容的参数摘要。
+- `DefaultReasoner` 已确保 `defer/deny` 这类没有触达真实 invoker 的工具调用不会被计入真实执行工具、不会污染 tool LRU 解锁路径。
+
+重要边界：
+
+- P2 仍不是 approval UI，也不是用户批准后的继续执行协议；它只产生结构化授权请求和不执行真实 invoker 的安全结果。
+- P2 仍不是完整 `ToolAuditLedger` 数据库；当前审计只随 turn trace/observe 传播，满足“为什么执行/为什么没执行”的最小回放需要。
+- P2 仍不是 Docker/chroot/seccomp sandbox，也不是 shell AST；shell 安全目前是 `ResourcePolicy` 参数 gate + shell safety pre-hook + P2 默认 defer 的组合防线。
+- shell safety 插件测试已调整语义：插件层“允许”只表示 pre-hook 未拒绝，最终是否真实执行由 P2 invocation policy 决定。
+
 ## 验证结果
 
 P1.1 目标测试：
@@ -241,11 +263,35 @@ git diff --check
 
 结果：均通过，退出码 0；`git diff --check` 无输出。
 
+P2 focused 回归：
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 uv run --with pytest --with pytest-asyncio pytest tests/test_tool_risk_strategy.py tests/test_tool_approval.py tests/test_tool_audit.py tests/test_tool_invocation_policy.py tests/test_tool_invocation_policy_gate.py tests/test_tool_invocation_resource_policy.py tests/test_resource_policy.py tests/test_tool_executor.py tests/test_tool_boundary_manager.py tests/test_task_execution_access.py tests/test_task_execution_reasoner.py tests/test_shell_safety_plugin.py tests/test_tool_access_gateway.py tests/test_observe_writer.py -q -p no:cacheprovider
+```
+
+结果：
+
+```text
+192 passed in 4.83s
+```
+
+P2 audit focused 回归：
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 uv run --with pytest --with pytest-asyncio pytest tests/test_tool_audit.py tests/test_tool_invocation_policy_gate.py tests/test_tool_executor.py tests/test_observe_writer.py -q -p no:cacheprovider
+```
+
+结果：
+
+```text
+30 passed in 0.38s
+```
+
 ## 后续步骤
 
-下一步进入 P2，不应直接上完整 sandbox，而是先补默认 workspace / approval / deny 策略和最小审计证据：
+P2 已完成默认 risk strategy、structured approval request 和 minimal audit trace。下一步不应直接声称生产级安全，而是进入 P3/P4，把“请求授权”和“安全执行环境”补成闭环：
 
-1. 明确普通 passive turn 的 write/external/unknown 什么时候继续 allow、什么时候 approval、什么时候 deny。
-2. 设计 `ToolAuditLedger` 的最小字段：request/turn/session/tool/policy/action/args hash/result preview/invoker 状态。
+1. P3 设计用户 approval workflow：approve/deny/retry 的协议、过期策略、同参数 hash 复用范围和 TaskExecution durable 状态衔接。
+2. P3/P4 设计 `ToolAuditLedger` 持久化：timestamp、actor、request id、policy decision、args hash、脱敏摘要、执行结果预览和 retention 策略。
 3. 继续收敛 no-root 兼容 allow，只让明确无法提供 workspace 的直接调用方走兼容路径。
-4. 再评估 sandbox 形态：Docker/Podman、non-root user、read-only rootfs、resource limits、filesystem snapshot/diff/rollback。
+4. P4 评估 sandbox 形态：Docker/Podman、non-root user、read-only rootfs、resource limits、filesystem snapshot/diff/rollback。
