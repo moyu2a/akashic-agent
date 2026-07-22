@@ -64,6 +64,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--source-fixture-db", type=Path)
     args = parser.parse_args(argv)
 
+    effective_case_set = args.case_set
     if args.source_fixture_mode == "balanced":
         fixture_db = args.source_fixture_db or args.output_dir / "fixture_sessions.db"
         fixture = build_sleep_hygiene_source_fixture(
@@ -77,6 +78,7 @@ def main(argv: list[str] | None = None) -> int:
         cases = fixture.cases
         args.source_fetch_mode = "session-store"
         args.session_db = fixture.session_db_path
+        effective_case_set = "all"
     else:
         cases = build_sleep_hygiene_cases(
             case_set=args.case_set,
@@ -143,7 +145,7 @@ def main(argv: list[str] | None = None) -> int:
 
     print(
         "sleep hygiene evidence eval complete: "
-        f"case_set={args.case_set} "
+        f"case_set={effective_case_set} "
         f"cases={report.metrics['case_count']} "
         f"scanned_active_items={report.metrics['scanned_active_item_count']} "
         f"evidence_rows={report.metrics['evaluated_evidence_row_count']} "

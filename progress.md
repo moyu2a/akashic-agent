@@ -59,6 +59,11 @@
   - Regenerated source-backed report and patch.
   - Patch gate result: `200` rows, `12` source-backed safe, `24` requires review, `73` source_not_fetchable, `11` source_not_supporting_summary, `80` not_cleanup_candidate.
   - Commit: `fee1d5a feat: gate sleep hygiene patch by source evidence`.
+- Final review follow-up:
+  - fixed fixture DB overwrite risk by adding a fixture marker and refusing to overwrite an existing non-fixture session DB;
+  - allowed rebuilding legacy unmarked source fixture DBs only when they clearly contain the old fixture shape;
+  - fixed fixture CLI output so it reports `case_set=all`, matching the actual all-case fixture pack;
+  - fixed source-backed report Markdown so `source_fetch_mode=session-store` reports `session-store 回源成功率`, not proxy 回源成功率.
 - Current conclusion:
   - V3 cleanup / review separation remains the cleanup-safety baseline;
   - Phase 6s adds evidence trust: source refs can now be tested against real `SessionStore` rows in fixture mode;

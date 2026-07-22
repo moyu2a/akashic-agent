@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+import sqlite3
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Sequence
@@ -38,12 +40,13 @@ def build_sleep_hygiene_source_fixture(
     )
     adjusted_cases = _assign_source_states(cases)
     db_path.parent.mkdir(parents=True, exist_ok=True)
-    _reset_fixture_db(db_path)
+    _reset_fixture_db_if_safe(db_path)
     store = SessionStore(db_path)
     try:
         _write_fixture_messages(store, adjusted_cases)
     finally:
         store.close()
+    _mark_fixture_db(db_path)
     return SleepHygieneSourceFixture(
         cases=adjusted_cases,
         session_db_path=db_path,
@@ -107,11 +110,87 @@ def _source_ref_for_state(state: str, message_seq: int) -> str:
     return ""
 
 
-def _reset_fixture_db(db_path: Path) -> None:
+def _reset_fixture_db_if_safe(db_path: Path) -> None:
+    if db_path.exists() and not _is_fixture_db(db_path):
+        raise ValueError(
+            f"refusing to overwrite existing non-fixture session db: {db_path}"
+        )
     for suffix in ("", "-wal", "-shm"):
         candidate = Path(str(db_path) + suffix)
         if candidate.exists():
             candidate.unlink()
+
+
+def _is_fixture_db(db_path: Path) -> bool:
+    return _is_marked_fixture_db(db_path) or _looks_like_legacy_fixture_db(db_path)
+
+
+def _is_marked_fixture_db(db_path: Path) -> bool:
+    try:
+        conn = sqlite3.connect(str(db_path))
+        try:
+            row = conn.execute(
+                """
+                SELECT value
+                FROM sleep_hygiene_source_fixture_meta
+                WHERE key = 'fixture_name'
+                """
+            ).fetchone()
+        finally:
+            conn.close()
+    except sqlite3.DatabaseError:
+        return False
+    return row is not None and row[0] == "sleep_hygiene_source_fixture"
+
+
+def _looks_like_legacy_fixture_db(db_path: Path) -> bool:
+    try:
+        conn = sqlite3.connect(str(db_path))
+        conn.row_factory = sqlite3.Row
+        try:
+            session_rows = conn.execute("SELECT key FROM sessions").fetchall()
+            message_rows = conn.execute("SELECT extra FROM messages").fetchall()
+        finally:
+            conn.close()
+    except sqlite3.DatabaseError:
+        return False
+    if not session_rows or {str(row["key"]) for row in session_rows} != {"cli:local"}:
+        return False
+    if not message_rows:
+        return False
+    for row in message_rows:
+        try:
+            extra = json.loads(str(row["extra"] or "{}"))
+        except json.JSONDecodeError:
+            return False
+        if str(extra.get("source_fixture_state") or "") not in {
+            "supported",
+            "unsupported",
+        }:
+            return False
+    return True
+
+
+def _mark_fixture_db(db_path: Path) -> None:
+    conn = sqlite3.connect(str(db_path))
+    try:
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS sleep_hygiene_source_fixture_meta (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL
+            )
+            """
+        )
+        conn.execute(
+            """
+            INSERT OR REPLACE INTO sleep_hygiene_source_fixture_meta (key, value)
+            VALUES ('fixture_name', 'sleep_hygiene_source_fixture')
+            """
+        )
+        conn.commit()
+    finally:
+        conn.close()
 
 
 def _write_fixture_messages(

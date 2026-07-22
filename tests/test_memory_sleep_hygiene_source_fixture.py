@@ -43,6 +43,62 @@ def test_source_fixture_can_rebuild_same_db_path(tmp_path: Path) -> None:
     assert second.expected_status_counts == first.expected_status_counts
 
 
+def test_source_fixture_refuses_to_overwrite_unmarked_existing_session_db(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "sessions.db"
+    store = SessionStore(db_path)
+    try:
+        store.create_session(key="telegram:123")
+        store.insert_message(
+            "telegram:123",
+            role="user",
+            content="真实会话内容不应被 fixture 覆盖",
+            ts="2026-07-22T00:00:00+08:00",
+            seq=0,
+        )
+    finally:
+        store.close()
+
+    try:
+        build_sleep_hygiene_source_fixture(db_path)
+    except ValueError as exc:
+        assert "refusing to overwrite existing non-fixture session db" in str(exc)
+    else:
+        raise AssertionError("expected fixture builder to reject existing non-fixture db")
+
+    store = SessionStore(db_path)
+    try:
+        messages = store.fetch_session_messages("telegram:123")
+    finally:
+        store.close()
+    assert [message["content"] for message in messages] == ["真实会话内容不应被 fixture 覆盖"]
+
+
+def test_source_fixture_can_rebuild_legacy_unmarked_fixture_db(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "sessions.db"
+    store = SessionStore(db_path)
+    try:
+        store.create_session(key="cli:local")
+        store.insert_message(
+            "cli:local",
+            role="user",
+            content="旧版 fixture 内容",
+            ts="2026-07-22T00:00:00+08:00",
+            seq=0,
+            extra={"source_fixture_state": "supported"},
+        )
+    finally:
+        store.close()
+
+    fixture = build_sleep_hygiene_source_fixture(db_path)
+
+    assert fixture.session_db_path.exists()
+    assert fixture.expected_status_counts["supported"] > 0
+
+
 def test_source_fixture_runs_through_session_store_resolver(
     tmp_path: Path,
 ) -> None:

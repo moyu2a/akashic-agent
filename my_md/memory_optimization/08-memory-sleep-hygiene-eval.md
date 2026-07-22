@@ -49,6 +49,8 @@ dry-run patch 已新增 source-backed 安全门：
 
 这个 gate 的含义是：只有同时满足 `safe_cleanup_candidate = true`、`source_fetch_mode = session-store`、`source_fetch_success = true`、`source_support_status = supported` 的记录，才会标记 `source_backed_action_safe = true`。proxy 模式即使显示支持，也不会被当作真实可执行依据。
 
+Fixture DB 也加了覆盖保护：如果 `--source-fixture-db` 指向一个已经存在但没有 fixture marker、也不像旧版 sleep hygiene fixture 的普通 `sessions.db`，构建器会直接失败，不会删除或覆盖它。这样可以避免误把生产会话库作为评测 fixture 路径传入。
+
 ## 当前项目真实状态
 
 - 现有睡眠巩固仍是 shadow / dry-run。

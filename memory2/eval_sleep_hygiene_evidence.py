@@ -167,6 +167,7 @@ def write_sleep_hygiene_report_markdown(
     path.parent.mkdir(parents=True, exist_ok=True)
     metrics = report.metrics
     shadow = report.shadow_metrics
+    source_fetch_label = _source_fetch_success_label(metrics)
     lines = [
         "# 睡眠巩固记忆库卫生评测报告",
         "",
@@ -181,7 +182,7 @@ def write_sleep_hygiene_report_markdown(
         f"| 过期候选识别率 | {metrics['stale_cleanup_rate']}% |",
         f"| 低价值候选识别率 | {metrics['low_value_cleanup_rate']}% |",
         f"| 来源覆盖率 | {metrics['source_ref_coverage_rate']}% |",
-        f"| proxy 回源成功率 | {metrics['source_fetch_success_rate']}% |",
+        f"| {source_fetch_label} | {metrics['source_fetch_success_rate']}% |",
         f"| shadow 估算 token 节省率 | {metrics['shadow_estimated_token_saving_rate']}% |",
         f"| 关键记忆保持率 | {metrics['post_consolidation_recall_retention_rate']}% |",
         f"| 关键记忆误伤候选数 | {metrics['retained_candidate_leak_count']} |",
@@ -720,6 +721,18 @@ def _fmt_pct(value: object) -> str:
     if isinstance(value, (int, float)) and not isinstance(value, bool):
         return f"{value}%"
     return str(value)
+
+
+def _source_fetch_success_label(metrics: dict[str, object]) -> str:
+    source_metrics = metrics.get("source_evidence_metrics")
+    if not isinstance(source_metrics, dict):
+        return "proxy 回源成功率"
+    mode = str(source_metrics.get("source_fetch_mode") or "").strip()
+    if mode == "session-store":
+        return "session-store 回源成功率"
+    if mode:
+        return f"{mode} 回源成功率"
+    return "回源成功率"
 
 
 def _group_metrics(records: Sequence[dict[str, object]]) -> dict[str, dict[str, object]]:

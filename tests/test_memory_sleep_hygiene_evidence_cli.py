@@ -170,6 +170,7 @@ def test_sleep_hygiene_cli_can_run_source_backed_fixture_mode(
     )
 
     assert result.returncode == 0, result.stderr
+    assert "case_set=all" in result.stdout
     assert fixture_db.exists()
     summary = json.loads(
         (output_dir / "memory_sleep_hygiene_evidence_eval.json").read_text(
