@@ -46,14 +46,25 @@ def build_sleep_hygiene_evidence_records(
 
     records: list[dict[str, object]] = []
     for case in cases:
-        for item_id in case.expected_item_ids:
+        for item_id in case.evaluated_item_ids():
             item = item_by_id[str(item_id)]
-            after_state = _after_state_for_label(
-                label=case.label,
+            expected_after_state = case.expected_state_for(str(item_id))
+            after_state = _after_state_for_expected(
+                expected_after_state=expected_after_state,
                 item_id=str(item_id),
                 candidate_state_by_id=candidate_state_by_id,
             )
-            records.append(_record(item, label=case.label, after_state=after_state))
+            records.append(
+                _record(
+                    item,
+                    label=_label_for_expected_state(expected_after_state),
+                    after_state=after_state,
+                    case_id=case.case_id,
+                    case_set=case.case_set,
+                    scenario=case.scenario,
+                    expected_after_state=expected_after_state,
+                )
+            )
     return tuple(records)
 
 
@@ -205,11 +216,34 @@ def _after_state_for_label(
     return "active"
 
 
+def _after_state_for_expected(
+    *,
+    expected_after_state: str,
+    item_id: str,
+    candidate_state_by_id: dict[str, str],
+) -> str:
+    return candidate_state_by_id.get(item_id) or "active"
+
+
+def _label_for_expected_state(expected_after_state: str) -> str:
+    if expected_after_state == "merged":
+        return "duplicate"
+    if expected_after_state == "stale":
+        return "stale"
+    if expected_after_state == "low_value_removed":
+        return "low_value"
+    return "retained"
+
+
 def _record(
     item: dict[str, object],
     *,
     label: str,
     after_state: str,
+    case_id: str,
+    case_set: str,
+    scenario: str,
+    expected_after_state: str,
 ) -> dict[str, object]:
     baseline_tokens = _token_estimate(item.get("summary"))
     after_tokens = (
@@ -217,9 +251,13 @@ def _record(
     )
     source_ref_available = bool(str(item.get("source_ref") or "").strip())
     return {
+        "case_id": case_id,
+        "case_set": case_set,
+        "scenario": scenario,
         "item_id": str(item["id"]),
         "baseline_state": "active",
         "after_state": after_state,
+        "expected_after_state": expected_after_state,
         "label": label,
         "source_ref_available": source_ref_available,
         "source_fetch_success": source_ref_available,
@@ -227,6 +265,28 @@ def _record(
         "after_token_estimate": after_tokens,
         "infra_error": False,
     }
+
+
+_TARGET_HYGIENE_FIELDS = (
+    "item_id",
+    "baseline_state",
+    "after_state",
+    "label",
+    "source_ref_available",
+    "source_fetch_success",
+    "baseline_token_estimate",
+    "after_token_estimate",
+    "infra_error",
+)
+
+
+def strip_sleep_hygiene_evidence_for_target_metrics(
+    records: Sequence[dict[str, object]],
+) -> tuple[dict[str, object], ...]:
+    return tuple(
+        {field: record[field] for field in _TARGET_HYGIENE_FIELDS}
+        for record in records
+    )
 
 
 def _non_representative_duplicate_ids(groups: object) -> set[str]:
@@ -291,6 +351,7 @@ def _metrics(
             retained_candidate_leak_count / max(1, _count_label(records, "retained")) * 100,
             4,
         ),
+        "group_metrics": _group_metrics(records),
     }
 
 
@@ -330,3 +391,76 @@ def _bool_pct(records: Sequence[dict[str, object]], field: str) -> float | str:
 
 def _token_estimate(text: object) -> int:
     return max(1, len(str(text or "")) // 4)
+
+
+def _group_metrics(records: Sequence[dict[str, object]]) -> dict[str, dict[str, object]]:
+    groups: dict[str, list[dict[str, object]]] = {
+        "standard": [],
+        "hard": [],
+        "overall": list(records),
+    }
+    for record in records:
+        groups.setdefault(str(record.get("case_set") or "standard"), []).append(record)
+    return {
+        name: _metrics_for_records(group_records)
+        for name, group_records in groups.items()
+        if group_records
+    }
+
+
+def _metrics_for_records(records: Sequence[dict[str, object]]) -> dict[str, object]:
+    expected_candidate_rows = [
+        record for record in records if record["expected_after_state"] != "active"
+    ]
+    actual_candidate_rows = [
+        record for record in records if record["after_state"] != "active"
+    ]
+    correct_candidate_rows = [
+        record
+        for record in actual_candidate_rows
+        if record["after_state"] == record["expected_after_state"]
+    ]
+    retained_rows = [
+        record for record in records if record["expected_after_state"] == "active"
+    ]
+    false_positive_rows = [
+        record for record in retained_rows if record["after_state"] != "active"
+    ]
+    token_rate = _token_saving_rate(records)
+    false_positive_rate = _ratio_pct(len(false_positive_rows), len(retained_rows))
+    return {
+        "case_count": len({str(record["case_id"]) for record in records}),
+        "evaluated_item_count": len(records),
+        "evidence_row_count": len(records),
+        "candidate_recall": _ratio_pct(
+            len(correct_candidate_rows),
+            len(expected_candidate_rows),
+        ),
+        "candidate_precision": _ratio_pct(
+            len(correct_candidate_rows),
+            len(actual_candidate_rows),
+        ),
+        "retained_protection_rate": _ratio_pct(
+            len(retained_rows) - len(false_positive_rows),
+            len(retained_rows),
+        ),
+        "false_positive_cleanup_rate": false_positive_rate,
+        "evidence_estimated_token_saving_rate": token_rate,
+        "safe_evidence_estimated_token_saving_rate": (
+            token_rate if false_positive_rate == 0.0 else "unsafe"
+        ),
+    }
+
+
+def _ratio_pct(numerator: int, denominator: int) -> float | str:
+    if denominator <= 0:
+        return "unavailable"
+    return round(numerator / denominator * 100, 4)
+
+
+def _token_saving_rate(records: Sequence[dict[str, object]]) -> float | str:
+    baseline_tokens = sum(float(record["baseline_token_estimate"]) for record in records)
+    after_tokens = sum(float(record["after_token_estimate"]) for record in records)
+    if baseline_tokens <= 0:
+        return "unavailable"
+    return round((1 - after_tokens / baseline_tokens) * 100, 4)
