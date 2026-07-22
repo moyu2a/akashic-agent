@@ -4,6 +4,61 @@
 
 Implement turn-local Document RAG tool intent preload without changing always-on policy or writing intent decisions to `ToolDiscoveryState` / LRU.
 
+## 2026-07-22 Memory Phase 6s Sleep Hygiene Source-Backed Evidence
+
+Goal: add a source-backed sleep hygiene evaluation path that proves cleanup and review candidates can be traced to real `SessionStore` messages, while keeping sleep consolidation shadow-only and non-mutating.
+
+1. Add source evidence aggregate metrics and Markdown source tables - complete
+2. Add deterministic `SessionStore` fixture builder - complete
+3. Add CLI fixture mode and generate `sleep_hygiene_source_backed_v1` report - complete
+4. Tighten dry-run patch source safety gate - complete
+5. Update memory optimization docs and final verification - in progress
+
+Constraints:
+
+- Do not change `AgentLoop`, `Reasoner`, `ToolExecutor`, production retrieval, prompt injection, or production memory storage.
+- Do not merge, delete, supersede, or write real memory rows.
+- Keep formal V3 proxy reports reproducible; source-backed fixture report is separate.
+- Use counts and percentages rather than opaque scores.
+- Do not stage `.superpowers/sdd/*.diff`.
+
+Results so far:
+
+- Commits:
+  - `80ba815 feat: add sleep hygiene source evidence metrics`
+  - `5be2f78 feat: add sleep hygiene source-backed fixture`
+  - `b57baaa feat: add sleep hygiene source-backed report`
+  - `fee1d5a feat: gate sleep hygiene patch by source evidence`
+- Source-backed report path: `my_md/memory_optimization/eval_reports/sleep_hygiene_source_backed_v1/`.
+- Headline metrics:
+  - `case_count = 160`
+  - `evaluated_evidence_row_count = 200`
+  - `source_fetch_mode = session-store`
+  - `source_ref_coverage_rate = 81.5%`
+  - `source_ref_parse_success_rate = 82.2086%`
+  - `source_fetch_success_rate = 36.1963%`
+  - `source_support_rate = 18.4049%`
+  - `missing_source_count = 75`
+  - `unsupported_source_count = 29`
+  - `session_ref_not_fetchable_count = 37`
+  - `malformed_source_ref_count = 29`
+- Dry-run patch source gate:
+  - `patch rows = 200`
+  - `source_backed_action_safe = 12`
+  - `requires_review = 24`
+  - `source_not_fetchable = 73`
+  - `source_not_supporting_summary = 11`
+  - `not_cleanup_candidate = 80`
+
+Errors Encountered:
+
+| Error | Attempt | Resolution |
+| --- | --- | --- |
+| Source evidence metrics test failed with missing `source_evidence_metrics` | 1 | Added aggregate source metrics, by-action metrics, and Markdown tables. |
+| Source fixture tests failed because `memory2.eval_sleep_hygiene_source_fixture` did not exist | 1 | Added deterministic fixture builder backed by real `SessionStore`. |
+| CLI fixture test failed because `--source-fixture-mode` and `--source-fixture-db` did not exist | 1 | Added fixture CLI mode and checkpoint source labels. |
+| Patch safety test failed because dry-run patch lacked `source_backed_action_safe` | 1 | Added source-backed safety fields and block reasons. |
+
 ## Phases
 
 1. Research project context and P10a requirements - complete

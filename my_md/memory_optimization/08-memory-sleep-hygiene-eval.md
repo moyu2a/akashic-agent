@@ -4,6 +4,51 @@
 
 本轮评测回答一个问题：在不改动真实记忆库的前提下，睡眠巩固模块能否识别重复记忆、过期记忆、低价值记忆，同时保护应该保留的关键记忆。
 
+## Source-backed V1 真实来源证据评测
+
+这一轮不是继续提高候选召回率，而是验证 sleep hygiene 候选背后的 `source_ref` 是否真实、可查、支持摘要，并能否作为未来恢复依据。
+
+结论：source-backed 评测把 V3 从“proxy 可回源”推进到“真实 `SessionStore` 证据可审计”。如果某条候选无法回源或原文不支持摘要，它不能进入真实 active cleanup，只能进入 review 或 blocked。
+
+正式报告路径：
+
+- `my_md/memory_optimization/eval_reports/sleep_hygiene_source_backed_v1/memory_sleep_hygiene_evidence_eval.json`
+- `my_md/memory_optimization/eval_reports/sleep_hygiene_source_backed_v1/memory_sleep_hygiene_evidence_eval.md`
+- `my_md/memory_optimization/eval_reports/sleep_hygiene_source_backed_v1/memory_sleep_hygiene_dry_run_patch.json`
+- `my_md/memory_optimization/eval_reports/sleep_hygiene_source_backed_v1/memory_target_metric_sleep_hygiene.json`
+- `my_md/memory_optimization/eval_reports/sleep_hygiene_source_backed_v1/fixture_sessions.db`
+
+本轮规模：
+
+| 指标 | 数值 |
+| --- | ---: |
+| case 数 | 160 |
+| 扫描 active item 数 | 224 |
+| evidence row 数 | 200 |
+| source fetch mode | session-store |
+| source_ref parse success | 82.2086% |
+| source fetch success | 36.1963% |
+| source support rate | 18.4049% |
+| missing source count | 75 |
+| unsupported source count | 29 |
+| session ref not fetchable count | 37 |
+| malformed source_ref count | 29 |
+
+按动作分组看，安全清理候选一共有 `96` 条，其中 `source_ref` 覆盖率 `79.1667%`、真实回源成功率 `30.2632%`、原文支持率 `15.7895%`。这说明 V3 的 cleanup 规则本身仍然稳定，但如果把“可恢复、可审计”作为真实执行前置条件，很多候选还不能直接 active 化。
+
+dry-run patch 已新增 source-backed 安全门：
+
+| 指标 | 数值 |
+| --- | ---: |
+| patch row 数 | 200 |
+| source-backed safe row 数 | 12 |
+| requires review | 24 |
+| source_not_fetchable | 73 |
+| source_not_supporting_summary | 11 |
+| not_cleanup_candidate | 80 |
+
+这个 gate 的含义是：只有同时满足 `safe_cleanup_candidate = true`、`source_fetch_mode = session-store`、`source_fetch_success = true`、`source_support_status = supported` 的记录，才会标记 `source_backed_action_safe = true`。proxy 模式即使显示支持，也不会被当作真实可执行依据。
+
 ## 当前项目真实状态
 
 - 现有睡眠巩固仍是 shadow / dry-run。
@@ -321,3 +366,11 @@ V3 还生成了 `memory_sleep_hygiene_dry_run_patch.json`，其中动作被拆�
 - `review_required_count = 120` 说明 hard 集里仍有相当一部分候选需要策略或人工复核；这不是缺陷，而是避免过度自动清理的安全边界。
 - V3 仍然不能证明真实生产记忆库已经变干净，也不能证明真实 prompt token 已下降，因为没有 active cleanup。
 - 下一步如果要进入更真实的结论，需要用 session-store 模式跑 fixture 或真实 `sessions.db`，再评估真实回源成功率、恢复性和清理后召回质量。
+
+## Source-backed V1 当前结论
+
+- `session-store` fixture 已证明评测链路可以通过真实 `SessionStore.fetch_by_ids()` 查消息，而不是只依赖 proxy。
+- 源证据可信度已被拆成覆盖率、解析成功率、真实回源成功率、原文支持率和失败原因分布。
+- dry-run patch 已经具备 source-backed 安全门，但仍然只写报告，不会修改真实 memory DB。
+- 当前 source support 是基于确定性 expected terms 的轻量支持判断，不是完整语义蕴含判断。
+- 当前 `fixture_sessions.db` 是受控测试库，不是生产自然流量，所以只能证明机制可审计，不能证明真实线上来源质量。

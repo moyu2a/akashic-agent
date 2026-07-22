@@ -1,5 +1,71 @@
 # Document RAG P10a Progress
 
+## 2026-07-22 Memory Phase 6s Sleep Hygiene Source-Backed Evidence
+
+- User asked to execute the reviewed Phase 6s plan.
+- Scope stayed shadow / dry-run:
+  - no `AgentLoop`, `Reasoner`, `ToolExecutor`, production retrieval, prompt injection, or production memory storage changes;
+  - no real memory merge/delete/supersede;
+  - no production `sessions.db` or memory DB writes.
+- Task 1 added source evidence aggregate metrics to `memory2/eval_sleep_hygiene_evidence.py`:
+  - `source_evidence_metrics`;
+  - `source_evidence_metrics_by_action`;
+  - source support status counts;
+  - Markdown source evidence tables;
+  - fixture-only `_source_expected_terms` support.
+- Task 1 TDD evidence:
+  - RED: `tests/test_memory_sleep_hygiene_evidence.py::test_sleep_hygiene_report_exposes_source_evidence_metrics` failed with missing `source_evidence_metrics`;
+  - GREEN: `tests/test_memory_sleep_hygiene_evidence.py` -> `12 passed`.
+  - Commit: `80ba815 feat: add sleep hygiene source evidence metrics`.
+- Task 2 added `memory2/eval_sleep_hygiene_source_fixture.py`:
+  - builds deterministic all-case sleep hygiene fixtures;
+  - writes a fixture `sessions.db` through real `SessionStore`;
+  - assigns supported, missing, unsupported, session-ref-not-fetchable, parse-failed, and missing-source states;
+  - produces expected status counts for evaluated rows only.
+- Task 2 TDD evidence:
+  - RED: `tests/test_memory_sleep_hygiene_source_fixture.py` failed because the module did not exist;
+  - GREEN: `tests/test_memory_sleep_hygiene_source_fixture.py tests/test_memory_sleep_hygiene_provenance.py` -> `11 passed`.
+  - Commit: `5be2f78 feat: add sleep hygiene source-backed fixture`.
+- Task 3 added CLI fixture mode:
+  - `--source-fixture-mode none|balanced`;
+  - `--source-fixture-db PATH`;
+  - fixture mode forces `source_fetch_mode=session-store`;
+  - target metric checkpoint source is `sleep_hygiene_source_backed_fixture` only for fixture mode, and `sleep_hygiene_session_store` for ordinary session-store mode.
+- Task 3 TDD evidence:
+  - RED: CLI fixture test failed with unrecognized `--source-fixture-mode` / `--source-fixture-db`;
+  - GREEN: `tests/test_memory_sleep_hygiene_evidence_cli.py` -> `6 passed`.
+  - Generated source-backed report under `my_md/memory_optimization/eval_reports/sleep_hygiene_source_backed_v1/`.
+  - Commit: `b57baaa feat: add sleep hygiene source-backed report`.
+- Source-backed V1 report headline:
+  - `case_count = 160`;
+  - `scanned_active_item_count = 224`;
+  - `evaluated_evidence_row_count = 200`;
+  - `source_fetch_mode = session-store`;
+  - `source_ref_coverage_rate = 81.5%`;
+  - `source_ref_parse_success_rate = 82.2086%`;
+  - `source_fetch_success_rate = 36.1963%`;
+  - `source_support_rate = 18.4049%`;
+  - `missing_source_count = 75`;
+  - `unsupported_source_count = 29`;
+  - `session_ref_not_fetchable_count = 37`;
+  - `malformed_source_ref_count = 29`.
+- Task 4 tightened dry-run patch source safety:
+  - patch entries now include `source_fetch_mode`, `source_backed_action_safe`, and `source_backed_block_reason`;
+  - only true cleanup candidates with `source_fetch_mode=session-store`, successful fetch, and `source_support_status=supported` are source-backed safe;
+  - proxy sources are rejected for source-backed safety even when marked supported.
+- Task 4 TDD evidence:
+  - RED: patch test failed with missing `source_backed_action_safe`;
+  - GREEN: `tests/test_memory_sleep_hygiene_patch.py` -> `3 passed`.
+  - Regenerated source-backed report and patch.
+  - Patch gate result: `200` rows, `12` source-backed safe, `24` requires review, `73` source_not_fetchable, `11` source_not_supporting_summary, `80` not_cleanup_candidate.
+  - Commit: `fee1d5a feat: gate sleep hygiene patch by source evidence`.
+- Current conclusion:
+  - V3 cleanup / review separation remains the cleanup-safety baseline;
+  - Phase 6s adds evidence trust: source refs can now be tested against real `SessionStore` rows in fixture mode;
+  - active cleanup is still closed because most candidates do not yet satisfy source-backed safety;
+  - source support is deterministic term matching, not full semantic entailment;
+  - fixture `sessions.db` is controlled test data, not production natural traffic.
+
 ## 2026-07-22 Memory Phase 6o Expanded Write Governance Real LLM Eval
 
 - User asked to execute the reviewed plan for expanding write-governance real LLM shadow evaluation.

@@ -1121,10 +1121,20 @@ Phase 6r 当前状态：
   - overall：cleanup recall `100.0%`，cleanup precision `100.0%`，retained protection `100.0%`，false positive cleanup `0.0%`，safe cleanup token saving `42.5121%`。
 - V3 的含义是评测和动作口径更安全，不是生产清理效果已经发生。formal synthetic run 仍是 `source_fetch_mode = proxy`，真实回源和真实 token 下降需要后续单独测。
 
+Phase 6s 当前状态：
+
+- 已完成 source-backed fixture 评测实现，继续保持 shadow / dry-run，不改变真实 memory DB。
+- 新增 `memory2/eval_sleep_hygiene_source_fixture.py`，生成受控 `fixture_sessions.db`，并让 `source_ref` 指向真实 `SessionStore` message id。
+- 新增源证据聚合指标，统计 source_ref 覆盖率、解析成功率、真实回源成功率、原文支持率，以及 missing / unsupported / session-ref-not-fetchable / parse-failed 等失败原因。
+- 正式 source-backed V1 报告路径：`my_md/memory_optimization/eval_reports/sleep_hygiene_source_backed_v1/`。
+- Source-backed V1 结果：`160` case、`200` evidence row，source_ref 覆盖率 `81.5%`，解析成功率 `82.2086%`，真实回源成功率 `36.1963%`，原文支持率 `18.4049%`。
+- dry-run patch 已新增 `source_backed_action_safe` 和 `source_backed_block_reason`。当前 `200` 条 patch 记录中，只有 `12` 条满足真实 `session-store` 回源且原文支持；`24` 条进入 review，`73` 条因来源不可取回阻断，`11` 条因原文不支持摘要阻断。
+- 该阶段证明真实来源证据链路可审计，但仍是 fixture 数据，不是生产自然流量；source support 仍是轻量 expected-term 判断，不是完整语义蕴含。
+
 后续计划：
 
 1. 如果继续扩大真实模型测试，复用 Phase 6o runner 和 checkpoint 机制，把 `240` 条扩展样本推进到可选 `1200` 条全量；默认不继续消耗这部分 token。
-2. 继续治理睡眠巩固 hard 集误伤，优先把 merge candidate 与 cleanup candidate 分开评价，再补真实 token / active 数 evidence 输入，区分 dry-run 估算和真实效果。
+2. 继续把睡眠巩固从 source-backed fixture 推进到真实样本 evidence：真实 source_ref 覆盖、真实回源、真实 active 数、真实 prompt token 变化和清理后召回保持率。
 3. 扩展冲突链 fixture 类型，例如多层分叉、回滚分叉和跨 source_ref 分叉。
 4. 再从 Phase 6e checkpoint 重建真实 LLM 目标指标表；如果 checkpoint 不完整，再考虑 `--resume` 补跑。
 

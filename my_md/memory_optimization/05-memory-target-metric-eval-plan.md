@@ -230,6 +230,38 @@ V3 还新增 evaluator 侧 `source_ref` resolver 和 non-mutating dry-run patch�
 - dry-run patch 输出 `would_merge`、`would_mark_stale`、`would_remove_low_value`、`would_keep`、`requires_review`。
 - patch 记录带 `writes_real_db = false`、`recoverability_status` 和 `recoverability_reason`，不写真实 memory DB。
 
+Phase 6s 进一步补了 source-backed fixture 报告，正式路径是：
+
+```text
+my_md/memory_optimization/eval_reports/sleep_hygiene_source_backed_v1/
+```
+
+这份报告和 V3 proxy 报告的区别是：
+
+| 报告 | source_fetch_mode | 用途 |
+| --- | --- | --- |
+| `sleep_hygiene_evidence_v3` | proxy | 保持 synthetic V3 可复现，证明 cleanup / review 动作分层口径。 |
+| `sleep_hygiene_source_backed_v1` | session-store | 用 fixture `sessions.db` 验证真实消息 ID 可查、原文是否支持摘要、失败原因能否被统计。 |
+
+Source-backed V1 的关键结果：
+
+| 指标 | 数值 |
+| --- | ---: |
+| case 数 | 160 |
+| evidence row 数 | 200 |
+| source_ref 覆盖率 | 81.5% |
+| source_ref 解析成功率 | 82.2086% |
+| 真实回源成功率 | 36.1963% |
+| 原文支持率 | 18.4049% |
+| 缺失来源数 | 75 |
+| 原文不支持数 | 29 |
+| session 级 ref 不可按消息取回数 | 37 |
+| 格式错误 source_ref 数 | 29 |
+
+这些是 evidence trust metrics，不是 cleanup recall metrics。它们回答的是“候选动作是否有可信来源支撑”，而不是“重复、过期、低价值候选是否能被找到”。因此 V3 的 cleanup recall / precision 仍看 `sleep_hygiene_evidence_v3`，source-backed V1 主要用于判断未来能否进入 active cleanup。
+
+dry-run patch 已新增 `source_backed_action_safe` 和 `source_backed_block_reason`。当前 `200` 条 patch 记录里只有 `12` 条满足真实回源且原文支持；其余被分到 `requires_review = 24`、`source_not_fetchable = 73`、`source_not_supporting_summary = 11`、`not_cleanup_candidate = 80`。这说明真实执行前的来源门禁已经可观测，但 active cleanup 仍然关闭。
+
 因此记忆库卫生表后续不应只展示“重复合并率 / token 节省率”，还要展示两个安全指标：
 
 ```text
