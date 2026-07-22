@@ -1113,3 +1113,54 @@
   - replace proxy source fetch with real `source_ref` lookup evidence;
   - generate active dry-run patch without writing DB;
   - require high hard precision, retained protection, real source fetch, and recoverability before any real merge / supersede.
+
+## 2026-07-22 Sleep Hygiene Safety V3
+
+- Executed the V3 sleep hygiene safety plan after committing the documentation baseline.
+- Added hard scenario metrics:
+  - `scenario_metrics`;
+  - Markdown hard scenario breakdown.
+- Split candidate semantics:
+  - `cleanup candidate` for safe duplicate / stale / low-value cleanup candidates;
+  - `merge suggestion` for near-merge review-only cases;
+  - retained near-merge rows keep `after_state = active`;
+  - raw shadow signal is preserved in `shadow_after_state`.
+- Added local evidence fields:
+  - `source_ref`;
+  - `candidate_action`;
+  - `candidate_source`;
+  - `requires_review`;
+  - `safe_cleanup_candidate`;
+  - `source_ref_parse_success`;
+  - `source_fetch_mode`;
+  - `source_support_status`;
+  - `source_support_reason`.
+- Added evaluator-side provenance module:
+  - proxy resolver for synthetic reports;
+  - mapping resolver for deterministic tests;
+  - session-store resolver for fixture or real `sessions.db` checks via `SessionStore.fetch_by_ids()`.
+- Added non-mutating dry-run patch:
+  - `would_merge`;
+  - `would_mark_stale`;
+  - `would_remove_low_value`;
+  - `would_keep`;
+  - `requires_review`;
+  - `writes_real_db = false`;
+  - `recoverability_status`;
+  - `recoverability_reason`.
+- Generated V3 reports under `my_md/memory_optimization/eval_reports/sleep_hygiene_evidence_v3/`.
+- V3 formal synthetic result:
+  - standard: `600` cases, `600` rows, cleanup recall `100.0%`, cleanup precision `100.0%`, retained protection `100.0%`, false positive cleanup `0.0%`, safe cleanup token saving `64.0138%`;
+  - hard: `320` cases, `520` rows, cleanup recall `100.0%`, cleanup precision `100.0%`, retained protection `100.0%`, false positive cleanup `0.0%`, merge suggestions `40`, review required `120`, safe cleanup token saving `23.7952%`;
+  - overall: `920` cases, `1120` rows, cleanup recall `100.0%`, cleanup precision `100.0%`, retained protection `100.0%`, false positive cleanup `0.0%`, merge suggestions `40`, review required `120`, safe cleanup token saving `42.5121%`.
+- Near-merge result:
+  - `40` cases / `80` rows;
+  - `merge_suggestion_count = 40`;
+  - `review_required_count = 40`;
+  - `safe_cleanup_token_saving_rate = 0.0%`.
+- Boundary:
+  - formal V3 run uses `source_fetch_mode = proxy`;
+  - session-store mode is covered by tests but not used to claim synthetic source lookup success;
+  - no real memory DB cleanup happened;
+  - no real prompt token reduction is claimed;
+  - active gate remains closed.

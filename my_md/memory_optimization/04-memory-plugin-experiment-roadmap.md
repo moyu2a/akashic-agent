@@ -1105,6 +1105,22 @@ Phase 6q 当前状态：
   4. 动作层生成 active dry-run patch，只输出拟合并、拟过期、拟低价值清理和 requires_review，不落库。
   5. 达到 hard precision、retained protection、真实回源和可恢复门槛后，再讨论真实 merge / supersede。
 
+Phase 6r 当前状态：
+
+- 已完成 V3 sleep hygiene safety 评测实现，继续保持 shadow / dry-run，不改变真实 memory DB。
+- 已按 hard scenario 输出指标，并把 `cleanup candidate` 与 `merge suggestion` 拆开。
+- 已新增 evaluator 侧 `source_ref` resolver：
+  - `proxy` 用于合成报告；
+  - `mapping` 用于确定性测试；
+  - `session-store` 可对 fixture 或真实 `sessions.db` 调用 `SessionStore.fetch_by_ids()`。
+- 已新增 non-mutating dry-run patch，输出 `would_merge`、`would_mark_stale`、`would_remove_low_value`、`would_keep`、`requires_review`，并为每条记录写入 `recoverability_status`。
+- 正式 V3 报告路径：`my_md/memory_optimization/eval_reports/sleep_hygiene_evidence_v3/`。
+- V3 结果：
+  - standard：cleanup recall `100.0%`，cleanup precision `100.0%`，retained protection `100.0%`，false positive cleanup `0.0%`；
+  - hard：cleanup recall `100.0%`，cleanup precision `100.0%`，retained protection `100.0%`，false positive cleanup `0.0%`，merge suggestions `40`，review required `120`；
+  - overall：cleanup recall `100.0%`，cleanup precision `100.0%`，retained protection `100.0%`，false positive cleanup `0.0%`，safe cleanup token saving `42.5121%`。
+- V3 的含义是评测和动作口径更安全，不是生产清理效果已经发生。formal synthetic run 仍是 `source_fetch_mode = proxy`，真实回源和真实 token 下降需要后续单独测。
+
 后续计划：
 
 1. 如果继续扩大真实模型测试，复用 Phase 6o runner 和 checkpoint 机制，把 `240` 条扩展样本推进到可选 `1200` 条全量；默认不继续消耗这部分 token。

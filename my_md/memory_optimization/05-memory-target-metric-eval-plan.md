@@ -201,6 +201,23 @@ V2 hard / adversarial 报告结果：
 
 这说明 standard 集可以证明基础链路稳定，hard 集可以暴露边界误伤。当前 hard 集里主要问题是相似但不应清理的 near-merge 场景会进入候选，从而把安全 token saving 标记为 `unsafe`。
 
+V3 安全候选口径已经把这个问题拆开：`cleanup candidate` 表示可以进入严格 dry-run patch 的清理动作，`merge suggestion` 表示有相似信号但只能复核，不能直接清理。当前 V3 正式报告路径是 `my_md/memory_optimization/eval_reports/sleep_hygiene_evidence_v3/`。
+
+| case_set | case 数 | evaluated item 数 | cleanup recall | cleanup precision | retained protection | false positive cleanup | merge suggestion | review required | safe cleanup token saving |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| standard | 600 | 600 | 100.0% | 100.0% | 100.0% | 0.0% | 0 | 0 | 64.0138% |
+| hard | 320 | 520 | 100.0% | 100.0% | 100.0% | 0.0% | 40 | 120 | 23.7952% |
+| overall | 920 | 1120 | 100.0% | 100.0% | 100.0% | 0.0% | 40 | 120 | 42.5121% |
+
+near-merge 专项结果是 `40` 个 case / `80` 行，`merge_suggestion_count = 40`，`review_required_count = 40`，`retained_protection = 100.0%`，`safe_cleanup_token_saving = 0.0%`。这说明 V3 保留了原始相似合并信号，但不把它计入安全清理收益。
+
+V3 还新增 evaluator 侧 `source_ref` resolver 和 non-mutating dry-run patch：
+
+- `source_fetch_mode = proxy|session-store`；formal synthetic V3 仍使用 proxy，因为合成 `source_ref` 不保证存在于真实 `sessions.db`。
+- 单元测试覆盖 mapping resolver 和真实 `SessionStore.fetch_by_ids()`。
+- dry-run patch 输出 `would_merge`、`would_mark_stale`、`would_remove_low_value`、`would_keep`、`requires_review`。
+- patch 记录带 `writes_real_db = false`、`recoverability_status` 和 `recoverability_reason`，不写真实 memory DB。
+
 因此记忆库卫生表后续不应只展示“重复合并率 / token 节省率”，还要展示两个安全指标：
 
 ```text

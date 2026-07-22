@@ -982,3 +982,43 @@ Next improvement sequence:
 3. Real provenance evidence: replace proxy `source_fetch_success` with real `source_ref` lookup and support/mismatch counters.
 4. Active dry-run patch: output `would_merge`, `would_mark_stale`, `would_remove_low_value`, `would_keep`, and `requires_review` without writing DB.
 5. Activation gate: do not enable real merge / supersede until hard precision, retained protection, real source fetch, and recoverability meet explicit thresholds.
+
+## 2026-07-22 Sleep Hygiene Safety V3
+
+Goal: turn the V2 hard-eval finding into a safer sleep hygiene evaluation and dry-run workflow without changing production memory behavior.
+
+Completed:
+
+- Documentation baseline commit:
+  - `2c50d26 docs: record sleep hygiene safety follow-ups`.
+- Task 1:
+  - added hard `scenario_metrics`;
+  - committed as `361d5f4 feat: add sleep hygiene scenario metrics`.
+- Task 2:
+  - split `cleanup candidate` from `merge suggestion`;
+  - near-merge is review-only and no longer counted as safe cleanup;
+  - committed as `3281611 feat: split sleep hygiene cleanup and review candidates`.
+- Task 3:
+  - added source_ref provenance resolver modes;
+  - wired CLI `--source-fetch-mode proxy|session-store` and `--session-db`;
+  - committed as `d0a2263 feat: add sleep hygiene provenance evidence`.
+- Task 4:
+  - added non-mutating dry-run patch JSON;
+  - committed as `8102cea feat: add sleep hygiene dry-run patch report`.
+- Task 5:
+  - generated formal V3 reports under `my_md/memory_optimization/eval_reports/sleep_hygiene_evidence_v3/`;
+  - updated memory optimization docs with V3 results and boundaries.
+
+Current V3 result:
+
+| case_set | cases | rows | cleanup recall | cleanup precision | retained protection | false positive cleanup | merge suggestions | review required | safe cleanup token saving |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| standard | 600 | 600 | 100.0% | 100.0% | 100.0% | 0.0% | 0 | 0 | 64.0138% |
+| hard | 320 | 520 | 100.0% | 100.0% | 100.0% | 0.0% | 40 | 120 | 23.7952% |
+| overall | 920 | 1120 | 100.0% | 100.0% | 100.0% | 0.0% | 40 | 120 | 42.5121% |
+
+Next:
+
+1. Keep sleep hygiene active gate closed.
+2. If stronger evidence is needed, run `--source-fetch-mode session-store --session-db <path>` against fixture or real sessions DB.
+3. Add production-like dry-run evidence before allowing any real merge / stale mark / low-value removal.

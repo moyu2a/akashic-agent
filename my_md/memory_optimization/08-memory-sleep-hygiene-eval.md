@@ -226,3 +226,61 @@ requires_review: [...]
 2. 引入真实 `source_ref` 回源检查，区分可解析和真的能取回原消息。
 3. 在安全开关下做 active dry-run patch，不落库，只输出拟执行变更计划。
 4. 等 hard precision 和 retained protection 稳定后，再讨论是否允许真实 merge / supersede。
+
+## V3 安全候选口径
+
+V3 已把 V2 暴露的问题落到评测口径中：不再把所有非 active shadow 候选都等同为可清理动作，而是拆成 `cleanup candidate` 和 `merge suggestion`。`near_merge_not_duplicate` 仍会保留原始 shadow merge 信号，但默认进入 review，不计入安全 token saving，也不会作为真实清理动作。
+
+正式报告路径：
+
+- `my_md/memory_optimization/eval_reports/sleep_hygiene_evidence_v3/memory_sleep_hygiene_evidence_eval.json`
+- `my_md/memory_optimization/eval_reports/sleep_hygiene_evidence_v3/memory_sleep_hygiene_evidence_eval.md`
+- `my_md/memory_optimization/eval_reports/sleep_hygiene_evidence_v3/memory_sleep_hygiene_dry_run_patch.json`
+- `my_md/memory_optimization/eval_reports/sleep_hygiene_evidence_v3/memory_target_metric_sleep_hygiene.json`
+- `my_md/memory_optimization/eval_reports/sleep_hygiene_evidence_v3/memory_target_metric_sleep_hygiene.md`
+
+V3 主表：
+
+| 分组 | case 数 | evaluated item 数 | cleanup recall | cleanup precision | retained protection | false positive cleanup | merge suggestion | review required | safe cleanup token saving |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| standard | 600 | 600 | 100.0% | 100.0% | 100.0% | 0.0% | 0 | 0 | 64.0138% |
+| hard | 320 | 520 | 100.0% | 100.0% | 100.0% | 0.0% | 40 | 120 | 23.7952% |
+| overall | 920 | 1120 | 100.0% | 100.0% | 100.0% | 0.0% | 40 | 120 | 42.5121% |
+
+near-merge 专项：
+
+| scenario | case 数 | evaluated item 数 | cleanup recall | cleanup precision | retained protection | merge suggestion | review required | safe cleanup token saving |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| near_merge_not_duplicate | 40 | 80 | unavailable | unavailable | 100.0% | 40 | 40 | 0.0% |
+
+这组数据说明：V3 没有“消灭”原始 merge 信号，而是把它从可清理动作中剥离出来。这样面试表达时可以说：V2 发现 near-merge 会误伤 retained protection；V3 通过动作分层，把相似但不确定的合并信号转成复核建议，使安全清理口径下 hard retained protection 回到 `100.0%`，false positive cleanup 降到 `0.0%`。
+
+## V3 回源和 dry-run 边界
+
+V3 新增了三种 `source_ref` 证据模式：
+
+| 模式 | 用途 | 结论边界 |
+| --- | --- | --- |
+| proxy | 合成测试集和历史可复现报告 | 只说明记录带有可解析来源，不代表真实消息存在。 |
+| mapping | 单元测试和确定性 fixture | 可以验证 source_ref 到正文的支持关系，但不是生产库查询。 |
+| session-store | fixture 或真实 `sessions.db` | 通过 `SessionStore.fetch_by_ids()` 查询真实消息 ID；session 级 ref 只算可解析，不能按消息 ID 回源。 |
+
+本轮正式 V3 报告继续使用 `source_fetch_mode = proxy`，原因是合成测试集的 `source_ref` 是目标导向构造，不保证存在于真实 `sessions.db`。因此不能把 V3 的 `source_fetch_success` 表述为真实历史消息回源成功。
+
+V3 还生成了 `memory_sleep_hygiene_dry_run_patch.json`，其中动作被拆成：
+
+- `would_merge`
+- `would_mark_stale`
+- `would_remove_low_value`
+- `would_keep`
+- `requires_review`
+
+所有 patch 记录都带有 `writes_real_db = false`，并输出 `recoverability_status` 和 `recoverability_reason`。这意味着当前只是动作计划和安全审计材料，不会真实合并、删除、标记过期或修改 memory DB。
+
+## V3 当前结论
+
+- standard 集继续证明基础重复、过期、低价值候选识别稳定。
+- hard 集证明 V2 的主要误伤可以通过动作分层治理：near-merge 不再算安全清理，只进入 review。
+- `review_required_count = 120` 说明 hard 集里仍有相当一部分候选需要策略或人工复核；这不是缺陷，而是避免过度自动清理的安全边界。
+- V3 仍然不能证明真实生产记忆库已经变干净，也不能证明真实 prompt token 已下降，因为没有 active cleanup。
+- 下一步如果要进入更真实的结论，需要用 session-store 模式跑 fixture 或真实 `sessions.db`，再评估真实回源成功率、恢复性和清理后召回质量。
