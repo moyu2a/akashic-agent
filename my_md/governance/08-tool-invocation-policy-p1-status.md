@@ -287,6 +287,24 @@ PYTHONDONTWRITEBYTECODE=1 uv run --with pytest --with pytest-asyncio pytest test
 30 passed in 0.38s
 ```
 
+P1/P2 contract 回归：
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 uv run --with pytest --with pytest-asyncio pytest tests/test_tool_governance_p1_p2_contract.py -q -p no:cacheprovider
+```
+
+结果：
+
+```text
+6 passed in 0.08s
+```
+
+该短测试集用于快速验证第一大步和第二大步的核心合同：
+
+- P1：workspace escape、protected runtime argument、destructive shell wrapper 都必须在真实 invoker 前被拒绝。
+- P2：read-only 资源通过后可执行；write 和 shell 默认 defer，返回 `approval_request`，并带最小 `audit_trace`。
+- P2：敏感 `content` 只进入 hash/脱敏摘要，不暴露 preview。
+
 ## 后续步骤
 
 P2 已完成默认 risk strategy、structured approval request 和 minimal audit trace。下一步不应直接声称生产级安全，而是进入 P3/P4，把“请求授权”和“安全执行环境”补成闭环：
