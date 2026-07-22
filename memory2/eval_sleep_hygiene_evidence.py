@@ -26,6 +26,16 @@ class SleepHygieneEvidenceReport:
     shadow_metrics: dict[str, object]
 
 
+@dataclass(frozen=True)
+class CandidateDecision:
+    after_state: str = "active"
+    shadow_after_state: str = "active"
+    candidate_action: str = "none"
+    candidate_source: str = "none"
+    requires_review: bool = False
+    safe_cleanup_candidate: bool = False
+
+
 def build_sleep_hygiene_evidence_records(
     cases: Sequence[SleepHygieneCase],
     *,
@@ -42,27 +52,24 @@ def build_sleep_hygiene_evidence_records(
         max_low_value_candidates=10_000,
         max_conflict_candidates=10_000,
     )
-    candidate_state_by_id = _candidate_state_by_id(shadow.experimental_result)
+    candidate_decision_by_id = _candidate_decision_by_id(shadow.experimental_result)
 
     records: list[dict[str, object]] = []
     for case in cases:
         for item_id in case.evaluated_item_ids():
             item = item_by_id[str(item_id)]
             expected_after_state = case.expected_state_for(str(item_id))
-            after_state = _after_state_for_expected(
-                expected_after_state=expected_after_state,
-                item_id=str(item_id),
-                candidate_state_by_id=candidate_state_by_id,
-            )
+            decision = candidate_decision_by_id.get(str(item_id), CandidateDecision())
             records.append(
                 _record(
                     item,
                     label=_label_for_expected_state(expected_after_state),
-                    after_state=after_state,
+                    after_state=decision.after_state,
                     case_id=case.case_id,
                     case_set=case.case_set,
                     scenario=case.scenario,
                     expected_after_state=expected_after_state,
+                    decision=decision,
                 )
             )
     return tuple(records)
@@ -99,7 +106,6 @@ def run_sleep_hygiene_evidence_eval(
         max_conflict_candidates=10_000,
     )
     records = build_sleep_hygiene_evidence_records(selected_cases, now=FIXED_NOW)
-    candidate_state_by_id = _candidate_state_by_id(shadow.experimental_result)
     shadow_metrics = _stable_shadow_metrics(shadow.metrics)
     return SleepHygieneEvidenceReport(
         records=records,
@@ -107,7 +113,6 @@ def run_sleep_hygiene_evidence_eval(
             records,
             case_count=len(selected_cases),
             scanned_active_item_count=int(shadow_metrics.get("scanned_count", 0) or 0),
-            candidate_state_by_id=candidate_state_by_id,
         ),
         shadow_metrics=shadow_metrics,
     )
@@ -207,6 +212,33 @@ def write_sleep_hygiene_report_markdown(
                 )
                 + " |"
             )
+        lines.extend(
+            [
+                "",
+                "## V3 cleanup / review action metrics",
+                "",
+                "| case_set | cleanup recall | cleanup precision | merge suggestions | review required | safe cleanup token saving |",
+                "| --- | ---: | ---: | ---: | ---: | ---: |",
+            ]
+        )
+        for name in ("standard", "hard", "overall"):
+            group = group_metrics.get(name)
+            if not isinstance(group, dict):
+                continue
+            lines.append(
+                "| "
+                + " | ".join(
+                    [
+                        name,
+                        _fmt_pct(group.get("cleanup_candidate_recall")),
+                        _fmt_pct(group.get("cleanup_candidate_precision")),
+                        str(group.get("merge_suggestion_count")),
+                        str(group.get("review_required_count")),
+                        _fmt_pct(group.get("safe_cleanup_token_saving_rate")),
+                    ]
+                )
+                + " |"
+            )
     scenario_metrics = metrics.get("scenario_metrics")
     if isinstance(scenario_metrics, dict) and scenario_metrics:
         lines.extend(
@@ -214,8 +246,8 @@ def write_sleep_hygiene_report_markdown(
                 "",
                 "## hard scenario breakdown",
                 "",
-                "| scenario | case 数 | evaluated item 数 | candidate recall | candidate precision | retained protection | false positive cleanup |",
-                "| --- | ---: | ---: | ---: | ---: | ---: | ---: |",
+                "| scenario | case 数 | evaluated item 数 | cleanup recall | cleanup precision | merge suggestions | review required | retained protection |",
+                "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
             ]
         )
         for scenario, scenario_metric in sorted(scenario_metrics.items()):
@@ -228,10 +260,11 @@ def write_sleep_hygiene_report_markdown(
                         scenario,
                         str(scenario_metric.get("case_count")),
                         str(scenario_metric.get("evaluated_item_count")),
-                        _fmt_pct(scenario_metric.get("candidate_recall")),
-                        _fmt_pct(scenario_metric.get("candidate_precision")),
+                        _fmt_pct(scenario_metric.get("cleanup_candidate_recall")),
+                        _fmt_pct(scenario_metric.get("cleanup_candidate_precision")),
+                        str(scenario_metric.get("merge_suggestion_count")),
+                        str(scenario_metric.get("review_required_count")),
                         _fmt_pct(scenario_metric.get("retained_protection_rate")),
-                        _fmt_pct(scenario_metric.get("false_positive_cleanup_rate")),
                     ]
                 )
                 + " |"
@@ -239,21 +272,66 @@ def write_sleep_hygiene_report_markdown(
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
-def _candidate_state_by_id(experimental_result: dict[str, object]) -> dict[str, str]:
-    states: dict[str, str] = {}
+def _candidate_decision_by_id(
+    experimental_result: dict[str, object],
+) -> dict[str, CandidateDecision]:
+    decisions: dict[str, CandidateDecision] = {}
     for item_id in _non_representative_duplicate_ids(
         experimental_result.get("duplicate_groups")
     ):
-        states[item_id] = "merged"
+        decisions[item_id] = CandidateDecision(
+            after_state="merged",
+            shadow_after_state="merged",
+            candidate_action="duplicate_merge",
+            candidate_source="duplicate_group",
+            safe_cleanup_candidate=True,
+        )
     for item_id in _non_representative_duplicate_ids(
         experimental_result.get("merge_candidates")
     ):
-        states.setdefault(item_id, "merged")
+        decisions.setdefault(
+            item_id,
+            CandidateDecision(
+                after_state="active",
+                shadow_after_state="merged",
+                candidate_action="merge_suggestion",
+                candidate_source="merge_candidate",
+                requires_review=True,
+                safe_cleanup_candidate=False,
+            ),
+        )
     for item_id in _str_set(experimental_result.get("stale_candidate_ids")):
-        states.setdefault(item_id, "stale")
+        decisions.setdefault(
+            item_id,
+            CandidateDecision(
+                after_state="stale",
+                shadow_after_state="stale",
+                candidate_action="stale_cleanup",
+                candidate_source="stale_candidate",
+                safe_cleanup_candidate=True,
+            ),
+        )
     for item_id in _str_set(experimental_result.get("low_value_candidate_ids")):
-        states[item_id] = "low_value_removed"
-    return states
+        decisions[item_id] = CandidateDecision(
+            after_state="low_value_removed",
+            shadow_after_state="low_value_removed",
+            candidate_action="low_value_cleanup",
+            candidate_source="low_value_candidate",
+            safe_cleanup_candidate=True,
+        )
+    for item_id in _candidate_member_ids(experimental_result.get("conflict_candidates")):
+        decisions.setdefault(
+            item_id,
+            CandidateDecision(
+                after_state="active",
+                shadow_after_state="active",
+                candidate_action="conflict_review",
+                candidate_source="conflict_candidate",
+                requires_review=True,
+                safe_cleanup_candidate=False,
+            ),
+        )
+    return decisions
 
 
 def _stable_shadow_metrics(metrics: dict[str, object]) -> dict[str, object]:
@@ -308,6 +386,7 @@ def _record(
     case_set: str,
     scenario: str,
     expected_after_state: str,
+    decision: CandidateDecision,
 ) -> dict[str, object]:
     baseline_tokens = _token_estimate(item.get("summary"))
     after_tokens = (
@@ -319,10 +398,16 @@ def _record(
         "case_set": case_set,
         "scenario": scenario,
         "item_id": str(item["id"]),
+        "source_ref": str(item.get("source_ref") or ""),
         "baseline_state": "active",
         "after_state": after_state,
         "expected_after_state": expected_after_state,
         "label": label,
+        "shadow_after_state": decision.shadow_after_state,
+        "candidate_action": decision.candidate_action,
+        "candidate_source": decision.candidate_source,
+        "requires_review": decision.requires_review,
+        "safe_cleanup_candidate": decision.safe_cleanup_candidate,
         "source_ref_available": source_ref_available,
         "source_fetch_success": source_ref_available,
         "baseline_token_estimate": baseline_tokens,
@@ -365,6 +450,17 @@ def _non_representative_duplicate_ids(groups: object) -> set[str]:
     return duplicate_ids
 
 
+def _candidate_member_ids(groups: object) -> set[str]:
+    item_ids: set[str] = set()
+    if not isinstance(groups, list):
+        return item_ids
+    for group in groups:
+        if not isinstance(group, dict):
+            continue
+        item_ids.update(str(item_id) for item_id in group.get("item_ids", []) if str(item_id))
+    return item_ids
+
+
 def _str_set(value: object) -> set[str]:
     if not isinstance(value, list):
         return set()
@@ -376,7 +472,6 @@ def _metrics(
     *,
     case_count: int,
     scanned_active_item_count: int,
-    candidate_state_by_id: dict[str, str],
 ) -> dict[str, object]:
     baseline_tokens = sum(float(record["baseline_token_estimate"]) for record in records)
     after_tokens = sum(float(record["after_token_estimate"]) for record in records)
@@ -384,7 +479,8 @@ def _metrics(
     retained_candidate_leak_count = sum(
         1
         for record in records
-        if record["label"] == "retained" and record["item_id"] in candidate_state_by_id
+        if record["label"] == "retained"
+        and record.get("safe_cleanup_candidate") is True
     )
     unexpected_candidate_count = sum(
         1 for record in records if not _record_matches_expected_candidate_state(record)
@@ -510,6 +606,21 @@ def _metrics_for_records(records: Sequence[dict[str, object]]) -> dict[str, obje
     false_positive_rows = [
         record for record in retained_rows if record["after_state"] != "active"
     ]
+    expected_cleanup_rows = [
+        record for record in records if record["expected_after_state"] != "active"
+    ]
+    actual_safe_cleanup_rows = [
+        record for record in records if record.get("safe_cleanup_candidate") is True
+    ]
+    correct_safe_cleanup_rows = [
+        record
+        for record in actual_safe_cleanup_rows
+        if record["after_state"] == record["expected_after_state"]
+    ]
+    review_rows = [record for record in records if record.get("requires_review") is True]
+    merge_suggestion_rows = [
+        record for record in records if record.get("candidate_action") == "merge_suggestion"
+    ]
     token_rate = _token_saving_rate(records)
     false_positive_rate = _ratio_pct(len(false_positive_rows), len(retained_rows))
     return {
@@ -533,6 +644,17 @@ def _metrics_for_records(records: Sequence[dict[str, object]]) -> dict[str, obje
         "safe_evidence_estimated_token_saving_rate": (
             token_rate if false_positive_rate == 0.0 else "unsafe"
         ),
+        "cleanup_candidate_recall": _ratio_pct(
+            len(correct_safe_cleanup_rows),
+            len(expected_cleanup_rows),
+        ),
+        "cleanup_candidate_precision": _ratio_pct(
+            len(correct_safe_cleanup_rows),
+            len(actual_safe_cleanup_rows),
+        ),
+        "merge_suggestion_count": len(merge_suggestion_rows),
+        "review_required_count": len(review_rows),
+        "safe_cleanup_token_saving_rate": _safe_cleanup_token_saving_rate(records),
     }
 
 
@@ -548,3 +670,15 @@ def _token_saving_rate(records: Sequence[dict[str, object]]) -> float | str:
     if baseline_tokens <= 0:
         return "unavailable"
     return round((1 - after_tokens / baseline_tokens) * 100, 4)
+
+
+def _safe_cleanup_token_saving_rate(records: Sequence[dict[str, object]]) -> float | str:
+    baseline_tokens = sum(float(record["baseline_token_estimate"]) for record in records)
+    if baseline_tokens <= 0:
+        return "unavailable"
+    saved_tokens = sum(
+        float(record["baseline_token_estimate"]) - float(record["after_token_estimate"])
+        for record in records
+        if record.get("safe_cleanup_candidate") is True
+    )
+    return round(saved_tokens / baseline_tokens * 100, 4)

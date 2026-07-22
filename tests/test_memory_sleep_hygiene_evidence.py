@@ -162,6 +162,50 @@ def test_sleep_hygiene_report_splits_hard_metrics_by_scenario() -> None:
     assert scenarios["mixed_signal_low_value"]["candidate_recall"] == 100.0
 
 
+def test_near_merge_is_review_suggestion_not_cleanup() -> None:
+    report = run_sleep_hygiene_evidence_eval(
+        cases=build_sleep_hygiene_cases(
+            case_set="hard",
+            hard_per_scenario=2,
+            missing_source_count=1,
+        )
+    )
+    near_records = [
+        record
+        for record in report.records
+        if record["scenario"] == "near_merge_not_duplicate"
+    ]
+
+    assert len(near_records) == 4
+    assert any(record["candidate_action"] == "merge_suggestion" for record in near_records)
+    assert all(record["after_state"] == "active" for record in near_records)
+    assert all(record["safe_cleanup_candidate"] is False for record in near_records)
+    assert any(record["requires_review"] is True for record in near_records)
+
+
+def test_v3_safe_cleanup_metrics_do_not_count_merge_suggestions_as_cleanup() -> None:
+    report = run_sleep_hygiene_evidence_eval(
+        cases=build_sleep_hygiene_cases(
+            case_set="all",
+            duplicate_groups=3,
+            stale_count=4,
+            low_value_count=5,
+            retained_count=6,
+            hard_per_scenario=3,
+            missing_source_count=2,
+        )
+    )
+    hard = report.metrics["group_metrics"]["hard"]
+
+    assert hard["cleanup_candidate_recall"] == 100.0
+    assert hard["cleanup_candidate_precision"] == 100.0
+    assert hard["retained_protection_rate"] == 100.0
+    assert hard["false_positive_cleanup_rate"] == 0.0
+    assert hard["merge_suggestion_count"] == 3
+    assert hard["review_required_count"] >= 3
+    assert hard["safe_cleanup_token_saving_rate"] != "unsafe"
+
+
 def test_sleep_hygiene_all_report_splits_case_and_item_counts() -> None:
     cases = build_sleep_hygiene_cases(
         case_set="all",
