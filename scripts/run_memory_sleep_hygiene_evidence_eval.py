@@ -17,6 +17,7 @@ from memory2.eval_sleep_hygiene_evidence import (
     write_sleep_hygiene_report_json,
     write_sleep_hygiene_report_markdown,
 )
+from memory2.eval_sleep_hygiene_provenance import build_source_ref_resolver
 from memory2.eval_target_metrics import (
     build_target_metric_report,
     write_target_metric_json,
@@ -41,6 +42,12 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--hard-per-scenario", type=int, default=40)
     parser.add_argument("--write-target-metrics", action="store_true")
+    parser.add_argument(
+        "--source-fetch-mode",
+        choices=("proxy", "session-store"),
+        default="proxy",
+    )
+    parser.add_argument("--session-db", type=Path)
     args = parser.parse_args(argv)
 
     cases = build_sleep_hygiene_cases(
@@ -52,7 +59,17 @@ def main(argv: list[str] | None = None) -> int:
         hard_per_scenario=args.hard_per_scenario,
         missing_source_count=args.missing_source_count,
     )
-    report = run_sleep_hygiene_evidence_eval(cases=cases)
+    try:
+        source_ref_resolver = build_source_ref_resolver(
+            args.source_fetch_mode,
+            session_db_path=args.session_db,
+        )
+    except ValueError as exc:
+        parser.error(str(exc))
+    report = run_sleep_hygiene_evidence_eval(
+        cases=cases,
+        source_ref_resolver=source_ref_resolver,
+    )
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
     write_sleep_hygiene_evidence_jsonl(
@@ -94,6 +111,7 @@ def main(argv: list[str] | None = None) -> int:
         f"duplicate_candidate_rate={report.metrics['duplicate_merge_rate']} "
         f"stale_candidate_rate={report.metrics['stale_cleanup_rate']} "
         f"low_value_candidate_rate={report.metrics['low_value_cleanup_rate']} "
+        f"source_fetch_mode={args.source_fetch_mode} "
         f"retention_rate={report.metrics['post_consolidation_recall_retention_rate']} "
         f"false_positive_cleanup_rate={report.metrics['false_positive_cleanup_rate']}"
     )

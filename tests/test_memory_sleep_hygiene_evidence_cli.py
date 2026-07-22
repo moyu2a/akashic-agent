@@ -123,3 +123,24 @@ def test_sleep_hygiene_cli_supports_all_case_set_with_group_tables(
         if row["measurement_layer"] == "online_evidence"
     ]
     assert online_rows
+
+
+def test_sleep_hygiene_cli_rejects_session_store_mode_without_db(
+    tmp_path: Path,
+) -> None:
+    result = subprocess.run(
+        [
+            sys.executable,
+            "scripts/run_memory_sleep_hygiene_evidence_eval.py",
+            "--output-dir",
+            str(tmp_path / "reports"),
+            "--source-fetch-mode",
+            "session-store",
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode != 0
+    assert "--session-db is required" in result.stderr

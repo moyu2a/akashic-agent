@@ -11,6 +11,11 @@ from memory2.eval_sleep_hygiene_cases import (
     build_sleep_hygiene_cases,
     flatten_sleep_hygiene_memory_items,
 )
+from memory2.eval_sleep_hygiene_provenance import (
+    ProxySourceRefResolver,
+    SourceRefEvidence,
+    SourceRefResolver,
+)
 from memory2.sleep_consolidation_experiments import (
     build_sleep_consolidation_shadow_result,
 )
@@ -40,9 +45,11 @@ def build_sleep_hygiene_evidence_records(
     cases: Sequence[SleepHygieneCase],
     *,
     now: datetime | None = None,
+    source_ref_resolver: SourceRefResolver | None = None,
 ) -> tuple[dict[str, object], ...]:
     items = flatten_sleep_hygiene_memory_items(cases)
     item_by_id = {str(item["id"]): item for item in items}
+    resolver = source_ref_resolver or ProxySourceRefResolver()
     shadow = build_sleep_consolidation_shadow_result(
         memory_items=items,
         now=now or FIXED_NOW,
@@ -60,6 +67,10 @@ def build_sleep_hygiene_evidence_records(
             item = item_by_id[str(item_id)]
             expected_after_state = case.expected_state_for(str(item_id))
             decision = candidate_decision_by_id.get(str(item_id), CandidateDecision())
+            source_evidence = resolver.resolve(
+                item.get("source_ref"),
+                expected_terms=_expected_terms_for_item(item),
+            )
             records.append(
                 _record(
                     item,
@@ -70,6 +81,7 @@ def build_sleep_hygiene_evidence_records(
                     scenario=case.scenario,
                     expected_after_state=expected_after_state,
                     decision=decision,
+                    source_evidence=source_evidence,
                 )
             )
     return tuple(records)
@@ -83,6 +95,7 @@ def run_sleep_hygiene_evidence_eval(
     retained_count: int = 120,
     missing_source_count: int = 40,
     cases: Sequence[SleepHygieneCase] | None = None,
+    source_ref_resolver: SourceRefResolver | None = None,
 ) -> SleepHygieneEvidenceReport:
     selected_cases = (
         tuple(cases)
@@ -105,7 +118,11 @@ def run_sleep_hygiene_evidence_eval(
         max_low_value_candidates=10_000,
         max_conflict_candidates=10_000,
     )
-    records = build_sleep_hygiene_evidence_records(selected_cases, now=FIXED_NOW)
+    records = build_sleep_hygiene_evidence_records(
+        selected_cases,
+        now=FIXED_NOW,
+        source_ref_resolver=source_ref_resolver,
+    )
     shadow_metrics = _stable_shadow_metrics(shadow.metrics)
     return SleepHygieneEvidenceReport(
         records=records,
@@ -387,12 +404,12 @@ def _record(
     scenario: str,
     expected_after_state: str,
     decision: CandidateDecision,
+    source_evidence: SourceRefEvidence,
 ) -> dict[str, object]:
     baseline_tokens = _token_estimate(item.get("summary"))
     after_tokens = (
         0 if after_state in {"merged", "stale", "low_value_removed"} else baseline_tokens
     )
-    source_ref_available = bool(str(item.get("source_ref") or "").strip())
     return {
         "case_id": case_id,
         "case_set": case_set,
@@ -408,8 +425,12 @@ def _record(
         "candidate_source": decision.candidate_source,
         "requires_review": decision.requires_review,
         "safe_cleanup_candidate": decision.safe_cleanup_candidate,
-        "source_ref_available": source_ref_available,
-        "source_fetch_success": source_ref_available,
+        "source_ref_available": source_evidence.source_ref_available,
+        "source_fetch_success": source_evidence.source_fetch_success,
+        "source_ref_parse_success": source_evidence.source_ref_parse_success,
+        "source_fetch_mode": source_evidence.source_fetch_mode,
+        "source_support_status": source_evidence.source_support_status,
+        "source_support_reason": source_evidence.source_support_reason,
         "baseline_token_estimate": baseline_tokens,
         "after_token_estimate": after_tokens,
         "infra_error": False,
@@ -459,6 +480,12 @@ def _candidate_member_ids(groups: object) -> set[str]:
             continue
         item_ids.update(str(item_id) for item_id in group.get("item_ids", []) if str(item_id))
     return item_ids
+
+
+def _expected_terms_for_item(item: dict[str, object]) -> tuple[str, ...]:
+    summary = str(item.get("summary") or "")
+    terms = [term for term in ("用户", "memory", "偏好", "临时", "架构") if term in summary]
+    return tuple(terms[:2])
 
 
 def _str_set(value: object) -> set[str]:

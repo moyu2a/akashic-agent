@@ -6,6 +6,7 @@ from memory2.eval_sleep_hygiene_evidence import (
     run_sleep_hygiene_evidence_eval,
     strip_sleep_hygiene_evidence_for_target_metrics,
 )
+from memory2.eval_sleep_hygiene_provenance import MappingSourceRefResolver
 
 
 def test_sleep_hygiene_evidence_records_use_target_metric_schema() -> None:
@@ -257,3 +258,29 @@ def test_sleep_hygiene_target_metric_records_are_stripped_to_schema_fields() -> 
         "after_token_estimate",
         "infra_error",
     }
+
+
+def test_sleep_hygiene_evidence_can_use_mapping_source_ref_resolver() -> None:
+    cases = build_sleep_hygiene_cases(
+        duplicate_groups=0,
+        stale_count=0,
+        low_value_count=0,
+        retained_count=1,
+        missing_source_count=0,
+    )
+    item = cases[0].memory_items[0]
+    resolver = MappingSourceRefResolver(
+        {
+            str(item["source_ref"]): str(item["summary"]),
+        }
+    )
+
+    report = run_sleep_hygiene_evidence_eval(
+        cases=cases,
+        source_ref_resolver=resolver,
+    )
+
+    assert report.records[0]["source_fetch_mode"] == "mapping"
+    assert report.records[0]["source_ref_parse_success"] is True
+    assert report.records[0]["source_fetch_success"] is True
+    assert report.records[0]["source_support_status"] == "supported"
