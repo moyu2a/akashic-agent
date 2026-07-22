@@ -1245,3 +1245,45 @@
   - no real memory DB cleanup happened;
   - no real prompt token reduction is claimed;
   - active gate remains closed.
+
+## 2026-07-22 Source Ref Quality Shadow
+
+- Goal: quantify whether message-level `source_ref` normalization can improve source-backed evidence quality before changing production memory writes.
+- Added a pure shadow normalizer:
+  - `memory2/source_ref_quality.py`;
+  - keeps valid same-session message-level refs;
+  - upgrades session-level, missing, malformed, or foreign baseline refs only when explicit current-session candidate message IDs are available;
+  - filters duplicate, malformed, and foreign candidate message IDs.
+- Added a guarded evaluator:
+  - `memory2/eval_source_ref_quality.py`;
+  - evaluator consumes an injected `SourceRefResolver` and does not open arbitrary session DB paths;
+  - fixture builder refuses to overwrite an existing unmarked `sessions.db`;
+  - fixture resolver opener refuses unmarked DBs;
+  - baseline and normalized source refs both enforce same-session message IDs before resolver lookup;
+  - `source_backed_eligible` means source fetch succeeded and `source_support_status == "supported"`.
+- Added CLI:
+  - `scripts/run_memory_source_ref_quality_eval.py`;
+  - only supports guarded fixture mode in this phase;
+  - writes JSON and Markdown reports under `my_md/memory_optimization/eval_reports/source_ref_quality_shadow_v1/`.
+- Current synthetic controlled fixture result:
+  - candidates: `6`;
+  - message-level coverage: `33.3333% -> 83.3333%`;
+  - parse success: `66.6667% -> 100.0%`;
+  - real source fetch success: `33.3333% -> 83.3333%`;
+  - source support: `16.6667% -> 66.6667%`;
+  - source-backed eligible: `1/6 -> 4/6`;
+  - malformed source_ref count: `1 -> 0`.
+- Boundary:
+  - synthetic controlled fixture / shadow-only;
+  - no production online uplift claim;
+  - no `memory_items.source_ref` rewrite;
+  - no production `sessions.db` or memory DB writes;
+  - no active cleanup.
+- Verification so far:
+  - `.venv/bin/python -m pytest tests/test_memory_source_ref_quality.py tests/test_memory_source_ref_quality_cli.py -q -p no:cacheprovider` => `18 passed`.
+  - `.venv/bin/python -m pytest tests/test_memory_source_ref_quality.py tests/test_memory_source_ref_quality_cli.py tests/test_memory_sleep_hygiene_provenance.py tests/test_memory_sleep_hygiene_evidence.py tests/test_memory_sleep_hygiene_source_fixture.py -q -p no:cacheprovider` => `43 passed`.
+- Code review fixes before commit:
+  - fixed Chinese `expected_terms` tuple handling so strings are not split into characters;
+  - tightened baseline/scoped message refs to require current `session_key` and numeric message sequence;
+  - clarified Phase 6t metric denominators as all-candidate rates;
+  - prevented fixture marker checks from creating a missing DB path.

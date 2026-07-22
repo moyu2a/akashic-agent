@@ -645,3 +645,36 @@ Phase 6h 比上一轮更可信，因为它解决了两个展示误导：
 - 先有稳定、可测试、可复现的报表结构。
 - 再把真实 LLM 的不稳定性和成本放到 runner 层处理。
 - 不把“provider 余额不足”误判成 memory 模块效果不好。
+
+## Phase 6t：source_ref 写入质量指标
+
+Phase 6s 的 source-backed 评测说明：睡眠巩固要从 shadow / dry-run 走向更可信的 active gate，关键前置条件是每条候选记忆必须能回到真实原文。Phase 6t 因此把 `source_ref` 写入质量单独列成一组可量化指标。
+
+本轮只做 synthetic controlled fixture / shadow 评估，不修改真实 `memory_items.source_ref`，不写生产 `sessions.db`，也不把结果解释成线上真实提升。
+
+指标口径：
+
+| 指标 | 含义 |
+| --- | --- |
+| message-level 覆盖率 | 候选记忆的 `source_ref` 有多少能精确到消息 ID。 |
+| source_ref 解析成功率 | 全部候选中，有多少来源字段能被 parser 正确解析。 |
+| 真实回源成功率 | 全部候选中，有多少能通过 `SessionStore.fetch_by_ids()` 找到消息。 |
+| 原文支持率 | 全部候选中，有多少找到的消息内容包含 expected terms，能够支撑摘要。 |
+| source-backed eligible 率 | 全部候选中，同时满足真实回源成功和原文支持的比例。 |
+
+当前报告路径：
+
+- `my_md/memory_optimization/eval_reports/source_ref_quality_shadow_v1/memory_source_ref_quality_eval.json`
+- `my_md/memory_optimization/eval_reports/source_ref_quality_shadow_v1/memory_source_ref_quality_eval.md`
+
+当前 6 个受控样本结果：
+
+| 指标 | before | after | 变化 |
+| --- | ---: | ---: | ---: |
+| message-level 覆盖率 | 33.3333% | 83.3333% | +50.0 个百分点 |
+| source_ref 解析成功率 | 66.6667% | 100.0% | +33.3333 个百分点 |
+| 真实回源成功率 | 33.3333% | 83.3333% | +50.0 个百分点 |
+| 原文支持率 | 16.6667% | 66.6667% | +50.0 个百分点 |
+| source-backed eligible 率 | 16.6667% | 66.6667% | +50.0 个百分点 |
+
+这组指标后续应接入“记忆库卫生组”和“写入治理组”的中间证据：写入治理负责在候选阶段保留可用来源，睡眠巩固负责在清理前验证来源是否真实可审计。

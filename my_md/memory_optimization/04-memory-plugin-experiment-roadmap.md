@@ -218,6 +218,46 @@ MemoryValueScorer
 - `fused_hit_count`：融合后数量。
 - `lane_contribution`：每一路对最终结果的贡献。
 - `rerank_changed_count`：重排改变名次次数。
+
+## Phase 6t：source_ref 写入质量治理
+
+### 目的
+
+把 Phase 6s 暴露的“来源不可审计”问题前移到写入质量治理：长期记忆不只要有摘要，还要尽量带上可解析、可回源、能支持摘要的消息级 `source_ref`。
+
+### 当前基础
+
+项目已经有：
+
+- `memory_items.source_ref`
+- `SessionStore.insert_message()` 生成的消息 ID：`session_key:seq`
+- `parse_source_ref_for_fetch()`
+- `SessionStoreSourceRefResolver`
+- source-backed sleep hygiene evidence 和 dry-run patch 安全门
+
+### 本轮实现边界
+
+Phase 6t 只新增 shadow / eval-only 评估：
+
+- 不改真实 `DefaultMemoryEngine.remember()`。
+- 不改 `PostResponseMemoryWorker`、`Memorizer` 或 `MemoryStore2` 的写入行为。
+- 不重写历史 `memory_items.source_ref`。
+- 不打开任意生产 `sessions.db`。
+- CLI 只使用带 fixture marker 的受控测试库。
+
+### 输出数据
+
+| 指标 | 当前 before | 当前 after | 变化 |
+| --- | ---: | ---: | ---: |
+| message-level 覆盖率 | 33.3333% | 83.3333% | +50.0 个百分点 |
+| source_ref 解析成功率 | 66.6667% | 100.0% | +33.3333 个百分点 |
+| 真实回源成功率 | 33.3333% | 83.3333% | +50.0 个百分点 |
+| 原文支持率 | 16.6667% | 66.6667% | +50.0 个百分点 |
+| source-backed eligible 率 | 16.6667% | 66.6667% | +50.0 个百分点 |
+
+### 后续接入点
+
+后续如果要进入真实链路，推荐先让记忆候选生成阶段携带当前 turn 的候选消息 ID，再由写入治理 shadow 记录 baseline `source_ref` 和 normalized `source_ref` 的对比。只有当真实样本里的 message-level 覆盖率、回源成功率和原文支持率稳定后，才考虑把 normalized `source_ref` 写入真实 memory item。
 - `dropped_by_reason`：候选被丢弃原因。
 - `injected_count`：最终注入数量。
 - `retrieval_latency_ms`：召回耗时。

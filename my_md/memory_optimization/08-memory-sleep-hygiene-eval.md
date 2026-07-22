@@ -466,3 +466,60 @@ V3 还生成了 `memory_sleep_hygiene_dry_run_patch.json`，其中动作被拆�
 - dry-run patch 已经具备 source-backed 安全门，但仍然只写报告，不会修改真实 memory DB。
 - 当前 source support 是基于确定性 expected terms 的轻量支持判断，不是完整语义蕴含判断。
 - 当前 `fixture_sessions.db` 是受控测试库，不是生产自然流量，所以只能证明机制可审计，不能证明真实线上来源质量。
+
+## Phase 6t Source Ref 写入质量 Shadow
+
+Source-backed V1 暴露的主要问题不是 sleep hygiene 候选识别能力，而是长期记忆里的 `source_ref` 质量不足：很多来源只能定位到 `session@post_response`，或者格式错误、缺失、无法按消息 ID 找回原文。Phase 6t 因此专门评估一件事：如果写入阶段能拿到明确的消息级 `message_id`，把 session 级、缺失或 malformed 的 `source_ref` 在 shadow 报告中规范成消息级引用，会带来多少来源质量提升。
+
+本阶段仍然不改真实记忆写入，不重写 `memory_items.source_ref`，不启用 active cleanup，也不打开生产 `sessions.db`。评估器只消费注入的 `SourceRefResolver`；CLI 只创建带本阶段 fixture marker 的受控 `fixture_sessions.db`，并拒绝覆盖未标记的普通会话库。
+
+正式报告路径：
+
+- `my_md/memory_optimization/eval_reports/source_ref_quality_shadow_v1/memory_source_ref_quality_eval.json`
+- `my_md/memory_optimization/eval_reports/source_ref_quality_shadow_v1/memory_source_ref_quality_eval.md`
+- `my_md/memory_optimization/eval_reports/source_ref_quality_shadow_v1/fixture_sessions.db`
+
+测试方案：
+
+| 样本类型 | baseline source_ref | candidate message ids | 期望 |
+| --- | --- | --- | --- |
+| 已是消息级且原文支持 | `cli:local:0` | `cli:local:0` | 保留，eligible |
+| session 级可升级 | `cli:local@post_response` | `cli:local:1` | shadow 升级为消息级，eligible |
+| 缺失可升级 | 空字符串 | `cli:local:2` | shadow 升级为消息级，eligible |
+| malformed 可升级 | 非法 JSON | `cli:local:3` | shadow 升级为消息级，eligible |
+| 消息级但原文不支持 | `cli:local:4` | `cli:local:4` | 可回源但不 eligible |
+| session 级且无候选消息 | `cli:local@post_response` | 空 | 不猜测，不 eligible |
+
+额外边界测试：
+
+- candidate message ids 必须唯一、格式可解析，并且属于当前 `session_key`。
+- baseline 和 normalized 两侧都做同会话校验，跨会话消息不能算成功回源。
+- resolver opener 拒绝未标记 fixture DB。
+- 空候选集合的百分比指标返回 `unavailable`。
+
+当前 shadow 结果：
+
+| 指标 | before | after | 变化 |
+| --- | ---: | ---: | ---: |
+| message-level 覆盖率 | 33.3333% | 83.3333% | +50.0 个百分点 |
+| source_ref 解析成功率 | 66.6667% | 100.0% | +33.3333 个百分点 |
+| 真实回源成功率 | 33.3333% | 83.3333% | +50.0 个百分点 |
+| 原文支持率 | 16.6667% | 66.6667% | +50.0 个百分点 |
+| source-backed eligible 率 | 16.6667% | 66.6667% | +50.0 个百分点 |
+
+计数结果：
+
+| 指标 | 数值 |
+| --- | ---: |
+| candidate_count | 6 |
+| source_backed_eligible before | 1 |
+| source_backed_eligible after | 4 |
+| malformed_source_ref before | 1 |
+| malformed_source_ref after | 0 |
+
+结论：
+
+- 只要写入阶段能提供明确的当前会话消息 ID，`source_ref` 质量可以从“阶段级来源”推进到“消息级可回源来源”。
+- 这能直接提高后续 source-backed cleanup 的安全门通过率，因为 `source_backed_eligible` 明确定义为“回源成功且原文支持摘要”。
+- 当前数据是 synthetic controlled fixture / shadow 结果，不是生产自然流量，也不是线上真实提升。
+- 下一步如果要进入真实链路，需要在记忆候选生成或写入治理阶段携带候选来源消息 ID，然后继续以 shadow 方式采集真实样本。

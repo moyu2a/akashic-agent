@@ -1077,3 +1077,33 @@ Next:
 1. Keep sleep hygiene active gate closed.
 2. If stronger evidence is needed, run `--source-fetch-mode session-store --session-db <path>` against fixture or real sessions DB.
 3. Add production-like dry-run evidence before allowing any real merge / stale mark / low-value removal.
+
+## 2026-07-22 Source Ref Quality Shadow
+
+Goal: make the source-backed safety gate measurable from the write side, without changing production writes.
+
+Completed in this phase:
+
+- Added source_ref quality shadow normalizer and evaluator.
+- Added guarded fixture DB flow so tests use a marked `sessions.db` and refuse unmarked DBs.
+- Added same-session validation for both baseline and normalized message-level refs.
+- Added CLI report generation under `my_md/memory_optimization/eval_reports/source_ref_quality_shadow_v1/`.
+- Recorded metrics:
+  - message-level coverage `33.3333% -> 83.3333%`;
+  - parse success `66.6667% -> 100.0%`;
+  - real source fetch success `33.3333% -> 83.3333%`;
+  - source support `16.6667% -> 66.6667%`;
+  - source-backed eligible `1/6 -> 4/6`.
+
+Boundaries:
+
+- This is synthetic fixture / shadow-only.
+- It does not rewrite existing memory rows.
+- It does not change `DefaultMemoryEngine`, `PostResponseMemoryWorker`, `Memorizer`, `MemoryStore2`, retrieval, prompt injection, `AgentLoop`, `Reasoner`, or `ToolExecutor`.
+- It does not prove production online uplift.
+
+Next:
+
+1. Capture candidate source message IDs in the real memory candidate/write shadow path.
+2. Run the same before/after source_ref quality evaluator on real shadow evidence.
+3. Only after real evidence is stable, decide whether normalized message-level `source_ref` can become an active write-time field.
