@@ -148,6 +148,18 @@ def run_source_ref_quality_eval(
     )
 
 
+def with_source_ref_quality_metadata(
+    report: SourceRefQualityReport,
+    extra_metadata: dict[str, object],
+) -> SourceRefQualityReport:
+    return SourceRefQualityReport(
+        records=report.records,
+        metrics=report.metrics,
+        metadata={**report.metadata, **extra_metadata},
+        group_metrics=report.group_metrics,
+    )
+
+
 def write_source_ref_quality_json(
     report: SourceRefQualityReport,
     path: Path,

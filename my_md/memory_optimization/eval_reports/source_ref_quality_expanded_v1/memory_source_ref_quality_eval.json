@@ -1,0 +1,4886 @@
+{
+  "group_metrics": {
+    "case_sets": {
+      "common": {
+        "baseline_fetch_success_rate": 40.0,
+        "baseline_message_level_rate": 40.0,
+        "baseline_parse_success_rate": 60.0,
+        "baseline_source_backed_eligible_rate": 20.0,
+        "baseline_support_rate": 20.0,
+        "candidate_count": 100,
+        "fetch_success_uplift_points": 60.0,
+        "malformed_source_ref_count_after": 0,
+        "malformed_source_ref_count_before": 20,
+        "message_level_uplift_points": 60.0,
+        "normalized_fetch_success_rate": 100.0,
+        "normalized_message_level_rate": 100.0,
+        "normalized_parse_success_rate": 100.0,
+        "normalized_source_backed_eligible_rate": 80.0,
+        "normalized_support_rate": 80.0,
+        "parse_success_uplift_points": 40.0,
+        "source_backed_eligible_count_after": 80,
+        "source_backed_eligible_count_before": 20,
+        "source_backed_eligible_uplift_points": 60.0,
+        "support_uplift_points": 60.0
+      },
+      "hard": {
+        "baseline_fetch_success_rate": 0.0,
+        "baseline_message_level_rate": 40.0,
+        "baseline_parse_success_rate": 100.0,
+        "baseline_source_backed_eligible_rate": 0.0,
+        "baseline_support_rate": 0.0,
+        "candidate_count": 100,
+        "fetch_success_uplift_points": 60.0,
+        "malformed_source_ref_count_after": 0,
+        "malformed_source_ref_count_before": 0,
+        "message_level_uplift_points": 40.0,
+        "normalized_fetch_success_rate": 60.0,
+        "normalized_message_level_rate": 80.0,
+        "normalized_parse_success_rate": 100.0,
+        "normalized_source_backed_eligible_rate": 60.0,
+        "normalized_support_rate": 60.0,
+        "parse_success_uplift_points": 0.0,
+        "source_backed_eligible_count_after": 60,
+        "source_backed_eligible_count_before": 0,
+        "source_backed_eligible_uplift_points": 60.0,
+        "support_uplift_points": 60.0
+      }
+    },
+    "scenarios": {
+      "already_message_supported": {
+        "baseline_fetch_success_rate": 100.0,
+        "baseline_message_level_rate": 100.0,
+        "baseline_parse_success_rate": 100.0,
+        "baseline_source_backed_eligible_rate": 100.0,
+        "baseline_support_rate": 100.0,
+        "candidate_count": 20,
+        "fetch_success_uplift_points": 0.0,
+        "malformed_source_ref_count_after": 0,
+        "malformed_source_ref_count_before": 0,
+        "message_level_uplift_points": 0.0,
+        "normalized_fetch_success_rate": 100.0,
+        "normalized_message_level_rate": 100.0,
+        "normalized_parse_success_rate": 100.0,
+        "normalized_source_backed_eligible_rate": 100.0,
+        "normalized_support_rate": 100.0,
+        "parse_success_uplift_points": 0.0,
+        "source_backed_eligible_count_after": 20,
+        "source_backed_eligible_count_before": 20,
+        "source_backed_eligible_uplift_points": 0.0,
+        "support_uplift_points": 0.0
+      },
+      "foreign_baseline_replaced": {
+        "baseline_fetch_success_rate": 0.0,
+        "baseline_message_level_rate": 100.0,
+        "baseline_parse_success_rate": 100.0,
+        "baseline_source_backed_eligible_rate": 0.0,
+        "baseline_support_rate": 0.0,
+        "candidate_count": 20,
+        "fetch_success_uplift_points": 100.0,
+        "malformed_source_ref_count_after": 0,
+        "malformed_source_ref_count_before": 0,
+        "message_level_uplift_points": 0.0,
+        "normalized_fetch_success_rate": 100.0,
+        "normalized_message_level_rate": 100.0,
+        "normalized_parse_success_rate": 100.0,
+        "normalized_source_backed_eligible_rate": 100.0,
+        "normalized_support_rate": 100.0,
+        "parse_success_uplift_points": 0.0,
+        "source_backed_eligible_count_after": 20,
+        "source_backed_eligible_count_before": 0,
+        "source_backed_eligible_uplift_points": 100.0,
+        "support_uplift_points": 100.0
+      },
+      "foreign_candidate_filtered": {
+        "baseline_fetch_success_rate": 0.0,
+        "baseline_message_level_rate": 0.0,
+        "baseline_parse_success_rate": 100.0,
+        "baseline_source_backed_eligible_rate": 0.0,
+        "baseline_support_rate": 0.0,
+        "candidate_count": 20,
+        "fetch_success_uplift_points": 0.0,
+        "malformed_source_ref_count_after": 0,
+        "malformed_source_ref_count_before": 0,
+        "message_level_uplift_points": 0.0,
+        "normalized_fetch_success_rate": 0.0,
+        "normalized_message_level_rate": 0.0,
+        "normalized_parse_success_rate": 100.0,
+        "normalized_source_backed_eligible_rate": 0.0,
+        "normalized_support_rate": 0.0,
+        "parse_success_uplift_points": 0.0,
+        "source_backed_eligible_count_after": 0,
+        "source_backed_eligible_count_before": 0,
+        "source_backed_eligible_uplift_points": 0.0,
+        "support_uplift_points": 0.0
+      },
+      "invalid_same_session_baseline": {
+        "baseline_fetch_success_rate": 0.0,
+        "baseline_message_level_rate": 100.0,
+        "baseline_parse_success_rate": 100.0,
+        "baseline_source_backed_eligible_rate": 0.0,
+        "baseline_support_rate": 0.0,
+        "candidate_count": 20,
+        "fetch_success_uplift_points": 100.0,
+        "malformed_source_ref_count_after": 0,
+        "malformed_source_ref_count_before": 0,
+        "message_level_uplift_points": 0.0,
+        "normalized_fetch_success_rate": 100.0,
+        "normalized_message_level_rate": 100.0,
+        "normalized_parse_success_rate": 100.0,
+        "normalized_source_backed_eligible_rate": 100.0,
+        "normalized_support_rate": 100.0,
+        "parse_success_uplift_points": 0.0,
+        "source_backed_eligible_count_after": 20,
+        "source_backed_eligible_count_before": 0,
+        "source_backed_eligible_uplift_points": 100.0,
+        "support_uplift_points": 100.0
+      },
+      "malformed_upgradable": {
+        "baseline_fetch_success_rate": 0.0,
+        "baseline_message_level_rate": 0.0,
+        "baseline_parse_success_rate": 0.0,
+        "baseline_source_backed_eligible_rate": 0.0,
+        "baseline_support_rate": 0.0,
+        "candidate_count": 20,
+        "fetch_success_uplift_points": 100.0,
+        "malformed_source_ref_count_after": 0,
+        "malformed_source_ref_count_before": 20,
+        "message_level_uplift_points": 100.0,
+        "normalized_fetch_success_rate": 100.0,
+        "normalized_message_level_rate": 100.0,
+        "normalized_parse_success_rate": 100.0,
+        "normalized_source_backed_eligible_rate": 100.0,
+        "normalized_support_rate": 100.0,
+        "parse_success_uplift_points": 100.0,
+        "source_backed_eligible_count_after": 20,
+        "source_backed_eligible_count_before": 0,
+        "source_backed_eligible_uplift_points": 100.0,
+        "support_uplift_points": 100.0
+      },
+      "missing_message_id": {
+        "baseline_fetch_success_rate": 0.0,
+        "baseline_message_level_rate": 0.0,
+        "baseline_parse_success_rate": 100.0,
+        "baseline_source_backed_eligible_rate": 0.0,
+        "baseline_support_rate": 0.0,
+        "candidate_count": 20,
+        "fetch_success_uplift_points": 0.0,
+        "malformed_source_ref_count_after": 0,
+        "malformed_source_ref_count_before": 0,
+        "message_level_uplift_points": 100.0,
+        "normalized_fetch_success_rate": 0.0,
+        "normalized_message_level_rate": 100.0,
+        "normalized_parse_success_rate": 100.0,
+        "normalized_source_backed_eligible_rate": 0.0,
+        "normalized_support_rate": 0.0,
+        "parse_success_uplift_points": 0.0,
+        "source_backed_eligible_count_after": 0,
+        "source_backed_eligible_count_before": 0,
+        "source_backed_eligible_uplift_points": 0.0,
+        "support_uplift_points": 0.0
+      },
+      "missing_upgradable": {
+        "baseline_fetch_success_rate": 0.0,
+        "baseline_message_level_rate": 0.0,
+        "baseline_parse_success_rate": 0.0,
+        "baseline_source_backed_eligible_rate": 0.0,
+        "baseline_support_rate": 0.0,
+        "candidate_count": 20,
+        "fetch_success_uplift_points": 100.0,
+        "malformed_source_ref_count_after": 0,
+        "malformed_source_ref_count_before": 0,
+        "message_level_uplift_points": 100.0,
+        "normalized_fetch_success_rate": 100.0,
+        "normalized_message_level_rate": 100.0,
+        "normalized_parse_success_rate": 100.0,
+        "normalized_source_backed_eligible_rate": 100.0,
+        "normalized_support_rate": 100.0,
+        "parse_success_uplift_points": 100.0,
+        "source_backed_eligible_count_after": 20,
+        "source_backed_eligible_count_before": 0,
+        "source_backed_eligible_uplift_points": 100.0,
+        "support_uplift_points": 100.0
+      },
+      "multi_message_supported": {
+        "baseline_fetch_success_rate": 0.0,
+        "baseline_message_level_rate": 0.0,
+        "baseline_parse_success_rate": 100.0,
+        "baseline_source_backed_eligible_rate": 0.0,
+        "baseline_support_rate": 0.0,
+        "candidate_count": 20,
+        "fetch_success_uplift_points": 100.0,
+        "malformed_source_ref_count_after": 0,
+        "malformed_source_ref_count_before": 0,
+        "message_level_uplift_points": 100.0,
+        "normalized_fetch_success_rate": 100.0,
+        "normalized_message_level_rate": 100.0,
+        "normalized_parse_success_rate": 100.0,
+        "normalized_source_backed_eligible_rate": 100.0,
+        "normalized_support_rate": 100.0,
+        "parse_success_uplift_points": 0.0,
+        "source_backed_eligible_count_after": 20,
+        "source_backed_eligible_count_before": 0,
+        "source_backed_eligible_uplift_points": 100.0,
+        "support_uplift_points": 100.0
+      },
+      "session_level_upgradable": {
+        "baseline_fetch_success_rate": 0.0,
+        "baseline_message_level_rate": 0.0,
+        "baseline_parse_success_rate": 100.0,
+        "baseline_source_backed_eligible_rate": 0.0,
+        "baseline_support_rate": 0.0,
+        "candidate_count": 20,
+        "fetch_success_uplift_points": 100.0,
+        "malformed_source_ref_count_after": 0,
+        "malformed_source_ref_count_before": 0,
+        "message_level_uplift_points": 100.0,
+        "normalized_fetch_success_rate": 100.0,
+        "normalized_message_level_rate": 100.0,
+        "normalized_parse_success_rate": 100.0,
+        "normalized_source_backed_eligible_rate": 100.0,
+        "normalized_support_rate": 100.0,
+        "parse_success_uplift_points": 0.0,
+        "source_backed_eligible_count_after": 20,
+        "source_backed_eligible_count_before": 0,
+        "source_backed_eligible_uplift_points": 100.0,
+        "support_uplift_points": 100.0
+      },
+      "unsupported_message_kept": {
+        "baseline_fetch_success_rate": 100.0,
+        "baseline_message_level_rate": 100.0,
+        "baseline_parse_success_rate": 100.0,
+        "baseline_source_backed_eligible_rate": 0.0,
+        "baseline_support_rate": 0.0,
+        "candidate_count": 20,
+        "fetch_success_uplift_points": 0.0,
+        "malformed_source_ref_count_after": 0,
+        "malformed_source_ref_count_before": 0,
+        "message_level_uplift_points": 0.0,
+        "normalized_fetch_success_rate": 100.0,
+        "normalized_message_level_rate": 100.0,
+        "normalized_parse_success_rate": 100.0,
+        "normalized_source_backed_eligible_rate": 0.0,
+        "normalized_support_rate": 0.0,
+        "parse_success_uplift_points": 0.0,
+        "source_backed_eligible_count_after": 0,
+        "source_backed_eligible_count_before": 0,
+        "source_backed_eligible_uplift_points": 0.0,
+        "support_uplift_points": 0.0
+      }
+    }
+  },
+  "metadata": {
+    "case_pack": "expanded",
+    "common_per_scenario": 20,
+    "description": "Synthetic controlled fixture result only; this does not prove production online uplift and does not modify memory_items.source_ref.",
+    "evaluation_mode": "synthetic_fixture_shadow",
+    "hard_per_scenario": 20,
+    "production_uplift": false,
+    "synthetic_fixture": true,
+    "writes_production_memory": false
+  },
+  "metrics": {
+    "baseline_fetch_success_rate": 20.0,
+    "baseline_message_level_rate": 40.0,
+    "baseline_parse_success_rate": 80.0,
+    "baseline_source_backed_eligible_rate": 10.0,
+    "baseline_support_rate": 10.0,
+    "candidate_count": 200,
+    "fetch_success_uplift_points": 60.0,
+    "malformed_source_ref_count_after": 0,
+    "malformed_source_ref_count_before": 20,
+    "message_level_uplift_points": 50.0,
+    "normalized_fetch_success_rate": 80.0,
+    "normalized_message_level_rate": 90.0,
+    "normalized_parse_success_rate": 100.0,
+    "normalized_source_backed_eligible_rate": 70.0,
+    "normalized_support_rate": 70.0,
+    "parse_success_uplift_points": 20.0,
+    "source_backed_eligible_count_after": 140,
+    "source_backed_eligible_count_before": 20,
+    "source_backed_eligible_uplift_points": 60.0,
+    "support_uplift_points": 60.0
+  },
+  "records": [
+    {
+      "action": "kept_message_level",
+      "baseline_fetch_success": true,
+      "baseline_level": "message",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": true,
+      "baseline_source_ref": "cli:local:0",
+      "baseline_support_status": "supported",
+      "candidate_id": "common::already_message_supported::0",
+      "candidate_message_ids": [
+        "cli:local:0"
+      ],
+      "expected_terms": [
+        "already_message_supported-term-0"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "cli:local:0",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "kept_message_level",
+      "baseline_fetch_success": true,
+      "baseline_level": "message",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": true,
+      "baseline_source_ref": "cli:local:1",
+      "baseline_support_status": "supported",
+      "candidate_id": "common::already_message_supported::1",
+      "candidate_message_ids": [
+        "cli:local:1"
+      ],
+      "expected_terms": [
+        "already_message_supported-term-1"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "cli:local:1",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "kept_message_level",
+      "baseline_fetch_success": true,
+      "baseline_level": "message",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": true,
+      "baseline_source_ref": "cli:local:2",
+      "baseline_support_status": "supported",
+      "candidate_id": "common::already_message_supported::2",
+      "candidate_message_ids": [
+        "cli:local:2"
+      ],
+      "expected_terms": [
+        "already_message_supported-term-2"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "cli:local:2",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "kept_message_level",
+      "baseline_fetch_success": true,
+      "baseline_level": "message",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": true,
+      "baseline_source_ref": "cli:local:3",
+      "baseline_support_status": "supported",
+      "candidate_id": "common::already_message_supported::3",
+      "candidate_message_ids": [
+        "cli:local:3"
+      ],
+      "expected_terms": [
+        "already_message_supported-term-3"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "cli:local:3",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "kept_message_level",
+      "baseline_fetch_success": true,
+      "baseline_level": "message",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": true,
+      "baseline_source_ref": "cli:local:4",
+      "baseline_support_status": "supported",
+      "candidate_id": "common::already_message_supported::4",
+      "candidate_message_ids": [
+        "cli:local:4"
+      ],
+      "expected_terms": [
+        "already_message_supported-term-4"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "cli:local:4",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "kept_message_level",
+      "baseline_fetch_success": true,
+      "baseline_level": "message",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": true,
+      "baseline_source_ref": "cli:local:5",
+      "baseline_support_status": "supported",
+      "candidate_id": "common::already_message_supported::5",
+      "candidate_message_ids": [
+        "cli:local:5"
+      ],
+      "expected_terms": [
+        "already_message_supported-term-5"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "cli:local:5",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "kept_message_level",
+      "baseline_fetch_success": true,
+      "baseline_level": "message",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": true,
+      "baseline_source_ref": "cli:local:6",
+      "baseline_support_status": "supported",
+      "candidate_id": "common::already_message_supported::6",
+      "candidate_message_ids": [
+        "cli:local:6"
+      ],
+      "expected_terms": [
+        "already_message_supported-term-6"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "cli:local:6",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "kept_message_level",
+      "baseline_fetch_success": true,
+      "baseline_level": "message",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": true,
+      "baseline_source_ref": "cli:local:7",
+      "baseline_support_status": "supported",
+      "candidate_id": "common::already_message_supported::7",
+      "candidate_message_ids": [
+        "cli:local:7"
+      ],
+      "expected_terms": [
+        "already_message_supported-term-7"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "cli:local:7",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "kept_message_level",
+      "baseline_fetch_success": true,
+      "baseline_level": "message",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": true,
+      "baseline_source_ref": "cli:local:8",
+      "baseline_support_status": "supported",
+      "candidate_id": "common::already_message_supported::8",
+      "candidate_message_ids": [
+        "cli:local:8"
+      ],
+      "expected_terms": [
+        "already_message_supported-term-8"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "cli:local:8",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "kept_message_level",
+      "baseline_fetch_success": true,
+      "baseline_level": "message",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": true,
+      "baseline_source_ref": "cli:local:9",
+      "baseline_support_status": "supported",
+      "candidate_id": "common::already_message_supported::9",
+      "candidate_message_ids": [
+        "cli:local:9"
+      ],
+      "expected_terms": [
+        "already_message_supported-term-9"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "cli:local:9",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "kept_message_level",
+      "baseline_fetch_success": true,
+      "baseline_level": "message",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": true,
+      "baseline_source_ref": "cli:local:10",
+      "baseline_support_status": "supported",
+      "candidate_id": "common::already_message_supported::10",
+      "candidate_message_ids": [
+        "cli:local:10"
+      ],
+      "expected_terms": [
+        "already_message_supported-term-10"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "cli:local:10",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "kept_message_level",
+      "baseline_fetch_success": true,
+      "baseline_level": "message",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": true,
+      "baseline_source_ref": "cli:local:11",
+      "baseline_support_status": "supported",
+      "candidate_id": "common::already_message_supported::11",
+      "candidate_message_ids": [
+        "cli:local:11"
+      ],
+      "expected_terms": [
+        "already_message_supported-term-11"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "cli:local:11",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "kept_message_level",
+      "baseline_fetch_success": true,
+      "baseline_level": "message",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": true,
+      "baseline_source_ref": "cli:local:12",
+      "baseline_support_status": "supported",
+      "candidate_id": "common::already_message_supported::12",
+      "candidate_message_ids": [
+        "cli:local:12"
+      ],
+      "expected_terms": [
+        "already_message_supported-term-12"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "cli:local:12",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "kept_message_level",
+      "baseline_fetch_success": true,
+      "baseline_level": "message",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": true,
+      "baseline_source_ref": "cli:local:13",
+      "baseline_support_status": "supported",
+      "candidate_id": "common::already_message_supported::13",
+      "candidate_message_ids": [
+        "cli:local:13"
+      ],
+      "expected_terms": [
+        "already_message_supported-term-13"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "cli:local:13",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "kept_message_level",
+      "baseline_fetch_success": true,
+      "baseline_level": "message",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": true,
+      "baseline_source_ref": "cli:local:14",
+      "baseline_support_status": "supported",
+      "candidate_id": "common::already_message_supported::14",
+      "candidate_message_ids": [
+        "cli:local:14"
+      ],
+      "expected_terms": [
+        "already_message_supported-term-14"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "cli:local:14",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "kept_message_level",
+      "baseline_fetch_success": true,
+      "baseline_level": "message",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": true,
+      "baseline_source_ref": "cli:local:15",
+      "baseline_support_status": "supported",
+      "candidate_id": "common::already_message_supported::15",
+      "candidate_message_ids": [
+        "cli:local:15"
+      ],
+      "expected_terms": [
+        "already_message_supported-term-15"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "cli:local:15",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "kept_message_level",
+      "baseline_fetch_success": true,
+      "baseline_level": "message",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": true,
+      "baseline_source_ref": "cli:local:16",
+      "baseline_support_status": "supported",
+      "candidate_id": "common::already_message_supported::16",
+      "candidate_message_ids": [
+        "cli:local:16"
+      ],
+      "expected_terms": [
+        "already_message_supported-term-16"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "cli:local:16",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "kept_message_level",
+      "baseline_fetch_success": true,
+      "baseline_level": "message",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": true,
+      "baseline_source_ref": "cli:local:17",
+      "baseline_support_status": "supported",
+      "candidate_id": "common::already_message_supported::17",
+      "candidate_message_ids": [
+        "cli:local:17"
+      ],
+      "expected_terms": [
+        "already_message_supported-term-17"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "cli:local:17",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "kept_message_level",
+      "baseline_fetch_success": true,
+      "baseline_level": "message",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": true,
+      "baseline_source_ref": "cli:local:18",
+      "baseline_support_status": "supported",
+      "candidate_id": "common::already_message_supported::18",
+      "candidate_message_ids": [
+        "cli:local:18"
+      ],
+      "expected_terms": [
+        "already_message_supported-term-18"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "cli:local:18",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "kept_message_level",
+      "baseline_fetch_success": true,
+      "baseline_level": "message",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": true,
+      "baseline_source_ref": "cli:local:19",
+      "baseline_support_status": "supported",
+      "candidate_id": "common::already_message_supported::19",
+      "candidate_message_ids": [
+        "cli:local:19"
+      ],
+      "expected_terms": [
+        "already_message_supported-term-19"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "cli:local:19",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "session",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "cli:local@post_response",
+      "baseline_support_status": "session_ref_not_fetchable",
+      "candidate_id": "common::session_level_upgradable::0",
+      "candidate_message_ids": [
+        "cli:local:20"
+      ],
+      "expected_terms": [
+        "session_level_upgradable-term-0"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "[\"cli:local:20\"]",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "session",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "cli:local@post_response",
+      "baseline_support_status": "session_ref_not_fetchable",
+      "candidate_id": "common::session_level_upgradable::1",
+      "candidate_message_ids": [
+        "cli:local:21"
+      ],
+      "expected_terms": [
+        "session_level_upgradable-term-1"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "[\"cli:local:21\"]",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "session",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "cli:local@post_response",
+      "baseline_support_status": "session_ref_not_fetchable",
+      "candidate_id": "common::session_level_upgradable::2",
+      "candidate_message_ids": [
+        "cli:local:22"
+      ],
+      "expected_terms": [
+        "session_level_upgradable-term-2"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "[\"cli:local:22\"]",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "session",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "cli:local@post_response",
+      "baseline_support_status": "session_ref_not_fetchable",
+      "candidate_id": "common::session_level_upgradable::3",
+      "candidate_message_ids": [
+        "cli:local:23"
+      ],
+      "expected_terms": [
+        "session_level_upgradable-term-3"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "[\"cli:local:23\"]",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "session",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "cli:local@post_response",
+      "baseline_support_status": "session_ref_not_fetchable",
+      "candidate_id": "common::session_level_upgradable::4",
+      "candidate_message_ids": [
+        "cli:local:24"
+      ],
+      "expected_terms": [
+        "session_level_upgradable-term-4"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "[\"cli:local:24\"]",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "session",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "cli:local@post_response",
+      "baseline_support_status": "session_ref_not_fetchable",
+      "candidate_id": "common::session_level_upgradable::5",
+      "candidate_message_ids": [
+        "cli:local:25"
+      ],
+      "expected_terms": [
+        "session_level_upgradable-term-5"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "[\"cli:local:25\"]",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "session",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "cli:local@post_response",
+      "baseline_support_status": "session_ref_not_fetchable",
+      "candidate_id": "common::session_level_upgradable::6",
+      "candidate_message_ids": [
+        "cli:local:26"
+      ],
+      "expected_terms": [
+        "session_level_upgradable-term-6"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "[\"cli:local:26\"]",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "session",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "cli:local@post_response",
+      "baseline_support_status": "session_ref_not_fetchable",
+      "candidate_id": "common::session_level_upgradable::7",
+      "candidate_message_ids": [
+        "cli:local:27"
+      ],
+      "expected_terms": [
+        "session_level_upgradable-term-7"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "[\"cli:local:27\"]",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "session",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "cli:local@post_response",
+      "baseline_support_status": "session_ref_not_fetchable",
+      "candidate_id": "common::session_level_upgradable::8",
+      "candidate_message_ids": [
+        "cli:local:28"
+      ],
+      "expected_terms": [
+        "session_level_upgradable-term-8"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "[\"cli:local:28\"]",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "session",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "cli:local@post_response",
+      "baseline_support_status": "session_ref_not_fetchable",
+      "candidate_id": "common::session_level_upgradable::9",
+      "candidate_message_ids": [
+        "cli:local:29"
+      ],
+      "expected_terms": [
+        "session_level_upgradable-term-9"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "[\"cli:local:29\"]",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "session",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "cli:local@post_response",
+      "baseline_support_status": "session_ref_not_fetchable",
+      "candidate_id": "common::session_level_upgradable::10",
+      "candidate_message_ids": [
+        "cli:local:30"
+      ],
+      "expected_terms": [
+        "session_level_upgradable-term-10"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "[\"cli:local:30\"]",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "session",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "cli:local@post_response",
+      "baseline_support_status": "session_ref_not_fetchable",
+      "candidate_id": "common::session_level_upgradable::11",
+      "candidate_message_ids": [
+        "cli:local:31"
+      ],
+      "expected_terms": [
+        "session_level_upgradable-term-11"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "[\"cli:local:31\"]",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "session",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "cli:local@post_response",
+      "baseline_support_status": "session_ref_not_fetchable",
+      "candidate_id": "common::session_level_upgradable::12",
+      "candidate_message_ids": [
+        "cli:local:32"
+      ],
+      "expected_terms": [
+        "session_level_upgradable-term-12"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "[\"cli:local:32\"]",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "session",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "cli:local@post_response",
+      "baseline_support_status": "session_ref_not_fetchable",
+      "candidate_id": "common::session_level_upgradable::13",
+      "candidate_message_ids": [
+        "cli:local:33"
+      ],
+      "expected_terms": [
+        "session_level_upgradable-term-13"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "[\"cli:local:33\"]",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "session",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "cli:local@post_response",
+      "baseline_support_status": "session_ref_not_fetchable",
+      "candidate_id": "common::session_level_upgradable::14",
+      "candidate_message_ids": [
+        "cli:local:34"
+      ],
+      "expected_terms": [
+        "session_level_upgradable-term-14"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "[\"cli:local:34\"]",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "session",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "cli:local@post_response",
+      "baseline_support_status": "session_ref_not_fetchable",
+      "candidate_id": "common::session_level_upgradable::15",
+      "candidate_message_ids": [
+        "cli:local:35"
+      ],
+      "expected_terms": [
+        "session_level_upgradable-term-15"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "[\"cli:local:35\"]",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "session",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "cli:local@post_response",
+      "baseline_support_status": "session_ref_not_fetchable",
+      "candidate_id": "common::session_level_upgradable::16",
+      "candidate_message_ids": [
+        "cli:local:36"
+      ],
+      "expected_terms": [
+        "session_level_upgradable-term-16"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "[\"cli:local:36\"]",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "session",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "cli:local@post_response",
+      "baseline_support_status": "session_ref_not_fetchable",
+      "candidate_id": "common::session_level_upgradable::17",
+      "candidate_message_ids": [
+        "cli:local:37"
+      ],
+      "expected_terms": [
+        "session_level_upgradable-term-17"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "[\"cli:local:37\"]",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "session",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "cli:local@post_response",
+      "baseline_support_status": "session_ref_not_fetchable",
+      "candidate_id": "common::session_level_upgradable::18",
+      "candidate_message_ids": [
+        "cli:local:38"
+      ],
+      "expected_terms": [
+        "session_level_upgradable-term-18"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "[\"cli:local:38\"]",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "session",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "cli:local@post_response",
+      "baseline_support_status": "session_ref_not_fetchable",
+      "candidate_id": "common::session_level_upgradable::19",
+      "candidate_message_ids": [
+        "cli:local:39"
+      ],
+      "expected_terms": [
+        "session_level_upgradable-term-19"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "[\"cli:local:39\"]",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "missing",
+      "baseline_parse_ok": false,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "",
+      "baseline_support_status": "missing_source_ref",
+      "candidate_id": "common::missing_upgradable::0",
+      "candidate_message_ids": [
+        "cli:local:40"
+      ],
+      "expected_terms": [
+        "missing_upgradable-term-0"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "[\"cli:local:40\"]",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "missing",
+      "baseline_parse_ok": false,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "",
+      "baseline_support_status": "missing_source_ref",
+      "candidate_id": "common::missing_upgradable::1",
+      "candidate_message_ids": [
+        "cli:local:41"
+      ],
+      "expected_terms": [
+        "missing_upgradable-term-1"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "[\"cli:local:41\"]",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "missing",
+      "baseline_parse_ok": false,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "",
+      "baseline_support_status": "missing_source_ref",
+      "candidate_id": "common::missing_upgradable::2",
+      "candidate_message_ids": [
+        "cli:local:42"
+      ],
+      "expected_terms": [
+        "missing_upgradable-term-2"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "[\"cli:local:42\"]",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "missing",
+      "baseline_parse_ok": false,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "",
+      "baseline_support_status": "missing_source_ref",
+      "candidate_id": "common::missing_upgradable::3",
+      "candidate_message_ids": [
+        "cli:local:43"
+      ],
+      "expected_terms": [
+        "missing_upgradable-term-3"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "[\"cli:local:43\"]",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "missing",
+      "baseline_parse_ok": false,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "",
+      "baseline_support_status": "missing_source_ref",
+      "candidate_id": "common::missing_upgradable::4",
+      "candidate_message_ids": [
+        "cli:local:44"
+      ],
+      "expected_terms": [
+        "missing_upgradable-term-4"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "[\"cli:local:44\"]",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "missing",
+      "baseline_parse_ok": false,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "",
+      "baseline_support_status": "missing_source_ref",
+      "candidate_id": "common::missing_upgradable::5",
+      "candidate_message_ids": [
+        "cli:local:45"
+      ],
+      "expected_terms": [
+        "missing_upgradable-term-5"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "[\"cli:local:45\"]",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "missing",
+      "baseline_parse_ok": false,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "",
+      "baseline_support_status": "missing_source_ref",
+      "candidate_id": "common::missing_upgradable::6",
+      "candidate_message_ids": [
+        "cli:local:46"
+      ],
+      "expected_terms": [
+        "missing_upgradable-term-6"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "[\"cli:local:46\"]",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "missing",
+      "baseline_parse_ok": false,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "",
+      "baseline_support_status": "missing_source_ref",
+      "candidate_id": "common::missing_upgradable::7",
+      "candidate_message_ids": [
+        "cli:local:47"
+      ],
+      "expected_terms": [
+        "missing_upgradable-term-7"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "[\"cli:local:47\"]",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "missing",
+      "baseline_parse_ok": false,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "",
+      "baseline_support_status": "missing_source_ref",
+      "candidate_id": "common::missing_upgradable::8",
+      "candidate_message_ids": [
+        "cli:local:48"
+      ],
+      "expected_terms": [
+        "missing_upgradable-term-8"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "[\"cli:local:48\"]",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "missing",
+      "baseline_parse_ok": false,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "",
+      "baseline_support_status": "missing_source_ref",
+      "candidate_id": "common::missing_upgradable::9",
+      "candidate_message_ids": [
+        "cli:local:49"
+      ],
+      "expected_terms": [
+        "missing_upgradable-term-9"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "[\"cli:local:49\"]",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "missing",
+      "baseline_parse_ok": false,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "",
+      "baseline_support_status": "missing_source_ref",
+      "candidate_id": "common::missing_upgradable::10",
+      "candidate_message_ids": [
+        "cli:local:50"
+      ],
+      "expected_terms": [
+        "missing_upgradable-term-10"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "[\"cli:local:50\"]",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "missing",
+      "baseline_parse_ok": false,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "",
+      "baseline_support_status": "missing_source_ref",
+      "candidate_id": "common::missing_upgradable::11",
+      "candidate_message_ids": [
+        "cli:local:51"
+      ],
+      "expected_terms": [
+        "missing_upgradable-term-11"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "[\"cli:local:51\"]",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "missing",
+      "baseline_parse_ok": false,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "",
+      "baseline_support_status": "missing_source_ref",
+      "candidate_id": "common::missing_upgradable::12",
+      "candidate_message_ids": [
+        "cli:local:52"
+      ],
+      "expected_terms": [
+        "missing_upgradable-term-12"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "[\"cli:local:52\"]",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "missing",
+      "baseline_parse_ok": false,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "",
+      "baseline_support_status": "missing_source_ref",
+      "candidate_id": "common::missing_upgradable::13",
+      "candidate_message_ids": [
+        "cli:local:53"
+      ],
+      "expected_terms": [
+        "missing_upgradable-term-13"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "[\"cli:local:53\"]",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "missing",
+      "baseline_parse_ok": false,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "",
+      "baseline_support_status": "missing_source_ref",
+      "candidate_id": "common::missing_upgradable::14",
+      "candidate_message_ids": [
+        "cli:local:54"
+      ],
+      "expected_terms": [
+        "missing_upgradable-term-14"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "[\"cli:local:54\"]",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "missing",
+      "baseline_parse_ok": false,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "",
+      "baseline_support_status": "missing_source_ref",
+      "candidate_id": "common::missing_upgradable::15",
+      "candidate_message_ids": [
+        "cli:local:55"
+      ],
+      "expected_terms": [
+        "missing_upgradable-term-15"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "[\"cli:local:55\"]",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "missing",
+      "baseline_parse_ok": false,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "",
+      "baseline_support_status": "missing_source_ref",
+      "candidate_id": "common::missing_upgradable::16",
+      "candidate_message_ids": [
+        "cli:local:56"
+      ],
+      "expected_terms": [
+        "missing_upgradable-term-16"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "[\"cli:local:56\"]",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "missing",
+      "baseline_parse_ok": false,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "",
+      "baseline_support_status": "missing_source_ref",
+      "candidate_id": "common::missing_upgradable::17",
+      "candidate_message_ids": [
+        "cli:local:57"
+      ],
+      "expected_terms": [
+        "missing_upgradable-term-17"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "[\"cli:local:57\"]",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "missing",
+      "baseline_parse_ok": false,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "",
+      "baseline_support_status": "missing_source_ref",
+      "candidate_id": "common::missing_upgradable::18",
+      "candidate_message_ids": [
+        "cli:local:58"
+      ],
+      "expected_terms": [
+        "missing_upgradable-term-18"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "[\"cli:local:58\"]",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "missing",
+      "baseline_parse_ok": false,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "",
+      "baseline_support_status": "missing_source_ref",
+      "candidate_id": "common::missing_upgradable::19",
+      "candidate_message_ids": [
+        "cli:local:59"
+      ],
+      "expected_terms": [
+        "missing_upgradable-term-19"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "[\"cli:local:59\"]",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "malformed",
+      "baseline_parse_ok": false,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "[\"broken\"",
+      "baseline_support_status": "parse_failed",
+      "candidate_id": "common::malformed_upgradable::0",
+      "candidate_message_ids": [
+        "cli:local:60"
+      ],
+      "expected_terms": [
+        "malformed_upgradable-term-0"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "[\"cli:local:60\"]",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "malformed",
+      "baseline_parse_ok": false,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "[\"broken\"",
+      "baseline_support_status": "parse_failed",
+      "candidate_id": "common::malformed_upgradable::1",
+      "candidate_message_ids": [
+        "cli:local:61"
+      ],
+      "expected_terms": [
+        "malformed_upgradable-term-1"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "[\"cli:local:61\"]",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "malformed",
+      "baseline_parse_ok": false,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "[\"broken\"",
+      "baseline_support_status": "parse_failed",
+      "candidate_id": "common::malformed_upgradable::2",
+      "candidate_message_ids": [
+        "cli:local:62"
+      ],
+      "expected_terms": [
+        "malformed_upgradable-term-2"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "[\"cli:local:62\"]",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "malformed",
+      "baseline_parse_ok": false,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "[\"broken\"",
+      "baseline_support_status": "parse_failed",
+      "candidate_id": "common::malformed_upgradable::3",
+      "candidate_message_ids": [
+        "cli:local:63"
+      ],
+      "expected_terms": [
+        "malformed_upgradable-term-3"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "[\"cli:local:63\"]",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "malformed",
+      "baseline_parse_ok": false,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "[\"broken\"",
+      "baseline_support_status": "parse_failed",
+      "candidate_id": "common::malformed_upgradable::4",
+      "candidate_message_ids": [
+        "cli:local:64"
+      ],
+      "expected_terms": [
+        "malformed_upgradable-term-4"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "[\"cli:local:64\"]",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "malformed",
+      "baseline_parse_ok": false,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "[\"broken\"",
+      "baseline_support_status": "parse_failed",
+      "candidate_id": "common::malformed_upgradable::5",
+      "candidate_message_ids": [
+        "cli:local:65"
+      ],
+      "expected_terms": [
+        "malformed_upgradable-term-5"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "[\"cli:local:65\"]",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "malformed",
+      "baseline_parse_ok": false,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "[\"broken\"",
+      "baseline_support_status": "parse_failed",
+      "candidate_id": "common::malformed_upgradable::6",
+      "candidate_message_ids": [
+        "cli:local:66"
+      ],
+      "expected_terms": [
+        "malformed_upgradable-term-6"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "[\"cli:local:66\"]",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "malformed",
+      "baseline_parse_ok": false,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "[\"broken\"",
+      "baseline_support_status": "parse_failed",
+      "candidate_id": "common::malformed_upgradable::7",
+      "candidate_message_ids": [
+        "cli:local:67"
+      ],
+      "expected_terms": [
+        "malformed_upgradable-term-7"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "[\"cli:local:67\"]",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "malformed",
+      "baseline_parse_ok": false,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "[\"broken\"",
+      "baseline_support_status": "parse_failed",
+      "candidate_id": "common::malformed_upgradable::8",
+      "candidate_message_ids": [
+        "cli:local:68"
+      ],
+      "expected_terms": [
+        "malformed_upgradable-term-8"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "[\"cli:local:68\"]",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "malformed",
+      "baseline_parse_ok": false,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "[\"broken\"",
+      "baseline_support_status": "parse_failed",
+      "candidate_id": "common::malformed_upgradable::9",
+      "candidate_message_ids": [
+        "cli:local:69"
+      ],
+      "expected_terms": [
+        "malformed_upgradable-term-9"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "[\"cli:local:69\"]",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "malformed",
+      "baseline_parse_ok": false,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "[\"broken\"",
+      "baseline_support_status": "parse_failed",
+      "candidate_id": "common::malformed_upgradable::10",
+      "candidate_message_ids": [
+        "cli:local:70"
+      ],
+      "expected_terms": [
+        "malformed_upgradable-term-10"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "[\"cli:local:70\"]",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "malformed",
+      "baseline_parse_ok": false,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "[\"broken\"",
+      "baseline_support_status": "parse_failed",
+      "candidate_id": "common::malformed_upgradable::11",
+      "candidate_message_ids": [
+        "cli:local:71"
+      ],
+      "expected_terms": [
+        "malformed_upgradable-term-11"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "[\"cli:local:71\"]",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "malformed",
+      "baseline_parse_ok": false,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "[\"broken\"",
+      "baseline_support_status": "parse_failed",
+      "candidate_id": "common::malformed_upgradable::12",
+      "candidate_message_ids": [
+        "cli:local:72"
+      ],
+      "expected_terms": [
+        "malformed_upgradable-term-12"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "[\"cli:local:72\"]",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "malformed",
+      "baseline_parse_ok": false,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "[\"broken\"",
+      "baseline_support_status": "parse_failed",
+      "candidate_id": "common::malformed_upgradable::13",
+      "candidate_message_ids": [
+        "cli:local:73"
+      ],
+      "expected_terms": [
+        "malformed_upgradable-term-13"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "[\"cli:local:73\"]",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "malformed",
+      "baseline_parse_ok": false,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "[\"broken\"",
+      "baseline_support_status": "parse_failed",
+      "candidate_id": "common::malformed_upgradable::14",
+      "candidate_message_ids": [
+        "cli:local:74"
+      ],
+      "expected_terms": [
+        "malformed_upgradable-term-14"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "[\"cli:local:74\"]",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "malformed",
+      "baseline_parse_ok": false,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "[\"broken\"",
+      "baseline_support_status": "parse_failed",
+      "candidate_id": "common::malformed_upgradable::15",
+      "candidate_message_ids": [
+        "cli:local:75"
+      ],
+      "expected_terms": [
+        "malformed_upgradable-term-15"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "[\"cli:local:75\"]",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "malformed",
+      "baseline_parse_ok": false,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "[\"broken\"",
+      "baseline_support_status": "parse_failed",
+      "candidate_id": "common::malformed_upgradable::16",
+      "candidate_message_ids": [
+        "cli:local:76"
+      ],
+      "expected_terms": [
+        "malformed_upgradable-term-16"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "[\"cli:local:76\"]",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "malformed",
+      "baseline_parse_ok": false,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "[\"broken\"",
+      "baseline_support_status": "parse_failed",
+      "candidate_id": "common::malformed_upgradable::17",
+      "candidate_message_ids": [
+        "cli:local:77"
+      ],
+      "expected_terms": [
+        "malformed_upgradable-term-17"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "[\"cli:local:77\"]",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "malformed",
+      "baseline_parse_ok": false,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "[\"broken\"",
+      "baseline_support_status": "parse_failed",
+      "candidate_id": "common::malformed_upgradable::18",
+      "candidate_message_ids": [
+        "cli:local:78"
+      ],
+      "expected_terms": [
+        "malformed_upgradable-term-18"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "[\"cli:local:78\"]",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "malformed",
+      "baseline_parse_ok": false,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "[\"broken\"",
+      "baseline_support_status": "parse_failed",
+      "candidate_id": "common::malformed_upgradable::19",
+      "candidate_message_ids": [
+        "cli:local:79"
+      ],
+      "expected_terms": [
+        "malformed_upgradable-term-19"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "[\"cli:local:79\"]",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "kept_message_level",
+      "baseline_fetch_success": true,
+      "baseline_level": "message",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "cli:local:80",
+      "baseline_support_status": "unsupported",
+      "candidate_id": "common::unsupported_message_kept::0",
+      "candidate_message_ids": [
+        "cli:local:80"
+      ],
+      "expected_terms": [
+        "unsupported_message_kept-term-0"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": false,
+      "normalized_source_ref": "cli:local:80",
+      "normalized_support_status": "unsupported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "kept_message_level",
+      "baseline_fetch_success": true,
+      "baseline_level": "message",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "cli:local:81",
+      "baseline_support_status": "unsupported",
+      "candidate_id": "common::unsupported_message_kept::1",
+      "candidate_message_ids": [
+        "cli:local:81"
+      ],
+      "expected_terms": [
+        "unsupported_message_kept-term-1"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": false,
+      "normalized_source_ref": "cli:local:81",
+      "normalized_support_status": "unsupported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "kept_message_level",
+      "baseline_fetch_success": true,
+      "baseline_level": "message",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "cli:local:82",
+      "baseline_support_status": "unsupported",
+      "candidate_id": "common::unsupported_message_kept::2",
+      "candidate_message_ids": [
+        "cli:local:82"
+      ],
+      "expected_terms": [
+        "unsupported_message_kept-term-2"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": false,
+      "normalized_source_ref": "cli:local:82",
+      "normalized_support_status": "unsupported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "kept_message_level",
+      "baseline_fetch_success": true,
+      "baseline_level": "message",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "cli:local:83",
+      "baseline_support_status": "unsupported",
+      "candidate_id": "common::unsupported_message_kept::3",
+      "candidate_message_ids": [
+        "cli:local:83"
+      ],
+      "expected_terms": [
+        "unsupported_message_kept-term-3"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": false,
+      "normalized_source_ref": "cli:local:83",
+      "normalized_support_status": "unsupported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "kept_message_level",
+      "baseline_fetch_success": true,
+      "baseline_level": "message",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "cli:local:84",
+      "baseline_support_status": "unsupported",
+      "candidate_id": "common::unsupported_message_kept::4",
+      "candidate_message_ids": [
+        "cli:local:84"
+      ],
+      "expected_terms": [
+        "unsupported_message_kept-term-4"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": false,
+      "normalized_source_ref": "cli:local:84",
+      "normalized_support_status": "unsupported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "kept_message_level",
+      "baseline_fetch_success": true,
+      "baseline_level": "message",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "cli:local:85",
+      "baseline_support_status": "unsupported",
+      "candidate_id": "common::unsupported_message_kept::5",
+      "candidate_message_ids": [
+        "cli:local:85"
+      ],
+      "expected_terms": [
+        "unsupported_message_kept-term-5"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": false,
+      "normalized_source_ref": "cli:local:85",
+      "normalized_support_status": "unsupported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "kept_message_level",
+      "baseline_fetch_success": true,
+      "baseline_level": "message",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "cli:local:86",
+      "baseline_support_status": "unsupported",
+      "candidate_id": "common::unsupported_message_kept::6",
+      "candidate_message_ids": [
+        "cli:local:86"
+      ],
+      "expected_terms": [
+        "unsupported_message_kept-term-6"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": false,
+      "normalized_source_ref": "cli:local:86",
+      "normalized_support_status": "unsupported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "kept_message_level",
+      "baseline_fetch_success": true,
+      "baseline_level": "message",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "cli:local:87",
+      "baseline_support_status": "unsupported",
+      "candidate_id": "common::unsupported_message_kept::7",
+      "candidate_message_ids": [
+        "cli:local:87"
+      ],
+      "expected_terms": [
+        "unsupported_message_kept-term-7"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": false,
+      "normalized_source_ref": "cli:local:87",
+      "normalized_support_status": "unsupported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "kept_message_level",
+      "baseline_fetch_success": true,
+      "baseline_level": "message",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "cli:local:88",
+      "baseline_support_status": "unsupported",
+      "candidate_id": "common::unsupported_message_kept::8",
+      "candidate_message_ids": [
+        "cli:local:88"
+      ],
+      "expected_terms": [
+        "unsupported_message_kept-term-8"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": false,
+      "normalized_source_ref": "cli:local:88",
+      "normalized_support_status": "unsupported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "kept_message_level",
+      "baseline_fetch_success": true,
+      "baseline_level": "message",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "cli:local:89",
+      "baseline_support_status": "unsupported",
+      "candidate_id": "common::unsupported_message_kept::9",
+      "candidate_message_ids": [
+        "cli:local:89"
+      ],
+      "expected_terms": [
+        "unsupported_message_kept-term-9"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": false,
+      "normalized_source_ref": "cli:local:89",
+      "normalized_support_status": "unsupported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "kept_message_level",
+      "baseline_fetch_success": true,
+      "baseline_level": "message",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "cli:local:90",
+      "baseline_support_status": "unsupported",
+      "candidate_id": "common::unsupported_message_kept::10",
+      "candidate_message_ids": [
+        "cli:local:90"
+      ],
+      "expected_terms": [
+        "unsupported_message_kept-term-10"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": false,
+      "normalized_source_ref": "cli:local:90",
+      "normalized_support_status": "unsupported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "kept_message_level",
+      "baseline_fetch_success": true,
+      "baseline_level": "message",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "cli:local:91",
+      "baseline_support_status": "unsupported",
+      "candidate_id": "common::unsupported_message_kept::11",
+      "candidate_message_ids": [
+        "cli:local:91"
+      ],
+      "expected_terms": [
+        "unsupported_message_kept-term-11"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": false,
+      "normalized_source_ref": "cli:local:91",
+      "normalized_support_status": "unsupported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "kept_message_level",
+      "baseline_fetch_success": true,
+      "baseline_level": "message",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "cli:local:92",
+      "baseline_support_status": "unsupported",
+      "candidate_id": "common::unsupported_message_kept::12",
+      "candidate_message_ids": [
+        "cli:local:92"
+      ],
+      "expected_terms": [
+        "unsupported_message_kept-term-12"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": false,
+      "normalized_source_ref": "cli:local:92",
+      "normalized_support_status": "unsupported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "kept_message_level",
+      "baseline_fetch_success": true,
+      "baseline_level": "message",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "cli:local:93",
+      "baseline_support_status": "unsupported",
+      "candidate_id": "common::unsupported_message_kept::13",
+      "candidate_message_ids": [
+        "cli:local:93"
+      ],
+      "expected_terms": [
+        "unsupported_message_kept-term-13"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": false,
+      "normalized_source_ref": "cli:local:93",
+      "normalized_support_status": "unsupported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "kept_message_level",
+      "baseline_fetch_success": true,
+      "baseline_level": "message",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "cli:local:94",
+      "baseline_support_status": "unsupported",
+      "candidate_id": "common::unsupported_message_kept::14",
+      "candidate_message_ids": [
+        "cli:local:94"
+      ],
+      "expected_terms": [
+        "unsupported_message_kept-term-14"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": false,
+      "normalized_source_ref": "cli:local:94",
+      "normalized_support_status": "unsupported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "kept_message_level",
+      "baseline_fetch_success": true,
+      "baseline_level": "message",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "cli:local:95",
+      "baseline_support_status": "unsupported",
+      "candidate_id": "common::unsupported_message_kept::15",
+      "candidate_message_ids": [
+        "cli:local:95"
+      ],
+      "expected_terms": [
+        "unsupported_message_kept-term-15"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": false,
+      "normalized_source_ref": "cli:local:95",
+      "normalized_support_status": "unsupported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "kept_message_level",
+      "baseline_fetch_success": true,
+      "baseline_level": "message",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "cli:local:96",
+      "baseline_support_status": "unsupported",
+      "candidate_id": "common::unsupported_message_kept::16",
+      "candidate_message_ids": [
+        "cli:local:96"
+      ],
+      "expected_terms": [
+        "unsupported_message_kept-term-16"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": false,
+      "normalized_source_ref": "cli:local:96",
+      "normalized_support_status": "unsupported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "kept_message_level",
+      "baseline_fetch_success": true,
+      "baseline_level": "message",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "cli:local:97",
+      "baseline_support_status": "unsupported",
+      "candidate_id": "common::unsupported_message_kept::17",
+      "candidate_message_ids": [
+        "cli:local:97"
+      ],
+      "expected_terms": [
+        "unsupported_message_kept-term-17"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": false,
+      "normalized_source_ref": "cli:local:97",
+      "normalized_support_status": "unsupported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "kept_message_level",
+      "baseline_fetch_success": true,
+      "baseline_level": "message",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "cli:local:98",
+      "baseline_support_status": "unsupported",
+      "candidate_id": "common::unsupported_message_kept::18",
+      "candidate_message_ids": [
+        "cli:local:98"
+      ],
+      "expected_terms": [
+        "unsupported_message_kept-term-18"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": false,
+      "normalized_source_ref": "cli:local:98",
+      "normalized_support_status": "unsupported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "kept_message_level",
+      "baseline_fetch_success": true,
+      "baseline_level": "message",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "cli:local:99",
+      "baseline_support_status": "unsupported",
+      "candidate_id": "common::unsupported_message_kept::19",
+      "candidate_message_ids": [
+        "cli:local:99"
+      ],
+      "expected_terms": [
+        "unsupported_message_kept-term-19"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": false,
+      "normalized_source_ref": "cli:local:99",
+      "normalized_support_status": "unsupported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "kept_no_candidate_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "session",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "cli:local@post_response",
+      "baseline_support_status": "session_ref_not_fetchable",
+      "candidate_id": "hard::foreign_candidate_filtered::0",
+      "candidate_message_ids": [],
+      "expected_terms": [
+        "foreign_candidate_filtered-term-0"
+      ],
+      "normalized_fetch_success": false,
+      "normalized_level": "session",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": false,
+      "normalized_source_ref": "cli:local@post_response",
+      "normalized_support_status": "session_ref_not_fetchable",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "kept_no_candidate_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "session",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "cli:local@post_response",
+      "baseline_support_status": "session_ref_not_fetchable",
+      "candidate_id": "hard::foreign_candidate_filtered::1",
+      "candidate_message_ids": [],
+      "expected_terms": [
+        "foreign_candidate_filtered-term-1"
+      ],
+      "normalized_fetch_success": false,
+      "normalized_level": "session",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": false,
+      "normalized_source_ref": "cli:local@post_response",
+      "normalized_support_status": "session_ref_not_fetchable",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "kept_no_candidate_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "session",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "cli:local@post_response",
+      "baseline_support_status": "session_ref_not_fetchable",
+      "candidate_id": "hard::foreign_candidate_filtered::2",
+      "candidate_message_ids": [],
+      "expected_terms": [
+        "foreign_candidate_filtered-term-2"
+      ],
+      "normalized_fetch_success": false,
+      "normalized_level": "session",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": false,
+      "normalized_source_ref": "cli:local@post_response",
+      "normalized_support_status": "session_ref_not_fetchable",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "kept_no_candidate_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "session",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "cli:local@post_response",
+      "baseline_support_status": "session_ref_not_fetchable",
+      "candidate_id": "hard::foreign_candidate_filtered::3",
+      "candidate_message_ids": [],
+      "expected_terms": [
+        "foreign_candidate_filtered-term-3"
+      ],
+      "normalized_fetch_success": false,
+      "normalized_level": "session",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": false,
+      "normalized_source_ref": "cli:local@post_response",
+      "normalized_support_status": "session_ref_not_fetchable",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "kept_no_candidate_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "session",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "cli:local@post_response",
+      "baseline_support_status": "session_ref_not_fetchable",
+      "candidate_id": "hard::foreign_candidate_filtered::4",
+      "candidate_message_ids": [],
+      "expected_terms": [
+        "foreign_candidate_filtered-term-4"
+      ],
+      "normalized_fetch_success": false,
+      "normalized_level": "session",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": false,
+      "normalized_source_ref": "cli:local@post_response",
+      "normalized_support_status": "session_ref_not_fetchable",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "kept_no_candidate_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "session",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "cli:local@post_response",
+      "baseline_support_status": "session_ref_not_fetchable",
+      "candidate_id": "hard::foreign_candidate_filtered::5",
+      "candidate_message_ids": [],
+      "expected_terms": [
+        "foreign_candidate_filtered-term-5"
+      ],
+      "normalized_fetch_success": false,
+      "normalized_level": "session",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": false,
+      "normalized_source_ref": "cli:local@post_response",
+      "normalized_support_status": "session_ref_not_fetchable",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "kept_no_candidate_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "session",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "cli:local@post_response",
+      "baseline_support_status": "session_ref_not_fetchable",
+      "candidate_id": "hard::foreign_candidate_filtered::6",
+      "candidate_message_ids": [],
+      "expected_terms": [
+        "foreign_candidate_filtered-term-6"
+      ],
+      "normalized_fetch_success": false,
+      "normalized_level": "session",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": false,
+      "normalized_source_ref": "cli:local@post_response",
+      "normalized_support_status": "session_ref_not_fetchable",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "kept_no_candidate_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "session",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "cli:local@post_response",
+      "baseline_support_status": "session_ref_not_fetchable",
+      "candidate_id": "hard::foreign_candidate_filtered::7",
+      "candidate_message_ids": [],
+      "expected_terms": [
+        "foreign_candidate_filtered-term-7"
+      ],
+      "normalized_fetch_success": false,
+      "normalized_level": "session",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": false,
+      "normalized_source_ref": "cli:local@post_response",
+      "normalized_support_status": "session_ref_not_fetchable",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "kept_no_candidate_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "session",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "cli:local@post_response",
+      "baseline_support_status": "session_ref_not_fetchable",
+      "candidate_id": "hard::foreign_candidate_filtered::8",
+      "candidate_message_ids": [],
+      "expected_terms": [
+        "foreign_candidate_filtered-term-8"
+      ],
+      "normalized_fetch_success": false,
+      "normalized_level": "session",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": false,
+      "normalized_source_ref": "cli:local@post_response",
+      "normalized_support_status": "session_ref_not_fetchable",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "kept_no_candidate_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "session",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "cli:local@post_response",
+      "baseline_support_status": "session_ref_not_fetchable",
+      "candidate_id": "hard::foreign_candidate_filtered::9",
+      "candidate_message_ids": [],
+      "expected_terms": [
+        "foreign_candidate_filtered-term-9"
+      ],
+      "normalized_fetch_success": false,
+      "normalized_level": "session",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": false,
+      "normalized_source_ref": "cli:local@post_response",
+      "normalized_support_status": "session_ref_not_fetchable",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "kept_no_candidate_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "session",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "cli:local@post_response",
+      "baseline_support_status": "session_ref_not_fetchable",
+      "candidate_id": "hard::foreign_candidate_filtered::10",
+      "candidate_message_ids": [],
+      "expected_terms": [
+        "foreign_candidate_filtered-term-10"
+      ],
+      "normalized_fetch_success": false,
+      "normalized_level": "session",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": false,
+      "normalized_source_ref": "cli:local@post_response",
+      "normalized_support_status": "session_ref_not_fetchable",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "kept_no_candidate_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "session",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "cli:local@post_response",
+      "baseline_support_status": "session_ref_not_fetchable",
+      "candidate_id": "hard::foreign_candidate_filtered::11",
+      "candidate_message_ids": [],
+      "expected_terms": [
+        "foreign_candidate_filtered-term-11"
+      ],
+      "normalized_fetch_success": false,
+      "normalized_level": "session",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": false,
+      "normalized_source_ref": "cli:local@post_response",
+      "normalized_support_status": "session_ref_not_fetchable",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "kept_no_candidate_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "session",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "cli:local@post_response",
+      "baseline_support_status": "session_ref_not_fetchable",
+      "candidate_id": "hard::foreign_candidate_filtered::12",
+      "candidate_message_ids": [],
+      "expected_terms": [
+        "foreign_candidate_filtered-term-12"
+      ],
+      "normalized_fetch_success": false,
+      "normalized_level": "session",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": false,
+      "normalized_source_ref": "cli:local@post_response",
+      "normalized_support_status": "session_ref_not_fetchable",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "kept_no_candidate_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "session",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "cli:local@post_response",
+      "baseline_support_status": "session_ref_not_fetchable",
+      "candidate_id": "hard::foreign_candidate_filtered::13",
+      "candidate_message_ids": [],
+      "expected_terms": [
+        "foreign_candidate_filtered-term-13"
+      ],
+      "normalized_fetch_success": false,
+      "normalized_level": "session",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": false,
+      "normalized_source_ref": "cli:local@post_response",
+      "normalized_support_status": "session_ref_not_fetchable",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "kept_no_candidate_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "session",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "cli:local@post_response",
+      "baseline_support_status": "session_ref_not_fetchable",
+      "candidate_id": "hard::foreign_candidate_filtered::14",
+      "candidate_message_ids": [],
+      "expected_terms": [
+        "foreign_candidate_filtered-term-14"
+      ],
+      "normalized_fetch_success": false,
+      "normalized_level": "session",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": false,
+      "normalized_source_ref": "cli:local@post_response",
+      "normalized_support_status": "session_ref_not_fetchable",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "kept_no_candidate_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "session",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "cli:local@post_response",
+      "baseline_support_status": "session_ref_not_fetchable",
+      "candidate_id": "hard::foreign_candidate_filtered::15",
+      "candidate_message_ids": [],
+      "expected_terms": [
+        "foreign_candidate_filtered-term-15"
+      ],
+      "normalized_fetch_success": false,
+      "normalized_level": "session",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": false,
+      "normalized_source_ref": "cli:local@post_response",
+      "normalized_support_status": "session_ref_not_fetchable",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "kept_no_candidate_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "session",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "cli:local@post_response",
+      "baseline_support_status": "session_ref_not_fetchable",
+      "candidate_id": "hard::foreign_candidate_filtered::16",
+      "candidate_message_ids": [],
+      "expected_terms": [
+        "foreign_candidate_filtered-term-16"
+      ],
+      "normalized_fetch_success": false,
+      "normalized_level": "session",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": false,
+      "normalized_source_ref": "cli:local@post_response",
+      "normalized_support_status": "session_ref_not_fetchable",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "kept_no_candidate_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "session",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "cli:local@post_response",
+      "baseline_support_status": "session_ref_not_fetchable",
+      "candidate_id": "hard::foreign_candidate_filtered::17",
+      "candidate_message_ids": [],
+      "expected_terms": [
+        "foreign_candidate_filtered-term-17"
+      ],
+      "normalized_fetch_success": false,
+      "normalized_level": "session",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": false,
+      "normalized_source_ref": "cli:local@post_response",
+      "normalized_support_status": "session_ref_not_fetchable",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "kept_no_candidate_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "session",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "cli:local@post_response",
+      "baseline_support_status": "session_ref_not_fetchable",
+      "candidate_id": "hard::foreign_candidate_filtered::18",
+      "candidate_message_ids": [],
+      "expected_terms": [
+        "foreign_candidate_filtered-term-18"
+      ],
+      "normalized_fetch_success": false,
+      "normalized_level": "session",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": false,
+      "normalized_source_ref": "cli:local@post_response",
+      "normalized_support_status": "session_ref_not_fetchable",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "kept_no_candidate_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "session",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "cli:local@post_response",
+      "baseline_support_status": "session_ref_not_fetchable",
+      "candidate_id": "hard::foreign_candidate_filtered::19",
+      "candidate_message_ids": [],
+      "expected_terms": [
+        "foreign_candidate_filtered-term-19"
+      ],
+      "normalized_fetch_success": false,
+      "normalized_level": "session",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": false,
+      "normalized_source_ref": "cli:local@post_response",
+      "normalized_support_status": "session_ref_not_fetchable",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "message",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "qq:local:20",
+      "baseline_support_status": "foreign_session_source",
+      "candidate_id": "hard::foreign_baseline_replaced::0",
+      "candidate_message_ids": [
+        "cli:local:120"
+      ],
+      "expected_terms": [
+        "foreign_baseline_replaced-term-0"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "[\"cli:local:120\"]",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "message",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "qq:local:21",
+      "baseline_support_status": "foreign_session_source",
+      "candidate_id": "hard::foreign_baseline_replaced::1",
+      "candidate_message_ids": [
+        "cli:local:121"
+      ],
+      "expected_terms": [
+        "foreign_baseline_replaced-term-1"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "[\"cli:local:121\"]",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "message",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "qq:local:22",
+      "baseline_support_status": "foreign_session_source",
+      "candidate_id": "hard::foreign_baseline_replaced::2",
+      "candidate_message_ids": [
+        "cli:local:122"
+      ],
+      "expected_terms": [
+        "foreign_baseline_replaced-term-2"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "[\"cli:local:122\"]",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "message",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "qq:local:23",
+      "baseline_support_status": "foreign_session_source",
+      "candidate_id": "hard::foreign_baseline_replaced::3",
+      "candidate_message_ids": [
+        "cli:local:123"
+      ],
+      "expected_terms": [
+        "foreign_baseline_replaced-term-3"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "[\"cli:local:123\"]",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "message",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "qq:local:24",
+      "baseline_support_status": "foreign_session_source",
+      "candidate_id": "hard::foreign_baseline_replaced::4",
+      "candidate_message_ids": [
+        "cli:local:124"
+      ],
+      "expected_terms": [
+        "foreign_baseline_replaced-term-4"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "[\"cli:local:124\"]",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "message",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "qq:local:25",
+      "baseline_support_status": "foreign_session_source",
+      "candidate_id": "hard::foreign_baseline_replaced::5",
+      "candidate_message_ids": [
+        "cli:local:125"
+      ],
+      "expected_terms": [
+        "foreign_baseline_replaced-term-5"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "[\"cli:local:125\"]",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "message",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "qq:local:26",
+      "baseline_support_status": "foreign_session_source",
+      "candidate_id": "hard::foreign_baseline_replaced::6",
+      "candidate_message_ids": [
+        "cli:local:126"
+      ],
+      "expected_terms": [
+        "foreign_baseline_replaced-term-6"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "[\"cli:local:126\"]",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "message",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "qq:local:27",
+      "baseline_support_status": "foreign_session_source",
+      "candidate_id": "hard::foreign_baseline_replaced::7",
+      "candidate_message_ids": [
+        "cli:local:127"
+      ],
+      "expected_terms": [
+        "foreign_baseline_replaced-term-7"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "[\"cli:local:127\"]",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "message",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "qq:local:28",
+      "baseline_support_status": "foreign_session_source",
+      "candidate_id": "hard::foreign_baseline_replaced::8",
+      "candidate_message_ids": [
+        "cli:local:128"
+      ],
+      "expected_terms": [
+        "foreign_baseline_replaced-term-8"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "[\"cli:local:128\"]",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "message",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "qq:local:29",
+      "baseline_support_status": "foreign_session_source",
+      "candidate_id": "hard::foreign_baseline_replaced::9",
+      "candidate_message_ids": [
+        "cli:local:129"
+      ],
+      "expected_terms": [
+        "foreign_baseline_replaced-term-9"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "[\"cli:local:129\"]",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "message",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "qq:local:30",
+      "baseline_support_status": "foreign_session_source",
+      "candidate_id": "hard::foreign_baseline_replaced::10",
+      "candidate_message_ids": [
+        "cli:local:130"
+      ],
+      "expected_terms": [
+        "foreign_baseline_replaced-term-10"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "[\"cli:local:130\"]",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "message",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "qq:local:31",
+      "baseline_support_status": "foreign_session_source",
+      "candidate_id": "hard::foreign_baseline_replaced::11",
+      "candidate_message_ids": [
+        "cli:local:131"
+      ],
+      "expected_terms": [
+        "foreign_baseline_replaced-term-11"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "[\"cli:local:131\"]",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "message",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "qq:local:32",
+      "baseline_support_status": "foreign_session_source",
+      "candidate_id": "hard::foreign_baseline_replaced::12",
+      "candidate_message_ids": [
+        "cli:local:132"
+      ],
+      "expected_terms": [
+        "foreign_baseline_replaced-term-12"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "[\"cli:local:132\"]",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "message",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "qq:local:33",
+      "baseline_support_status": "foreign_session_source",
+      "candidate_id": "hard::foreign_baseline_replaced::13",
+      "candidate_message_ids": [
+        "cli:local:133"
+      ],
+      "expected_terms": [
+        "foreign_baseline_replaced-term-13"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "[\"cli:local:133\"]",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "message",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "qq:local:34",
+      "baseline_support_status": "foreign_session_source",
+      "candidate_id": "hard::foreign_baseline_replaced::14",
+      "candidate_message_ids": [
+        "cli:local:134"
+      ],
+      "expected_terms": [
+        "foreign_baseline_replaced-term-14"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "[\"cli:local:134\"]",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "message",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "qq:local:35",
+      "baseline_support_status": "foreign_session_source",
+      "candidate_id": "hard::foreign_baseline_replaced::15",
+      "candidate_message_ids": [
+        "cli:local:135"
+      ],
+      "expected_terms": [
+        "foreign_baseline_replaced-term-15"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "[\"cli:local:135\"]",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "message",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "qq:local:36",
+      "baseline_support_status": "foreign_session_source",
+      "candidate_id": "hard::foreign_baseline_replaced::16",
+      "candidate_message_ids": [
+        "cli:local:136"
+      ],
+      "expected_terms": [
+        "foreign_baseline_replaced-term-16"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "[\"cli:local:136\"]",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "message",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "qq:local:37",
+      "baseline_support_status": "foreign_session_source",
+      "candidate_id": "hard::foreign_baseline_replaced::17",
+      "candidate_message_ids": [
+        "cli:local:137"
+      ],
+      "expected_terms": [
+        "foreign_baseline_replaced-term-17"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "[\"cli:local:137\"]",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "message",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "qq:local:38",
+      "baseline_support_status": "foreign_session_source",
+      "candidate_id": "hard::foreign_baseline_replaced::18",
+      "candidate_message_ids": [
+        "cli:local:138"
+      ],
+      "expected_terms": [
+        "foreign_baseline_replaced-term-18"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "[\"cli:local:138\"]",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "message",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "qq:local:39",
+      "baseline_support_status": "foreign_session_source",
+      "candidate_id": "hard::foreign_baseline_replaced::19",
+      "candidate_message_ids": [
+        "cli:local:139"
+      ],
+      "expected_terms": [
+        "foreign_baseline_replaced-term-19"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "[\"cli:local:139\"]",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "message",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "cli:local:bad-0",
+      "baseline_support_status": "invalid_message_id",
+      "candidate_id": "hard::invalid_same_session_baseline::0",
+      "candidate_message_ids": [
+        "cli:local:140"
+      ],
+      "expected_terms": [
+        "invalid_same_session_baseline-term-0"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "[\"cli:local:140\"]",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "message",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "cli:local:bad-1",
+      "baseline_support_status": "invalid_message_id",
+      "candidate_id": "hard::invalid_same_session_baseline::1",
+      "candidate_message_ids": [
+        "cli:local:141"
+      ],
+      "expected_terms": [
+        "invalid_same_session_baseline-term-1"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "[\"cli:local:141\"]",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "message",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "cli:local:bad-2",
+      "baseline_support_status": "invalid_message_id",
+      "candidate_id": "hard::invalid_same_session_baseline::2",
+      "candidate_message_ids": [
+        "cli:local:142"
+      ],
+      "expected_terms": [
+        "invalid_same_session_baseline-term-2"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "[\"cli:local:142\"]",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "message",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "cli:local:bad-3",
+      "baseline_support_status": "invalid_message_id",
+      "candidate_id": "hard::invalid_same_session_baseline::3",
+      "candidate_message_ids": [
+        "cli:local:143"
+      ],
+      "expected_terms": [
+        "invalid_same_session_baseline-term-3"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "[\"cli:local:143\"]",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "message",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "cli:local:bad-4",
+      "baseline_support_status": "invalid_message_id",
+      "candidate_id": "hard::invalid_same_session_baseline::4",
+      "candidate_message_ids": [
+        "cli:local:144"
+      ],
+      "expected_terms": [
+        "invalid_same_session_baseline-term-4"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "[\"cli:local:144\"]",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "message",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "cli:local:bad-5",
+      "baseline_support_status": "invalid_message_id",
+      "candidate_id": "hard::invalid_same_session_baseline::5",
+      "candidate_message_ids": [
+        "cli:local:145"
+      ],
+      "expected_terms": [
+        "invalid_same_session_baseline-term-5"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "[\"cli:local:145\"]",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "message",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "cli:local:bad-6",
+      "baseline_support_status": "invalid_message_id",
+      "candidate_id": "hard::invalid_same_session_baseline::6",
+      "candidate_message_ids": [
+        "cli:local:146"
+      ],
+      "expected_terms": [
+        "invalid_same_session_baseline-term-6"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "[\"cli:local:146\"]",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "message",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "cli:local:bad-7",
+      "baseline_support_status": "invalid_message_id",
+      "candidate_id": "hard::invalid_same_session_baseline::7",
+      "candidate_message_ids": [
+        "cli:local:147"
+      ],
+      "expected_terms": [
+        "invalid_same_session_baseline-term-7"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "[\"cli:local:147\"]",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "message",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "cli:local:bad-8",
+      "baseline_support_status": "invalid_message_id",
+      "candidate_id": "hard::invalid_same_session_baseline::8",
+      "candidate_message_ids": [
+        "cli:local:148"
+      ],
+      "expected_terms": [
+        "invalid_same_session_baseline-term-8"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "[\"cli:local:148\"]",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "message",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "cli:local:bad-9",
+      "baseline_support_status": "invalid_message_id",
+      "candidate_id": "hard::invalid_same_session_baseline::9",
+      "candidate_message_ids": [
+        "cli:local:149"
+      ],
+      "expected_terms": [
+        "invalid_same_session_baseline-term-9"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "[\"cli:local:149\"]",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "message",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "cli:local:bad-10",
+      "baseline_support_status": "invalid_message_id",
+      "candidate_id": "hard::invalid_same_session_baseline::10",
+      "candidate_message_ids": [
+        "cli:local:150"
+      ],
+      "expected_terms": [
+        "invalid_same_session_baseline-term-10"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "[\"cli:local:150\"]",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "message",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "cli:local:bad-11",
+      "baseline_support_status": "invalid_message_id",
+      "candidate_id": "hard::invalid_same_session_baseline::11",
+      "candidate_message_ids": [
+        "cli:local:151"
+      ],
+      "expected_terms": [
+        "invalid_same_session_baseline-term-11"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "[\"cli:local:151\"]",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "message",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "cli:local:bad-12",
+      "baseline_support_status": "invalid_message_id",
+      "candidate_id": "hard::invalid_same_session_baseline::12",
+      "candidate_message_ids": [
+        "cli:local:152"
+      ],
+      "expected_terms": [
+        "invalid_same_session_baseline-term-12"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "[\"cli:local:152\"]",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "message",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "cli:local:bad-13",
+      "baseline_support_status": "invalid_message_id",
+      "candidate_id": "hard::invalid_same_session_baseline::13",
+      "candidate_message_ids": [
+        "cli:local:153"
+      ],
+      "expected_terms": [
+        "invalid_same_session_baseline-term-13"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "[\"cli:local:153\"]",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "message",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "cli:local:bad-14",
+      "baseline_support_status": "invalid_message_id",
+      "candidate_id": "hard::invalid_same_session_baseline::14",
+      "candidate_message_ids": [
+        "cli:local:154"
+      ],
+      "expected_terms": [
+        "invalid_same_session_baseline-term-14"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "[\"cli:local:154\"]",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "message",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "cli:local:bad-15",
+      "baseline_support_status": "invalid_message_id",
+      "candidate_id": "hard::invalid_same_session_baseline::15",
+      "candidate_message_ids": [
+        "cli:local:155"
+      ],
+      "expected_terms": [
+        "invalid_same_session_baseline-term-15"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "[\"cli:local:155\"]",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "message",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "cli:local:bad-16",
+      "baseline_support_status": "invalid_message_id",
+      "candidate_id": "hard::invalid_same_session_baseline::16",
+      "candidate_message_ids": [
+        "cli:local:156"
+      ],
+      "expected_terms": [
+        "invalid_same_session_baseline-term-16"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "[\"cli:local:156\"]",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "message",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "cli:local:bad-17",
+      "baseline_support_status": "invalid_message_id",
+      "candidate_id": "hard::invalid_same_session_baseline::17",
+      "candidate_message_ids": [
+        "cli:local:157"
+      ],
+      "expected_terms": [
+        "invalid_same_session_baseline-term-17"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "[\"cli:local:157\"]",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "message",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "cli:local:bad-18",
+      "baseline_support_status": "invalid_message_id",
+      "candidate_id": "hard::invalid_same_session_baseline::18",
+      "candidate_message_ids": [
+        "cli:local:158"
+      ],
+      "expected_terms": [
+        "invalid_same_session_baseline-term-18"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "[\"cli:local:158\"]",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "message",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "cli:local:bad-19",
+      "baseline_support_status": "invalid_message_id",
+      "candidate_id": "hard::invalid_same_session_baseline::19",
+      "candidate_message_ids": [
+        "cli:local:159"
+      ],
+      "expected_terms": [
+        "invalid_same_session_baseline-term-19"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "[\"cli:local:159\"]",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "session",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "cli:local@post_response",
+      "baseline_support_status": "session_ref_not_fetchable",
+      "candidate_id": "hard::missing_message_id::0",
+      "candidate_message_ids": [
+        "cli:local:100161"
+      ],
+      "expected_terms": [
+        "missing_message_id-term-0"
+      ],
+      "normalized_fetch_success": false,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": false,
+      "normalized_source_ref": "[\"cli:local:100161\"]",
+      "normalized_support_status": "missing",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "session",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "cli:local@post_response",
+      "baseline_support_status": "session_ref_not_fetchable",
+      "candidate_id": "hard::missing_message_id::1",
+      "candidate_message_ids": [
+        "cli:local:100162"
+      ],
+      "expected_terms": [
+        "missing_message_id-term-1"
+      ],
+      "normalized_fetch_success": false,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": false,
+      "normalized_source_ref": "[\"cli:local:100162\"]",
+      "normalized_support_status": "missing",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "session",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "cli:local@post_response",
+      "baseline_support_status": "session_ref_not_fetchable",
+      "candidate_id": "hard::missing_message_id::2",
+      "candidate_message_ids": [
+        "cli:local:100163"
+      ],
+      "expected_terms": [
+        "missing_message_id-term-2"
+      ],
+      "normalized_fetch_success": false,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": false,
+      "normalized_source_ref": "[\"cli:local:100163\"]",
+      "normalized_support_status": "missing",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "session",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "cli:local@post_response",
+      "baseline_support_status": "session_ref_not_fetchable",
+      "candidate_id": "hard::missing_message_id::3",
+      "candidate_message_ids": [
+        "cli:local:100164"
+      ],
+      "expected_terms": [
+        "missing_message_id-term-3"
+      ],
+      "normalized_fetch_success": false,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": false,
+      "normalized_source_ref": "[\"cli:local:100164\"]",
+      "normalized_support_status": "missing",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "session",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "cli:local@post_response",
+      "baseline_support_status": "session_ref_not_fetchable",
+      "candidate_id": "hard::missing_message_id::4",
+      "candidate_message_ids": [
+        "cli:local:100165"
+      ],
+      "expected_terms": [
+        "missing_message_id-term-4"
+      ],
+      "normalized_fetch_success": false,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": false,
+      "normalized_source_ref": "[\"cli:local:100165\"]",
+      "normalized_support_status": "missing",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "session",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "cli:local@post_response",
+      "baseline_support_status": "session_ref_not_fetchable",
+      "candidate_id": "hard::missing_message_id::5",
+      "candidate_message_ids": [
+        "cli:local:100166"
+      ],
+      "expected_terms": [
+        "missing_message_id-term-5"
+      ],
+      "normalized_fetch_success": false,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": false,
+      "normalized_source_ref": "[\"cli:local:100166\"]",
+      "normalized_support_status": "missing",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "session",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "cli:local@post_response",
+      "baseline_support_status": "session_ref_not_fetchable",
+      "candidate_id": "hard::missing_message_id::6",
+      "candidate_message_ids": [
+        "cli:local:100167"
+      ],
+      "expected_terms": [
+        "missing_message_id-term-6"
+      ],
+      "normalized_fetch_success": false,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": false,
+      "normalized_source_ref": "[\"cli:local:100167\"]",
+      "normalized_support_status": "missing",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "session",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "cli:local@post_response",
+      "baseline_support_status": "session_ref_not_fetchable",
+      "candidate_id": "hard::missing_message_id::7",
+      "candidate_message_ids": [
+        "cli:local:100168"
+      ],
+      "expected_terms": [
+        "missing_message_id-term-7"
+      ],
+      "normalized_fetch_success": false,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": false,
+      "normalized_source_ref": "[\"cli:local:100168\"]",
+      "normalized_support_status": "missing",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "session",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "cli:local@post_response",
+      "baseline_support_status": "session_ref_not_fetchable",
+      "candidate_id": "hard::missing_message_id::8",
+      "candidate_message_ids": [
+        "cli:local:100169"
+      ],
+      "expected_terms": [
+        "missing_message_id-term-8"
+      ],
+      "normalized_fetch_success": false,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": false,
+      "normalized_source_ref": "[\"cli:local:100169\"]",
+      "normalized_support_status": "missing",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "session",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "cli:local@post_response",
+      "baseline_support_status": "session_ref_not_fetchable",
+      "candidate_id": "hard::missing_message_id::9",
+      "candidate_message_ids": [
+        "cli:local:100170"
+      ],
+      "expected_terms": [
+        "missing_message_id-term-9"
+      ],
+      "normalized_fetch_success": false,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": false,
+      "normalized_source_ref": "[\"cli:local:100170\"]",
+      "normalized_support_status": "missing",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "session",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "cli:local@post_response",
+      "baseline_support_status": "session_ref_not_fetchable",
+      "candidate_id": "hard::missing_message_id::10",
+      "candidate_message_ids": [
+        "cli:local:100171"
+      ],
+      "expected_terms": [
+        "missing_message_id-term-10"
+      ],
+      "normalized_fetch_success": false,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": false,
+      "normalized_source_ref": "[\"cli:local:100171\"]",
+      "normalized_support_status": "missing",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "session",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "cli:local@post_response",
+      "baseline_support_status": "session_ref_not_fetchable",
+      "candidate_id": "hard::missing_message_id::11",
+      "candidate_message_ids": [
+        "cli:local:100172"
+      ],
+      "expected_terms": [
+        "missing_message_id-term-11"
+      ],
+      "normalized_fetch_success": false,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": false,
+      "normalized_source_ref": "[\"cli:local:100172\"]",
+      "normalized_support_status": "missing",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "session",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "cli:local@post_response",
+      "baseline_support_status": "session_ref_not_fetchable",
+      "candidate_id": "hard::missing_message_id::12",
+      "candidate_message_ids": [
+        "cli:local:100173"
+      ],
+      "expected_terms": [
+        "missing_message_id-term-12"
+      ],
+      "normalized_fetch_success": false,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": false,
+      "normalized_source_ref": "[\"cli:local:100173\"]",
+      "normalized_support_status": "missing",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "session",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "cli:local@post_response",
+      "baseline_support_status": "session_ref_not_fetchable",
+      "candidate_id": "hard::missing_message_id::13",
+      "candidate_message_ids": [
+        "cli:local:100174"
+      ],
+      "expected_terms": [
+        "missing_message_id-term-13"
+      ],
+      "normalized_fetch_success": false,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": false,
+      "normalized_source_ref": "[\"cli:local:100174\"]",
+      "normalized_support_status": "missing",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "session",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "cli:local@post_response",
+      "baseline_support_status": "session_ref_not_fetchable",
+      "candidate_id": "hard::missing_message_id::14",
+      "candidate_message_ids": [
+        "cli:local:100175"
+      ],
+      "expected_terms": [
+        "missing_message_id-term-14"
+      ],
+      "normalized_fetch_success": false,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": false,
+      "normalized_source_ref": "[\"cli:local:100175\"]",
+      "normalized_support_status": "missing",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "session",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "cli:local@post_response",
+      "baseline_support_status": "session_ref_not_fetchable",
+      "candidate_id": "hard::missing_message_id::15",
+      "candidate_message_ids": [
+        "cli:local:100176"
+      ],
+      "expected_terms": [
+        "missing_message_id-term-15"
+      ],
+      "normalized_fetch_success": false,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": false,
+      "normalized_source_ref": "[\"cli:local:100176\"]",
+      "normalized_support_status": "missing",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "session",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "cli:local@post_response",
+      "baseline_support_status": "session_ref_not_fetchable",
+      "candidate_id": "hard::missing_message_id::16",
+      "candidate_message_ids": [
+        "cli:local:100177"
+      ],
+      "expected_terms": [
+        "missing_message_id-term-16"
+      ],
+      "normalized_fetch_success": false,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": false,
+      "normalized_source_ref": "[\"cli:local:100177\"]",
+      "normalized_support_status": "missing",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "session",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "cli:local@post_response",
+      "baseline_support_status": "session_ref_not_fetchable",
+      "candidate_id": "hard::missing_message_id::17",
+      "candidate_message_ids": [
+        "cli:local:100178"
+      ],
+      "expected_terms": [
+        "missing_message_id-term-17"
+      ],
+      "normalized_fetch_success": false,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": false,
+      "normalized_source_ref": "[\"cli:local:100178\"]",
+      "normalized_support_status": "missing",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "session",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "cli:local@post_response",
+      "baseline_support_status": "session_ref_not_fetchable",
+      "candidate_id": "hard::missing_message_id::18",
+      "candidate_message_ids": [
+        "cli:local:100179"
+      ],
+      "expected_terms": [
+        "missing_message_id-term-18"
+      ],
+      "normalized_fetch_success": false,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": false,
+      "normalized_source_ref": "[\"cli:local:100179\"]",
+      "normalized_support_status": "missing",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "session",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "cli:local@post_response",
+      "baseline_support_status": "session_ref_not_fetchable",
+      "candidate_id": "hard::missing_message_id::19",
+      "candidate_message_ids": [
+        "cli:local:100180"
+      ],
+      "expected_terms": [
+        "missing_message_id-term-19"
+      ],
+      "normalized_fetch_success": false,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": false,
+      "normalized_source_ref": "[\"cli:local:100180\"]",
+      "normalized_support_status": "missing",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "session",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "cli:local@post_response",
+      "baseline_support_status": "session_ref_not_fetchable",
+      "candidate_id": "hard::multi_message_supported::0",
+      "candidate_message_ids": [
+        "cli:local:180",
+        "cli:local:181"
+      ],
+      "expected_terms": [
+        "multi_message_supported-term-0"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "[\"cli:local:180\",\"cli:local:181\"]",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "session",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "cli:local@post_response",
+      "baseline_support_status": "session_ref_not_fetchable",
+      "candidate_id": "hard::multi_message_supported::1",
+      "candidate_message_ids": [
+        "cli:local:182",
+        "cli:local:183"
+      ],
+      "expected_terms": [
+        "multi_message_supported-term-1"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "[\"cli:local:182\",\"cli:local:183\"]",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "session",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "cli:local@post_response",
+      "baseline_support_status": "session_ref_not_fetchable",
+      "candidate_id": "hard::multi_message_supported::2",
+      "candidate_message_ids": [
+        "cli:local:184",
+        "cli:local:185"
+      ],
+      "expected_terms": [
+        "multi_message_supported-term-2"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "[\"cli:local:184\",\"cli:local:185\"]",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "session",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "cli:local@post_response",
+      "baseline_support_status": "session_ref_not_fetchable",
+      "candidate_id": "hard::multi_message_supported::3",
+      "candidate_message_ids": [
+        "cli:local:186",
+        "cli:local:187"
+      ],
+      "expected_terms": [
+        "multi_message_supported-term-3"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "[\"cli:local:186\",\"cli:local:187\"]",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "session",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "cli:local@post_response",
+      "baseline_support_status": "session_ref_not_fetchable",
+      "candidate_id": "hard::multi_message_supported::4",
+      "candidate_message_ids": [
+        "cli:local:188",
+        "cli:local:189"
+      ],
+      "expected_terms": [
+        "multi_message_supported-term-4"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "[\"cli:local:188\",\"cli:local:189\"]",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "session",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "cli:local@post_response",
+      "baseline_support_status": "session_ref_not_fetchable",
+      "candidate_id": "hard::multi_message_supported::5",
+      "candidate_message_ids": [
+        "cli:local:190",
+        "cli:local:191"
+      ],
+      "expected_terms": [
+        "multi_message_supported-term-5"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "[\"cli:local:190\",\"cli:local:191\"]",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "session",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "cli:local@post_response",
+      "baseline_support_status": "session_ref_not_fetchable",
+      "candidate_id": "hard::multi_message_supported::6",
+      "candidate_message_ids": [
+        "cli:local:192",
+        "cli:local:193"
+      ],
+      "expected_terms": [
+        "multi_message_supported-term-6"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "[\"cli:local:192\",\"cli:local:193\"]",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "session",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "cli:local@post_response",
+      "baseline_support_status": "session_ref_not_fetchable",
+      "candidate_id": "hard::multi_message_supported::7",
+      "candidate_message_ids": [
+        "cli:local:194",
+        "cli:local:195"
+      ],
+      "expected_terms": [
+        "multi_message_supported-term-7"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "[\"cli:local:194\",\"cli:local:195\"]",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "session",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "cli:local@post_response",
+      "baseline_support_status": "session_ref_not_fetchable",
+      "candidate_id": "hard::multi_message_supported::8",
+      "candidate_message_ids": [
+        "cli:local:196",
+        "cli:local:197"
+      ],
+      "expected_terms": [
+        "multi_message_supported-term-8"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "[\"cli:local:196\",\"cli:local:197\"]",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "session",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "cli:local@post_response",
+      "baseline_support_status": "session_ref_not_fetchable",
+      "candidate_id": "hard::multi_message_supported::9",
+      "candidate_message_ids": [
+        "cli:local:198",
+        "cli:local:199"
+      ],
+      "expected_terms": [
+        "multi_message_supported-term-9"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "[\"cli:local:198\",\"cli:local:199\"]",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "session",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "cli:local@post_response",
+      "baseline_support_status": "session_ref_not_fetchable",
+      "candidate_id": "hard::multi_message_supported::10",
+      "candidate_message_ids": [
+        "cli:local:200",
+        "cli:local:201"
+      ],
+      "expected_terms": [
+        "multi_message_supported-term-10"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "[\"cli:local:200\",\"cli:local:201\"]",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "session",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "cli:local@post_response",
+      "baseline_support_status": "session_ref_not_fetchable",
+      "candidate_id": "hard::multi_message_supported::11",
+      "candidate_message_ids": [
+        "cli:local:202",
+        "cli:local:203"
+      ],
+      "expected_terms": [
+        "multi_message_supported-term-11"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "[\"cli:local:202\",\"cli:local:203\"]",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "session",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "cli:local@post_response",
+      "baseline_support_status": "session_ref_not_fetchable",
+      "candidate_id": "hard::multi_message_supported::12",
+      "candidate_message_ids": [
+        "cli:local:204",
+        "cli:local:205"
+      ],
+      "expected_terms": [
+        "multi_message_supported-term-12"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "[\"cli:local:204\",\"cli:local:205\"]",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "session",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "cli:local@post_response",
+      "baseline_support_status": "session_ref_not_fetchable",
+      "candidate_id": "hard::multi_message_supported::13",
+      "candidate_message_ids": [
+        "cli:local:206",
+        "cli:local:207"
+      ],
+      "expected_terms": [
+        "multi_message_supported-term-13"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "[\"cli:local:206\",\"cli:local:207\"]",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "session",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "cli:local@post_response",
+      "baseline_support_status": "session_ref_not_fetchable",
+      "candidate_id": "hard::multi_message_supported::14",
+      "candidate_message_ids": [
+        "cli:local:208",
+        "cli:local:209"
+      ],
+      "expected_terms": [
+        "multi_message_supported-term-14"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "[\"cli:local:208\",\"cli:local:209\"]",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "session",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "cli:local@post_response",
+      "baseline_support_status": "session_ref_not_fetchable",
+      "candidate_id": "hard::multi_message_supported::15",
+      "candidate_message_ids": [
+        "cli:local:210",
+        "cli:local:211"
+      ],
+      "expected_terms": [
+        "multi_message_supported-term-15"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "[\"cli:local:210\",\"cli:local:211\"]",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "session",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "cli:local@post_response",
+      "baseline_support_status": "session_ref_not_fetchable",
+      "candidate_id": "hard::multi_message_supported::16",
+      "candidate_message_ids": [
+        "cli:local:212",
+        "cli:local:213"
+      ],
+      "expected_terms": [
+        "multi_message_supported-term-16"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "[\"cli:local:212\",\"cli:local:213\"]",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "session",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "cli:local@post_response",
+      "baseline_support_status": "session_ref_not_fetchable",
+      "candidate_id": "hard::multi_message_supported::17",
+      "candidate_message_ids": [
+        "cli:local:214",
+        "cli:local:215"
+      ],
+      "expected_terms": [
+        "multi_message_supported-term-17"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "[\"cli:local:214\",\"cli:local:215\"]",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "session",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "cli:local@post_response",
+      "baseline_support_status": "session_ref_not_fetchable",
+      "candidate_id": "hard::multi_message_supported::18",
+      "candidate_message_ids": [
+        "cli:local:216",
+        "cli:local:217"
+      ],
+      "expected_terms": [
+        "multi_message_supported-term-18"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "[\"cli:local:216\",\"cli:local:217\"]",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "session",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "cli:local@post_response",
+      "baseline_support_status": "session_ref_not_fetchable",
+      "candidate_id": "hard::multi_message_supported::19",
+      "candidate_message_ids": [
+        "cli:local:218",
+        "cli:local:219"
+      ],
+      "expected_terms": [
+        "multi_message_supported-term-19"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "[\"cli:local:218\",\"cli:local:219\"]",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    }
+  ]
+}
