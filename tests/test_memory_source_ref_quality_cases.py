@@ -96,3 +96,49 @@ def test_expanded_source_ref_case_pack_refuses_unmarked_session_db(
     assert [message["content"] for message in messages] == [
         "真实会话内容不能被 expanded source_ref fixture 覆盖"
     ]
+
+
+def test_expanded_source_ref_report_groups_metrics_by_case_set_and_scenario(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "sessions.db"
+    pack = build_source_ref_quality_case_pack(db_path)
+    handle = open_marked_source_ref_quality_fixture_resolver(db_path)
+    try:
+        report = run_source_ref_quality_eval(
+            candidates=pack.candidates,
+            source_ref_resolver=handle.resolver,
+        )
+    finally:
+        handle.close()
+
+    case_sets = report.group_metrics["case_sets"]
+    scenarios = report.group_metrics["scenarios"]
+
+    assert case_sets["common"]["candidate_count"] == 100
+    assert case_sets["common"]["normalized_source_backed_eligible_rate"] == 80.0
+    assert case_sets["hard"]["candidate_count"] == 100
+    assert case_sets["hard"]["normalized_source_backed_eligible_rate"] == 60.0
+    assert scenarios["foreign_candidate_filtered"]["normalized_fetch_success_rate"] == 0.0
+    assert scenarios["missing_message_id"]["normalized_fetch_success_rate"] == 0.0
+    assert scenarios["multi_message_supported"]["normalized_source_backed_eligible_rate"] == 100.0
+
+
+def test_source_ref_report_omits_group_metrics_for_legacy_candidate_ids(
+    tmp_path: Path,
+) -> None:
+    from memory2.eval_source_ref_quality import build_source_ref_quality_fixture
+
+    db_path = tmp_path / "sessions.db"
+    candidates = build_source_ref_quality_fixture(db_path)
+    handle = open_marked_source_ref_quality_fixture_resolver(db_path)
+    try:
+        report = run_source_ref_quality_eval(
+            candidates=candidates,
+            source_ref_resolver=handle.resolver,
+        )
+    finally:
+        handle.close()
+
+    assert report.metrics["candidate_count"] == 6
+    assert report.group_metrics == {"case_sets": {}, "scenarios": {}}

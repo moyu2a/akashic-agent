@@ -4,7 +4,7 @@ import json
 import sqlite3
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Sequence
+from typing import Callable, Sequence
 
 from memory2.eval_sleep_hygiene_provenance import (
     SessionStoreSourceRefResolver,
@@ -24,6 +24,7 @@ class SourceRefQualityReport:
     records: tuple[dict[str, object], ...]
     metrics: dict[str, object]
     metadata: dict[str, object]
+    group_metrics: dict[str, dict[str, dict[str, object]]]
 
 
 @dataclass(frozen=True)
@@ -140,6 +141,10 @@ def run_source_ref_quality_eval(
                 "production online uplift and does not modify memory_items.source_ref."
             ),
         },
+        group_metrics={
+            "case_sets": _group_metrics(records, _case_set_from_candidate_id),
+            "scenarios": _group_metrics(records, _scenario_from_candidate_id),
+        },
     )
 
 
@@ -183,6 +188,30 @@ def write_source_ref_quality_markdown(
         f"| malformed_source_ref_count_before | {metrics['malformed_source_ref_count_before']} |",
         f"| malformed_source_ref_count_after | {metrics['malformed_source_ref_count_after']} |",
     ]
+    case_set_groups = report.group_metrics.get("case_sets", {})
+    scenario_groups = report.group_metrics.get("scenarios", {})
+    if case_set_groups:
+        lines.extend(
+            [
+                "",
+                "## Case Set Metrics",
+                "",
+                "| case_set | candidates | before eligible | after eligible | delta points |",
+                "| --- | ---: | ---: | ---: | ---: |",
+                *_group_rows(case_set_groups),
+            ]
+        )
+    if scenario_groups:
+        lines.extend(
+            [
+                "",
+                "## Scenario Metrics",
+                "",
+                "| scenario | candidates | before eligible | after eligible | fetch after | support after |",
+                "| --- | ---: | ---: | ---: | ---: | ---: |",
+                *_scenario_rows(scenario_groups),
+            ]
+        )
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
@@ -321,6 +350,42 @@ def _metrics(records: Sequence[dict[str, object]]) -> dict[str, object]:
             "malformed",
         ),
     }
+
+
+def _group_metrics(
+    records: Sequence[dict[str, object]],
+    key_fn: Callable[[str], str],
+) -> dict[str, dict[str, object]]:
+    groups: dict[str, list[dict[str, object]]] = {}
+    for record in records:
+        key = key_fn(str(record.get("candidate_id") or ""))
+        if not key:
+            continue
+        groups.setdefault(key, []).append(record)
+    return {
+        key: _metrics(tuple(group_records))
+        for key, group_records in sorted(groups.items())
+    }
+
+
+def _case_set_from_candidate_id(candidate_id: str) -> str:
+    parts = candidate_id.split("::", 2)
+    if len(parts) != 3:
+        return ""
+    case_set, _scenario, index = parts
+    if case_set not in {"common", "hard"} or not index.isdigit():
+        return ""
+    return case_set
+
+
+def _scenario_from_candidate_id(candidate_id: str) -> str:
+    parts = candidate_id.split("::", 2)
+    if len(parts) != 3:
+        return ""
+    case_set, scenario, index = parts
+    if case_set not in {"common", "hard"} or not index.isdigit():
+        return ""
+    return scenario
 
 
 def _insert(store: SessionStore, seq: int, content: str) -> None:
@@ -478,6 +543,31 @@ def _metric_row(metrics: dict[str, object], stem: str) -> str:
     after = metrics[f"normalized_{stem}"]
     delta = metrics[f"{stem.removesuffix('_rate')}_uplift_points"]
     return f"| {stem} | {_fmt(before)} | {_fmt(after)} | {_fmt(delta)} |"
+
+
+def _group_rows(groups: dict[str, dict[str, object]]) -> list[str]:
+    rows = []
+    for name, metrics in groups.items():
+        rows.append(
+            f"| {name} | {metrics['candidate_count']} | "
+            f"{_fmt(metrics['baseline_source_backed_eligible_rate'])} | "
+            f"{_fmt(metrics['normalized_source_backed_eligible_rate'])} | "
+            f"{_fmt(metrics['source_backed_eligible_uplift_points'])} |"
+        )
+    return rows
+
+
+def _scenario_rows(groups: dict[str, dict[str, object]]) -> list[str]:
+    rows = []
+    for name, metrics in groups.items():
+        rows.append(
+            f"| {name} | {metrics['candidate_count']} | "
+            f"{_fmt(metrics['baseline_source_backed_eligible_rate'])} | "
+            f"{_fmt(metrics['normalized_source_backed_eligible_rate'])} | "
+            f"{_fmt(metrics['normalized_fetch_success_rate'])} | "
+            f"{_fmt(metrics['normalized_support_rate'])} |"
+        )
+    return rows
 
 
 def _fmt(value: object) -> str:
