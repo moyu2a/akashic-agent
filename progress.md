@@ -1287,3 +1287,44 @@
   - tightened baseline/scoped message refs to require current `session_key` and numeric message sequence;
   - clarified Phase 6t metric denominators as all-candidate rates;
   - prevented fixture marker checks from creating a missing DB path.
+
+## 2026-07-23 Source Ref Quality Expanded Case Pack
+
+- Goal: replace the 6-row source_ref smoke fixture with a broader target-driven test set because no production real samples are currently available.
+- Added expanded case pack:
+  - `memory2/eval_source_ref_quality_cases.py`;
+  - `200` deterministic candidates;
+  - common `100` and hard `100`;
+  - 10 scenarios, each with `20` cases.
+- Added grouped reporting:
+  - `report.group_metrics["case_sets"]`;
+  - `report.group_metrics["scenarios"]`;
+  - strict candidate ID grouping contract: `{case_set}::{scenario}::{index}`.
+- Added CLI support:
+  - `--case-pack smoke|expanded`;
+  - `--common-per-scenario`;
+  - `--hard-per-scenario`;
+  - expanded mode still uses only guarded fixture DBs and rejects existing unmarked `sessions.db`.
+- Generated formal expanded report:
+  - `my_md/memory_optimization/eval_reports/source_ref_quality_expanded_v1/memory_source_ref_quality_eval.json`;
+  - `my_md/memory_optimization/eval_reports/source_ref_quality_expanded_v1/memory_source_ref_quality_eval.md`;
+  - `my_md/memory_optimization/eval_reports/source_ref_quality_expanded_v1/fixture_sessions.db`.
+- Current expanded result:
+  - candidates: `200`;
+  - message-level coverage: `40.0% -> 90.0%`;
+  - parse success: `80.0% -> 100.0%`;
+  - real source fetch success: `20.0% -> 80.0%`;
+  - source support: `10.0% -> 70.0%`;
+  - source-backed eligible: `20/200 -> 140/200`;
+  - common after eligible: `80.0%`;
+  - hard after eligible: `60.0%`.
+- Commits:
+  - `c8249fe feat: add expanded source ref quality case pack`;
+  - `536f1f6 feat: add grouped source ref quality metrics`;
+  - `86e9838 feat: add expanded source ref quality report`.
+- Boundary:
+  - synthetic controlled fixture / shadow-only;
+  - no production online uplift claim;
+  - no `memory_items.source_ref` rewrite;
+  - no production `sessions.db` or memory DB writes;
+  - no active cleanup.

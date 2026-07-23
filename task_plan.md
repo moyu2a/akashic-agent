@@ -1104,6 +1104,49 @@ Boundaries:
 
 Next:
 
-1. Capture candidate source message IDs in the real memory candidate/write shadow path.
-2. Run the same before/after source_ref quality evaluator on real shadow evidence.
-3. Only after real evidence is stable, decide whether normalized message-level `source_ref` can become an active write-time field.
+1. Because production real samples are not currently available, keep using target-driven test sets rather than claiming production evidence.
+2. Use the expanded source_ref quality case pack as the current offline baseline for write-source quality.
+3. If stronger realism is needed without production data, run the expanded test set through a controlled AgentLoop shadow harness, still without production memory writes.
+
+## 2026-07-23 Source Ref Quality Expanded Case Pack
+
+Goal: make the source_ref write-quality result more convincing using a broader target-driven test set.
+
+Completed:
+
+- Added `memory2/eval_source_ref_quality_cases.py`.
+- Added `200` deterministic cases:
+  - common `100`;
+  - hard `100`;
+  - 10 scenarios x 20 cases.
+- Added grouped metrics by:
+  - `case_set`;
+  - `scenario`.
+- Added CLI support for:
+  - `--case-pack smoke|expanded`;
+  - `--common-per-scenario`;
+  - `--hard-per-scenario`.
+- Generated report under `my_md/memory_optimization/eval_reports/source_ref_quality_expanded_v1/`.
+
+Current result:
+
+| metric | before | after | delta |
+| --- | ---: | ---: | ---: |
+| message-level coverage | 40.0% | 90.0% | +50.0 |
+| parse success | 80.0% | 100.0% | +20.0 |
+| real source fetch success | 20.0% | 80.0% | +60.0 |
+| source support | 10.0% | 70.0% | +60.0 |
+| source-backed eligible | 20/200 | 140/200 | +120 items |
+
+Boundaries:
+
+- This is synthetic controlled fixture / shadow-only.
+- It does not prove production natural traffic uplift.
+- It does not modify real memory writes.
+- It does not run real online AgentLoop tests.
+
+Next:
+
+1. Use this expanded report as the source_ref write-quality offline evidence.
+2. If needed, design a controlled AgentLoop shadow harness for the same test set.
+3. Do not active-write normalized `source_ref` until there is evidence from either real samples or a controlled online shadow run.

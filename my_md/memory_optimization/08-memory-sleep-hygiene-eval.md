@@ -523,3 +523,75 @@ Source-backed V1 暴露的主要问题不是 sleep hygiene 候选识别能力，
 - 这能直接提高后续 source-backed cleanup 的安全门通过率，因为 `source_backed_eligible` 明确定义为“回源成功且原文支持摘要”。
 - 当前数据是 synthetic controlled fixture / shadow 结果，不是生产自然流量，也不是线上真实提升。
 - 下一步如果要进入真实链路，需要在记忆候选生成或写入治理阶段携带候选来源消息 ID，然后继续以 shadow 方式采集真实样本。
+
+## Phase 6u Source Ref 扩展测试集
+
+Phase 6t 的 6 条 fixture 只能证明链路可用，覆盖面不够。Phase 6u 把 source_ref 写入质量评测扩展成 `200` 条目标导向测试集，分成 common / hard 两组，每组 `100` 条，继续保持 synthetic controlled fixture / shadow-only。
+
+正式报告路径：
+
+- `my_md/memory_optimization/eval_reports/source_ref_quality_expanded_v1/memory_source_ref_quality_eval.json`
+- `my_md/memory_optimization/eval_reports/source_ref_quality_expanded_v1/memory_source_ref_quality_eval.md`
+- `my_md/memory_optimization/eval_reports/source_ref_quality_expanded_v1/fixture_sessions.db`
+
+测试集设计：
+
+| case_set | scenario | 数量 | 验证目标 |
+| --- | --- | ---: | --- |
+| common | already_message_supported | 20 | 已是消息级且原文支持时保持不变 |
+| common | session_level_upgradable | 20 | session 级来源能升级为消息级来源 |
+| common | missing_upgradable | 20 | 缺失来源在有候选消息 ID 时能补成消息级来源 |
+| common | malformed_upgradable | 20 | malformed 来源在有候选消息 ID 时能修正 |
+| common | unsupported_message_kept | 20 | 能回源但原文不支持摘要时不能 eligible |
+| hard | foreign_candidate_filtered | 20 | 只有跨会话 candidate IDs 时不能升级 |
+| hard | foreign_baseline_replaced | 20 | 跨会话 baseline 消息来源会被当前会话消息来源替换 |
+| hard | invalid_same_session_baseline | 20 | 同会话但非法消息 ID 会被当前合法消息来源替换 |
+| hard | missing_message_id | 20 | 消息 ID 格式合法但 DB 缺失时仍不能 eligible |
+| hard | multi_message_supported | 20 | 多消息来源可以用 JSON message-id list 表达并回源 |
+
+整体结果：
+
+| 指标 | before | after | 变化 |
+| --- | ---: | ---: | ---: |
+| message-level 覆盖率 | 40.0% | 90.0% | +50.0 个百分点 |
+| source_ref 解析成功率 | 80.0% | 100.0% | +20.0 个百分点 |
+| 真实回源成功率 | 20.0% | 80.0% | +60.0 个百分点 |
+| 原文支持率 | 10.0% | 70.0% | +60.0 个百分点 |
+| source-backed eligible 率 | 10.0% | 70.0% | +60.0 个百分点 |
+
+计数结果：
+
+| 指标 | before | after |
+| --- | ---: | ---: |
+| candidate_count | 200 | 200 |
+| source-backed eligible | 20 | 140 |
+| malformed source_ref | 20 | 0 |
+
+common / hard 分组：
+
+| case_set | candidates | before eligible | after eligible | 变化 |
+| --- | ---: | ---: | ---: | ---: |
+| common | 100 | 20.0% | 80.0% | +60.0 个百分点 |
+| hard | 100 | 0.0% | 60.0% | +60.0 个百分点 |
+
+scenario 细分：
+
+| scenario | candidates | before eligible | after eligible | after fetch | after support |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| already_message_supported | 20 | 100.0% | 100.0% | 100.0% | 100.0% |
+| session_level_upgradable | 20 | 0.0% | 100.0% | 100.0% | 100.0% |
+| missing_upgradable | 20 | 0.0% | 100.0% | 100.0% | 100.0% |
+| malformed_upgradable | 20 | 0.0% | 100.0% | 100.0% | 100.0% |
+| unsupported_message_kept | 20 | 0.0% | 0.0% | 100.0% | 0.0% |
+| foreign_candidate_filtered | 20 | 0.0% | 0.0% | 0.0% | 0.0% |
+| foreign_baseline_replaced | 20 | 0.0% | 100.0% | 100.0% | 100.0% |
+| invalid_same_session_baseline | 20 | 0.0% | 100.0% | 100.0% | 100.0% |
+| missing_message_id | 20 | 0.0% | 0.0% | 0.0% | 0.0% |
+| multi_message_supported | 20 | 0.0% | 100.0% | 100.0% | 100.0% |
+
+结论：
+
+- expanded case pack 比 6 条 smoke fixture 更适合面试展示，因为它覆盖了正常、缺失、格式错误、跨会话、非法 ID、缺失消息、多消息来源和原文不支持等场景。
+- message-level normalization 在目标导向测试集中把 source-backed eligible 从 `20/200` 提升到 `140/200`。
+- hard 组 after eligible 只有 `60.0%` 是预期结果，因为 foreign-only、missing message 和 unsupported source 不能被安全门放行。
+- 这仍不是生产自然流量，也不代表真实线上提升；它证明的是“在覆盖这些来源质量问题的测试集上，消息级来源治理机制有效且可审计”。

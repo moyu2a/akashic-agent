@@ -678,3 +678,26 @@ Phase 6s 的 source-backed 评测说明：睡眠巩固要从 shadow / dry-run �
 | source-backed eligible 率 | 16.6667% | 66.6667% | +50.0 个百分点 |
 
 这组指标后续应接入“记忆库卫生组”和“写入治理组”的中间证据：写入治理负责在候选阶段保留可用来源，睡眠巩固负责在清理前验证来源是否真实可审计。
+
+### Phase 6u：扩展测试集结果
+
+Phase 6u 把 Phase 6t 的 6 条 smoke fixture 扩展成 `200` 条目标导向测试集：common `100` 条，hard `100` 条。它仍然是 synthetic controlled fixture / shadow-only，不改真实写入，也不代表生产自然流量。
+
+整体结果：
+
+| 指标 | before | after | 变化 |
+| --- | ---: | ---: | ---: |
+| message-level 覆盖率 | 40.0% | 90.0% | +50.0 个百分点 |
+| source_ref 解析成功率 | 80.0% | 100.0% | +20.0 个百分点 |
+| 真实回源成功率 | 20.0% | 80.0% | +60.0 个百分点 |
+| 原文支持率 | 10.0% | 70.0% | +60.0 个百分点 |
+| source-backed eligible 率 | 10.0% | 70.0% | +60.0 个百分点 |
+
+分组结果：
+
+| case_set | candidates | before eligible | after eligible | 变化 |
+| --- | ---: | ---: | ---: | ---: |
+| common | 100 | 20.0% | 80.0% | +60.0 个百分点 |
+| hard | 100 | 0.0% | 60.0% | +60.0 个百分点 |
+
+这个结果说明：source_ref 写入质量治理适合用“全部候选中有多少来源可解析、可回源、可支持摘要、可进入 source-backed 安全门”来表达，而不是只看一个综合分。hard 组没有被强行做成 100%，因为 foreign-only、missing message 和 unsupported source 本来就应该被阻断。
