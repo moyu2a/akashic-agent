@@ -111,6 +111,14 @@ def open_marked_source_ref_quality_fixture_resolver(
     )
 
 
+def reset_source_ref_quality_fixture_db_if_safe(db_path: Path) -> None:
+    _reset_fixture_db_if_safe(db_path)
+
+
+def mark_source_ref_quality_fixture_db(db_path: Path) -> None:
+    _mark_fixture_db(db_path)
+
+
 def run_source_ref_quality_eval(
     *,
     candidates: Sequence[SourceRefQualityInput],
