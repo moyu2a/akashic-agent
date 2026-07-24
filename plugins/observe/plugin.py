@@ -233,7 +233,41 @@ def _slim_call(
             )
             if key in audit_trace
         }
+    approval_lifecycle = call.get("approval_lifecycle")
+    if isinstance(approval_lifecycle, list):
+        events = [
+            _slim_approval_lifecycle_event(event)
+            for event in approval_lifecycle
+            if isinstance(event, Mapping)
+        ]
+        if events:
+            out["approval_lifecycle"] = events
     return out
+
+
+def _slim_approval_lifecycle_event(event: Mapping[object, object]) -> dict[str, object]:
+    return {
+        key: event.get(key)
+        for key in (
+            "event_type",
+            "approval_request_id",
+            "request_id",
+            "session_key",
+            "actor",
+            "source",
+            "tool_name",
+            "risk",
+            "approval_scope",
+            "policy_reason",
+            "status",
+            "args_hash",
+            "created_at",
+            "decided_at",
+            "consumed_at",
+            "executed_at",
+        )
+        if key in event
+    }
 
 
 def _group_calls(group: dict[str, object]) -> list[dict[str, object]]:

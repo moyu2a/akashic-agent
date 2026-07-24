@@ -183,6 +183,7 @@ class ToolApprovalStore:
                 _record_from_row(row),
                 action="expired",
                 reason="approval_expired",
+                decided_at=now_iso,
             )
             for row in rows
         ]
@@ -284,7 +285,10 @@ class ToolApprovalStore:
                     (now_iso, approval_request_id),
                 )
                 return _decision_from_record(
-                    record, action="expired", reason="approval_expired"
+                    record,
+                    action="expired",
+                    reason="approval_expired",
+                    decided_at=now_iso,
                 )
             if record.status == "approved":
                 conn.execute(
@@ -296,7 +300,11 @@ class ToolApprovalStore:
                     (now_iso, approval_request_id),
                 )
                 return _decision_from_record(
-                    record, action="consumed", reason="approval_consumed"
+                    record,
+                    action="consumed",
+                    reason="approval_consumed",
+                    actor=actor,
+                    consumed_at=now_iso,
                 )
             if record.status in _TERMINAL_STATUSES:
                 return _decision_from_record(
@@ -359,7 +367,10 @@ class ToolApprovalStore:
                 (execution_status, now_iso, execution_status, approval_request_id),
             )
         return _decision_from_record(
-            record, action=execution_status, reason=f"approval_{execution_status}"
+            record,
+            action=execution_status,
+            reason=f"approval_{execution_status}",
+            executed_at=now_iso,
         )
 
     def _decide_request(
@@ -410,7 +421,10 @@ class ToolApprovalStore:
                     (now_iso, approval_request_id),
                 )
                 return _decision_from_record(
-                    record, action="expired", reason="approval_expired"
+                    record,
+                    action="expired",
+                    reason="approval_expired",
+                    decided_at=now_iso,
                 )
             if record.status != "pending":
                 return _decision_from_record(
@@ -429,7 +443,13 @@ class ToolApprovalStore:
                 """,
                 (target_status, actor, reason, now_iso, approval_request_id),
             )
-        return _decision_from_record(record, action=target_status, reason=reason)
+        return _decision_from_record(
+            record,
+            action=target_status,
+            reason=reason,
+            actor=actor,
+            decided_at=now_iso,
+        )
 
     def _connect(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self.db_path)
@@ -547,6 +567,10 @@ def _decision_from_record(
     *,
     action: str | None = None,
     reason: str,
+    actor: str = "",
+    decided_at: str = "",
+    consumed_at: str = "",
+    executed_at: str = "",
 ) -> ToolApprovalDecision:
     return ToolApprovalDecision(
         action=action or record.status,
@@ -557,6 +581,16 @@ def _decision_from_record(
         tool_name=record.tool_name,
         approval_scope=record.approval_scope,
         args_hash=record.args_hash,
+        metadata={
+            "actor": actor or record.decided_by,
+            "source": record.source,
+            "risk": record.risk,
+            "policy_reason": record.policy_reason,
+            "created_at": record.created_at,
+            "decided_at": decided_at or record.decided_at,
+            "consumed_at": consumed_at or record.consumed_at,
+            "executed_at": executed_at or record.executed_at,
+        },
     )
 
 

@@ -56,7 +56,9 @@ from agent.policies.tool_approval_store import (
     ToolApprovalStore,
 )
 from agent.policies.tool_audit import (
+    ToolApprovalAuditEvent,
     ToolAuditEvent,
+    build_tool_approval_audit_event,
     build_tool_audit_event,
 )
 from agent.policies.tool_invocation_policy import (
@@ -99,6 +101,7 @@ __all__ = [
     "ToolAccessContext",
     "ToolAccessGateway",
     "ToolAccessPlan",
+    "ToolApprovalAuditEvent",
     "ToolApprovalDecision",
     "ToolApprovalRequestRecord",
     "ToolApprovalRuntime",
@@ -110,6 +113,7 @@ __all__ = [
     "ToolInvocationDecision",
     "ToolInvocationPolicyEngine",
     "build_approval_payload",
+    "build_tool_approval_audit_event",
     "build_tool_audit_event",
     "canonical_args_hash",
     "decide_doc_rag_preload",

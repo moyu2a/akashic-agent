@@ -191,7 +191,11 @@ class ToolApprovalCommandModule:
             lines.append("pending: none")
         for record in records:
             lines.extend(["", _format_approval_record(record)])
-        frame.slots[_CTX_SLOT] = _abort_ctx(state, "\n".join(lines))
+        frame.slots[_CTX_SLOT] = _abort_ctx(
+            state,
+            "\n".join(lines),
+            approval_lifecycle=_approval_lifecycle_from_decisions(expired),
+        )
         return frame
 
     def _handle_approve(self, frame, state: TurnState) -> object:
@@ -209,6 +213,10 @@ class ToolApprovalCommandModule:
         frame.slots[_CTX_SLOT] = _abort_ctx(
             state,
             _format_approval_decision(decision),
+            approval_lifecycle=_approval_lifecycle_from_decisions(
+                [decision],
+                actor="status_command",
+            ),
         )
         return frame
 
@@ -229,6 +237,10 @@ class ToolApprovalCommandModule:
         frame.slots[_CTX_SLOT] = _abort_ctx(
             state,
             _format_approval_decision(decision),
+            approval_lifecycle=_approval_lifecycle_from_decisions(
+                [decision],
+                actor="status_command",
+            ),
         )
         return frame
 
@@ -412,7 +424,15 @@ def _format_approval_decision(decision: ToolApprovalDecision) -> str:
     return "\n".join(lines)
 
 
-def _abort_ctx(state: TurnState, reply: str) -> BeforeTurnCtx:
+def _abort_ctx(
+    state: TurnState,
+    reply: str,
+    *,
+    approval_lifecycle: list[dict[str, object]] | None = None,
+) -> BeforeTurnCtx:
+    extra_metadata = {}
+    if approval_lifecycle:
+        extra_metadata["tool_approval_lifecycle"] = approval_lifecycle
     return BeforeTurnCtx(
         session_key=state.session_key,
         channel=state.msg.channel,
@@ -425,7 +445,26 @@ def _abort_ctx(state: TurnState, reply: str) -> BeforeTurnCtx:
         history_messages=(),
         abort=True,
         abort_reply=reply,
+        extra_metadata=extra_metadata,
     )
+
+
+def _approval_lifecycle_from_decisions(
+    decisions: list[ToolApprovalDecision],
+    *,
+    actor: str = "",
+) -> list[dict[str, object]]:
+    events = []
+    for decision in decisions:
+        if decision.action not in {"approved", "denied", "expired"}:
+            continue
+        events.append(
+            ToolApprovalRuntime.lifecycle_event_from_decision(
+                decision,
+                actor=actor,
+            )
+        )
+    return events
 
 
 def _format_ts(ts: str) -> str:

@@ -136,6 +136,7 @@ class ToolExecutor:
         if policy_decision.action == "defer":
             approval_scope = _approval_scope_from_trace(policy_trace)
             approval_decision: ToolApprovalDecision | None = None
+            approval_lifecycle: list[dict[str, object]] = []
             if self._approval_runtime is not None:
                 approval_decision = self._approval_runtime.consume_for_execution(
                     trusted_context=request.trusted_approval_context,
@@ -146,6 +147,11 @@ class ToolExecutor:
                     arguments=final_arguments,
                 )
                 if approval_decision.allows_invoker:
+                    approval_lifecycle.append(
+                        self._approval_runtime.lifecycle_event_from_decision(
+                            approval_decision
+                        )
+                    )
                     return await self._execute_invoker(
                         request=request,
                         invoker=invoker,
@@ -157,6 +163,7 @@ class ToolExecutor:
                         policy_trace=policy_trace,
                         approval_request_id=approval_decision.approval_request_id,
                         approval_scope=approval_scope,
+                        approval_lifecycle=approval_lifecycle,
                     )
             approval_request_id = ""
             expires_at = ""
@@ -179,6 +186,13 @@ class ToolExecutor:
                 )
                 approval_request_id = record.approval_request_id
                 expires_at = record.expires_at
+                approval_lifecycle.append(
+                    self._approval_runtime.lifecycle_event_from_record(
+                        record,
+                        status="requested",
+                        actor="model",
+                    )
+                )
             return ToolExecutionResult(
                 status="deferred",
                 output=_policy_defer_output(
@@ -202,6 +216,7 @@ class ToolExecutor:
                     invoker_reached=False,
                     invoker_succeeded=False,
                 ),
+                approval_lifecycle=approval_lifecycle,
             )
 
         return await self._execute_invoker(
@@ -228,19 +243,23 @@ class ToolExecutor:
         policy_trace: dict[str, object],
         approval_request_id: str = "",
         approval_scope: str = "tool_call",
+        approval_lifecycle: list[dict[str, object]] | None = None,
     ) -> ToolExecutionResult:
+        lifecycle_events = list(approval_lifecycle or [])
         try:
             # 这里才进入真实工具执行；hook 本身不直接替代工具实现。
             output = await invoker(request.tool_name, final_arguments)
         except Exception as exc:
             error_text = str(exc)
-            self._finalize_approval_execution(
+            final_event = self._finalize_approval_execution(
                 approval_request_id=approval_request_id,
                 request=request,
                 final_arguments=final_arguments,
                 approval_scope=approval_scope,
                 execution_status="execution_failed",
             )
+            if final_event:
+                lifecycle_events.append(final_event)
             try:
                 # 工具自身报错后，允许 post_tool_error 做记录型处理。
                 await self._run_post_hooks(
@@ -271,6 +290,7 @@ class ToolExecutor:
                         invoker_reached=True,
                         invoker_succeeded=False,
                     ),
+                    approval_lifecycle=lifecycle_events,
                 )
             return ToolExecutionResult(
                 status="error",
@@ -289,15 +309,18 @@ class ToolExecutor:
                     invoker_reached=True,
                     invoker_succeeded=False,
                 ),
+                approval_lifecycle=lifecycle_events,
             )
 
-        self._finalize_approval_execution(
+        final_event = self._finalize_approval_execution(
             approval_request_id=approval_request_id,
             request=request,
             final_arguments=final_arguments,
             approval_scope=approval_scope,
             execution_status="executed",
         )
+        if final_event:
+            lifecycle_events.append(final_event)
         try:
             # post_tool_use 只做观察和补充信息，不回写执行参数。
             await self._run_post_hooks(
@@ -329,6 +352,7 @@ class ToolExecutor:
                     invoker_reached=True,
                     invoker_succeeded=True,
                 ),
+                approval_lifecycle=lifecycle_events,
             )
         return ToolExecutionResult(
             status="success",
@@ -347,6 +371,7 @@ class ToolExecutor:
                 invoker_reached=True,
                 invoker_succeeded=True,
             ),
+            approval_lifecycle=lifecycle_events,
         )
 
     def _finalize_approval_execution(
@@ -357,10 +382,10 @@ class ToolExecutor:
         final_arguments: dict[str, Any],
         approval_scope: str,
         execution_status: str,
-    ) -> None:
+    ) -> dict[str, object] | None:
         if self._approval_runtime is None or not approval_request_id:
-            return
-        self._approval_runtime.finalize_execution(
+            return None
+        decision = self._approval_runtime.finalize_execution(
             approval_request_id=approval_request_id,
             request_id=request.call_id,
             session_key=request.session_key,
@@ -369,6 +394,9 @@ class ToolExecutor:
             arguments=final_arguments,
             execution_status=execution_status,
         )
+        if decision.action not in {"executed", "execution_failed"}:
+            return None
+        return self._approval_runtime.lifecycle_event_from_decision(decision)
 
     async def preflight(
         self,

@@ -101,6 +101,59 @@ def test_observe_slim_trace_preserves_bounded_audit_metadata() -> None:
     assert flat_audit["tool_name"] == "write_file"
 
 
+def test_observe_slim_trace_preserves_approval_lifecycle_fields_without_args_summary() -> None:
+    tool_chain = [
+        {
+            "text": "",
+            "calls": [
+                {
+                    "name": "write_file",
+                    "arguments": {"path": "notes.md"},
+                    "status": "deferred",
+                    "result": '{"ok": false}',
+                    "approval_lifecycle": [
+                        {
+                            "event_type": "tool_approval_lifecycle",
+                            "approval_request_id": "approval-1",
+                            "request_id": "call-1",
+                            "session_key": "cli:1",
+                            "actor": "status_command",
+                            "source": "passive",
+                            "tool_name": "write_file",
+                            "risk": "write",
+                            "approval_scope": "tool_call",
+                            "policy_reason": "risk_strategy_write_requires_approval",
+                            "status": "requested",
+                            "args_hash": "abc123",
+                            "created_at": "2026-07-24T01:00:00+00:00",
+                            "decided_at": "",
+                            "consumed_at": "",
+                            "executed_at": "",
+                            "args_summary": {"content": {"sha256": "secret"}},
+                            "command": "rm file.txt",
+                            "content": "raw secret",
+                        }
+                    ],
+                }
+            ],
+        }
+    ]
+
+    slim_chain = _slim_tool_chain(tool_chain)
+    slim_calls = _slim_tool_calls(tool_chain)
+
+    event = slim_chain[0]["calls"][0]["approval_lifecycle"][0]
+    flat_event = slim_calls[0]["approval_lifecycle"][0]
+    assert event["event_type"] == "tool_approval_lifecycle"
+    assert event["approval_request_id"] == "approval-1"
+    assert event["status"] == "requested"
+    assert event["args_hash"] == "abc123"
+    assert "args_summary" not in event
+    assert "command" not in event
+    assert "content" not in event
+    assert flat_event["tool_name"] == "write_file"
+
+
 def test_write_turn_persists_raw_output_and_meme_fields(tmp_path):
     db_path = tmp_path / "observe.db"
     conn = open_db(db_path)

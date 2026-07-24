@@ -7,6 +7,7 @@ from pathlib import Path
 from agent.policies.tool_approval import canonical_args_hash
 from agent.policies.tool_approval_context import TrustedApprovalContext
 from agent.policies.tool_approval_decision import ToolApprovalDecision
+from agent.policies.tool_audit import build_tool_approval_audit_event
 from agent.policies.tool_approval_store import (
     ToolApprovalRequestRecord,
     ToolApprovalStore,
@@ -120,6 +121,50 @@ class ToolApprovalRuntime:
             execution_status=execution_status,
             now=self._now(),
         )
+
+    @staticmethod
+    def lifecycle_event_from_record(
+        record: ToolApprovalRequestRecord,
+        *,
+        status: str,
+        actor: str = "model",
+    ) -> dict[str, object]:
+        decision = ToolApprovalDecision(
+            action="pending",
+            reason=f"approval_{status}",
+            approval_request_id=record.approval_request_id,
+            request_id=record.request_id,
+            session_key=record.session_key,
+            tool_name=record.tool_name,
+            approval_scope=record.approval_scope,
+            args_hash=record.args_hash,
+            metadata={
+                "actor": actor,
+                "source": record.source,
+                "risk": record.risk,
+                "policy_reason": record.policy_reason,
+                "created_at": record.created_at,
+                "decided_at": record.decided_at,
+                "consumed_at": record.consumed_at,
+                "executed_at": record.executed_at,
+            },
+        )
+        return build_tool_approval_audit_event(
+            decision,
+            status=status,
+            actor=actor,
+        ).to_trace_metadata()
+
+    @staticmethod
+    def lifecycle_event_from_decision(
+        decision: ToolApprovalDecision,
+        *,
+        actor: str = "",
+    ) -> dict[str, object]:
+        return build_tool_approval_audit_event(
+            decision,
+            actor=actor,
+        ).to_trace_metadata()
 
     def _now(self) -> datetime:
         value = self._now_factory()

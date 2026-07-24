@@ -1760,27 +1760,30 @@ class DefaultReasoner(Reasoner):
                                 status=exec_result.status,
                                 result_preview=support.log_preview(result),
                             )
-                            iter_calls.append(
-                                {
-                                    "call_id": tool_call.id,
-                                    "name": tool_call.name,
-                                    "status": exec_result.status,
-                                    "arguments": tool_call.arguments,
-                                    "final_arguments": exec_result.final_arguments,
-                                    "pre_hook_trace": [
-                                        {
-                                            "hook_name": item.hook_name,
-                                            "event": item.event,
-                                            "matched": item.matched,
-                                            "decision": item.decision,
-                                            "reason": item.reason,
-                                            "extra_message": item.extra_message,
-                                        }
-                                        for item in exec_result.pre_hook_trace
-                                    ],
-                                    "result": result,
-                                }
-                            )
+                            trace_item: dict[str, object] = {
+                                "call_id": tool_call.id,
+                                "name": tool_call.name,
+                                "status": exec_result.status,
+                                "arguments": tool_call.arguments,
+                                "final_arguments": exec_result.final_arguments,
+                                "pre_hook_trace": [
+                                    {
+                                        "hook_name": item.hook_name,
+                                        "event": item.event,
+                                        "matched": item.matched,
+                                        "decision": item.decision,
+                                        "reason": item.reason,
+                                        "extra_message": item.extra_message,
+                                    }
+                                    for item in exec_result.pre_hook_trace
+                                ],
+                                "result": result,
+                            }
+                            if exec_result.approval_lifecycle:
+                                trace_item["approval_lifecycle"] = (
+                                    exec_result.approval_lifecycle
+                                )
+                            iter_calls.append(trace_item)
                             for skipped in response.tool_calls[tool_batch_index + 1:]:
                                 append_tool_result(
                                     messages,
@@ -2249,6 +2252,10 @@ class DefaultReasoner(Reasoner):
                     }
                     if exec_result.audit_trace:
                         trace_item["audit_trace"] = exec_result.audit_trace
+                    if exec_result.approval_lifecycle:
+                        trace_item["approval_lifecycle"] = (
+                            exec_result.approval_lifecycle
+                        )
                     iter_calls.append(trace_item)
                     if _is_tool_loop_guard_denial(exec_result):
                         logger.warning(

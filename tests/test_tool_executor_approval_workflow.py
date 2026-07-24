@@ -124,6 +124,32 @@ def test_deferred_write_persists_pending_approval_id(tmp_path: Path) -> None:
     assert "hello" not in str(payload["approval_request"]["args_summary"])
 
 
+def test_executor_defer_trace_includes_approval_requested_event(
+    tmp_path: Path,
+) -> None:
+    runtime = _runtime(tmp_path)
+    invoker = RecordingInvoker()
+
+    result = _run(
+        ToolExecutor(approval_runtime=runtime).execute(_write_request(), invoker)
+    )
+
+    payload = json.loads(result.output)
+    event = result.approval_lifecycle[0]
+    assert event["event_type"] == "tool_approval_lifecycle"
+    assert event["status"] == "requested"
+    assert (
+        event["approval_request_id"]
+        == payload["approval_request"]["approval_request_id"]
+    )
+    assert event["request_id"] == "call-approval"
+    assert event["tool_name"] == "write_file"
+    assert event["risk"] == "write"
+    assert event["args_hash"]
+    assert "args_summary" not in event
+    assert "raw-secret-content" not in str(event)
+
+
 def test_trusted_approved_write_executes_once_and_marks_executed(
     tmp_path: Path,
 ) -> None:
@@ -148,6 +174,37 @@ def test_trusted_approved_write_executes_once_and_marks_executed(
     assert result.invoker_succeeded is True
     assert invoker.calls == [("write_file", {"path": "notes.md", "content": "hello"})]
     assert runtime.store.get_request(record.approval_request_id).status == "executed"
+
+
+def test_executor_approved_execution_trace_includes_consumed_and_executed_events(
+    tmp_path: Path,
+) -> None:
+    runtime = _runtime(tmp_path)
+    invoker = RecordingInvoker()
+    _, record = _defer_write(runtime, invoker)
+    _approve(runtime, record)
+    trusted = trusted_approval_from_runtime(
+        approval_request_id=record.approval_request_id,
+        actor="user",
+        source="status_command",
+    )
+
+    result = _run(
+        ToolExecutor(approval_runtime=runtime).execute(
+            _write_request(trusted_approval_context=trusted), invoker
+        )
+    )
+
+    statuses = [event["status"] for event in result.approval_lifecycle]
+    assert statuses == ["consumed", "executed"]
+    for event in result.approval_lifecycle:
+        assert event["approval_request_id"] == record.approval_request_id
+        assert event["request_id"] == record.request_id
+        assert event["session_key"] == record.session_key
+        assert event["tool_name"] == "write_file"
+        assert event["args_hash"] == record.args_hash
+        assert "content" not in event
+        assert "args_summary" not in event
 
 
 def test_reusing_consumed_approval_does_not_execute(tmp_path: Path) -> None:

@@ -673,6 +673,31 @@ async def test_before_turn_approve_tool_command_approves_current_session_request
 
 
 @pytest.mark.asyncio
+async def test_status_command_approve_trace_includes_approved_event(
+    tmp_path: Path,
+):
+    store = _approval_store(tmp_path)
+    record = _create_tool_approval(store)
+
+    ctx = await _run_tool_approval_command(
+        store,
+        f"/approve_tool {record.approval_request_id}",
+    )
+
+    events = ctx.extra_metadata["tool_approval_lifecycle"]
+    assert len(events) == 1
+    event = events[0]
+    assert event["event_type"] == "tool_approval_lifecycle"
+    assert event["status"] == "approved"
+    assert event["approval_request_id"] == record.approval_request_id
+    assert event["request_id"] == record.request_id
+    assert event["session_key"] == record.session_key
+    assert event["actor"] == "status_command"
+    assert event["args_hash"] == record.args_hash
+    assert "args_summary" not in event
+
+
+@pytest.mark.asyncio
 async def test_before_turn_approve_tool_command_rejects_other_session(
     tmp_path: Path,
 ):
@@ -702,6 +727,27 @@ async def test_before_turn_deny_tool_command_denies_current_session_request(
 
     assert "denied" in ctx.abort_reply
     assert store.get_request(record.approval_request_id).status == "denied"
+
+
+@pytest.mark.asyncio
+async def test_status_command_deny_trace_includes_denied_event(tmp_path: Path):
+    store = _approval_store(tmp_path)
+    record = _create_tool_approval(store)
+
+    ctx = await _run_tool_approval_command(
+        store,
+        f"/deny_tool {record.approval_request_id} no",
+    )
+
+    events = ctx.extra_metadata["tool_approval_lifecycle"]
+    assert len(events) == 1
+    event = events[0]
+    assert event["status"] == "denied"
+    assert event["approval_request_id"] == record.approval_request_id
+    assert event["actor"] == "status_command"
+    assert event["tool_name"] == "write_file"
+    assert event["args_hash"] == record.args_hash
+    assert "raw-secret-content" not in str(event)
 
 
 @pytest.mark.asyncio
@@ -769,6 +815,28 @@ async def test_before_turn_approve_tool_command_expires_before_approval(
 
     assert "expired" in ctx.abort_reply
     assert store.get_request(record.approval_request_id).status == "expired"
+
+
+@pytest.mark.asyncio
+async def test_status_command_expire_trace_includes_expired_event(tmp_path: Path):
+    store = _approval_store(tmp_path)
+    record = _create_tool_approval(
+        store,
+        now=datetime.fromtimestamp(0).astimezone(),
+        ttl_seconds=1,
+    )
+
+    ctx = await _run_tool_approval_command(store, "/approvals")
+
+    events = ctx.extra_metadata["tool_approval_lifecycle"]
+    assert len(events) == 1
+    event = events[0]
+    assert event["status"] == "expired"
+    assert event["approval_request_id"] == record.approval_request_id
+    assert event["request_id"] == record.request_id
+    assert event["session_key"] == record.session_key
+    assert event["args_hash"] == record.args_hash
+    assert "command" not in event
 
 
 def test_status_commands_plugin_mounts_tool_approval_module_for_workspace(
