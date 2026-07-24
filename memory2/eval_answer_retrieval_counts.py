@@ -199,6 +199,13 @@ def build_answer_retrieval_count_report(
         "sleep_consolidation_excluded": True,
         "answer_feature_names": answer_feature_names,
         "forbidden_answer_features": tuple(sorted(_FORBIDDEN_ANSWER_FEATURES)),
+        "future_metrics_not_measured": (
+            "answer_correctness",
+            "evidence_grounding",
+            "source_ref_hit",
+            "noise_control",
+            "context_cost",
+        ),
         "timestamp_mode": "fixed_for_deterministic_eval",
     }
     return AnswerRetrievalCountReport(
@@ -232,8 +239,8 @@ def write_answer_retrieval_count_markdown(
         "",
         "## 单模块启动测试",
         "",
-        "| profile | success | miss | 召回率 | 命中增量 | 漏召回减少 | 召回率提升百分点 |",
-        "| --- | ---: | ---: | ---: | ---: | ---: | ---: |",
+        "| profile | success | miss | 召回率 | 命中增量 | 漏召回减少 | 召回率提升百分点 | 相对召回率提升% | 相对基线漏召减少率% |",
+        "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
     ]
     for row in report.single_module_rows:
         lines.append(_markdown_row(row))
@@ -242,12 +249,22 @@ def write_answer_retrieval_count_markdown(
             "",
             "## 组合链路测试",
             "",
-            "| profile | success | miss | 召回率 | 相邻命中增量 | 相邻漏召回减少 | 相邻召回率提升百分点 | 累计命中增量 | 累计召回率提升百分点 |",
-            "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+            "| profile | success | miss | 召回率 | 相邻命中增量 | 相邻漏召回减少 | 相邻召回率提升百分点 | 相邻相对召回率提升% | 相邻漏召回减少率% | 累计命中增量 | 累计漏召回减少 | 累计召回率提升百分点 | 累计相对召回率提升% | 累计漏召回减少率% |",
+            "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
         ]
     )
     for row in report.chain_rows:
         lines.append(_markdown_chain_row(row))
+    lines.extend(
+        [
+            "",
+            "公式：相对召回率提升% = 召回率提升百分点 / 基线召回率；漏召回减少率% = 漏召回减少数 / 基线漏召回数。负数表示比基线漏召更多，可能小于 -100%。",
+            "",
+            "## 后续未测量指标",
+            "",
+            "本离线计数评测尚未测量回答正确性、证据命中、噪声控制和上下文成本；这些指标需要真实 LLM 输出、source_ref / grounding trace、注入条目明细和 token / latency evidence。",
+        ]
+    )
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
@@ -270,7 +287,39 @@ def _row_vs_baseline(
             row.recall_rate - baseline.recall_rate,
             4,
         ),
+        "relative_recall_lift_percent": _relative_lift_percent(
+            row.recall_rate,
+            baseline.recall_rate,
+        ),
+        "miss_reduction_rate_percent": _reduction_rate_percent(
+            baseline.miss_count,
+            row.miss_count,
+        ),
     }
+
+
+def _relative_lift_percent(
+    after_rate: float,
+    baseline_rate: float,
+) -> float | None:
+    if float(baseline_rate) == 0.0:
+        return None
+    return round(
+        ((float(after_rate) - float(baseline_rate)) / float(baseline_rate)) * 100.0,
+        4,
+    )
+
+
+def _reduction_rate_percent(
+    before_count: int | float,
+    after_count: int | float,
+) -> float | None:
+    if float(before_count) == 0.0:
+        return None
+    return round(
+        ((float(before_count) - float(after_count)) / float(before_count)) * 100.0,
+        4,
+    )
 
 
 def _chain_row(
@@ -280,6 +329,8 @@ def _chain_row(
     previous: QuantitativeProfileSummary | None,
     feature_names: tuple[str, ...],
 ) -> dict[str, Any]:
+    previous_recall_rate = row.recall_rate if previous is None else previous.recall_rate
+    previous_miss_count = row.miss_count if previous is None else previous.miss_count
     return {
         "profile_name": row.profile_name,
         "feature_names": list(feature_names),
@@ -296,10 +347,25 @@ def _chain_row(
         "adjacent_recall_delta_points": 0.0
         if previous is None
         else round(row.recall_rate - previous.recall_rate, 4),
+        "adjacent_relative_recall_lift_percent": 0.0
+        if previous is None
+        else _relative_lift_percent(row.recall_rate, previous_recall_rate),
+        "adjacent_miss_reduction_rate_percent": 0.0
+        if previous is None
+        else _reduction_rate_percent(previous_miss_count, row.miss_count),
         "cumulative_success_delta": row.success_count - baseline.success_count,
+        "cumulative_miss_reduction": baseline.miss_count - row.miss_count,
         "cumulative_recall_delta_points": round(
             row.recall_rate - baseline.recall_rate,
             4,
+        ),
+        "cumulative_relative_recall_lift_percent": _relative_lift_percent(
+            row.recall_rate,
+            baseline.recall_rate,
+        ),
+        "cumulative_miss_reduction_rate_percent": _reduction_rate_percent(
+            baseline.miss_count,
+            row.miss_count,
         ),
     }
 
@@ -312,7 +378,9 @@ def _markdown_row(row: dict[str, Any]) -> str:
         f"{row['recall_rate']}% | "
         f"{row['success_delta_vs_baseline']} | "
         f"{row['miss_reduction_vs_baseline']} | "
-        f"{row['recall_delta_points_vs_baseline']} |"
+        f"{row['recall_delta_points_vs_baseline']} | "
+        f"{_fmt_metric(row['relative_recall_lift_percent'])} | "
+        f"{_fmt_metric(row['miss_reduction_rate_percent'])} |"
     )
 
 
@@ -325,6 +393,15 @@ def _markdown_chain_row(row: dict[str, Any]) -> str:
         f"{row['adjacent_success_delta']} | "
         f"{row['adjacent_miss_reduction']} | "
         f"{row['adjacent_recall_delta_points']} | "
+        f"{_fmt_metric(row['adjacent_relative_recall_lift_percent'])} | "
+        f"{_fmt_metric(row['adjacent_miss_reduction_rate_percent'])} | "
         f"{row['cumulative_success_delta']} | "
-        f"{row['cumulative_recall_delta_points']} |"
+        f"{row['cumulative_miss_reduction']} | "
+        f"{row['cumulative_recall_delta_points']} | "
+        f"{_fmt_metric(row['cumulative_relative_recall_lift_percent'])} | "
+        f"{_fmt_metric(row['cumulative_miss_reduction_rate_percent'])} |"
     )
+
+
+def _fmt_metric(value: object) -> str:
+    return "N/A" if value is None else str(value)

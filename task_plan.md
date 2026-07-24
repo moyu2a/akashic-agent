@@ -1150,3 +1150,62 @@ Next:
 1. Use this expanded report as the source_ref write-quality offline evidence.
 2. If needed, design a controlled AgentLoop shadow harness for the same test set.
 3. Do not active-write normalized `source_ref` until there is evidence from either real samples or a controlled online shadow run.
+
+Documentation note:
+
+- Current Phase 6u conclusion and metric definitions have been synchronized to the memory optimization docs.
+- The main conclusion is `source-backed eligible: 20/200 -> 140/200` on the target-driven fixture.
+- The current boundary remains unchanged: synthetic fixture / shadow-only, no production natural traffic, no active write-time source_ref change.
+
+## 2026-07-24 Answer Retrieval Metric Report Update
+
+Goal: update the answer/retrieval deterministic count report to show interview-friendly uplift against the original memory baseline.
+
+Plan after review:
+
+1. Add relative percentage fields to the single-module table:
+   - relative recall lift percent;
+   - miss reduction rate percent.
+2. Add adjacent and cumulative percentage fields to the chain table:
+   - adjacent relative recall lift percent;
+   - adjacent miss reduction rate percent;
+   - cumulative miss reduction count;
+   - cumulative relative recall lift percent;
+   - cumulative miss reduction rate percent.
+3. Update markdown output and docs with formula notes.
+4. Keep answer correctness, evidence hit, noise control, and context cost as future online / trace-evidence metrics, not measured offline result tables.
+
+Current status: implementation complete and verified.
+
+Completed result:
+
+- Single-module table now includes:
+  - relative recall lift percent;
+  - miss reduction rate percent.
+- Chain table now includes:
+  - adjacent relative recall lift percent;
+  - adjacent miss reduction rate percent;
+  - cumulative miss reduction count;
+  - cumulative relative recall lift percent;
+  - cumulative miss reduction rate percent.
+- Regenerated report:
+  - `my_md/memory_optimization/eval_reports/memory_answer_retrieval_counts_eval.json`;
+  - `my_md/memory_optimization/eval_reports/memory_answer_retrieval_counts_eval.md`.
+- Key regenerated numbers:
+  - tri retrieval: `2000/2000`, relative recall lift `1.1122%`, miss reduction `100.0%`;
+  - graph retrieval: `1994/2000`, relative recall lift `0.8089%`, miss reduction `72.7273%`;
+  - chain all on: `1998/2000`, cumulative relative recall lift `1.0111%`, cumulative miss reduction `90.9091%`.
+- Boundary remains:
+  - answer correctness, evidence hit, noise control, and context cost are not measured by this offline deterministic count report;
+  - they require online shadow / agent dry-run trace evidence.
+
+Verification:
+
+- `.venv/bin/python -m pytest tests/test_memory_answer_retrieval_counts.py tests/test_memory_answer_retrieval_counts_cli.py -q -p no:cacheprovider` => `9 passed in 103.19s`.
+- `git diff --check` => passed.
+
+Documentation sync:
+
+- Updated `02-memory-quality-metrics.md` with Phase 6m Answer Comprehensive V2 data, formulas, and offline-only boundary.
+- Updated `05-memory-target-metric-eval-plan.md` with the current recall coverage table and the online evidence required for answer correctness, evidence hit, noise control, and context cost.
+- Updated `04-memory-plugin-experiment-roadmap.md` with the current recall coverage results in the Phase 6f/6m roadmap section.

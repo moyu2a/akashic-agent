@@ -1279,6 +1279,39 @@
   - no `memory_items.source_ref` rewrite;
   - no production `sessions.db` or memory DB writes;
   - no active cleanup.
+
+## 2026-07-24 Answer Retrieval Metric Plan Boundary
+
+- Goal: improve the answer/retrieval count report so interview-facing recall numbers show both raw counts and relative percentages against the original memory baseline.
+- Reviewed plan conclusion:
+  - keep this phase limited to offline deterministic count metrics;
+  - measured tables are only single-module uplift and cumulative chain uplift;
+  - answer correctness, evidence hit, noise control, and context cost require real LLM / trace evidence and must not be rendered as measured result tables in this offline report.
+- Documentation updated before implementation:
+  - `my_md/memory_optimization/06-memory-320-baseline-plus-count-eval.md`;
+  - `my_md/memory_optimization/README.md`.
+- Implementation completed:
+  - added relative recall lift and miss reduction percentages to the single-module table;
+  - added adjacent / cumulative relative recall lift, miss reduction percentages, and cumulative miss reduction count to the chain table;
+  - regenerated `memory_answer_retrieval_counts_eval.json` and `.md`;
+  - kept answer correctness, evidence hit, noise control, and context cost as future unmeasured metrics for online / trace-evidence evaluation.
+- Current regenerated key results:
+  - original memory baseline: `1978/2000`, recall `98.9%`;
+  - tri retrieval: `2000/2000`, relative recall lift `1.1122%`, miss reduction `100.0%`;
+  - graph retrieval: `1994/2000`, relative recall lift `0.8089%`, miss reduction `72.7273%`;
+  - chain rerank injection: remains `2000/2000`, cumulative relative recall lift `1.1122%`;
+  - chain all on: `1998/2000`, cumulative relative recall lift `1.0111%`, cumulative miss reduction `90.9091%`.
+- Verification:
+  - `.venv/bin/python -m pytest tests/test_memory_answer_retrieval_counts.py tests/test_memory_answer_retrieval_counts_cli.py -q -p no:cacheprovider` => `9 passed in 103.19s`;
+  - `git diff --check` => passed.
+- Additional documentation sync after user requested experiment data update:
+  - `my_md/memory_optimization/02-memory-quality-metrics.md` now records Phase 6m Answer Comprehensive V2 scale, single-module results, chain results, formulas, and offline-only boundary;
+  - `my_md/memory_optimization/05-memory-target-metric-eval-plan.md` now records the current recall coverage table and explicitly lists which answer/evidence/noise/cost data require online trace evidence;
+  - `my_md/memory_optimization/04-memory-plugin-experiment-roadmap.md` now records the current recall coverage results under the Phase 6f/6m roadmap context.
+- Documentation sync:
+  - recorded the current conclusion that message-level source_ref governance improves traceability on the 200-case target-driven fixture;
+  - added metric definitions for message-level coverage, parse success, real source fetch success, source support, and source-backed eligible;
+  - recorded the boundary that this does not prove production natural traffic or LLM extraction quality.
 - Verification so far:
   - `.venv/bin/python -m pytest tests/test_memory_source_ref_quality.py tests/test_memory_source_ref_quality_cli.py -q -p no:cacheprovider` => `18 passed`.
   - `.venv/bin/python -m pytest tests/test_memory_source_ref_quality.py tests/test_memory_source_ref_quality_cli.py tests/test_memory_sleep_hygiene_provenance.py tests/test_memory_sleep_hygiene_evidence.py tests/test_memory_sleep_hygiene_source_fixture.py -q -p no:cacheprovider` => `43 passed`.
