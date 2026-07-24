@@ -160,3 +160,86 @@ V2 是更大规模的召回与回答链路评测，只包含回答侧的检索�
 
 这份离线表只回答“有没有找回来”。回答正确性、证据命中、噪声控制和上下文成本要进入下一阶段在线 shadow 或 agent dry-run，用真实 LLM 输出和 trace 数据评价。
 ```
+
+## 在线回答质量增益表补充
+
+在离线计数表之后，已补充综合线上评测报告的回答质量增益表。它复用 `memory2/eval_comprehensive_online.py` 和 `scripts/run_memory_comprehensive_online_eval.py`，不修改生产 `AgentLoop`、`Reasoner`、工具执行或真实记忆写入。
+
+新增表格只覆盖回答/召回链路：
+
+- `chain_memory_base`
+- `chain_tri_retrieval`
+- `chain_graph_retrieval`
+- `chain_rerank_injection`
+- `chain_version_provenance`
+- `chain_all_on`
+
+明确排除：
+
+- `chain_write_value`：写入治理模块，应该进入写入治理表。
+- `chain_sleep_consolidation`：记忆库卫生模块，应该进入睡眠巩固/库级卫生表。
+
+`chain_all_on` 在表中标记为 `combo/check`，只作为组合校验行，不作为某个单一回答/召回模块的独立增益。
+
+### 本轮 fake-provider smoke
+
+报告路径：
+
+- `/tmp/akashic-memory-answer-quality-uplift-fake/reports/memory_comprehensive_online_eval.json`
+- `/tmp/akashic-memory-answer-quality-uplift-fake/reports/memory_comprehensive_online_eval.md`
+
+运行边界：
+
+- `real_llm_enabled = False`
+- `case_count = 240`
+- `profile_count = 6`
+- `infra_passed = True`
+- `answer_quality_partial_matrix = False`
+- `answer_quality_missing_profiles = []`
+
+本轮只验证报表结构和计算口径，不解释为真实回答质量提升。因为 fake provider 的回答是脚本规则生成的，不能代表真实 LLM 对不同记忆注入的使用能力。
+
+### 新增三张表
+
+回答质量增益表：
+
+| profile | cases | answer pass | answer rate | answer lift vs 原始记忆 | grounding pass | grounding rate | grounding lift vs 原始记忆 | forbidden rate | forbidden reduction |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| chain_memory_base | 40 | 10 | 25.0% | 0.0% | 40 | 100.0% | 0.0% | 0.0% | N/A |
+| chain_tri_retrieval | 40 | 10 | 25.0% | 0.0% | 40 | 100.0% | 0.0% | 0.0% | N/A |
+| chain_graph_retrieval | 40 | 10 | 25.0% | 0.0% | 40 | 100.0% | 0.0% | 0.0% | N/A |
+| chain_rerank_injection | 40 | 10 | 25.0% | 0.0% | 40 | 100.0% | 0.0% | 0.0% | N/A |
+| chain_version_provenance | 40 | 10 | 25.0% | 0.0% | 0 | 0.0% | -100.0% | 0.0% | N/A |
+| chain_all_on (combo/check) | 40 | 10 | 25.0% | 0.0% | 40 | 100.0% | 0.0% | 0.0% | N/A |
+
+链路累计表：
+
+| step | previous | answer rate | adjacent answer delta | cumulative answer lift | grounding rate | adjacent grounding delta | cumulative grounding lift |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| chain_memory_base | unavailable | 25.0% | 0.0 | 0.0% | 100.0% | 0.0 | 0.0% |
+| chain_tri_retrieval | chain_memory_base | 25.0% | 0.0 | 0.0% | 100.0% | 0.0 | 0.0% |
+| chain_graph_retrieval | chain_tri_retrieval | 25.0% | 0.0 | 0.0% | 100.0% | 0.0 | 0.0% |
+| chain_rerank_injection | chain_graph_retrieval | 25.0% | 0.0 | 0.0% | 100.0% | 0.0 | 0.0% |
+| chain_version_provenance | chain_rerank_injection | 25.0% | 0.0 | 0.0% | 0.0% | -100.0 | -100.0% |
+| chain_all_on (combo/check) | chain_version_provenance | 25.0% | 0.0 | 0.0% | 100.0% | +100.0 | 0.0% |
+
+成本与延迟观测表：
+
+| profile | avg tokens | token overhead vs 原始记忆 | token reduction | avg latency ms | latency overhead ms | latency reduction |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| chain_memory_base | 30.0 | 0.0 | 0.0% | 32.725 | 0.0 | 0.0% |
+| chain_tri_retrieval | 30.0 | 0.0 | 0.0% | 39.2 | +6.475 | -19.7861% |
+| chain_graph_retrieval | 30.0 | 0.0 | 0.0% | 35.35 | +2.625 | -8.0214% |
+| chain_rerank_injection | 30.0 | 0.0 | 0.0% | 39.525 | +6.8 | -20.7792% |
+| chain_version_provenance | 30.0 | 0.0 | 0.0% | 32.95 | +0.225 | -0.6875% |
+| chain_all_on (combo/check) | 30.0 | 0.0 | 0.0% | 39.35 | +6.625 | -20.2445% |
+
+### 当前结论
+
+这次完成的是报表能力，不是真实 LLM 结论：
+
+1. 在线回答质量表已经能输出 `answer pass`、`grounding pass`、`forbidden violation`、token 和 latency 的相对原始记忆基线增益。
+2. profile 过滤已经生效，写入治理和睡眠巩固不会混进回答质量主表。
+3. `answer_quality_partial_matrix` 可以区分完整矩阵和 checkpoint 部分矩阵，避免把缺 profile 的 checkpoint 当成完整结论。
+4. 当前机器没有找到 `/tmp/akashic-memory-phase6k-real/reports/memory_comprehensive_online_eval.checkpoint.jsonl`，所以本轮没有重建真实 LLM checkpoint 报告。
+5. 要得到真实回答质量增益，还需要用同一 runner 运行或恢复真实 LLM checkpoint。

@@ -671,6 +671,44 @@ Phase 6h 比上一轮更可信，因为它解决了两个展示误导：
 - 再把真实 LLM 的不稳定性和成本放到 runner 层处理。
 - 不把“provider 余额不足”误判成 memory 模块效果不好。
 
+### Phase 6m-online：回答质量增益表实现状态
+
+回答质量、证据命中、噪声控制和上下文成本不再由离线召回计数表承载，而是进入 `memory2/eval_comprehensive_online.py` 的综合线上评测报告。
+
+新增指标：
+
+| 指标 | 含义 | 基线 |
+| --- | --- | --- |
+| `answer_rule_pass_rate` | 真实或 fake provider 最终回答是否命中答案规则。 | `chain_memory_base` |
+| `memory_grounding_pass_rate` | 注入或使用的 memory id 是否覆盖期望记忆。 | `chain_memory_base` |
+| `forbidden_violation_rate` | 回答是否出现 forbidden 内容。 | `chain_memory_base` |
+| `avg_total_token_count` | 每个 profile 的平均 token 观测值。 | `chain_memory_base` |
+| `avg_latency_ms` | 每个 profile 的平均延迟观测值。 | `chain_memory_base` |
+| `answer_quality_partial_matrix` | checkpoint 是否缺少必需的回答/召回 profile。 | 必须为 `false` 才能称为完整矩阵 |
+
+本轮 fake-provider smoke：
+
+- 报告路径：`/tmp/akashic-memory-answer-quality-uplift-fake/reports/memory_comprehensive_online_eval.json` 和 `.md`。
+- `case_count = 240`。
+- `profile_count = 6`。
+- `real_llm_enabled = False`。
+- `infra_passed = True`。
+- `answer_quality_partial_matrix = False`。
+- `answer_quality_missing_profiles = []`。
+
+本轮只验证 schema 和计算口径，不产生真实 LLM 性能结论。当前机器没有找到既有 Phase 6k checkpoint：`/tmp/akashic-memory-phase6k-real/reports/memory_comprehensive_online_eval.checkpoint.jsonl`，因此尚未重建真实回答质量增益表。
+
+当前回答质量表的 profile 范围固定为：
+
+- `chain_memory_base`
+- `chain_tri_retrieval`
+- `chain_graph_retrieval`
+- `chain_rerank_injection`
+- `chain_version_provenance`
+- `chain_all_on`
+
+`chain_write_value` 和 `chain_sleep_consolidation` 不进入回答质量主表；它们分别由写入治理表和记忆库卫生表评价。`chain_all_on` 只作为 `combo/check` 组合校验行。
+
 ## Phase 6t：source_ref 写入质量指标
 
 Phase 6s 的 source-backed 评测说明：睡眠巩固要从 shadow / dry-run 走向更可信的 active gate，关键前置条件是每条候选记忆必须能回到真实原文。Phase 6t 因此把 `source_ref` 写入质量单独列成一组可量化指标。

@@ -18,6 +18,16 @@ from memory2.eval_quantitative_cases import build_quantitative_eval_cases
 from memory2.eval_runner import _baseline_recalled_items
 
 
+EXPECTED_ANSWER_QUALITY_PROFILES = [
+    "chain_memory_base",
+    "chain_tri_retrieval",
+    "chain_graph_retrieval",
+    "chain_rerank_injection",
+    "chain_version_provenance",
+    "chain_all_on",
+]
+
+
 class ComprehensiveScriptedProvider:
     async def chat(self, **kwargs: Any) -> LLMResponse:
         text = "\n".join(
@@ -259,6 +269,80 @@ def test_online_report_uses_chain_memory_base_for_profile_comparison(
     )
 
 
+def test_online_report_exposes_answer_quality_uplift_vs_memory_base(
+    tmp_path: Path,
+) -> None:
+    cases = build_quantitative_eval_cases(limit=4, case_pack="comprehensive")
+    specs = build_comprehensive_run_specs(
+        cases,
+        repeats=1,
+        prompt_variants=("baseline",),
+        profiles=tuple(EXPECTED_ANSWER_QUALITY_PROFILES),
+    )
+
+    report = asyncio.run(
+        run_comprehensive_online_eval(
+            specs,
+            tmp_path / "workspace",
+            ComprehensiveScriptedProvider(),
+            model="scripted",
+            timeout_s=5.0,
+            real_llm_enabled=False,
+        )
+    )
+
+    rows = report.metrics["profile_answer_quality_uplift_vs_memory_base"]
+    base = rows["chain_memory_base"]
+    tri = rows["chain_tri_retrieval"]
+
+    assert base["baseline_profile"] == "chain_memory_base"
+    assert base["is_combo_check_row"] is False
+    assert base["answer_pass_relative_lift_percent"] == 0.0
+    assert base["grounding_pass_relative_lift_percent"] == 0.0
+    assert tri["case_count"] == 4
+    assert tri["is_combo_check_row"] is False
+    assert "answer_pass_delta_points" in tri
+    assert "grounding_pass_delta_points" in tri
+    assert "forbidden_violation_reduction_percent" in tri
+    assert "avg_total_token_overhead" in tri
+    assert "avg_latency_overhead_ms" in tri
+    assert report.metrics["answer_quality_required_profiles"] == list(
+        EXPECTED_ANSWER_QUALITY_PROFILES
+    )
+    assert report.metrics["answer_quality_missing_profiles"] == []
+    assert report.metrics["answer_quality_partial_matrix"] is False
+
+
+def test_online_report_exposes_chain_answer_quality_rows(tmp_path: Path) -> None:
+    cases = build_quantitative_eval_cases(limit=4, case_pack="comprehensive")
+    profiles = tuple(EXPECTED_ANSWER_QUALITY_PROFILES)
+    specs = build_comprehensive_run_specs(
+        cases,
+        repeats=1,
+        prompt_variants=("baseline",),
+        profiles=profiles,
+    )
+    report = asyncio.run(
+        run_comprehensive_online_eval(
+            specs,
+            tmp_path / "workspace",
+            ComprehensiveScriptedProvider(),
+            model="scripted",
+            timeout_s=5.0,
+            real_llm_enabled=False,
+        )
+    )
+
+    rows = report.metrics["chain_answer_quality_uplift_rows"]
+    assert [row["profile_name"] for row in rows] == list(profiles)
+    assert rows[0]["previous_profile"] is None
+    assert rows[1]["previous_profile"] == "chain_memory_base"
+    assert "adjacent_answer_pass_delta_points" in rows[1]
+    assert "cumulative_answer_pass_relative_lift_percent" in rows[-1]
+    assert "cumulative_grounding_pass_relative_lift_percent" in rows[-1]
+    assert rows[-1]["is_combo_check_row"] is True
+
+
 def test_online_primary_table_uses_counts_and_rates(tmp_path: Path) -> None:
     cases = build_quantitative_eval_cases(limit=2)
     specs = build_comprehensive_run_specs(
@@ -286,6 +370,52 @@ def test_online_primary_table_uses_counts_and_rates(tmp_path: Path) -> None:
     assert "| profile | cases | answer_success | grounding_success | forbidden_cases |" in markdown
     assert "| profile | main_score |" not in markdown
     assert "## Disabled Enhancement Control" in markdown
+
+
+def test_online_markdown_renders_answer_quality_uplift_tables(
+    tmp_path: Path,
+) -> None:
+    cases = build_quantitative_eval_cases(limit=2, case_pack="comprehensive")
+    specs = build_comprehensive_run_specs(
+        cases,
+        repeats=1,
+        prompt_variants=("baseline",),
+        profiles=tuple(EXPECTED_ANSWER_QUALITY_PROFILES),
+    )
+    report = asyncio.run(
+        run_comprehensive_online_eval(
+            specs,
+            tmp_path / "workspace",
+            ComprehensiveScriptedProvider(),
+            model="scripted",
+            timeout_s=5.0,
+            real_llm_enabled=False,
+        )
+    )
+    path = tmp_path / "report.md"
+    write_comprehensive_online_markdown(report, path)
+    markdown = path.read_text(encoding="utf-8")
+
+    assert "## Answer Quality Uplift Vs Original Memory" in markdown
+    assert (
+        "| profile | cases | answer_pass | answer_rate | answer_lift | "
+        "grounding_pass | grounding_rate | grounding_lift | forbidden_rate | "
+        "forbidden_reduction |"
+    ) in markdown
+    assert "## Chain Answer Quality Uplift" in markdown
+    assert (
+        "| profile | previous | answer_rate | adjacent_answer_delta | "
+        "cumulative_answer_lift | grounding_rate | adjacent_grounding_delta | "
+        "cumulative_grounding_lift |"
+    ) in markdown
+    assert "## Cost And Latency Observation" in markdown
+    answer_section = markdown.split(
+        "## Answer Quality Uplift Vs Original Memory",
+        1,
+    )[1].split("## Chain Answer Quality Uplift", 1)[0]
+    assert "chain_write_value" not in answer_section
+    assert "chain_sleep_consolidation" not in answer_section
+    assert "combo/check" in markdown
 
 
 def test_run_comprehensive_online_eval_supports_bounded_concurrency(
@@ -392,6 +522,77 @@ def test_build_report_from_checkpoint_can_exclude_infra_failures(
     assert report.metrics["checkpoint_input_count"] == 3
     assert report.metrics["excluded_infra_failure_count"] == 2
     assert report.metrics["partial_due_to_infra_failure"] is True
+
+
+def test_answer_quality_uplift_handles_zero_denominators_and_filters_profiles(
+    tmp_path: Path,
+) -> None:
+    checkpoint = tmp_path / "checkpoint.jsonl"
+    rows = [
+        (
+            "base",
+            {
+                **_checkpoint_result(
+                    case_id="case-base",
+                    profile_name="chain_memory_base",
+                    passed=False,
+                ),
+                "answer_rule_passed": False,
+                "memory_grounding_passed": False,
+                "forbidden_contains_violation_count": 1,
+                "total_token_count": 100,
+                "latency_ms": 1000,
+            },
+        ),
+        (
+            "tri",
+            {
+                **_checkpoint_result(
+                    case_id="case-tri",
+                    profile_name="chain_tri_retrieval",
+                    passed=True,
+                ),
+                "answer_rule_passed": True,
+                "memory_grounding_passed": True,
+                "forbidden_contains_violation_count": 0,
+                "total_token_count": 120,
+                "latency_ms": 900,
+            },
+        ),
+        (
+            "write",
+            _checkpoint_result(
+                case_id="case-write",
+                profile_name="chain_write_value",
+                passed=True,
+            ),
+        ),
+    ]
+    checkpoint.write_text(
+        "\n".join(
+            json.dumps({"spec_key": key, "result": result})
+            for key, result in rows
+        ),
+        encoding="utf-8",
+    )
+
+    report = build_comprehensive_online_report_from_checkpoint(
+        checkpoint,
+        real_llm_enabled=True,
+    )
+
+    uplift = report.metrics["profile_answer_quality_uplift_vs_memory_base"]
+    tri = uplift["chain_tri_retrieval"]
+    assert "chain_write_value" not in uplift
+    assert tri["answer_pass_relative_lift_percent"] is None
+    assert tri["grounding_pass_relative_lift_percent"] is None
+    assert tri["answer_pass_delta_points"] == 100.0
+    assert tri["grounding_pass_delta_points"] == 100.0
+    assert tri["forbidden_violation_reduction_percent"] == 100.0
+    assert tri["avg_total_token_overhead"] == 20.0
+    assert tri["avg_latency_overhead_ms"] == -100.0
+    assert report.metrics["answer_quality_partial_matrix"] is True
+    assert "chain_graph_retrieval" in report.metrics["answer_quality_missing_profiles"]
 
 
 def test_report_passed_tracks_answer_quality_separately_from_infra(

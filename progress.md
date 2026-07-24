@@ -1321,6 +1321,42 @@
   - clarified Phase 6t metric denominators as all-candidate rates;
   - prevented fixture marker checks from creating a missing DB path.
 
+## 2026-07-24 Memory Answer Quality Online Uplift Report
+
+- User asked to execute the reviewed plan for answer-quality online uplift reporting.
+- Implemented report-only changes in `memory2/eval_comprehensive_online.py`:
+  - added `ANSWER_QUALITY_PROFILES`;
+  - added `profile_answer_quality_uplift_vs_memory_base`;
+  - added `chain_answer_quality_uplift_rows`;
+  - added `answer_quality_required_profiles`, `answer_quality_missing_profiles`, and `answer_quality_partial_matrix`;
+  - added Markdown sections for answer quality uplift, chain uplift, and cost/latency observation.
+- Scope boundary:
+  - no production `AgentLoop`, `Reasoner`, `ToolExecutor`, `ToolRegistry`, memory write, or observe DB behavior changed;
+  - `chain_write_value` and `chain_sleep_consolidation` are filtered out of the answer-quality table;
+  - `chain_all_on` is marked as `combo/check`, not a pure single-module gain.
+- TDD / verification so far:
+  - RED for missing `profile_answer_quality_uplift_vs_memory_base` observed;
+  - RED for missing `chain_answer_quality_uplift_rows` observed;
+  - RED for missing Markdown sections observed;
+  - `tests/test_memory_comprehensive_online_eval.py` -> `14 passed`;
+  - `tests/test_memory_comprehensive_online_cli.py` -> `8 passed`.
+- Fake-provider smoke:
+  - command output directory: `/tmp/akashic-memory-answer-quality-uplift-fake/reports`;
+  - `case_count = 240`;
+  - `profile_count = 6`;
+  - `real_llm_enabled = False`;
+  - `infra_passed = True`;
+  - `answer_quality_partial_matrix = False`;
+  - `answer_quality_missing_profiles = []`;
+  - profiles included: `chain_memory_base`, `chain_tri_retrieval`, `chain_graph_retrieval`, `chain_rerank_injection`, `chain_version_provenance`, `chain_all_on`.
+- Fake-provider result boundary:
+  - these values validate schema and calculation only;
+  - they are not real LLM performance results and should not be used as answer-quality uplift evidence.
+- Existing checkpoint attempt:
+  - `/tmp/akashic-memory-phase6k-real/reports/memory_comprehensive_online_eval.checkpoint.jsonl` was not present on this machine;
+  - no checkpoint-only real report was rebuilt;
+  - no new real LLM calls were started.
+
 ## 2026-07-23 Source Ref Quality Expanded Case Pack
 
 - Goal: replace the 6-row source_ref smoke fixture with a broader target-driven test set because no production real samples are currently available.

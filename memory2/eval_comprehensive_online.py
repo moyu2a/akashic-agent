@@ -57,6 +57,14 @@ from session.manager import SessionManager
 _FIXED_REPORT_TIME = datetime(2026, 7, 19, tzinfo=timezone.utc)
 
 COMPREHENSIVE_CHAIN_PROFILES: tuple[str, ...] = CHAIN_REPORT_PROFILES
+ANSWER_QUALITY_PROFILES: tuple[str, ...] = (
+    "chain_memory_base",
+    "chain_tri_retrieval",
+    "chain_graph_retrieval",
+    "chain_rerank_injection",
+    "chain_version_provenance",
+    "chain_all_on",
+)
 METRIC_SOURCES: dict[str, str] = {
     "online_answer_level": "real AgentLoop answer scoring",
     "online_balanced_proxy": "online answer-level fields converted into balanced proxy dimensions",
@@ -566,6 +574,9 @@ def write_comprehensive_online_markdown(
                 ]
             )
     lines.extend(
+        _answer_quality_markdown_sections(metrics)
+    )
+    lines.extend(
         [
             "",
             "## 原始评分字段",
@@ -752,6 +763,11 @@ def _metrics_from_results(
     profile_summaries = _profile_summaries(results, profiles)
     uplift = _profile_uplift_vs_memory_base(profile_summaries)
     adjacent = _chain_adjacent_uplift(profile_summaries)
+    answer_quality_rows = _build_profile_answer_quality_uplift_rows(profile_summaries)
+    answer_quality_chain_rows = _build_chain_answer_quality_rows(profile_summaries)
+    answer_quality_missing_profiles = [
+        profile for profile in ANSWER_QUALITY_PROFILES if profile not in profile_summaries
+    ]
     return {
         "evaluation_level": "comprehensive_online_agentloop",
         "real_llm_enabled": real_llm_enabled,
@@ -798,6 +814,11 @@ def _metrics_from_results(
         "profile_summaries": profile_summaries,
         "baseline_profile": "chain_memory_base",
         "control_profile": "chain_off",
+        "answer_quality_required_profiles": list(ANSWER_QUALITY_PROFILES),
+        "answer_quality_missing_profiles": answer_quality_missing_profiles,
+        "answer_quality_partial_matrix": bool(answer_quality_missing_profiles),
+        "profile_answer_quality_uplift_vs_memory_base": answer_quality_rows,
+        "chain_answer_quality_uplift_rows": answer_quality_chain_rows,
         "profile_uplift_vs_memory_base": uplift,
         "profile_uplift_vs_off": _profile_uplift_vs_off(profile_summaries),
         "chain_adjacent_uplift": adjacent,
@@ -842,6 +863,11 @@ def _empty_metrics(real_memory_sample_metrics: dict[str, object]) -> dict[str, o
         "profile_summaries": {},
         "baseline_profile": "chain_memory_base",
         "control_profile": "chain_off",
+        "answer_quality_required_profiles": list(ANSWER_QUALITY_PROFILES),
+        "answer_quality_missing_profiles": list(ANSWER_QUALITY_PROFILES),
+        "answer_quality_partial_matrix": True,
+        "profile_answer_quality_uplift_vs_memory_base": {},
+        "chain_answer_quality_uplift_rows": (),
         "profile_uplift_vs_memory_base": {},
         "profile_uplift_vs_off": {},
         "chain_adjacent_uplift": {},
@@ -918,6 +944,152 @@ def _profile_uplift_vs_memory_base(
         profile: round(float(summary["main_score"]) - baseline, 4)
         for profile, summary in summaries.items()
     }
+
+
+def _relative_rate_lift(after: float, baseline: float) -> float | None:
+    if float(baseline) == 0.0:
+        return None
+    return round(((float(after) - float(baseline)) / float(baseline)) * 100.0, 4)
+
+
+def _relative_reduction(before: float, after: float) -> float | None:
+    if float(before) == 0.0:
+        return None
+    return round(((float(before) - float(after)) / float(before)) * 100.0, 4)
+
+
+def _build_profile_answer_quality_uplift_rows(
+    profile_summaries: dict[str, dict[str, object]],
+    *,
+    baseline_profile: str = "chain_memory_base",
+    profiles: Sequence[str] = ANSWER_QUALITY_PROFILES,
+) -> dict[str, dict[str, object]]:
+    baseline = profile_summaries.get(baseline_profile)
+    if not isinstance(baseline, dict):
+        return {}
+    rows: dict[str, dict[str, object]] = {}
+    base_answer = float(baseline.get("answer_rule_pass_rate") or 0.0)
+    base_grounding = float(baseline.get("memory_grounding_pass_rate") or 0.0)
+    base_forbidden = float(baseline.get("forbidden_violation_rate") or 0.0)
+    base_tokens = float(baseline.get("avg_total_token_count") or 0.0)
+    base_latency = float(baseline.get("avg_latency_ms") or 0.0)
+    for profile in profiles:
+        summary = profile_summaries.get(profile)
+        if not isinstance(summary, dict):
+            continue
+        answer = float(summary.get("answer_rule_pass_rate") or 0.0)
+        grounding = float(summary.get("memory_grounding_pass_rate") or 0.0)
+        forbidden = float(summary.get("forbidden_violation_rate") or 0.0)
+        tokens = float(summary.get("avg_total_token_count") or 0.0)
+        latency = float(summary.get("avg_latency_ms") or 0.0)
+        rows[profile] = {
+            "baseline_profile": baseline_profile,
+            "is_combo_check_row": profile == "chain_all_on",
+            "case_count": summary.get("case_count", 0),
+            "answer_success_count": summary.get("answer_success_count", 0),
+            "grounding_success_count": summary.get("grounding_success_count", 0),
+            "forbidden_case_count": summary.get("forbidden_case_count", 0),
+            "answer_rule_pass_rate": answer,
+            "answer_pass_delta_points": round(answer - base_answer, 4),
+            "answer_pass_relative_lift_percent": _relative_rate_lift(
+                answer,
+                base_answer,
+            ),
+            "memory_grounding_pass_rate": grounding,
+            "grounding_pass_delta_points": round(grounding - base_grounding, 4),
+            "grounding_pass_relative_lift_percent": _relative_rate_lift(
+                grounding,
+                base_grounding,
+            ),
+            "forbidden_violation_rate": forbidden,
+            "forbidden_violation_delta_points": round(forbidden - base_forbidden, 4),
+            "forbidden_violation_reduction_percent": _relative_reduction(
+                base_forbidden,
+                forbidden,
+            ),
+            "avg_total_token_count": tokens,
+            "avg_total_token_overhead": round(tokens - base_tokens, 4),
+            "avg_total_token_reduction_percent": _relative_reduction(
+                base_tokens,
+                tokens,
+            ),
+            "avg_latency_ms": latency,
+            "avg_latency_overhead_ms": round(latency - base_latency, 4),
+            "avg_latency_reduction_percent": _relative_reduction(
+                base_latency,
+                latency,
+            ),
+        }
+    return rows
+
+
+def _build_chain_answer_quality_rows(
+    profile_summaries: dict[str, dict[str, object]],
+    *,
+    ordered_profiles: Sequence[str] = ANSWER_QUALITY_PROFILES,
+    baseline_profile: str = "chain_memory_base",
+) -> tuple[dict[str, object], ...]:
+    baseline = profile_summaries.get(baseline_profile)
+    if not isinstance(baseline, dict):
+        return ()
+    rows: list[dict[str, object]] = []
+    previous: dict[str, object] | None = None
+    previous_profile: str | None = None
+    base_answer = float(baseline.get("answer_rule_pass_rate") or 0.0)
+    base_grounding = float(baseline.get("memory_grounding_pass_rate") or 0.0)
+    for profile in ordered_profiles:
+        current = profile_summaries.get(profile)
+        if not isinstance(current, dict):
+            continue
+        current_answer = float(current.get("answer_rule_pass_rate") or 0.0)
+        current_grounding = float(current.get("memory_grounding_pass_rate") or 0.0)
+        prev_answer = (
+            float(previous.get("answer_rule_pass_rate") or 0.0)
+            if isinstance(previous, dict)
+            else current_answer
+        )
+        prev_grounding = (
+            float(previous.get("memory_grounding_pass_rate") or 0.0)
+            if isinstance(previous, dict)
+            else current_grounding
+        )
+        rows.append(
+            {
+                "profile_name": profile,
+                "previous_profile": previous_profile,
+                "is_combo_check_row": profile == "chain_all_on",
+                "case_count": current.get("case_count", 0),
+                "answer_rule_pass_rate": current_answer,
+                "adjacent_answer_pass_delta_points": round(
+                    current_answer - prev_answer,
+                    4,
+                ),
+                "cumulative_answer_pass_delta_points": round(
+                    current_answer - base_answer,
+                    4,
+                ),
+                "cumulative_answer_pass_relative_lift_percent": _relative_rate_lift(
+                    current_answer,
+                    base_answer,
+                ),
+                "memory_grounding_pass_rate": current_grounding,
+                "adjacent_grounding_pass_delta_points": round(
+                    current_grounding - prev_grounding,
+                    4,
+                ),
+                "cumulative_grounding_pass_delta_points": round(
+                    current_grounding - base_grounding,
+                    4,
+                ),
+                "cumulative_grounding_pass_relative_lift_percent": _relative_rate_lift(
+                    current_grounding,
+                    base_grounding,
+                ),
+            }
+        )
+        previous = current
+        previous_profile = profile
+    return tuple(rows)
 
 
 def _chain_adjacent_uplift(
@@ -1260,6 +1432,132 @@ def _sanitize_failure(failure: str) -> str:
     if failure.startswith("missing expected memory ids:"):
         return "missing_expected_memory_ids"
     return failure
+
+
+def _answer_quality_markdown_sections(metrics: dict[str, object]) -> list[str]:
+    lines: list[str] = [
+        "",
+        "## Answer Quality Uplift Vs Original Memory",
+        "",
+        "`combo/check` marks `chain_all_on`; it is a combined verification row, not a pure single-module answer/retrieval gain.",
+    ]
+    rows = metrics.get("profile_answer_quality_uplift_vs_memory_base", {})
+    if isinstance(rows, dict) and rows:
+        lines.extend(
+            [
+                "| profile | cases | answer_pass | answer_rate | answer_lift | grounding_pass | grounding_rate | grounding_lift | forbidden_rate | forbidden_reduction |",
+                "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+            ]
+        )
+        for profile in ANSWER_QUALITY_PROFILES:
+            row = rows.get(profile)
+            if not isinstance(row, dict):
+                continue
+            label = f"{profile} (combo/check)" if row.get("is_combo_check_row") else profile
+            lines.append(
+                "| "
+                + " | ".join(
+                    [
+                        label,
+                        _fmt(row.get("case_count")),
+                        _fmt(row.get("answer_success_count")),
+                        _fmt(row.get("answer_rule_pass_rate")),
+                        _fmt_percent(row.get("answer_pass_relative_lift_percent")),
+                        _fmt(row.get("grounding_success_count")),
+                        _fmt(row.get("memory_grounding_pass_rate")),
+                        _fmt_percent(row.get("grounding_pass_relative_lift_percent")),
+                        _fmt(row.get("forbidden_violation_rate")),
+                        _fmt_percent(row.get("forbidden_violation_reduction_percent")),
+                    ]
+                )
+                + " |"
+            )
+    else:
+        lines.append("- No answer-quality uplift rows available.")
+
+    lines.extend(
+        [
+            "",
+            "## Chain Answer Quality Uplift",
+            "",
+        ]
+    )
+    chain_rows = metrics.get("chain_answer_quality_uplift_rows", ())
+    if isinstance(chain_rows, (list, tuple)) and chain_rows:
+        lines.extend(
+            [
+                "| profile | previous | answer_rate | adjacent_answer_delta | cumulative_answer_lift | grounding_rate | adjacent_grounding_delta | cumulative_grounding_lift |",
+                "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |",
+            ]
+        )
+        for raw_row in chain_rows:
+            if not isinstance(raw_row, dict):
+                continue
+            label = (
+                f"{raw_row.get('profile_name')} (combo/check)"
+                if raw_row.get("is_combo_check_row")
+                else str(raw_row.get("profile_name"))
+            )
+            lines.append(
+                "| "
+                + " | ".join(
+                    [
+                        label,
+                        _fmt(raw_row.get("previous_profile")),
+                        _fmt(raw_row.get("answer_rule_pass_rate")),
+                        _fmt(raw_row.get("adjacent_answer_pass_delta_points")),
+                        _fmt_percent(
+                            raw_row.get("cumulative_answer_pass_relative_lift_percent")
+                        ),
+                        _fmt(raw_row.get("memory_grounding_pass_rate")),
+                        _fmt(raw_row.get("adjacent_grounding_pass_delta_points")),
+                        _fmt_percent(
+                            raw_row.get("cumulative_grounding_pass_relative_lift_percent")
+                        ),
+                    ]
+                )
+                + " |"
+            )
+    else:
+        lines.append("- No chain answer-quality uplift rows available.")
+
+    lines.extend(
+        [
+            "",
+            "## Cost And Latency Observation",
+            "",
+            "| profile | avg_tokens | token_overhead_vs_memory_base | token_reduction | avg_latency_ms | latency_overhead_ms | latency_reduction |",
+            "| --- | ---: | ---: | ---: | ---: | ---: | ---: |",
+        ]
+    )
+    if isinstance(rows, dict) and rows:
+        for profile in ANSWER_QUALITY_PROFILES:
+            row = rows.get(profile)
+            if not isinstance(row, dict):
+                continue
+            label = f"{profile} (combo/check)" if row.get("is_combo_check_row") else profile
+            lines.append(
+                "| "
+                + " | ".join(
+                    [
+                        label,
+                        _fmt(row.get("avg_total_token_count")),
+                        _fmt(row.get("avg_total_token_overhead")),
+                        _fmt_percent(row.get("avg_total_token_reduction_percent")),
+                        _fmt(row.get("avg_latency_ms")),
+                        _fmt(row.get("avg_latency_overhead_ms")),
+                        _fmt_percent(row.get("avg_latency_reduction_percent")),
+                    ]
+                )
+                + " |"
+            )
+    return lines
+
+
+def _fmt_percent(value: object) -> str:
+    if value is None:
+        return "N/A"
+    return _fmt(value)
 
 
 def _fmt(value: object) -> str:

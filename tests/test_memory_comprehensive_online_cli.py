@@ -35,6 +35,17 @@ def test_comprehensive_online_cli_gates_real_llm_by_default(
     )
     assert payload["metrics"]["real_llm_enabled"] is False
     assert payload["metrics"]["gate_reason"] == "real_llm_disabled"
+    assert "profile_answer_quality_uplift_vs_memory_base" in payload["metrics"]
+    assert "chain_answer_quality_uplift_rows" in payload["metrics"]
+    assert payload["metrics"]["answer_quality_missing_profiles"] == [
+        "chain_memory_base",
+        "chain_tri_retrieval",
+        "chain_graph_retrieval",
+        "chain_rerank_injection",
+        "chain_version_provenance",
+        "chain_all_on",
+    ]
+    assert payload["metrics"]["answer_quality_partial_matrix"] is True
 
 
 def test_comprehensive_online_cli_fake_provider_writes_report(
@@ -87,8 +98,14 @@ def test_comprehensive_online_cli_fake_provider_writes_report(
         payload["metrics"]["metric_sources"]["online_answer_level"]
         == "real AgentLoop answer scoring"
     )
+    assert "profile_answer_quality_uplift_vs_memory_base" in payload["metrics"]
+    assert "chain_answer_quality_uplift_rows" in payload["metrics"]
+    assert payload["metrics"]["answer_quality_partial_matrix"] is True
     assert "综合线上评测" in markdown
     assert "不是生产回答准确率" in markdown
+    assert "## Answer Quality Uplift Vs Original Memory" in markdown
+    assert "## Chain Answer Quality Uplift" in markdown
+    assert "## Cost And Latency Observation" in markdown
 
 
 def test_comprehensive_online_cli_accepts_comprehensive_case_pack_core_matrix(

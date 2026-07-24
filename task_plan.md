@@ -1209,3 +1209,52 @@ Documentation sync:
 - Updated `02-memory-quality-metrics.md` with Phase 6m Answer Comprehensive V2 data, formulas, and offline-only boundary.
 - Updated `05-memory-target-metric-eval-plan.md` with the current recall coverage table and the online evidence required for answer correctness, evidence hit, noise control, and context cost.
 - Updated `04-memory-plugin-experiment-roadmap.md` with the current recall coverage results in the Phase 6f/6m roadmap section.
+
+## 2026-07-24 Memory Answer Quality Online Uplift Report
+
+Goal: add an answer-quality uplift layer to the comprehensive online report so answer correctness, grounding, forbidden/noise, token, and latency can be compared against original memory baseline without polluting the offline recall-count report.
+
+1. Write and verify RED tests for profile uplift rows - complete
+2. Implement profile uplift fields in `_metrics_from_results()` and `_empty_metrics()` - complete
+3. Write and verify RED tests for chain answer-quality rows - complete
+4. Implement chain adjacent/cumulative rows - complete
+5. Write and verify RED tests for Markdown answer-quality sections - complete
+6. Render answer-quality, chain, and cost/latency Markdown tables - complete
+7. Add formula / zero denominator / partial-matrix regression test - complete
+8. Run fake-provider smoke report - complete
+9. Try checkpoint-only real report rebuild - blocked by missing local checkpoint
+10. Update memory optimization docs and planning records - complete
+11. Final verification and commit - pending
+
+Implemented fields:
+
+- `ANSWER_QUALITY_PROFILES`
+- `profile_answer_quality_uplift_vs_memory_base`
+- `chain_answer_quality_uplift_rows`
+- `answer_quality_required_profiles`
+- `answer_quality_missing_profiles`
+- `answer_quality_partial_matrix`
+
+Current fake-provider smoke:
+
+- report path: `/tmp/akashic-memory-answer-quality-uplift-fake/reports/memory_comprehensive_online_eval.json`
+- markdown path: `/tmp/akashic-memory-answer-quality-uplift-fake/reports/memory_comprehensive_online_eval.md`
+- `case_count = 240`
+- `profile_count = 6`
+- `real_llm_enabled = False`
+- `infra_passed = True`
+- `answer_quality_partial_matrix = False`
+- `answer_quality_missing_profiles = []`
+
+Boundaries:
+
+- This is report/evaluation code only; no production AgentLoop, Reasoner, ToolExecutor, ToolRegistry, memory write, or observe DB behavior changed.
+- `chain_write_value` and `chain_sleep_consolidation` are excluded from the answer-quality table.
+- `chain_all_on` is marked `combo/check`, not interpreted as a pure single-module answer/retrieval gain.
+- Fake-provider smoke validates schema and calculations only; it is not real LLM performance evidence.
+- Existing checkpoint `/tmp/akashic-memory-phase6k-real/reports/memory_comprehensive_online_eval.checkpoint.jsonl` is absent in the current environment, so no checkpoint-only real report was rebuilt in this pass.
+
+Verification so far:
+
+- `.venv/bin/python -m pytest tests/test_memory_comprehensive_online_eval.py -q -p no:cacheprovider` -> `14 passed in 7.74s`.
+- `.venv/bin/python -m pytest tests/test_memory_comprehensive_online_cli.py -q -p no:cacheprovider` -> `8 passed in 9.35s`.
