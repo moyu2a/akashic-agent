@@ -198,6 +198,7 @@ def test_executor_approved_execution_trace_includes_consumed_and_executed_events
     statuses = [event["status"] for event in result.approval_lifecycle]
     assert statuses == ["consumed", "executed"]
     for event in result.approval_lifecycle:
+        assert event["actor"] == "user"
         assert event["approval_request_id"] == record.approval_request_id
         assert event["request_id"] == record.request_id
         assert event["session_key"] == record.session_key

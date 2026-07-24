@@ -76,6 +76,32 @@ def test_create_or_get_pending_request_is_idempotent_and_sanitized(
     assert "content" in persisted
 
 
+def test_create_or_get_pending_request_does_not_reuse_terminal_request(
+    tmp_path: Path,
+) -> None:
+    store = _store(tmp_path)
+    first = _create_pending(store)
+    store.deny_request(
+        approval_request_id=first.approval_request_id,
+        request_id=first.request_id,
+        session_key=first.session_key,
+        tool_name=first.tool_name,
+        approval_scope=first.approval_scope,
+        args_hash=first.args_hash,
+        actor="user",
+        reason="user_denied",
+        now=_now(),
+    )
+
+    second = _create_pending(store)
+
+    assert second.status == "pending"
+    assert second.approval_request_id != first.approval_request_id
+    old = store.get_request(first.approval_request_id)
+    assert old is not None
+    assert old.status == "denied"
+
+
 def test_approve_requires_request_session_tool_scope_and_args_hash(
     tmp_path: Path,
 ) -> None:

@@ -730,6 +730,25 @@ async def test_before_turn_deny_tool_command_denies_current_session_request(
 
 
 @pytest.mark.asyncio
+async def test_before_turn_deny_tool_command_redacts_sensitive_reason(
+    tmp_path: Path,
+):
+    store = _approval_store(tmp_path)
+    record = _create_tool_approval(store)
+
+    ctx = await _run_tool_approval_command(
+        store,
+        f"/deny_tool {record.approval_request_id} token=secret-token-value",
+    )
+
+    updated = store.get_request(record.approval_request_id)
+    assert updated is not None
+    assert updated.status == "denied"
+    assert updated.decision_reason == "user_denied"
+    assert "secret-token-value" not in ctx.abort_reply
+
+
+@pytest.mark.asyncio
 async def test_status_command_deny_trace_includes_denied_event(tmp_path: Path):
     store = _approval_store(tmp_path)
     record = _create_tool_approval(store)

@@ -7,6 +7,7 @@ from collections.abc import Mapping
 from contextlib import suppress
 from typing import Protocol, cast, runtime_checkable
 
+from agent.policies.tool_approval import summarize_arguments
 from agent.plugins import Plugin
 from bus.events_lifecycle import TurnCommitted
 from core.memory.events import MemoryWritten, RetrievalCompleted
@@ -202,7 +203,7 @@ def _slim_call(
 ) -> dict[str, object]:
     out = {
         "name": str(call.get("name", "")),
-        "args": str(call.get("arguments", ""))[:args_limit],
+        "args": _slim_arguments(call.get("arguments"), limit=args_limit),
         "result": str(call.get("result", ""))[:result_limit],
     }
     for key in ("status", "boundary_reason", "boundary_action"):
@@ -243,6 +244,21 @@ def _slim_call(
         if events:
             out["approval_lifecycle"] = events
     return out
+
+
+def _slim_arguments(arguments: object, *, limit: int) -> str:
+    if isinstance(arguments, Mapping):
+        safe_args = summarize_arguments(
+            {
+                str(key): value
+                for key, value in arguments.items()
+                if isinstance(key, str)
+            }
+        )
+        return json.dumps(safe_args, ensure_ascii=False, sort_keys=True)[:limit]
+    if arguments is None or arguments == "":
+        return ""
+    return "[redacted_non_mapping_arguments]"
 
 
 def _slim_approval_lifecycle_event(event: Mapping[object, object]) -> dict[str, object]:

@@ -160,8 +160,8 @@ P1.2 已接入 `ToolExecutor` 和 passive reasoner 的真实执行路径。P1.3a
 - 审批绑定 tuple 为 `approval_request_id + session_key + request_id + tool_name + approval_scope + args_hash`，approve/deny/consume/finalize 均按完整 tuple 校验。
 - `ToolApprovalRuntime` 是 executor、status command、TaskExecution bridge 的共享 facade，`DefaultReasoner` 每 turn 按 workspace 注入同一 approval DB。
 - `ToolExecutionRequest.trusted_approval_context` 只能由 runtime code 构造；模型在工具参数里伪造 `approval_request_id` 不会触发执行。
-- `ToolExecutor` 在 P2 `defer` 后创建或复用 pending request；用户审批后，只有 trusted context 且参数 hash 完全一致时才会原子 consume 并进入真实 invoker。
-- approval 是 single-use：第一次 resume consume 后才能执行，重复 resume、变参、denied、expired、mismatch、not_found 均不触达真实 invoker。
+- `ToolExecutor` 在 P2 `defer` 后创建或复用 pending request；executor API 层只有收到 runtime 注入的 trusted context 且参数 hash 完全一致时才会原子 consume 并进入真实 invoker。
+- approval 是 single-use：第一次 trusted consume 后才能执行，重复 consume、变参、denied、expired、mismatch、not_found 均不触达真实 invoker。
 - P1 deny 仍优先：即使存在 approved request，workspace escape、protected argument、destructive shell 等 P1/P1.3 deny 仍在 consume/execution 前阻断。
 - `plugins/status_commands` 新增 trusted command surface：`/approvals`、`/approve_tool <id>`、`/deny_tool <id> [reason]`。命令只接受 approval id，绑定字段全部来自持久 record，不从命令文本读取。
 - TaskExecution `waiting_authorization` 已持久化 bounded metadata：approval id、expires_at、approval_scope、args_hash、args_summary、policy_reason；但 P3 不开放 TaskExecution write/edit/shell side-effect resume。
@@ -171,7 +171,7 @@ P1.2 已接入 `ToolExecutor` 和 passive reasoner 的真实执行路径。P1.3a
 明确边界：
 
 - P3 不是 sandbox，不提供 Docker/chroot/seccomp、non-root user、read-only rootfs、resource limit。
-- P3 不提供 filesystem snapshot/diff/rollback，也不承诺批准后自动恢复 TaskExecution 副作用执行。
+- P3 不提供 filesystem snapshot/diff/rollback，也不承诺 `/approve_tool` 后自动重放 passive 工具调用或自动恢复 TaskExecution 副作用执行；status command 当前只负责 trusted approve/deny 状态变更。
 - P3 不是完整企业级 `ToolAuditLedger`；当前是随 turn trace/observe 传播的 bounded lifecycle metadata。可查询持久审计账本、retention 和 dashboard/admin 审计检索属于 P4/P5。
 
 ## 验证结果
@@ -338,7 +338,7 @@ PYTHONDONTWRITEBYTECODE=1 uv run --with pytest --with pytest-asyncio pytest test
 结果：
 
 ```text
-63 passed in 2.04s
+65 passed in 2.24s
 ```
 
 P3 compatibility 回归：
@@ -350,7 +350,7 @@ PYTHONDONTWRITEBYTECODE=1 uv run --with pytest --with pytest-asyncio pytest test
 结果：
 
 ```text
-260 passed in 6.52s
+262 passed in 6.79s
 ```
 
 P3 compileall 与 whitespace 检查：
@@ -364,9 +364,10 @@ git diff --check
 
 ## 后续步骤
 
-P3 已完成 trusted approval workflow、single-use consume、status command approve/deny、TaskExecution bounded authorization metadata 和 approval lifecycle trace。下一步不应直接声称生产级安全，而是进入 P4/P5，把“批准后安全执行环境”和“可查询持久审计账本”补成闭环：
+P3 已完成 trusted approval workflow、executor API 级 single-use consume、status command approve/deny、TaskExecution bounded authorization metadata 和 approval lifecycle trace。下一步不应直接声称生产级安全，而是进入 P4/P5，把“批准后安全执行环境”“真实 passive/admin replay 入口”和“可查询持久审计账本”补成闭环：
 
 1. P4 设计 sandbox/diff/snapshot/rollback：Docker/Podman、non-root user、read-only rootfs、resource limits、filesystem snapshot/diff/rollback。
 2. P4/P5 设计可查询持久 `ToolAuditLedger`：timestamp、actor、request id、policy decision、args hash、脱敏摘要、执行结果预览和 retention 策略。
 3. 继续收敛 no-root 兼容 allow，只让明确无法提供 workspace 的直接调用方走兼容路径。
-4. 评估 TaskExecution side-effect resume 的开放条件：只有 P4 具备 diff/snapshot/rollback 后，才允许 approved write/edit/shell 从 `waiting_authorization` 继续真实执行。
+4. 设计真实 replay/admin 执行入口：在不把 raw args 写入 approval/audit store 的前提下，明确如何由可信 runtime 取回原始调用、展示 diff、执行或取消。
+5. 评估 TaskExecution side-effect resume 的开放条件：只有 P4 具备 diff/snapshot/rollback 后，才允许 approved write/edit/shell 从 `waiting_authorization` 继续真实执行。

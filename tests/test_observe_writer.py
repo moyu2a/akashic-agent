@@ -154,6 +154,36 @@ def test_observe_slim_trace_preserves_approval_lifecycle_fields_without_args_sum
     assert flat_event["tool_name"] == "write_file"
 
 
+def test_observe_slim_call_redacts_sensitive_tool_arguments() -> None:
+    tool_chain = [
+        {
+            "text": "",
+            "calls": [
+                {
+                    "name": "shell",
+                    "arguments": {
+                        "command": "echo a | xargs rm file.txt",
+                        "token": "secret-token-value",
+                        "content": "raw secret body",
+                        "path": "notes.md",
+                    },
+                    "status": "deferred",
+                    "result": '{"ok": false}',
+                }
+            ],
+        }
+    ]
+
+    slim_call = _slim_tool_calls(tool_chain)[0]
+
+    encoded_args = str(slim_call["args"])
+    assert "echo a | xargs rm file.txt" not in encoded_args
+    assert "secret-token-value" not in encoded_args
+    assert "raw secret body" not in encoded_args
+    assert "sha256" in encoded_args
+    assert "notes.md" in encoded_args
+
+
 def test_write_turn_persists_raw_output_and_meme_fields(tmp_path):
     db_path = tmp_path / "observe.db"
     conn = open_db(db_path)

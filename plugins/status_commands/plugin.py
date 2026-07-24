@@ -379,7 +379,24 @@ def _bounded_denial_reason(content: str) -> str:
     reason = " ".join(parts[2].split())
     if not reason:
         return "user_denied"
-    if any(marker in reason.lower() for marker in ("rm ", "command", "content")):
+    lower = reason.lower()
+    sensitive_markers = (
+        "rm ",
+        "command",
+        "content",
+        "token",
+        "password",
+        "passwd",
+        "secret",
+        "api_key",
+        "apikey",
+        "authorization",
+        "cookie",
+        "bearer",
+        "private_key",
+        "ssh-key",
+    )
+    if any(marker in lower for marker in sensitive_markers):
         return "user_denied"
     return reason[:80]
 

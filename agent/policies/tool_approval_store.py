@@ -25,6 +25,38 @@ _TERMINAL_STATUSES = frozenset(
     {"denied", "expired", "consumed", "executed", "execution_failed"}
 )
 
+_CREATE_APPROVAL_TABLE_SQL = """
+CREATE TABLE IF NOT EXISTS tool_approval_requests (
+    approval_request_id TEXT PRIMARY KEY,
+    request_id TEXT NOT NULL,
+    session_key TEXT NOT NULL,
+    channel TEXT NOT NULL DEFAULT '',
+    chat_id TEXT NOT NULL DEFAULT '',
+    source TEXT NOT NULL DEFAULT '',
+    tool_name TEXT NOT NULL,
+    risk TEXT NOT NULL,
+    approval_scope TEXT NOT NULL,
+    policy_reason TEXT NOT NULL,
+    args_hash TEXT NOT NULL,
+    args_summary_json TEXT NOT NULL DEFAULT '{}',
+    status TEXT NOT NULL CHECK (
+        status IN (
+            'pending', 'approved', 'denied', 'expired',
+            'consumed', 'executed', 'execution_failed'
+        )
+    ),
+    requested_by TEXT NOT NULL DEFAULT 'model',
+    decided_by TEXT NOT NULL DEFAULT '',
+    decision_reason TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    decided_at TEXT NOT NULL DEFAULT '',
+    consumed_at TEXT NOT NULL DEFAULT '',
+    executed_at TEXT NOT NULL DEFAULT '',
+    execution_status TEXT NOT NULL DEFAULT ''
+)
+"""
+
 
 @dataclass(frozen=True)
 class ToolApprovalRequestRecord:
@@ -74,12 +106,23 @@ class ToolApprovalStore:
         now: datetime,
         ttl: timedelta,
     ) -> ToolApprovalRequestRecord:
+        self.expire_pending_requests(now=now)
         args_hash = canonical_args_hash(arguments)
         args_summary_json = _json_dumps(summarize_arguments(arguments))
         created_at = _to_iso(now)
         expires_at = _to_iso(now + ttl)
         approval_request_id = uuid.uuid4().hex
-        with self._connect() as conn:
+        with self._immediate_transaction() as conn:
+            row = _select_pending_by_binding(
+                conn,
+                session_key=session_key,
+                request_id=request_id,
+                tool_name=tool_name,
+                approval_scope=approval_scope or "tool_call",
+                args_hash=args_hash,
+            )
+            if row is not None:
+                return _record_from_row(row)
             try:
                 conn.execute(
                     """
@@ -110,24 +153,18 @@ class ToolApprovalStore:
                     ),
                 )
             except sqlite3.IntegrityError:
-                pass
-            row = conn.execute(
-                """
-                SELECT * FROM tool_approval_requests
-                WHERE session_key = ?
-                  AND request_id = ?
-                  AND tool_name = ?
-                  AND approval_scope = ?
-                  AND args_hash = ?
-                """,
-                (
-                    session_key,
-                    request_id,
-                    tool_name,
-                    approval_scope or "tool_call",
-                    args_hash,
-                ),
-            ).fetchone()
+                row = _select_pending_by_binding(
+                    conn,
+                    session_key=session_key,
+                    request_id=request_id,
+                    tool_name=tool_name,
+                    approval_scope=approval_scope or "tool_call",
+                    args_hash=args_hash,
+                )
+                if row is not None:
+                    return _record_from_row(row)
+                raise
+            row = _select_for_update(conn, approval_request_id)
         if row is None:
             raise RuntimeError("failed to create or load approval request")
         return _record_from_row(row)
@@ -461,41 +498,15 @@ class ToolApprovalStore:
 
     def _init_schema(self) -> None:
         with self._connect() as conn:
+            conn.execute(_CREATE_APPROVAL_TABLE_SQL)
+            _migrate_legacy_binding_unique(conn)
             conn.execute(
                 """
-                CREATE TABLE IF NOT EXISTS tool_approval_requests (
-                    approval_request_id TEXT PRIMARY KEY,
-                    request_id TEXT NOT NULL,
-                    session_key TEXT NOT NULL,
-                    channel TEXT NOT NULL DEFAULT '',
-                    chat_id TEXT NOT NULL DEFAULT '',
-                    source TEXT NOT NULL DEFAULT '',
-                    tool_name TEXT NOT NULL,
-                    risk TEXT NOT NULL,
-                    approval_scope TEXT NOT NULL,
-                    policy_reason TEXT NOT NULL,
-                    args_hash TEXT NOT NULL,
-                    args_summary_json TEXT NOT NULL DEFAULT '{}',
-                    status TEXT NOT NULL CHECK (
-                        status IN (
-                            'pending', 'approved', 'denied', 'expired',
-                            'consumed', 'executed', 'execution_failed'
-                        )
-                    ),
-                    requested_by TEXT NOT NULL DEFAULT 'model',
-                    decided_by TEXT NOT NULL DEFAULT '',
-                    decision_reason TEXT NOT NULL DEFAULT '',
-                    created_at TEXT NOT NULL,
-                    expires_at TEXT NOT NULL,
-                    decided_at TEXT NOT NULL DEFAULT '',
-                    consumed_at TEXT NOT NULL DEFAULT '',
-                    executed_at TEXT NOT NULL DEFAULT '',
-                    execution_status TEXT NOT NULL DEFAULT '',
-                    UNIQUE(
-                        session_key, request_id, tool_name,
-                        approval_scope, args_hash
-                    )
+                CREATE UNIQUE INDEX IF NOT EXISTS idx_tool_approval_pending_binding
+                ON tool_approval_requests (
+                    session_key, request_id, tool_name, approval_scope, args_hash
                 )
+                WHERE status = 'pending'
                 """
             )
 
@@ -528,6 +539,70 @@ def _select_for_update(
         "SELECT * FROM tool_approval_requests WHERE approval_request_id = ?",
         (approval_request_id,),
     ).fetchone()
+
+
+def _select_pending_by_binding(
+    conn: sqlite3.Connection,
+    *,
+    session_key: str,
+    request_id: str,
+    tool_name: str,
+    approval_scope: str,
+    args_hash: str,
+) -> sqlite3.Row | None:
+    return conn.execute(
+        """
+        SELECT * FROM tool_approval_requests
+        WHERE session_key = ?
+          AND request_id = ?
+          AND tool_name = ?
+          AND approval_scope = ?
+          AND args_hash = ?
+          AND status = 'pending'
+        ORDER BY created_at ASC, approval_request_id ASC
+        LIMIT 1
+        """,
+        (session_key, request_id, tool_name, approval_scope, args_hash),
+    ).fetchone()
+
+
+def _migrate_legacy_binding_unique(conn: sqlite3.Connection) -> None:
+    row = conn.execute(
+        """
+        SELECT sql FROM sqlite_master
+        WHERE type = 'table' AND name = 'tool_approval_requests'
+        """
+    ).fetchone()
+    if row is None:
+        return
+    sql = str(row[0] or "")
+    if "UNIQUE(" not in sql or "approval_scope, args_hash" not in sql:
+        return
+    conn.executescript(
+        """
+        ALTER TABLE tool_approval_requests RENAME TO tool_approval_requests_legacy;
+        """
+    )
+    conn.execute(_CREATE_APPROVAL_TABLE_SQL)
+    conn.execute(
+        """
+        INSERT INTO tool_approval_requests (
+            approval_request_id, request_id, session_key, channel, chat_id,
+            source, tool_name, risk, approval_scope, policy_reason, args_hash,
+            args_summary_json, status, requested_by, decided_by, decision_reason,
+            created_at, expires_at, decided_at, consumed_at, executed_at,
+            execution_status
+        )
+        SELECT
+            approval_request_id, request_id, session_key, channel, chat_id,
+            source, tool_name, risk, approval_scope, policy_reason, args_hash,
+            args_summary_json, status, requested_by, decided_by, decision_reason,
+            created_at, expires_at, decided_at, consumed_at, executed_at,
+            execution_status
+        FROM tool_approval_requests_legacy
+        """
+    )
+    conn.execute("DROP TABLE tool_approval_requests_legacy")
 
 
 def _record_from_row(row: sqlite3.Row) -> ToolApprovalRequestRecord:

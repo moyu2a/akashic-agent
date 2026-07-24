@@ -690,13 +690,13 @@ Task 10 证据：
   - TaskExecution `waiting_authorization` 已持久化 bounded metadata：`approval_request_id`、`expires_at`、`approval_scope=task_execution_step`、`args_hash`、脱敏 `args_summary`、`policy_reason`。
   - workspace SQLite approval store 持久化 pending/approved/denied/expired/consumed/executed/execution_failed 状态。
   - `/approvals`、`/approve_tool <id>`、`/deny_tool <id> [reason]` 作为 trusted runtime command surface；命令只接受 approval id，request/session/tool/scope/hash 绑定字段全部来自持久 record。
-  - 普通 executor approved resume 需要 `TrustedApprovalContext` 和完整 tuple 匹配，且 approval single-use；模型参数伪造 approval id 不会执行。
+  - 普通 executor approved consume 需要 runtime 注入的 `TrustedApprovalContext` 和完整 tuple 匹配，且 approval single-use；模型参数伪造 approval id 不会执行。
   - bounded lifecycle audit 已覆盖 requested/approved/denied/expired/consumed/executed/execution_failed，并进入 observe slim trace allowlist。
 - 验证证据：
-  - P3 focused suite：`63 passed in 2.04s`。
-  - P3 compatibility suite：`260 passed in 6.52s`。
+  - P3 focused suite：`65 passed in 2.24s`。
+  - P3 compatibility suite：`262 passed in 6.79s`。
   - P3 contract：`5 passed in 0.59s`。
-- 剩余边界单独转入 P4：diff/snapshot/rollback/sandbox 完成前，不开放 TaskExecution write/edit/shell side-effect resume。
+- 剩余边界单独转入 P4：`/approve_tool` 当前只负责批准状态，不自动重放 passive 工具调用；diff/snapshot/rollback/sandbox 完成前，不开放 TaskExecution write/edit/shell side-effect resume。
 
 ### LA-004 final-only provider tool syntax normalization（open）
 

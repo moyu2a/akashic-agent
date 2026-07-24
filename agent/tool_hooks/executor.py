@@ -149,7 +149,12 @@ class ToolExecutor:
                 if approval_decision.allows_invoker:
                     approval_lifecycle.append(
                         self._approval_runtime.lifecycle_event_from_decision(
-                            approval_decision
+                            approval_decision,
+                            actor=(
+                                request.trusted_approval_context.actor
+                                if request.trusted_approval_context is not None
+                                else ""
+                            ),
                         )
                     )
                     return await self._execute_invoker(
@@ -396,7 +401,14 @@ class ToolExecutor:
         )
         if decision.action not in {"executed", "execution_failed"}:
             return None
-        return self._approval_runtime.lifecycle_event_from_decision(decision)
+        return self._approval_runtime.lifecycle_event_from_decision(
+            decision,
+            actor=(
+                request.trusted_approval_context.actor
+                if request.trusted_approval_context is not None
+                else ""
+            ),
+        )
 
     async def preflight(
         self,
