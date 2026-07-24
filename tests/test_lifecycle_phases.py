@@ -3,7 +3,7 @@ from __future__ import annotations
 import importlib
 import sqlite3
 from collections.abc import Callable
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast
@@ -66,8 +66,10 @@ from agent.lifecycle.phases.prompt_render import (
     default_prompt_render_modules,
 )
 from agent.prompting import PromptSectionRender
+from agent.policies.tool_approval_store import ToolApprovalStore
 from agent.turns.outbound import OutboundDispatch
 from session.manager import SessionManager
+from plugins.status_commands.plugin import StatusCommands, ToolApprovalCommandModule
 
 _observe_db = importlib.import_module("plugins.observe.db")
 open_observe_db = cast(
@@ -563,6 +565,228 @@ async def test_before_turn_kvcache_command(tmp_path):
     assert "80.00%" in ctx.abort_reply
     assert ctx.abort_reply.count("\n\n") <= 2
     ctx_store.prepare.assert_not_called()
+
+
+def _approval_store(tmp_path: Path) -> ToolApprovalStore:
+    return ToolApprovalStore(tmp_path / "approvals.db")
+
+
+def _create_tool_approval(
+    store: ToolApprovalStore,
+    *,
+    request_id: str = "approval-call",
+    session_key: str = "telegram:123",
+    now: datetime | None = None,
+    ttl_seconds: int = 300,
+):
+    return store.create_or_get_pending_request(
+        request_id=request_id,
+        session_key=session_key,
+        channel="telegram",
+        chat_id="123",
+        source="passive",
+        tool_name="write_file",
+        risk="write",
+        approval_scope="tool_call",
+        policy_reason="risk_strategy_write_requires_approval",
+        arguments={
+            "path": "notes.md",
+            "content": "raw-secret-content",
+            "command": "rm file.txt",
+        },
+        now=now or datetime.now().astimezone(),
+        ttl=timedelta(seconds=ttl_seconds),
+    )
+
+
+async def _run_tool_approval_command(
+    store: ToolApprovalStore,
+    content: str,
+    *,
+    session_key: str = "telegram:123",
+) -> BeforeTurnCtx:
+    bus = EventBus()
+    session = _DummySession(session_key)
+    session_mgr = SimpleNamespace(get_or_create=lambda key: session)
+    ctx_store = SimpleNamespace(prepare=AsyncMock())
+    phase = Phase(
+        default_before_turn_modules(
+            bus,
+            cast(SessionManager, session_mgr),
+            cast(ContextStore, ctx_store),
+            plugin_modules=[ToolApprovalCommandModule("status_commands", store)],
+        ),
+        frame_factory=BeforeTurnFrame,
+    )
+    msg = InboundMessage(
+        channel="telegram",
+        sender="user",
+        chat_id="123",
+        content=content,
+        timestamp=datetime.now(),
+    )
+    state = TurnState(msg=msg, session_key=session_key, dispatch_outbound=True)
+
+    ctx = await phase.run(state)
+
+    assert ctx.abort is True
+    assert "raw-secret-content" not in ctx.abort_reply
+    assert "rm file.txt" not in ctx.abort_reply
+    ctx_store.prepare.assert_not_called()
+    return ctx
+
+
+@pytest.mark.asyncio
+async def test_before_turn_approvals_command_lists_pending_requests(tmp_path: Path):
+    store = _approval_store(tmp_path)
+    current = _create_tool_approval(store)
+    other = _create_tool_approval(
+        store,
+        request_id="other-call",
+        session_key="telegram:other",
+    )
+
+    ctx = await _run_tool_approval_command(store, "/approvals")
+
+    assert current.approval_request_id in ctx.abort_reply
+    assert other.approval_request_id not in ctx.abort_reply
+    assert "pending" in ctx.abort_reply
+    assert "write_file" in ctx.abort_reply
+    assert current.args_hash in ctx.abort_reply
+    assert current.expires_at in ctx.abort_reply
+
+
+@pytest.mark.asyncio
+async def test_before_turn_approve_tool_command_approves_current_session_request(
+    tmp_path: Path,
+):
+    store = _approval_store(tmp_path)
+    record = _create_tool_approval(store)
+
+    ctx = await _run_tool_approval_command(
+        store,
+        f"/approve_tool {record.approval_request_id}",
+    )
+
+    assert "approved" in ctx.abort_reply
+    assert store.get_request(record.approval_request_id).status == "approved"
+
+
+@pytest.mark.asyncio
+async def test_before_turn_approve_tool_command_rejects_other_session(
+    tmp_path: Path,
+):
+    store = _approval_store(tmp_path)
+    record = _create_tool_approval(store, session_key="telegram:other")
+
+    ctx = await _run_tool_approval_command(
+        store,
+        f"/approve_tool {record.approval_request_id}",
+    )
+
+    assert "not_found" in ctx.abort_reply
+    assert store.get_request(record.approval_request_id).status == "pending"
+
+
+@pytest.mark.asyncio
+async def test_before_turn_deny_tool_command_denies_current_session_request(
+    tmp_path: Path,
+):
+    store = _approval_store(tmp_path)
+    record = _create_tool_approval(store)
+
+    ctx = await _run_tool_approval_command(
+        store,
+        f"/deny_tool {record.approval_request_id} no",
+    )
+
+    assert "denied" in ctx.abort_reply
+    assert store.get_request(record.approval_request_id).status == "denied"
+
+
+@pytest.mark.asyncio
+async def test_before_turn_denied_request_cannot_later_be_approved(tmp_path: Path):
+    store = _approval_store(tmp_path)
+    record = _create_tool_approval(store)
+
+    await _run_tool_approval_command(store, f"/deny_tool {record.approval_request_id}")
+    ctx = await _run_tool_approval_command(
+        store,
+        f"/approve_tool {record.approval_request_id}",
+    )
+
+    assert "denied" in ctx.abort_reply
+    assert store.get_request(record.approval_request_id).status == "denied"
+
+
+@pytest.mark.asyncio
+async def test_before_turn_approve_tool_command_uses_persisted_binding_tuple(
+    tmp_path: Path,
+):
+    store = _approval_store(tmp_path)
+    record = _create_tool_approval(store)
+
+    ctx = await _run_tool_approval_command(
+        store,
+        f"/approve_tool {record.approval_request_id} request_id=fake args_hash=fake",
+    )
+
+    assert "approved" in ctx.abort_reply
+    assert store.get_request(record.approval_request_id).status == "approved"
+
+
+@pytest.mark.asyncio
+async def test_before_turn_deny_tool_command_uses_persisted_binding_tuple(
+    tmp_path: Path,
+):
+    store = _approval_store(tmp_path)
+    record = _create_tool_approval(store)
+
+    ctx = await _run_tool_approval_command(
+        store,
+        f"/deny_tool {record.approval_request_id} request_id=fake args_hash=fake",
+    )
+
+    assert "denied" in ctx.abort_reply
+    assert store.get_request(record.approval_request_id).status == "denied"
+
+
+@pytest.mark.asyncio
+async def test_before_turn_approve_tool_command_expires_before_approval(
+    tmp_path: Path,
+):
+    store = _approval_store(tmp_path)
+    record = _create_tool_approval(
+        store,
+        now=datetime.fromtimestamp(0).astimezone(),
+        ttl_seconds=1,
+    )
+
+    ctx = await _run_tool_approval_command(
+        store,
+        f"/approve_tool {record.approval_request_id}",
+    )
+
+    assert "expired" in ctx.abort_reply
+    assert store.get_request(record.approval_request_id).status == "expired"
+
+
+def test_status_commands_plugin_mounts_tool_approval_module_for_workspace(
+    tmp_path: Path,
+) -> None:
+    plugin = StatusCommands()
+    plugin.context = cast(Any, SimpleNamespace(workspace=tmp_path))
+
+    modules = plugin.before_turn_modules()
+
+    approval_modules = [
+        module for module in modules if isinstance(module, ToolApprovalCommandModule)
+    ]
+    assert len(approval_modules) == 1
+    assert (
+        approval_modules[0]._approval_store.db_path
+        == tmp_path.resolve() / "tool_approvals" / "approvals.db"
+    )
 
 
 @pytest.mark.asyncio

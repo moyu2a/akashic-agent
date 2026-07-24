@@ -3,12 +3,18 @@ from __future__ import annotations
 import logging
 import re
 import sqlite3
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import cast
 from zoneinfo import ZoneInfo
 
 from agent.lifecycle.types import BeforeTurnCtx, TurnState
+from agent.policies.tool_approval_decision import ToolApprovalDecision
+from agent.policies.tool_approval_runtime import ToolApprovalRuntime
+from agent.policies.tool_approval_store import (
+    ToolApprovalRequestRecord,
+    ToolApprovalStore,
+)
 from agent.plugins import Plugin
 from agent.prompting import is_context_frame
 
@@ -144,6 +150,161 @@ class KVCacheCommandModule:
         return "\n".join(lines)
 
 
+class ToolApprovalCommandModule:
+    slot = "status_commands.tool_approval"
+    requires = ("before_turn.acquire_session", _SESSION_SLOT)
+    produces = (_CTX_SLOT,)
+
+    def __init__(self, plugin_name: str, approval_store: ToolApprovalStore) -> None:
+        self._plugin_name = plugin_name
+        self._approval_store = approval_store
+
+    async def run(self, frame) -> object:
+        if _CTX_SLOT in frame.slots:
+            return frame
+        state = frame.input
+        command = _normalize_command(state.msg.content)
+        if command == "/approvals":
+            return self._handle_list(frame, state)
+        if command == "/approve_tool":
+            return self._handle_approve(frame, state)
+        if command == "/deny_tool":
+            return self._handle_deny(frame, state)
+        return frame
+
+    def _handle_list(self, frame, state: TurnState) -> object:
+        logger.info(
+            "[%s:%s] 命中命令: /approvals",
+            self._plugin_name,
+            self.__class__.__name__,
+        )
+        now = _approval_now()
+        expired = self._approval_store.expire_pending_requests(now=now)
+        records = self._approval_store.list_pending_requests(
+            session_key=state.session_key,
+            now=now,
+        )
+        lines = ["Tool approvals"]
+        if expired:
+            lines.append(f"expired: {len(expired)}")
+        if not records:
+            lines.append("pending: none")
+        for record in records:
+            lines.extend(["", _format_approval_record(record)])
+        frame.slots[_CTX_SLOT] = _abort_ctx(state, "\n".join(lines))
+        return frame
+
+    def _handle_approve(self, frame, state: TurnState) -> object:
+        logger.info(
+            "[%s:%s] 命中命令: /approve_tool",
+            self._plugin_name,
+            self.__class__.__name__,
+        )
+        approval_request_id = _approval_command_id(state.msg.content)
+        decision = self._approve_or_reject(
+            state=state,
+            approval_request_id=approval_request_id,
+            action="approve",
+        )
+        frame.slots[_CTX_SLOT] = _abort_ctx(
+            state,
+            _format_approval_decision(decision),
+        )
+        return frame
+
+    def _handle_deny(self, frame, state: TurnState) -> object:
+        logger.info(
+            "[%s:%s] 命中命令: /deny_tool",
+            self._plugin_name,
+            self.__class__.__name__,
+        )
+        approval_request_id = _approval_command_id(state.msg.content)
+        reason = _bounded_denial_reason(state.msg.content)
+        decision = self._approve_or_reject(
+            state=state,
+            approval_request_id=approval_request_id,
+            action="deny",
+            reason=reason,
+        )
+        frame.slots[_CTX_SLOT] = _abort_ctx(
+            state,
+            _format_approval_decision(decision),
+        )
+        return frame
+
+    def _approve_or_reject(
+        self,
+        *,
+        state: TurnState,
+        approval_request_id: str,
+        action: str,
+        reason: str = "",
+    ) -> ToolApprovalDecision:
+        now = _approval_now()
+        self._approval_store.expire_pending_requests(now=now)
+        if not approval_request_id:
+            return ToolApprovalDecision(
+                action="not_found",
+                reason="approval_request_id_missing",
+                session_key=state.session_key,
+            )
+        record = self._approval_store.get_request(approval_request_id)
+        if record is None or record.session_key != state.session_key:
+            return ToolApprovalDecision(
+                action="not_found",
+                reason="approval_request_not_found",
+                approval_request_id=approval_request_id,
+                session_key=state.session_key,
+            )
+        if record.status != "pending":
+            return ToolApprovalDecision(
+                action=record.status,
+                reason=f"approval_status_{record.status}",
+                approval_request_id=record.approval_request_id,
+                request_id=record.request_id,
+                session_key=record.session_key,
+                tool_name=record.tool_name,
+                approval_scope=record.approval_scope,
+                args_hash=record.args_hash,
+            )
+        if _approval_expired(record, now):
+            self._approval_store.expire_pending_requests(now=now)
+            expired = self._approval_store.get_request(approval_request_id)
+            if expired is not None:
+                return ToolApprovalDecision(
+                    action=expired.status,
+                    reason=f"approval_status_{expired.status}",
+                    approval_request_id=expired.approval_request_id,
+                    request_id=expired.request_id,
+                    session_key=expired.session_key,
+                    tool_name=expired.tool_name,
+                    approval_scope=expired.approval_scope,
+                    args_hash=expired.args_hash,
+                )
+        if action == "approve":
+            return self._approval_store.approve_request(
+                approval_request_id=record.approval_request_id,
+                request_id=record.request_id,
+                session_key=record.session_key,
+                tool_name=record.tool_name,
+                approval_scope=record.approval_scope,
+                args_hash=record.args_hash,
+                actor="status_command",
+                now=now,
+            )
+        return self._approval_store.deny_request(
+            approval_request_id=record.approval_request_id,
+            request_id=record.request_id,
+            session_key=record.session_key,
+            tool_name=record.tool_name,
+            approval_scope=record.approval_scope,
+            args_hash=record.args_hash,
+            actor="status_command",
+            reason=reason or "user_denied",
+            now=now,
+        )
+
+
 class StatusCommands(Plugin):
     name = "status_commands"
 
@@ -151,19 +312,29 @@ class StatusCommands(Plugin):
         return [
             ("memorystatus", "查看记忆整理状态"),
             ("kvcache", "查看 KVCache 状态"),
+            ("approvals", "查看待审批工具调用"),
         ]
 
     def before_turn_modules(self) -> list[object]:
         plugin_name = self.name or "status_commands"
         db_path = None
+        approval_store = None
         if self.context.workspace is not None:
             db_path = self.context.workspace / "observe" / "observe.db"
+            approval_store = ToolApprovalStore(
+                ToolApprovalRuntime.approval_db_path_from_workspace(
+                    self.context.workspace
+                )
+            )
+        modules: list[object] = [
+            MemoryStatusCommandModule(plugin_name),
+            KVCacheCommandModule(plugin_name, db_path),
+        ]
+        if approval_store is not None:
+            modules.append(ToolApprovalCommandModule(plugin_name, approval_store))
         return cast(
             "list[object]",
-            [
-                MemoryStatusCommandModule(plugin_name),
-                KVCacheCommandModule(plugin_name, db_path),
-            ],
+            modules,
         )
 
 
@@ -175,6 +346,70 @@ def _normalize_command(content: str) -> str:
     if "@" in head:
         head = head.split("@", 1)[0]
     return head
+
+
+def _approval_command_id(content: str) -> str:
+    parts = (content or "").strip().split()
+    if len(parts) < 2:
+        return ""
+    return parts[1]
+
+
+def _bounded_denial_reason(content: str) -> str:
+    parts = (content or "").strip().split(maxsplit=2)
+    if len(parts) < 3:
+        return "user_denied"
+    reason = " ".join(parts[2].split())
+    if not reason:
+        return "user_denied"
+    if any(marker in reason.lower() for marker in ("rm ", "command", "content")):
+        return "user_denied"
+    return reason[:80]
+
+
+def _approval_now() -> datetime:
+    return datetime.now(UTC)
+
+
+def _approval_expired(record: ToolApprovalRequestRecord, now: datetime) -> bool:
+    try:
+        expires_at = datetime.fromisoformat(record.expires_at)
+    except ValueError:
+        return True
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=UTC)
+    return expires_at <= now.astimezone(UTC)
+
+
+def _format_approval_record(record: ToolApprovalRequestRecord) -> str:
+    return "\n".join(
+        [
+            f"id: {record.approval_request_id}",
+            f"status: {record.status}",
+            f"tool: {record.tool_name}",
+            f"risk: {record.risk}",
+            f"scope: {record.approval_scope}",
+            f"args_hash: {record.args_hash}",
+            f"expires_at: {record.expires_at}",
+            f"policy_reason: {record.policy_reason}",
+        ]
+    )
+
+
+def _format_approval_decision(decision: ToolApprovalDecision) -> str:
+    lines = [
+        f"status: {decision.action}",
+        f"reason: {decision.reason}",
+    ]
+    if decision.approval_request_id:
+        lines.append(f"id: {decision.approval_request_id}")
+    if decision.tool_name:
+        lines.append(f"tool: {decision.tool_name}")
+    if decision.approval_scope:
+        lines.append(f"scope: {decision.approval_scope}")
+    if decision.args_hash:
+        lines.append(f"args_hash: {decision.args_hash}")
+    return "\n".join(lines)
 
 
 def _abort_ctx(state: TurnState, reply: str) -> BeforeTurnCtx:
