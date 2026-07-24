@@ -23,6 +23,8 @@ from agent.policies.turn_completion import (
     TurnCompletionController,
     TurnCompletionDecision,
 )
+from agent.policies.tool_approval_runtime import ToolApprovalRuntime
+from agent.policies.tool_approval_store import ToolApprovalStore
 from agent.core.runtime_support import ToolDiscoveryState
 from agent.core.types import (
     ContextBundle,
@@ -159,6 +161,16 @@ def _resource_roots_from_context(context: object | None) -> tuple[str, ...]:
     if workspace is None:
         return (str(Path.cwd().resolve()),)
     return (str(Path(workspace).expanduser().resolve()),)
+
+
+def _approval_runtime_from_context(
+    context: object | None,
+) -> ToolApprovalRuntime | None:
+    workspace = getattr(context, "workspace", None)
+    if workspace is None:
+        return None
+    db_path = ToolApprovalRuntime.approval_db_path_from_workspace(workspace)
+    return ToolApprovalRuntime(ToolApprovalStore(db_path))
 
 
 def _completion_trace(
@@ -879,6 +891,9 @@ class DefaultReasoner(Reasoner):
             raise RuntimeError("DefaultReasoner.run_turn requires context and session_manager")
         if self._prompt_render is None:
             self._prompt_render = self._build_prompt_render_phase(self._context)
+        self._tool_executor.set_approval_runtime(
+            _approval_runtime_from_context(self._context)
+        )
 
         # 1. 先准备 retry trace、history 和 preload 工具集合。
         retry_attempts: list[dict[str, object]] = []

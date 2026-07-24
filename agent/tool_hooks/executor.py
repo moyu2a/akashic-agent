@@ -52,6 +52,11 @@ class ToolExecutor:
     def add_hooks(self, hooks: Sequence[ToolHook]) -> None:
         self._hooks.extend(hooks)
 
+    def set_approval_runtime(
+        self, approval_runtime: ToolApprovalRuntime | None
+    ) -> None:
+        self._approval_runtime = approval_runtime
+
     async def execute(
         self,
         request: ToolExecutionRequest,
