@@ -891,9 +891,10 @@ class DefaultReasoner(Reasoner):
             raise RuntimeError("DefaultReasoner.run_turn requires context and session_manager")
         if self._prompt_render is None:
             self._prompt_render = self._build_prompt_render_phase(self._context)
-        self._tool_executor.set_approval_runtime(
-            _approval_runtime_from_context(self._context)
-        )
+        approval_runtime = _approval_runtime_from_context(self._context)
+        self._tool_executor.set_approval_runtime(approval_runtime)
+        if self._task_execution_coordinator is not None:
+            self._task_execution_coordinator.set_approval_runtime(approval_runtime)
 
         # 1. 先准备 retry trace、history 和 preload 工具集合。
         retry_attempts: list[dict[str, object]] = []

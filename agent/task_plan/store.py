@@ -875,8 +875,14 @@ class TaskPlanStore:
         owner_instance_id: str,
         now: datetime,
         terminal_reason: str = "",
+        requested_tool_name: str = "",
+        requested_arguments: dict[str, Any] | None = None,
+        requested_capabilities: tuple[str, ...] = (),
     ) -> TaskExecutionAttempt:
         timestamp = _datetime_to_iso(now)
+        bounded_tool_name = str(requested_tool_name or "")
+        bounded_arguments = dict(requested_arguments or {})
+        bounded_capabilities = tuple(str(item) for item in requested_capabilities)
         with self._lock, self._connect() as conn:
             conn.execute("BEGIN IMMEDIATE")
             try:
@@ -884,11 +890,23 @@ class TaskPlanStore:
                     """
                     UPDATE task_execution_attempts
                     SET status = 'waiting_authorization', terminal_reason = ?,
-                        execution_mode = 'authorization_required', updated_at = ?
+                        execution_mode = 'authorization_required', updated_at = ?,
+                        requested_tool_name = ?,
+                        requested_arguments_json = ?,
+                        requested_capabilities_json = ?
                     WHERE attempt_id = ? AND owner_instance_id = ?
                       AND status IN ('pending', 'running') AND lease_expires_at > ?
                     """,
-                    (terminal_reason, timestamp, attempt_id, owner_instance_id, timestamp),
+                    (
+                        terminal_reason,
+                        timestamp,
+                        bounded_tool_name,
+                        _execution_json_dump(bounded_arguments),
+                        _execution_json_dump(list(bounded_capabilities)),
+                        attempt_id,
+                        owner_instance_id,
+                        timestamp,
+                    ),
                 )
                 if cur.rowcount != 1:
                     raise ExecutionAttemptConflictError("execution attempt defer conflict")

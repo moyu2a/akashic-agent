@@ -18,6 +18,8 @@ from agent.policies.task_execution_contract import (
 )
 from agent.policies.task_plan_contract import infer_task_plan_turn_decision
 from agent.policies.tool_boundary import BoundaryExecutionDecision
+from agent.policies.tool_approval import canonical_args_hash, summarize_arguments
+from agent.policies.tool_approval_runtime import ToolApprovalRuntime
 from agent.task_plan.execution_models import (
     RuntimeToolEvent,
     TaskExecutionAttempt,
@@ -190,13 +192,21 @@ class TaskExecutionRuntimeCoordinator:
         config: TaskExecutionConfig,
         runtime_instance_id: str,
         clock: Callable[[], datetime],
+        approval_runtime: ToolApprovalRuntime | None = None,
     ) -> None:
         self._service = service
         self._config = config
         self._runtime_instance_id = runtime_instance_id
         self._clock = clock
+        self._approval_runtime = approval_runtime
         self._event_classifier = TaskExecutionEventClassifier()
         self.protocol_correction_count = 0
+
+    def set_approval_runtime(
+        self,
+        approval_runtime: ToolApprovalRuntime | None,
+    ) -> None:
+        self._approval_runtime = approval_runtime
 
     def prepare_turn(
         self,
@@ -696,12 +706,22 @@ class TaskExecutionRuntimeCoordinator:
         if attempt_id is None or not turn.owns_current_attempt:
             raise RuntimeError("authorization defer requires a claimed attempt")
         try:
+            requested_arguments = self._authorization_request_metadata(
+                turn=turn,
+                attempt_id=attempt_id,
+                tool_name=tool_name,
+                arguments=arguments,
+            )
+            requested_capabilities = _authorization_capabilities(
+                tool_name,
+                capabilities,
+            )
             turn.snapshot = self._require_service().defer_attempt(
                 session_key=turn.session_key,
                 attempt_id=attempt_id,
                 tool_name=tool_name,
-                requested_arguments=dict(arguments),
-                requested_capabilities=tuple(sorted(capabilities)),
+                requested_arguments=requested_arguments,
+                requested_capabilities=requested_capabilities,
                 reason="task_execution_authorization_required",
             )
             turn.decision_reason = "task_execution_authorization_required"
@@ -726,6 +746,44 @@ class TaskExecutionRuntimeCoordinator:
                 raise TaskExecutionPersistenceError(
                     "task execution defer persistence failed"
                 ) from block_error
+
+    def _authorization_request_metadata(
+        self,
+        *,
+        turn: PreparedTaskExecutionTurn,
+        attempt_id: str,
+        tool_name: str,
+        arguments: Mapping[str, Any],
+    ) -> dict[str, object]:
+        raw_arguments = dict(arguments)
+        approval_scope = "task_execution_step"
+        policy_reason = "task_execution_authorization_required"
+        metadata: dict[str, object] = {
+            "approval_request_id": "",
+            "expires_at": "",
+            "approval_scope": approval_scope,
+            "args_hash": canonical_args_hash(raw_arguments),
+            "args_summary": summarize_arguments(raw_arguments),
+            "policy_reason": policy_reason,
+        }
+        if self._approval_runtime is None:
+            return metadata
+        record = self._approval_runtime.record_defer_request(
+            request_id=attempt_id,
+            session_key=turn.session_key,
+            channel=str(turn.turn_metadata.get("channel", "")),
+            chat_id=str(turn.turn_metadata.get("chat_id", "")),
+            source="task_execution",
+            tool_name=tool_name,
+            risk="write",
+            approval_scope=approval_scope,
+            policy_reason=policy_reason,
+            arguments=raw_arguments,
+        )
+        metadata["approval_request_id"] = record.approval_request_id
+        metadata["expires_at"] = record.expires_at
+        metadata["args_hash"] = record.args_hash
+        return metadata
 
     def _execution_context(
         self,
@@ -920,6 +978,18 @@ def _is_unowned_session_control(capabilities: frozenset[str]) -> bool:
         frozenset({"task_execution.inspect"}),
         frozenset({"task_execution.abort"}),
     }
+
+
+def _authorization_capabilities(
+    tool_name: str,
+    capabilities: frozenset[str],
+) -> tuple[str, ...]:
+    normalized = set(capabilities)
+    if tool_name in {"write_file", "edit_file"}:
+        normalized.add("file.write")
+    if tool_name == "shell":
+        normalized.add("shell.execute")
+    return tuple(sorted(normalized))
 
 
 def _optional_int(value: object) -> int | None:

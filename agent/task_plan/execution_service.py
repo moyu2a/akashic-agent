@@ -324,6 +324,15 @@ class TaskExecutionService:
                 owner_instance_id=self._runtime_instance_id,
                 now=self._now(),
                 terminal_reason=bounded_execution_preview(terminal_reason),
+                requested_tool_name=bounded_execution_preview(
+                    tool_name,
+                    max_chars=128,
+                ),
+                requested_arguments=redacted_arguments,
+                requested_capabilities=tuple(
+                    bounded_execution_preview(capability, max_chars=96)
+                    for capability in requested_capabilities
+                ),
             )
         except (ExecutionAttemptConflictError, TaskExecutionAttemptNotFoundError) as exc:
             raise TaskExecutionConflictError(str(exc)) from exc
