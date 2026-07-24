@@ -68,3 +68,19 @@ def test_approval_payload_is_json_safe_and_non_executed() -> None:
     assert decoded["approval_request"]["tool_name"] == "write_file"
     assert decoded["approval_request"]["args_hash"]
     assert "preview" not in decoded["approval_request"]["args_summary"]["content"]
+
+
+def test_approval_payload_includes_request_id_and_expiry_when_provided() -> None:
+    payload = build_approval_payload(
+        tool_name="write_file",
+        arguments={"path": "notes.md", "content": "hello"},
+        action="defer",
+        reason="risk_strategy_write_requires_approval",
+        risk="write",
+        approval_scope="tool_call",
+        approval_request_id="approval-1",
+        expires_at="2026-07-24T10:05:00+00:00",
+    )
+
+    assert payload["approval_request"]["approval_request_id"] == "approval-1"
+    assert payload["approval_request"]["expires_at"] == "2026-07-24T10:05:00+00:00"

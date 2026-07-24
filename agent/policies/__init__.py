@@ -45,7 +45,12 @@ from agent.policies.tool_approval import (
     canonical_args_hash,
     summarize_arguments,
 )
+from agent.policies.tool_approval_context import (
+    TrustedApprovalContext,
+    trusted_approval_from_runtime,
+)
 from agent.policies.tool_approval_decision import ToolApprovalDecision
+from agent.policies.tool_approval_runtime import ToolApprovalRuntime
 from agent.policies.tool_approval_store import (
     ToolApprovalRequestRecord,
     ToolApprovalStore,
@@ -96,9 +101,11 @@ __all__ = [
     "ToolAccessPlan",
     "ToolApprovalDecision",
     "ToolApprovalRequestRecord",
+    "ToolApprovalRuntime",
     "ToolApprovalStore",
     "ToolExecutionGateResult",
     "ToolAuditEvent",
+    "TrustedApprovalContext",
     "ToolInvocationContext",
     "ToolInvocationDecision",
     "ToolInvocationPolicyEngine",
@@ -108,4 +115,5 @@ __all__ = [
     "decide_doc_rag_preload",
     "infer_task_execution_contract",
     "summarize_arguments",
+    "trusted_approval_from_runtime",
 ]

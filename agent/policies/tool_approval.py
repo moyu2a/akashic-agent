@@ -80,9 +80,24 @@ def build_approval_payload(
     reason: str,
     risk: str,
     approval_scope: str,
+    approval_request_id: str = "",
+    expires_at: str = "",
 ) -> dict[str, object]:
     args_hash = canonical_args_hash(arguments)
     args_summary = summarize_arguments(arguments)
+    approval_request: dict[str, object] = {
+        "tool_name": tool_name,
+        "risk": risk,
+        "reason": reason,
+        "approval_scope": approval_scope or "tool_call",
+        "required_user_action": "approve_or_deny",
+        "args_hash": args_hash,
+        "args_summary": args_summary,
+    }
+    if approval_request_id:
+        approval_request["approval_request_id"] = approval_request_id
+    if expires_at:
+        approval_request["expires_at"] = expires_at
     return {
         "ok": False,
         "blocked": True,
@@ -90,15 +105,7 @@ def build_approval_payload(
         "error_code": reason,
         "message": "工具调用需要用户授权后才能执行。",
         "invoker_reached": False,
-        "approval_request": {
-            "tool_name": tool_name,
-            "risk": risk,
-            "reason": reason,
-            "approval_scope": approval_scope or "tool_call",
-            "required_user_action": "approve_or_deny",
-            "args_hash": args_hash,
-            "args_summary": args_summary,
-        },
+        "approval_request": approval_request,
     }
 
 
