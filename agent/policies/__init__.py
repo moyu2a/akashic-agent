@@ -45,6 +45,11 @@ from agent.policies.tool_approval import (
     canonical_args_hash,
     summarize_arguments,
 )
+from agent.policies.tool_approval_decision import ToolApprovalDecision
+from agent.policies.tool_approval_store import (
+    ToolApprovalRequestRecord,
+    ToolApprovalStore,
+)
 from agent.policies.tool_audit import (
     ToolAuditEvent,
     build_tool_audit_event,
@@ -89,6 +94,9 @@ __all__ = [
     "ToolAccessContext",
     "ToolAccessGateway",
     "ToolAccessPlan",
+    "ToolApprovalDecision",
+    "ToolApprovalRequestRecord",
+    "ToolApprovalStore",
     "ToolExecutionGateResult",
     "ToolAuditEvent",
     "ToolInvocationContext",
