@@ -5,6 +5,8 @@ from collections.abc import Sequence
 from typing import Any, Awaitable, Callable, Protocol
 
 from agent.policies.tool_approval import build_approval_payload
+from agent.policies.tool_approval_decision import ToolApprovalDecision
+from agent.policies.tool_approval_runtime import ToolApprovalRuntime
 from agent.policies.tool_audit import build_tool_audit_event
 from agent.policies.tool_invocation_policy import (
     ToolInvocationContext,
@@ -41,9 +43,11 @@ class ToolExecutor:
         self,
         hooks: Sequence[ToolHook] | None = None,
         policy_engine: ToolInvocationPolicy | None = None,
+        approval_runtime: ToolApprovalRuntime | None = None,
     ) -> None:
         self._hooks = list(hooks or [])
         self._policy_engine = policy_engine or ToolInvocationPolicyEngine()
+        self._approval_runtime = approval_runtime
 
     def add_hooks(self, hooks: Sequence[ToolHook]) -> None:
         self._hooks.extend(hooks)
@@ -125,12 +129,59 @@ class ToolExecutor:
                 ),
             )
         if policy_decision.action == "defer":
+            approval_scope = _approval_scope_from_trace(policy_trace)
+            approval_decision: ToolApprovalDecision | None = None
+            if self._approval_runtime is not None:
+                approval_decision = self._approval_runtime.consume_for_execution(
+                    trusted_context=request.trusted_approval_context,
+                    request_id=request.call_id,
+                    session_key=request.session_key,
+                    tool_name=request.tool_name,
+                    approval_scope=approval_scope,
+                    arguments=final_arguments,
+                )
+                if approval_decision.allows_invoker:
+                    return await self._execute_invoker(
+                        request=request,
+                        invoker=invoker,
+                        final_arguments=final_arguments,
+                        extra_messages=extra_messages,
+                        pre_trace=pre_trace,
+                        post_trace=post_trace,
+                        policy_decision=policy_decision,
+                        policy_trace=policy_trace,
+                        approval_request_id=approval_decision.approval_request_id,
+                        approval_scope=approval_scope,
+                    )
+            approval_request_id = ""
+            expires_at = ""
+            if (
+                self._approval_runtime is not None
+                and approval_decision is not None
+                and approval_decision.action == "not_applicable"
+            ):
+                record = self._approval_runtime.record_defer_request(
+                    request_id=request.call_id,
+                    session_key=request.session_key,
+                    channel=request.channel,
+                    chat_id=request.chat_id,
+                    source=_policy_source(request),
+                    tool_name=request.tool_name,
+                    risk=policy_decision.risk,
+                    approval_scope=approval_scope,
+                    policy_reason=policy_decision.reason,
+                    arguments=final_arguments,
+                )
+                approval_request_id = record.approval_request_id
+                expires_at = record.expires_at
             return ToolExecutionResult(
                 status="deferred",
                 output=_policy_defer_output(
                     policy_decision,
                     tool_name=request.tool_name,
                     arguments=final_arguments,
+                    approval_request_id=approval_request_id,
+                    expires_at=expires_at,
                 ),
                 final_arguments=final_arguments,
                 invoker_reached=False,
@@ -148,11 +199,43 @@ class ToolExecutor:
                 ),
             )
 
+        return await self._execute_invoker(
+            request=request,
+            invoker=invoker,
+            final_arguments=final_arguments,
+            extra_messages=extra_messages,
+            pre_trace=pre_trace,
+            post_trace=post_trace,
+            policy_decision=policy_decision,
+            policy_trace=policy_trace,
+        )
+
+    async def _execute_invoker(
+        self,
+        *,
+        request: ToolExecutionRequest,
+        invoker: ToolInvoker,
+        final_arguments: dict[str, Any],
+        extra_messages: list[str],
+        pre_trace: list[HookTraceItem],
+        post_trace: list[HookTraceItem],
+        policy_decision: ToolInvocationDecision,
+        policy_trace: dict[str, object],
+        approval_request_id: str = "",
+        approval_scope: str = "tool_call",
+    ) -> ToolExecutionResult:
         try:
             # 这里才进入真实工具执行；hook 本身不直接替代工具实现。
             output = await invoker(request.tool_name, final_arguments)
         except Exception as exc:
             error_text = str(exc)
+            self._finalize_approval_execution(
+                approval_request_id=approval_request_id,
+                request=request,
+                final_arguments=final_arguments,
+                approval_scope=approval_scope,
+                execution_status="execution_failed",
+            )
             try:
                 # 工具自身报错后，允许 post_tool_error 做记录型处理。
                 await self._run_post_hooks(
@@ -203,6 +286,13 @@ class ToolExecutor:
                 ),
             )
 
+        self._finalize_approval_execution(
+            approval_request_id=approval_request_id,
+            request=request,
+            final_arguments=final_arguments,
+            approval_scope=approval_scope,
+            execution_status="executed",
+        )
         try:
             # post_tool_use 只做观察和补充信息，不回写执行参数。
             await self._run_post_hooks(
@@ -252,6 +342,27 @@ class ToolExecutor:
                 invoker_reached=True,
                 invoker_succeeded=True,
             ),
+        )
+
+    def _finalize_approval_execution(
+        self,
+        *,
+        approval_request_id: str,
+        request: ToolExecutionRequest,
+        final_arguments: dict[str, Any],
+        approval_scope: str,
+        execution_status: str,
+    ) -> None:
+        if self._approval_runtime is None or not approval_request_id:
+            return
+        self._approval_runtime.finalize_execution(
+            approval_request_id=approval_request_id,
+            request_id=request.call_id,
+            session_key=request.session_key,
+            tool_name=request.tool_name,
+            approval_scope=approval_scope,
+            arguments=final_arguments,
+            execution_status=execution_status,
         )
 
     async def preflight(
@@ -517,6 +628,8 @@ def _policy_defer_output(
     *,
     tool_name: str,
     arguments: dict[str, Any],
+    approval_request_id: str = "",
+    expires_at: str = "",
 ) -> str:
     trace = decision.to_trace_metadata()
     payload = build_approval_payload(
@@ -526,6 +639,8 @@ def _policy_defer_output(
         reason=str(trace["reason"]),
         risk=str(trace["risk"]),
         approval_scope=_approval_scope_from_trace(trace),
+        approval_request_id=approval_request_id,
+        expires_at=expires_at,
     )
     payload["policy"] = trace
     return json.dumps(

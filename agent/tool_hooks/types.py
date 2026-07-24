@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
+
+if TYPE_CHECKING:
+    from agent.policies.tool_approval_context import TrustedApprovalContext
 
 HookEvent = Literal["pre_tool_use", "post_tool_use", "post_tool_error"]
 ToolSource = Literal["passive", "proactive", "subagent"]
@@ -27,6 +30,7 @@ class ToolExecutionRequest:
     task_execution_active: bool = False
     task_execution_phase: str = ""
     resource_roots: tuple[str, ...] = ()
+    trusted_approval_context: TrustedApprovalContext | None = None
 
 
 @dataclass
