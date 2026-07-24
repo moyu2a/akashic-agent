@@ -1357,6 +1357,73 @@
   - no checkpoint-only real report was rebuilt;
   - no new real LLM calls were started.
 
+## 2026-07-24 Memory Answer Quality Real LLM Full Eval
+
+- User asked to execute the reviewed real LLM answer/retrieval uplift plan.
+- Independent plan review found two important interpretation issues:
+  - current online answer profiles are ordered evidence-source comparisons, not strict cumulative feature toggles;
+  - `chain_all_on` currently uses `sleep_consolidation.filtered_active_ids`, so it is only a compatibility/check row, not a sleep-free pure retrieval module.
+- Plan was revised before execution:
+  - renamed the second table to ordered profile comparison;
+  - added per-profile completeness checks;
+  - documented that `answer_debug` must not be copied or committed.
+- Preflight:
+  - `build_quantitative_eval_cases(case_pack="comprehensive", case_set="all") = 320`;
+  - config path `/home/jjh/git_work/akashic-agent/config.toml`;
+  - provider `openai`;
+  - model `deepseek-v4-flash`;
+  - `api_key_present = True`;
+  - full matrix size `320 * 6 * 1 * 1 = 1920`.
+- Real 10-case smoke:
+  - output `/tmp/akashic-memory-answer-quality-real-smoke-v1/reports`;
+  - `case_count = 60`;
+  - `unique_case_count = 10`;
+  - `profile_count = 6`;
+  - `real_llm_enabled = True`;
+  - `infra_passed = True`;
+  - `provider_error_count = 0`;
+  - `timeout_count = 0`;
+  - `answer_rule_pass_rate = 35.0`;
+  - `memory_grounding_pass_rate = 83.3333`;
+  - `forbidden_violation_rate = 16.6667`;
+  - `avg_total_token_count = 5465.65`;
+  - `avg_latency_ms = 3868.2667`.
+- Full real LLM run:
+  - output `/tmp/akashic-memory-answer-quality-real-full-v1/reports`;
+  - checkpoint `/tmp/akashic-memory-answer-quality-real-full-v1/reports/memory_comprehensive_online_eval.checkpoint.jsonl`;
+  - checkpoint-only report `/tmp/akashic-memory-answer-quality-real-full-v1/checkpoint-report`;
+  - `case_count = 1920`;
+  - `unique_case_count = 320`;
+  - `completed_call_count = 1920`;
+  - `checkpoint_input_count = 1920`;
+  - `profile_count = 6`;
+  - `prompt_variant_count = 1`;
+  - `repeat_count = 1`;
+  - `real_llm_enabled = True`;
+  - `infra_passed = True`;
+  - `provider_error_count = 0`;
+  - `timeout_count = 0`;
+  - `excluded_infra_failure_count = 0`;
+  - `answer_quality_partial_matrix = False`;
+  - `answer_quality_missing_profiles = []`;
+  - `total_token_count = 10593288`;
+  - `avg_total_token_count = 5517.3375`;
+  - `avg_latency_ms = 4350.3875`.
+- Full real LLM single-profile answer quality:
+  - original memory baseline: answer `135/320 = 42.1875%`, grounding `308/320 = 96.25%`, forbidden `12.1875%`;
+  - tri retrieval: answer `91/320 = 28.4375%`, answer lift `-32.5926%`, grounding `100.0%`, forbidden `30.0%`;
+  - graph retrieval: answer `84/320 = 26.25%`, answer lift `-37.7778%`, grounding `100.0%`, forbidden `29.6875%`;
+  - rerank/injection governance: answer `127/320 = 39.6875%`, answer lift `-5.9259%`, grounding `100.0%`, forbidden `9.6875%`;
+  - version/provenance: answer `129/320 = 40.3125%`, answer lift `-4.4444%`, grounding `0.0%`, forbidden `0.9375%`;
+  - all-on check: answer `75/320 = 23.4375%`, answer lift `-44.4444%`, grounding `100.0%`, forbidden `24.6875%`.
+- Conclusion:
+  - this is the first complete 320-case / 1920-call real LLM answer-quality matrix for the answer/retrieval table;
+  - original memory baseline is strongest for current answer rules;
+  - tri and graph improve grounding to `100.0%` but hurt answer rate and increase forbidden risk, so recall expansion alone is not enough;
+  - rerank/injection governance is the strongest enhanced answer profile and lowers forbidden below baseline;
+  - version/provenance appears valuable for forbidden control but its grounding mapping is defective in this report;
+  - full all-on is not a winning default in current form; next work should focus on scene routing, evidence-injection prompting, forbidden/noise control, and version grounding mapping.
+
 ## 2026-07-23 Source Ref Quality Expanded Case Pack
 
 - Goal: replace the 6-row source_ref smoke fixture with a broader target-driven test set because no production real samples are currently available.

@@ -122,6 +122,45 @@
 开启版本链与溯源后，旧版本误用率从 A% 下降到 B%，回源成功率从 C% 提升到 D%。
 ```
 
+### 回答效果组真实 LLM 结果补充
+
+2026-07-24 已补充真实 LLM answer-level 完整矩阵，使用 `comprehensive/all` 的 `320` 个 case、6 个回答质量 profile，共 `1920` 次真实模型调用。checkpoint 重建报告路径：
+
+- `/tmp/akashic-memory-answer-quality-real-full-v1/checkpoint-report/memory_comprehensive_online_eval.json`
+- `/tmp/akashic-memory-answer-quality-real-full-v1/checkpoint-report/memory_comprehensive_online_eval.md`
+
+运行完整性：
+
+| 指标 | 数值 |
+| --- | ---: |
+| completed call | 1920 |
+| unique case | 320 |
+| profile 数 | 6 |
+| provider error | 0 |
+| timeout | 0 |
+| excluded infra failure | 0 |
+| total token | 10593288 |
+| avg latency ms | 4350.3875 |
+
+单 profile 结果：
+
+| 模块 | 回答命中率 | 相对基线回答提升 | 证据命中率 | 违规率 |
+| --- | ---: | ---: | ---: | ---: |
+| 原始记忆基线 | 42.1875% | 0.0% | 96.25% | 12.1875% |
+| 三路召回 | 28.4375% | -32.5926% | 100.0% | 30.0% |
+| 图谱召回 | 26.25% | -37.7778% | 100.0% | 29.6875% |
+| 重排与注入治理 | 39.6875% | -5.9259% | 100.0% | 9.6875% |
+| 版本链与溯源 | 40.3125% | -4.4444% | 0.0% | 0.9375% |
+| 全开组合校验 | 23.4375% | -44.4444% | 100.0% | 24.6875% |
+
+解释口径：
+
+1. 离线计数表证明三路召回和图谱召回能补漏召；真实 LLM 表进一步说明，补进上下文的证据不一定被模型正确使用。
+2. 三路召回和图谱召回 grounding 达到 `100.0%`，但 answer rate 低于原始基线，且 forbidden 违规率升高。这说明召回扩张必须配合候选去噪、场景路由和提示注入治理。
+3. 重排与注入治理回答命中率最接近原始基线，并把 forbidden 违规率降到 `9.6875%`，更符合“召回后治理层”的职责。
+4. 版本链与溯源 forbidden 最低，但 grounding 为 `0.0%`，这是当前 online report 的 evidence 映射口径问题，不能直接解释为溯源能力为零。
+5. `chain_all_on` 是兼容/校验行，当前使用 sleep-filtered ids，不是纯回答召回模块。当前真实结果不支持“全部模块默认全开”，更支持按场景选择性启用。
+
 ### 2. 写入治理组
 
 覆盖模块：

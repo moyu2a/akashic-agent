@@ -59,6 +59,65 @@ Errors Encountered:
 | CLI fixture test failed because `--source-fixture-mode` and `--source-fixture-db` did not exist | 1 | Added fixture CLI mode and checkpoint source labels. |
 | Patch safety test failed because dry-run patch lacked `source_backed_action_safe` | 1 | Added source-backed safety fields and block reasons. |
 
+## 2026-07-24 Memory Answer Quality Real LLM Full Eval
+
+Goal: run the full real LLM recall/answer uplift matrix for the answer-quality table, using original memory as the baseline and keeping write governance / sleep hygiene out of the main answer table.
+
+1. Review and revise the real LLM full-eval plan - complete
+2. Preflight case count, provider config, and matrix size - complete
+3. Run 10-case real-provider smoke - complete
+4. Run full 320-case / 1920-call real LLM matrix with checkpoint/resume - complete
+5. Rebuild checkpoint-only report excluding infrastructure failures - complete
+6. Extract single-profile uplift and ordered profile comparison tables - complete
+7. Update memory optimization docs and persistent progress - in progress
+8. Run verification and commit relevant docs - pending
+
+Constraints:
+
+- Use `chain_memory_base` as the original memory baseline.
+- Use exactly `chain_memory_base`, `chain_tri_retrieval`, `chain_graph_retrieval`, `chain_rerank_injection`, `chain_version_provenance`, and `chain_all_on`.
+- Do not interpret ordered profile comparisons as true cumulative feature toggles.
+- Treat `chain_all_on` as compatibility/check evidence; it currently uses sleep-filtered ids.
+- Do not write production memory or observe DB.
+- Do not copy or commit `/tmp/.../answer_debug`.
+- Do not stage `.superpowers/sdd/*.diff` or unrelated dirty files.
+
+Results so far:
+
+- Plan: `docs/superpowers/plans/2026-07-24-memory-answer-quality-real-llm-full-eval.md`.
+- Smoke report: `/tmp/akashic-memory-answer-quality-real-smoke-v1/reports`.
+- Full report: `/tmp/akashic-memory-answer-quality-real-full-v1/reports`.
+- Checkpoint-only report: `/tmp/akashic-memory-answer-quality-real-full-v1/checkpoint-report`.
+- Full matrix:
+  - `case_count = 1920`;
+  - `unique_case_count = 320`;
+  - `completed_call_count = 1920`;
+  - `checkpoint_input_count = 1920`;
+  - `provider_error_count = 0`;
+  - `timeout_count = 0`;
+  - `excluded_infra_failure_count = 0`;
+  - `total_token_count = 10593288`;
+  - `avg_latency_ms = 4350.3875`.
+- Single-profile answer rates:
+  - original memory baseline `42.1875%`;
+  - tri retrieval `28.4375%`;
+  - graph retrieval `26.25%`;
+  - rerank/injection governance `39.6875%`;
+  - version/provenance `40.3125%`;
+  - all-on check `23.4375%`.
+- Current conclusion:
+  - recall expansion can improve grounding but hurt final answer quality when noise/forbidden rises;
+  - rerank/injection governance is the best enhanced profile in this real matrix;
+  - version/provenance grounding mapping needs repair;
+  - full all-on should not be the default active strategy without routing and injection tuning.
+
+Errors Encountered:
+
+| Error | Attempt | Resolution |
+| --- | --- | --- |
+| Independent review found the plan mislabeled ordered profile comparison as cumulative module gain | 1 | Revised the plan wording and table extraction to say ordered profile comparison only. |
+| Independent review found `chain_all_on` was described as sleep-free while current code uses sleep-filtered ids | 1 | Revised plan/docs to label `chain_all_on` as compatibility/check evidence. |
+
 ## Phases
 
 1. Research project context and P10a requirements - complete

@@ -212,7 +212,7 @@ V2 是更大规模的召回与回答链路评测，只包含回答侧的检索�
 | chain_version_provenance | 40 | 10 | 25.0% | 0.0% | 0 | 0.0% | -100.0% | 0.0% | N/A |
 | chain_all_on (combo/check) | 40 | 10 | 25.0% | 0.0% | 40 | 100.0% | 0.0% | 0.0% | N/A |
 
-链路累计表：
+有序 profile 对比表：
 
 | step | previous | answer rate | adjacent answer delta | cumulative answer lift | grounding rate | adjacent grounding delta | cumulative grounding lift |
 | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
@@ -243,3 +243,76 @@ V2 是更大规模的召回与回答链路评测，只包含回答侧的检索�
 3. `answer_quality_partial_matrix` 可以区分完整矩阵和 checkpoint 部分矩阵，避免把缺 profile 的 checkpoint 当成完整结论。
 4. 当前机器没有找到 `/tmp/akashic-memory-phase6k-real/reports/memory_comprehensive_online_eval.checkpoint.jsonl`，所以本轮没有重建真实 LLM checkpoint 报告。
 5. 要得到真实回答质量增益，还需要用同一 runner 运行或恢复真实 LLM checkpoint。
+
+### 真实 LLM 完整回答质量矩阵
+
+2026-07-24 已使用真实 LLM 跑完整 `comprehensive/all` 回答质量矩阵。报告路径：
+
+- `/tmp/akashic-memory-answer-quality-real-full-v1/reports/memory_comprehensive_online_eval.json`
+- `/tmp/akashic-memory-answer-quality-real-full-v1/reports/memory_comprehensive_online_eval.md`
+- `/tmp/akashic-memory-answer-quality-real-full-v1/checkpoint-report/memory_comprehensive_online_eval.json`
+- `/tmp/akashic-memory-answer-quality-real-full-v1/checkpoint-report/memory_comprehensive_online_eval.md`
+
+运行边界：
+
+- `real_llm_enabled = True`
+- `case_count = 1920`
+- `unique_case_count = 320`
+- `completed_call_count = 1920`
+- `checkpoint_input_count = 1920`
+- `excluded_infra_failure_count = 0`
+- `provider_error_count = 0`
+- `timeout_count = 0`
+- `profile_count = 6`
+- `prompt_variant_count = 1`
+- `repeat_count = 1`
+- `answer_quality_partial_matrix = False`
+- `answer_quality_missing_profiles = []`
+- `total_token_count = 10593288`
+- `avg_total_token_count = 5517.3375`
+- `avg_latency_ms = 4350.3875`
+
+本轮是受控测试集上的真实 `AgentLoop.process_direct()` + 真实 LLM answer-level 评测，不是自然生产流量。它不写生产 memory，也不评估写入治理。`chain_all_on` 是兼容/校验行，当前代码使用 `sleep_consolidation.filtered_active_ids`，不能解释为纯召回模块的单项收益。
+
+#### 单 profile 相对原始记忆基线
+
+| 模块 | case 数 | 回答命中 | 回答命中率 | 相对基线回答提升 | 证据命中 | 证据命中率 | 相对基线证据提升 | 违规率 | 平均 token | 平均延迟 ms |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 原始记忆基线 | 320 | 135 | 42.1875% | 0.0% | 308 | 96.25% | 0.0% | 12.1875% | 5516.5031 | 4277.2969 |
+| 三路召回 | 320 | 91 | 28.4375% | -32.5926% | 320 | 100.0% | 3.8961% | 30.0% | 5643.0594 | 4868.2594 |
+| 图谱召回 | 320 | 84 | 26.25% | -37.7778% | 320 | 100.0% | 3.8961% | 29.6875% | 5610.6375 | 4543.1875 |
+| 重排与注入治理 | 320 | 127 | 39.6875% | -5.9259% | 320 | 100.0% | 3.8961% | 9.6875% | 5448.5844 | 3904.0813 |
+| 版本链与溯源 | 320 | 129 | 40.3125% | -4.4444% | 0 | 0.0% | -100.0% | 0.9375% | 5401.2 | 4078.6281 |
+| 全开组合 | 320 | 75 | 23.4375% | -44.4444% | 320 | 100.0% | 3.8961% | 24.6875% | 5484.0406 | 4430.8719 |
+
+#### 有序 profile 对比
+
+这张表只是把当前已有 profile 按工程顺序排列后比较，不代表代码真实逐步累计打开模块。当前 `chain_graph_retrieval`、`chain_rerank_injection`、`chain_version_provenance` 分别读取自己的 trace evidence source，而不是“上一步结果 + 当前模块”的严格累计证据。
+
+| 对比步骤 | case 数 | 上一个 profile | 回答命中率 | 相邻回答变化 | 相对基线回答提升 | 证据命中率 | 相邻证据变化 | 相对基线证据提升 |
+| --- | ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| 原始记忆基线 | 320 | 无 | 42.1875% | 0.0pp | 0.0% | 96.25% | 0.0pp | 0.0% |
+| 加入三路召回 | 320 | 原始记忆基线 | 28.4375% | -13.75pp | -32.5926% | 100.0% | +3.75pp | +3.8961% |
+| 加入图谱召回 | 320 | 加入三路召回 | 26.25% | -2.1875pp | -37.7778% | 100.0% | 0.0pp | +3.8961% |
+| 加入重排与注入治理 | 320 | 加入图谱召回 | 39.6875% | +13.4375pp | -5.9259% | 100.0% | 0.0pp | +3.8961% |
+| 加入版本链与溯源 | 320 | 加入重排与注入治理 | 40.3125% | +0.625pp | -4.4444% | 0.0% | -100.0pp | -100.0% |
+| 全开组合校验 | 320 | 加入版本链与溯源 | 23.4375% | -16.875pp | -44.4444% | 100.0% | +100.0pp | +3.8961% |
+
+#### 真实 LLM 结论
+
+1. 这轮完整真实评测没有基础设施失败，6 个 profile 都有 `320` 条有效样本，可以作为完整矩阵结论使用。
+2. 在真实回答命中率上，原始记忆基线最高，为 `42.1875%`。所有增强 profile 在当前 answer-level 规则下都没有超过原始记忆基线。
+3. 三路召回和图谱召回的证据命中率都达到 `100.0%`，比原始基线高 `3.8961%`，但回答命中率下降，且 forbidden 违规率升到约 `30%`。这说明它们能把证据放进上下文，但当前提示词、候选选择或答案规则没有把证据稳定转成正确回答，还引入了更多噪声风险。
+4. 重排与注入治理是增强 profile 中最接近原始基线的一项：回答命中率 `39.6875%`，相对基线下降 `5.9259%`；证据命中 `100.0%`，违规率 `9.6875%`，低于原始基线的 `12.1875%`。它的价值更像召回后的治理层，而不是扩召回层。
+5. 版本链与溯源回答命中率 `40.3125%`，接近原始基线，违规率最低 `0.9375%`；但证据命中率为 `0.0%`，这是当前 report/evidence 映射口径的明显缺陷，不能把它解释成证据能力真实为零。
+6. 全开组合回答命中率最低，为 `23.4375%`，违规率 `24.6875%`。结合离线计数结果看，当前不能简单把所有增强模块全部 active 化；更合理的方向是先做场景路由、证据注入提示优化和 forbidden 噪声治理。
+
+面试表达时可以这样说：
+
+```text
+我们做了两层评测。离线计数表证明模块能不能把目标记忆找回来；真实 LLM answer-level 表进一步验证找回来以后模型有没有用对。
+
+离线看，三路召回和图谱召回确实能补齐原始 memory 的漏召回。但真实 LLM 完整矩阵显示，单纯把更多证据塞进上下文并不一定提升最终回答。三路和图谱的 grounding 到了 100%，但 answer rate 低于原始基线，说明还需要做候选路由、重排、去噪和提示注入优化。
+
+重排与注入治理、版本链与溯源更接近治理层能力：它们不能只用召回率评价，要看噪声控制、旧版本误用、证据可追溯和上下文成本。当前真实结果说明，全开不是最优策略，后续应该按场景选择性启用，而不是默认全部打开。
+```
