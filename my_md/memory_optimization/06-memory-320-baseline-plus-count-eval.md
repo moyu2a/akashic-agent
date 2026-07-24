@@ -256,10 +256,14 @@ V2 是更大规模的召回与回答链路评测，只包含回答侧的检索�
 运行边界：
 
 - `real_llm_enabled = True`
+- `evaluation_level = comprehensive_online_agentloop`
+- `baseline_profile = chain_memory_base`
+- `control_profile = chain_off`
 - `case_count = 1920`
 - `unique_case_count = 320`
 - `completed_call_count = 1920`
 - `checkpoint_input_count = 1920`
+- `checkpoint_report_only = True`
 - `excluded_infra_failure_count = 0`
 - `provider_error_count = 0`
 - `timeout_count = 0`
@@ -268,9 +272,63 @@ V2 是更大规模的召回与回答链路评测，只包含回答侧的检索�
 - `repeat_count = 1`
 - `answer_quality_partial_matrix = False`
 - `answer_quality_missing_profiles = []`
+- `answer_rule_pass_rate = 33.3854%`
+- `memory_grounding_pass_rate = 82.7083%`
+- `forbidden_violation_rate = 17.8646%`
+- `passed_case_count = 505`
+- `failed_answer_case_count = 1279`
 - `total_token_count = 10593288`
 - `avg_total_token_count = 5517.3375`
 - `avg_latency_ms = 4350.3875`
+
+#### 完整运行参数
+
+| 参数 | 数值 |
+| --- | --- |
+| evaluation_level | `comprehensive_online_agentloop` |
+| real_llm_enabled | `True` |
+| baseline_profile | `chain_memory_base` |
+| control_profile | `chain_off` |
+| unique_case_count | `320` |
+| profile_count | `6` |
+| prompt_variant_count | `1` |
+| repeat_count | `1` |
+| completed_call_count | `1920` |
+| checkpoint_input_count | `1920` |
+| checkpoint_report_only | `True` |
+| concurrency | `checkpoint_report_only` |
+| full_answer_included | `False` |
+| prompt_included | `False` |
+| raw_query_included | `False` |
+| raw_memory_summary_included | `False` |
+| session_text_included | `False` |
+
+#### 基础设施状态
+
+| 指标 | 数值 |
+| --- | --- |
+| infra_passed | `True` |
+| provider_error_count | `0` |
+| timeout_count | `0` |
+| excluded_infra_failure_count | `0` |
+| partial_due_to_infra_failure | `False` |
+| answer_quality_partial_matrix | `False` |
+| answer_quality_missing_profiles | `[]` |
+| token_metrics_available | `True` |
+
+#### 整体指标
+
+| 指标 | 数值 |
+| --- | ---: |
+| case_count | 1920 |
+| passed_case_count | 505 |
+| failed_answer_case_count | 1279 |
+| answer_rule_pass_rate | 33.3854% |
+| memory_grounding_pass_rate | 82.7083% |
+| forbidden_violation_rate | 17.8646% |
+| total_token_count | 10593288 |
+| avg_total_token_count | 5517.3375 |
+| avg_latency_ms | 4350.3875 |
 
 本轮是受控测试集上的真实 `AgentLoop.process_direct()` + 真实 LLM answer-level 评测，不是自然生产流量。它不写生产 memory，也不评估写入治理。`chain_all_on` 是兼容/校验行，当前代码使用 `sleep_consolidation.filtered_active_ids`，不能解释为纯召回模块的单项收益。
 
@@ -284,6 +342,17 @@ V2 是更大规模的召回与回答链路评测，只包含回答侧的检索�
 | 重排与注入治理 | 320 | 127 | 39.6875% | -5.9259% | 320 | 100.0% | 3.8961% | 9.6875% | 5448.5844 | 3904.0813 |
 | 版本链与溯源 | 320 | 129 | 40.3125% | -4.4444% | 0 | 0.0% | -100.0% | 0.9375% | 5401.2 | 4078.6281 |
 | 全开组合 | 320 | 75 | 23.4375% | -44.4444% | 320 | 100.0% | 3.8961% | 24.6875% | 5484.0406 | 4430.8719 |
+
+#### 成本与延迟
+
+| 模块 | 平均 token | token 变化 | token 降低率 | 平均延迟 ms | 延迟变化 ms | 延迟降低率 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| 原始记忆基线 | 5516.5031 | 0.0 | 0.0% | 4277.2969 | 0.0 | 0.0% |
+| 三路召回 | 5643.0594 | +126.5563 | -2.2941% | 4868.2594 | +590.9625 | -13.8163% |
+| 图谱召回 | 5610.6375 | +94.1344 | -1.7064% | 4543.1875 | +265.8906 | -6.2163% |
+| 重排与注入治理 | 5448.5844 | -67.9187 | +1.2312% | 3904.0813 | -373.2156 | +8.7255% |
+| 版本链与溯源 | 5401.2 | -115.3031 | +2.0901% | 4078.6281 | -198.6688 | +4.6447% |
+| 全开组合 | 5484.0406 | -32.4625 | +0.5885% | 4430.8719 | +153.575 | -3.5905% |
 
 #### 有序 profile 对比
 

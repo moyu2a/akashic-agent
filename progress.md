@@ -1423,6 +1423,10 @@
   - rerank/injection governance is the strongest enhanced answer profile and lowers forbidden below baseline;
   - version/provenance appears valuable for forbidden control but its grounding mapping is defective in this report;
   - full all-on is not a winning default in current form; next work should focus on scene routing, evidence-injection prompting, forbidden/noise control, and version grounding mapping.
+- Documentation supplement after user requested all parameters/metrics:
+  - `my_md/memory_optimization/06-memory-320-baseline-plus-count-eval.md` now includes full run parameters, infrastructure status, overall metrics, single-profile uplift, cost/latency, and ordered profile comparison;
+  - `my_md/memory_optimization/05-memory-target-metric-eval-plan.md` now includes answer-quality pass, grounding pass, forbidden violation, pass/fail case counts, token, and latency summary;
+  - the report remains bounded as controlled test-set real LLM evidence, not natural production traffic.
 
 ## 2026-07-23 Source Ref Quality Expanded Case Pack
 
