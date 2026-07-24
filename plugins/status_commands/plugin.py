@@ -194,7 +194,10 @@ class ToolApprovalCommandModule:
         frame.slots[_CTX_SLOT] = _abort_ctx(
             state,
             "\n".join(lines),
-            approval_lifecycle=_approval_lifecycle_from_decisions(expired),
+            approval_lifecycle=_approval_lifecycle_from_decisions(
+                self._approval_store,
+                expired,
+            ),
         )
         return frame
 
@@ -214,6 +217,7 @@ class ToolApprovalCommandModule:
             state,
             _format_approval_decision(decision),
             approval_lifecycle=_approval_lifecycle_from_decisions(
+                self._approval_store,
                 [decision],
                 actor="status_command",
             ),
@@ -238,6 +242,7 @@ class ToolApprovalCommandModule:
             state,
             _format_approval_decision(decision),
             approval_lifecycle=_approval_lifecycle_from_decisions(
+                self._approval_store,
                 [decision],
                 actor="status_command",
             ),
@@ -450,6 +455,7 @@ def _abort_ctx(
 
 
 def _approval_lifecycle_from_decisions(
+    store: ToolApprovalStore,
     decisions: list[ToolApprovalDecision],
     *,
     actor: str = "",
@@ -458,10 +464,14 @@ def _approval_lifecycle_from_decisions(
     for decision in decisions:
         if decision.action not in {"approved", "denied", "expired"}:
             continue
+        record = store.get_request(decision.approval_request_id)
+        if record is None:
+            continue
         events.append(
-            ToolApprovalRuntime.lifecycle_event_from_decision(
-                decision,
-                actor=actor,
+            ToolApprovalRuntime.lifecycle_event_from_record(
+                record,
+                status=decision.action,
+                actor=actor or record.decided_by,
             )
         )
     return events

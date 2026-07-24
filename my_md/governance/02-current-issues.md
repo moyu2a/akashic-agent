@@ -676,7 +676,7 @@ Task 10 证据：
 
 范围边界：LA-002 fixed 只表示 recovery foundation + controlled read-only execution 完成，不表示 write/shell/external 的授权批准与真实执行已实现。可持久追踪的自动化计数、turn、attempt、event 和 cleanup 摘要见 `my_md/local_agent/03-task-plan-recovery-execution-design.md` 第 31 节；`.superpowers/sdd/task-10-report.md` 仅作为本地 SDD 临时明细，不再作为仓库证据链接。
 
-### LA-003 waiting authorization 请求详情与 P2 批准协议（open）
+### LA-003 waiting authorization 请求详情与 P2/P3 批准协议（fixed）
 
 现象：
 
@@ -686,8 +686,17 @@ Task 10 证据：
 影响与方向：
 
 - 当前 core deny/defer 安全边界成立，真实 write/edit/shell 仍为 0。
-- P2 approval UI/协议接入前，应把 redacted structured request 原子写入专用 columns，并定义 approve/deny、request ownership、过期、审计和恢复语义。
-- P3 diff/snapshot/rollback 完成前，不开放文件写入执行。
+- 2026-07-24 P3 approval workflow 已完成 LA-003 的结构化授权详情和批准/拒绝协议：
+  - TaskExecution `waiting_authorization` 已持久化 bounded metadata：`approval_request_id`、`expires_at`、`approval_scope=task_execution_step`、`args_hash`、脱敏 `args_summary`、`policy_reason`。
+  - workspace SQLite approval store 持久化 pending/approved/denied/expired/consumed/executed/execution_failed 状态。
+  - `/approvals`、`/approve_tool <id>`、`/deny_tool <id> [reason]` 作为 trusted runtime command surface；命令只接受 approval id，request/session/tool/scope/hash 绑定字段全部来自持久 record。
+  - 普通 executor approved resume 需要 `TrustedApprovalContext` 和完整 tuple 匹配，且 approval single-use；模型参数伪造 approval id 不会执行。
+  - bounded lifecycle audit 已覆盖 requested/approved/denied/expired/consumed/executed/execution_failed，并进入 observe slim trace allowlist。
+- 验证证据：
+  - P3 focused suite：`63 passed in 2.04s`。
+  - P3 compatibility suite：`260 passed in 6.52s`。
+  - P3 contract：`5 passed in 0.59s`。
+- 剩余边界单独转入 P4：diff/snapshot/rollback/sandbox 完成前，不开放 TaskExecution write/edit/shell side-effect resume。
 
 ### LA-004 final-only provider tool syntax normalization（open）
 

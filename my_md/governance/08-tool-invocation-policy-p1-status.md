@@ -150,6 +150,30 @@ P1.2 已接入 `ToolExecutor` 和 passive reasoner 的真实执行路径。P1.3a
 - P2 仍不是 Docker/chroot/seccomp sandbox，也不是 shell AST；shell 安全目前是 `ResourcePolicy` 参数 gate + shell safety pre-hook + P2 默认 defer 的组合防线。
 - shell safety 插件测试已调整语义：插件层“允许”只表示 pre-hook 未拒绝，最终是否真实执行由 P2 invocation policy 决定。
 
+## P3 Approval Workflow 接入结果
+
+日期：2026-07-24
+
+本阶段把 P2 的结构化 `defer + approval_request` 推进为 durable、trusted、single-use 的审批闭环，同时保留 P1/P2 的硬边界：
+
+- 新增 workspace-scoped SQLite approval store：持久化 pending/approved/denied/expired/consumed/executed/execution_failed 状态。
+- 审批绑定 tuple 为 `approval_request_id + session_key + request_id + tool_name + approval_scope + args_hash`，approve/deny/consume/finalize 均按完整 tuple 校验。
+- `ToolApprovalRuntime` 是 executor、status command、TaskExecution bridge 的共享 facade，`DefaultReasoner` 每 turn 按 workspace 注入同一 approval DB。
+- `ToolExecutionRequest.trusted_approval_context` 只能由 runtime code 构造；模型在工具参数里伪造 `approval_request_id` 不会触发执行。
+- `ToolExecutor` 在 P2 `defer` 后创建或复用 pending request；用户审批后，只有 trusted context 且参数 hash 完全一致时才会原子 consume 并进入真实 invoker。
+- approval 是 single-use：第一次 resume consume 后才能执行，重复 resume、变参、denied、expired、mismatch、not_found 均不触达真实 invoker。
+- P1 deny 仍优先：即使存在 approved request，workspace escape、protected argument、destructive shell 等 P1/P1.3 deny 仍在 consume/execution 前阻断。
+- `plugins/status_commands` 新增 trusted command surface：`/approvals`、`/approve_tool <id>`、`/deny_tool <id> [reason]`。命令只接受 approval id，绑定字段全部来自持久 record，不从命令文本读取。
+- TaskExecution `waiting_authorization` 已持久化 bounded metadata：approval id、expires_at、approval_scope、args_hash、args_summary、policy_reason；但 P3 不开放 TaskExecution write/edit/shell side-effect resume。
+- 新增 bounded approval lifecycle audit：requested、approved、denied、expired、consumed、executed、execution_failed 事件进入 executor trace、status command metadata 和 observe slim trace。
+- observe 仅保留 allowlist 字段：approval id、request/session/tool/source/risk/scope/policy reason/status/args hash/timestamps；不保存 raw args、`args_summary`、command、content、code、body、secret、cookie、token。
+
+明确边界：
+
+- P3 不是 sandbox，不提供 Docker/chroot/seccomp、non-root user、read-only rootfs、resource limit。
+- P3 不提供 filesystem snapshot/diff/rollback，也不承诺批准后自动恢复 TaskExecution 副作用执行。
+- P3 不是完整企业级 `ToolAuditLedger`；当前是随 turn trace/observe 传播的 bounded lifecycle metadata。可查询持久审计账本、retention 和 dashboard/admin 审计检索属于 P4/P5。
+
 ## 验证结果
 
 P1.1 目标测试：
@@ -305,11 +329,44 @@ PYTHONDONTWRITEBYTECODE=1 uv run --with pytest --with pytest-asyncio pytest test
 - P2：read-only 资源通过后可执行；write 和 shell 默认 defer，返回 `approval_request`，并带最小 `audit_trace`。
 - P2：敏感 `content` 只进入 hash/脱敏摘要，不暴露 preview。
 
+P3 approval workflow focused 回归：
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 uv run --with pytest --with pytest-asyncio pytest tests/test_tool_approval.py tests/test_tool_approval_store.py tests/test_tool_approval_runtime.py tests/test_tool_executor_approval_workflow.py tests/test_tool_approval_wiring.py tests/test_task_execution_approval_bridge.py tests/test_tool_audit.py tests/test_observe_writer.py tests/test_tool_governance_p1_p2_contract.py tests/test_tool_governance_p3_contract.py -q -p no:cacheprovider
+```
+
+结果：
+
+```text
+63 passed in 2.04s
+```
+
+P3 compatibility 回归：
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 uv run --with pytest --with pytest-asyncio pytest tests/test_tool_invocation_policy.py tests/test_tool_invocation_policy_gate.py tests/test_tool_invocation_resource_policy.py tests/test_resource_policy.py tests/test_tool_executor.py tests/test_tool_boundary_manager.py tests/test_task_execution_access.py tests/test_task_execution_reasoner.py tests/test_task_execution_store.py tests/test_task_execution_contract.py tests/test_shell_safety_plugin.py tests/test_tool_access_gateway.py tests/test_observe_writer.py tests/test_lifecycle_phases.py -q -p no:cacheprovider
+```
+
+结果：
+
+```text
+260 passed in 6.52s
+```
+
+P3 compileall 与 whitespace 检查：
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 uv run python -m compileall agent/policies agent/tool_hooks agent/core/passive_turn.py agent/task_plan plugins/status_commands plugins/observe tests/test_tool_approval_store.py tests/test_tool_approval_runtime.py tests/test_tool_executor_approval_workflow.py tests/test_tool_approval_wiring.py tests/test_task_execution_approval_bridge.py tests/test_tool_governance_p3_contract.py
+git diff --check
+```
+
+结果：compileall 退出码 0；`git diff --check` 无输出。
+
 ## 后续步骤
 
-P2 已完成默认 risk strategy、structured approval request 和 minimal audit trace。下一步不应直接声称生产级安全，而是进入 P3/P4，把“请求授权”和“安全执行环境”补成闭环：
+P3 已完成 trusted approval workflow、single-use consume、status command approve/deny、TaskExecution bounded authorization metadata 和 approval lifecycle trace。下一步不应直接声称生产级安全，而是进入 P4/P5，把“批准后安全执行环境”和“可查询持久审计账本”补成闭环：
 
-1. P3 设计用户 approval workflow：approve/deny/retry 的协议、过期策略、同参数 hash 复用范围和 TaskExecution durable 状态衔接。
-2. P3/P4 设计 `ToolAuditLedger` 持久化：timestamp、actor、request id、policy decision、args hash、脱敏摘要、执行结果预览和 retention 策略。
+1. P4 设计 sandbox/diff/snapshot/rollback：Docker/Podman、non-root user、read-only rootfs、resource limits、filesystem snapshot/diff/rollback。
+2. P4/P5 设计可查询持久 `ToolAuditLedger`：timestamp、actor、request id、policy decision、args hash、脱敏摘要、执行结果预览和 retention 策略。
 3. 继续收敛 no-root 兼容 allow，只让明确无法提供 workspace 的直接调用方走兼容路径。
-4. P4 评估 sandbox 形态：Docker/Podman、non-root user、read-only rootfs、resource limits、filesystem snapshot/diff/rollback。
+4. 评估 TaskExecution side-effect resume 的开放条件：只有 P4 具备 diff/snapshot/rollback 后，才允许 approved write/edit/shell 从 `waiting_authorization` 继续真实执行。

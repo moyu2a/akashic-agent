@@ -581,16 +581,6 @@ def _decision_from_record(
         tool_name=record.tool_name,
         approval_scope=record.approval_scope,
         args_hash=record.args_hash,
-        metadata={
-            "actor": actor or record.decided_by,
-            "source": record.source,
-            "risk": record.risk,
-            "policy_reason": record.policy_reason,
-            "created_at": record.created_at,
-            "decided_at": decided_at or record.decided_at,
-            "consumed_at": consumed_at or record.consumed_at,
-            "executed_at": executed_at or record.executed_at,
-        },
     )
 
 

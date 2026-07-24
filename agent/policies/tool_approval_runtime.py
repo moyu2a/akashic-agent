@@ -155,12 +155,20 @@ class ToolApprovalRuntime:
             actor=actor,
         ).to_trace_metadata()
 
-    @staticmethod
     def lifecycle_event_from_decision(
+        self,
         decision: ToolApprovalDecision,
         *,
         actor: str = "",
     ) -> dict[str, object]:
+        if decision.approval_request_id:
+            record = self._store.get_request(decision.approval_request_id)
+            if record is not None:
+                return self.lifecycle_event_from_record(
+                    record,
+                    status=decision.action,
+                    actor=actor or str(decision.metadata.get("actor") or ""),
+                )
         return build_tool_approval_audit_event(
             decision,
             actor=actor,
