@@ -1,0 +1,84 @@
+{
+  "id": "preference_recall",
+  "title": "Preference recall and injection quality",
+  "category": "preference_recall",
+  "phase_targets": ["phase2a", "phase3a", "phase3b"],
+  "config_profiles": ["off", "phase2", "phase3", "all"],
+  "setup": {
+    "scope": {"session_key": "cli:local", "channel": "cli", "chat_id": "local"},
+    "memory_items": [
+      {
+        "id": "m_pref_cn",
+        "memory_type": "preference",
+        "summary": "用户偏好中文回答",
+        "status": "active",
+        "source_ref": "cli:local@post_response",
+        "scope_channel": "cli",
+        "scope_chat_id": "local"
+      },
+      {
+        "id": "m_profile_pytest",
+        "memory_type": "profile",
+        "summary": "用户常用 pytest 做 Python 测试",
+        "status": "active",
+        "source_ref": "cli:local@post_response",
+        "scope_channel": "cli",
+        "scope_chat_id": "local"
+      }
+    ],
+    "query": "你应该用什么语言回答我？"
+  },
+  "expectations": {
+    "should_recall_ids": ["m_pref_cn"],
+    "should_not_recall_ids": [],
+    "expected_trace_features": [
+      "tri_retrieval",
+      "rerank_shadow",
+      "injection_governance_shadow"
+    ],
+    "expected_metric_keys": {
+      "tri_retrieval": ["semantic_hit_count", "fused_hit_count"],
+      "rerank_shadow": ["rerank_changed_count"],
+      "injection_governance_shadow": ["prompt_token_delta"]
+    },
+    "answer_expectations": {
+      "expected_answer_contains": ["中文"],
+      "forbidden_answer_contains": ["英文回答", "English"],
+      "expected_memory_ids": ["m_pref_cn"],
+      "expected_language": "zh",
+      "grounding_required": true
+    },
+    "profile_expectations": {
+      "off": {
+        "forbidden_trace_features": [
+          "tri_retrieval",
+          "rerank_shadow",
+          "injection_governance_shadow"
+        ]
+      },
+      "phase2": {
+        "required_trace_features": ["tri_retrieval"],
+        "metric_keys": {
+          "tri_retrieval": ["semantic_hit_count", "fused_hit_count"]
+        }
+      },
+      "phase3": {
+        "required_trace_features": [
+          "rerank_shadow",
+          "injection_governance_shadow"
+        ],
+        "metric_keys": {
+          "rerank_shadow": ["rerank_changed_count"],
+          "injection_governance_shadow": ["prompt_token_delta"]
+        }
+      },
+      "all": {
+        "required_trace_features": [
+          "tri_retrieval",
+          "rerank_shadow",
+          "injection_governance_shadow"
+        ]
+      }
+    }
+  }
+}

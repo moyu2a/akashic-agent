@@ -1,0 +1,71 @@
+{
+  "id": "vague_reference_graph",
+  "title": "Vague reference should benefit from graph retrieval traces",
+  "category": "vague_reference",
+  "phase_targets": ["phase2a", "phase2b"],
+  "config_profiles": ["off", "phase2", "all"],
+  "setup": {
+    "scope": {"session_key": "cli:local", "channel": "cli", "chat_id": "local"},
+    "memory_items": [
+      {
+        "id": "m_graph_1",
+        "memory_type": "event",
+        "summary": "用户之前讨论过 NetworkX 实体图谱用于第三路召回",
+        "status": "active",
+        "source_ref": "cli:local@post_response",
+        "scope_channel": "cli",
+        "scope_chat_id": "local"
+      },
+      {
+        "id": "m_graph_2",
+        "memory_type": "procedure",
+        "summary": "三路召回结果使用 RRF 融合排序",
+        "status": "active",
+        "source_ref": "cli:local@post_response",
+        "scope_channel": "cli",
+        "scope_chat_id": "local"
+      }
+    ],
+    "query": "之前那个第三路方案怎么排序？"
+  },
+  "expectations": {
+    "should_recall_ids": ["m_graph_1", "m_graph_2"],
+    "should_not_recall_ids": [],
+    "expected_trace_features": ["tri_retrieval", "graph_retrieval"],
+    "expected_metric_keys": {
+      "tri_retrieval": ["provenance_hit_count", "fused_hit_count"],
+      "graph_retrieval": [
+        "graph_hit_count",
+        "graph_path_count",
+        "baseline_graph_overlap_rate"
+      ]
+    },
+    "answer_expectations": {
+      "expected_answer_contains": ["RRF"],
+      "expected_answer_contains_any": [["三路召回", "第三路", "第三路方案", "融合排序"]],
+      "forbidden_answer_contains": [],
+      "expected_memory_ids": ["m_graph_1", "m_graph_2"],
+      "expected_language": "zh",
+      "grounding_required": true
+    },
+    "profile_expectations": {
+      "off": {
+        "forbidden_trace_features": ["tri_retrieval", "graph_retrieval"]
+      },
+      "phase2": {
+        "required_trace_features": ["tri_retrieval", "graph_retrieval"],
+        "metric_keys": {
+          "tri_retrieval": ["provenance_hit_count", "fused_hit_count"],
+          "graph_retrieval": [
+            "graph_hit_count",
+            "graph_path_count",
+            "baseline_graph_overlap_rate"
+          ]
+        }
+      },
+      "all": {
+        "required_trace_features": ["tri_retrieval", "graph_retrieval"]
+      }
+    }
+  }
+}

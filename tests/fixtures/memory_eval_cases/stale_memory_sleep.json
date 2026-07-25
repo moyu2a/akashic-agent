@@ -1,0 +1,49 @@
+{
+  "id": "stale_memory_sleep",
+  "title": "Stale low-value memory should be visible to sleep consolidation",
+  "category": "sleep_consolidation",
+  "phase_targets": ["phase5"],
+  "config_profiles": ["off", "phase5", "all"],
+  "setup": {
+    "scope": {"session_key": "cli:local", "channel": "cli", "chat_id": "local"},
+    "memory_items": [
+      {
+        "id": "m_old_tmp",
+        "memory_type": "event",
+        "summary": "用户临时测试变量是 abc",
+        "status": "active",
+        "updated_at": "2025-01-01T00:00:00+00:00",
+        "reinforcement": 1,
+        "emotional_weight": 0,
+        "source_ref": "cli:local@post_response",
+        "scope_channel": "cli",
+        "scope_chat_id": "local"
+      }
+    ],
+    "query": "你还记得临时测试变量吗？"
+  },
+  "expectations": {
+    "should_recall_ids": [],
+    "should_not_recall_ids": ["m_old_tmp"],
+    "expected_trace_features": ["sleep_consolidation_shadow"],
+    "expected_metric_keys": {
+      "sleep_consolidation_shadow": [
+        "stale_candidate_count",
+        "low_value_candidate_count"
+      ]
+    },
+    "profile_expectations": {
+      "off": {"forbidden_trace_features": ["sleep_consolidation_shadow"]},
+      "phase5": {
+        "required_trace_features": ["sleep_consolidation_shadow"],
+        "metric_keys": {
+          "sleep_consolidation_shadow": [
+            "stale_candidate_count",
+            "low_value_candidate_count"
+          ]
+        }
+      },
+      "all": {"required_trace_features": ["sleep_consolidation_shadow"]}
+    }
+  }
+}

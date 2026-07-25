@@ -1,0 +1,168 @@
+{
+  "metadata": {
+    "description": "Synthetic controlled fixture result only; this does not prove production online uplift and does not modify memory_items.source_ref.",
+    "evaluation_mode": "synthetic_fixture_shadow",
+    "production_uplift": false,
+    "writes_production_memory": false
+  },
+  "metrics": {
+    "baseline_fetch_success_rate": 33.3333,
+    "baseline_message_level_rate": 33.3333,
+    "baseline_parse_success_rate": 66.6667,
+    "baseline_source_backed_eligible_rate": 16.6667,
+    "baseline_support_rate": 16.6667,
+    "candidate_count": 6,
+    "fetch_success_uplift_points": 50.0,
+    "malformed_source_ref_count_after": 0,
+    "malformed_source_ref_count_before": 1,
+    "message_level_uplift_points": 50.0,
+    "normalized_fetch_success_rate": 83.3333,
+    "normalized_message_level_rate": 83.3333,
+    "normalized_parse_success_rate": 100.0,
+    "normalized_source_backed_eligible_rate": 66.6667,
+    "normalized_support_rate": 66.6667,
+    "parse_success_uplift_points": 33.3333,
+    "source_backed_eligible_count_after": 4,
+    "source_backed_eligible_count_before": 1,
+    "source_backed_eligible_uplift_points": 50.0,
+    "support_uplift_points": 50.0
+  },
+  "records": [
+    {
+      "action": "kept_message_level",
+      "baseline_fetch_success": true,
+      "baseline_level": "message",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": true,
+      "baseline_source_ref": "cli:local:0",
+      "baseline_support_status": "supported",
+      "candidate_id": "already-message-supported",
+      "candidate_message_ids": [
+        "cli:local:0"
+      ],
+      "expected_terms": [
+        "偏好"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "cli:local:0",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "session",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "cli:local@post_response",
+      "baseline_support_status": "session_ref_not_fetchable",
+      "candidate_id": "session-level-upgradable",
+      "candidate_message_ids": [
+        "cli:local:1"
+      ],
+      "expected_terms": [
+        "source_ref"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "[\"cli:local:1\"]",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "missing",
+      "baseline_parse_ok": false,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "",
+      "baseline_support_status": "missing_source_ref",
+      "candidate_id": "missing-upgradable",
+      "candidate_message_ids": [
+        "cli:local:2"
+      ],
+      "expected_terms": [
+        "消息级"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "[\"cli:local:2\"]",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "upgraded_to_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "malformed",
+      "baseline_parse_ok": false,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "[\"broken\"",
+      "baseline_support_status": "parse_failed",
+      "candidate_id": "malformed-upgradable",
+      "candidate_message_ids": [
+        "cli:local:3"
+      ],
+      "expected_terms": [
+        "临时测试"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": true,
+      "normalized_source_ref": "[\"cli:local:3\"]",
+      "normalized_support_status": "supported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "kept_message_level",
+      "baseline_fetch_success": true,
+      "baseline_level": "message",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "cli:local:4",
+      "baseline_support_status": "unsupported",
+      "candidate_id": "unsupported-message-kept",
+      "candidate_message_ids": [
+        "cli:local:4"
+      ],
+      "expected_terms": [
+        "不存在的支持词"
+      ],
+      "normalized_fetch_success": true,
+      "normalized_level": "message",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": false,
+      "normalized_source_ref": "cli:local:4",
+      "normalized_support_status": "unsupported",
+      "session_key": "cli:local"
+    },
+    {
+      "action": "kept_no_candidate_message_ids",
+      "baseline_fetch_success": false,
+      "baseline_level": "session",
+      "baseline_parse_ok": true,
+      "baseline_source_backed_eligible": false,
+      "baseline_source_ref": "cli:local@post_response",
+      "baseline_support_status": "session_ref_not_fetchable",
+      "candidate_id": "session-level-no-ids",
+      "candidate_message_ids": [],
+      "expected_terms": [
+        "无法猜测"
+      ],
+      "normalized_fetch_success": false,
+      "normalized_level": "session",
+      "normalized_parse_ok": true,
+      "normalized_source_backed_eligible": false,
+      "normalized_source_ref": "cli:local@post_response",
+      "normalized_support_status": "session_ref_not_fetchable",
+      "session_key": "cli:local"
+    }
+  ]
+}

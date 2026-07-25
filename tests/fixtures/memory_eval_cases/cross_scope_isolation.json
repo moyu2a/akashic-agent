@@ -1,0 +1,56 @@
+{
+  "id": "cross_scope_isolation",
+  "title": "Cross-scope memory risk should be observable",
+  "category": "scope_isolation",
+  "phase_targets": ["phase4b"],
+  "config_profiles": ["off", "phase4", "all"],
+  "setup": {
+    "scope": {"session_key": "telegram:123", "channel": "telegram", "chat_id": "123"},
+    "memory_items": [
+      {
+        "id": "m_tg_pref",
+        "memory_type": "preference",
+        "summary": "用户在 Telegram 会话偏好中文回答",
+        "status": "active",
+        "source_ref": "telegram:123@post_response",
+        "scope_channel": "telegram",
+        "scope_chat_id": "123"
+      },
+      {
+        "id": "m_qq_pref",
+        "memory_type": "preference",
+        "summary": "用户在 QQ 会话要求输出更短",
+        "status": "active",
+        "source_ref": "qq:123@post_response",
+        "scope_channel": "qq",
+        "scope_chat_id": "123"
+      }
+    ],
+    "query": "我的回答偏好是什么？"
+  },
+  "expectations": {
+    "should_recall_ids": ["m_tg_pref"],
+    "should_not_recall_ids": ["m_qq_pref"],
+    "expected_trace_features": ["provenance_shadow"],
+    "expected_metric_keys": {
+      "provenance_shadow": ["cross_scope_memory_count", "cross_scope_risk_count"]
+    },
+    "answer_expectations": {
+      "expected_answer_contains": ["中文"],
+      "forbidden_answer_contains": ["QQ", "更短"],
+      "expected_memory_ids": ["m_tg_pref"],
+      "expected_language": "zh",
+      "grounding_required": true
+    },
+    "profile_expectations": {
+      "off": {"forbidden_trace_features": ["provenance_shadow"]},
+      "phase4": {
+        "required_trace_features": ["provenance_shadow"],
+        "metric_keys": {
+          "provenance_shadow": ["cross_scope_memory_count", "cross_scope_risk_count"]
+        }
+      },
+      "all": {"required_trace_features": ["provenance_shadow"]}
+    }
+  }
+}

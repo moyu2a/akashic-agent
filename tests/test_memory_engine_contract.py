@@ -59,6 +59,7 @@ def _make_default_engine(
     engine._retriever = retriever
     engine._tagger = tagger
     engine._post_response_worker = post_response_worker
+    engine._experiment_runner = None
     engine._event_bus = event_publisher
     engine.closeables = []
     engine._wire_memory2_events()
@@ -169,6 +170,442 @@ async def test_default_memory_engine_retrieve_falls_back_to_session_scope():
     assert "keyword_only_enabled" not in kwargs
 
 
+@pytest.mark.asyncio
+async def test_default_memory_engine_records_tri_retrieval_shadow_without_changing_hits() -> (
+    None
+):
+    records: list[dict[str, object]] = []
+
+    class _Runner:
+        enabled = True
+
+        def record_tri_retrieval_shadow(self, **kwargs: object) -> object:
+            records.append(kwargs)
+            return object()
+
+    retriever = SimpleNamespace(
+        retrieve_with_lanes=AsyncMock(
+            return_value=(
+                [{"id": "baseline", "summary": "base"}],
+                [{"id": "semantic", "summary": "sem"}],
+                [{"id": "keyword", "summary": "key"}],
+            )
+        ),
+        build_injection_block=MagicMock(return_value=("block", ["baseline"])),
+    )
+    store = SimpleNamespace(
+        list_items_for_dashboard=MagicMock(
+            return_value=(
+                [
+                    {
+                        "id": "prov",
+                        "memory_type": "event",
+                        "summary": "上次方案",
+                        "source_ref": "cli:local:1",
+                        "scope_channel": "cli",
+                        "scope_chat_id": "local",
+                    },
+                    {
+                        "id": "wrong_type",
+                        "memory_type": "preference",
+                        "summary": "上次方案但类型不匹配",
+                        "source_ref": "cli:local:2",
+                        "scope_channel": "cli",
+                        "scope_chat_id": "local",
+                    },
+                    {
+                        "id": "wrong_scope",
+                        "memory_type": "event",
+                        "summary": "上次方案但会话不匹配",
+                        "source_ref": "cli:other:1",
+                        "scope_channel": "cli",
+                        "scope_chat_id": "other",
+                    },
+                ],
+                3,
+            )
+        )
+    )
+    engine = _make_default_engine(retriever=cast(Any, retriever))
+    engine._experiment_runner = _Runner()
+    engine._v2_store = store
+
+    result = await engine.retrieve(
+        MemoryEngineRetrieveRequest(
+            query="上次那个方案",
+            scope=MemoryScope(session_key="cli:local", channel="cli", chat_id="local"),
+            hints={"memory_types": ["event"], "require_scope_match": True},
+            top_k=3,
+        )
+    )
+
+    assert [hit.id for hit in result.hits] == ["baseline"]
+    assert records
+    assert records[0]["baseline_result"]["baseline_ids"] == ["baseline"]
+    assert records[0]["experimental_result"]["semantic_hit_count"] == 1
+    assert records[0]["experimental_result"]["keyword_hit_count"] == 1
+    assert records[0]["experimental_result"]["provenance_hit_count"] == 1
+    assert records[0]["experimental_result"]["provenance_ids"] == ["prov"]
+
+
+@pytest.mark.asyncio
+async def test_default_memory_engine_records_graph_retrieval_shadow_without_changing_hits() -> (
+    None
+):
+    records: list[dict[str, object]] = []
+
+    class _Runner:
+        enabled = True
+
+        def record_tri_retrieval_shadow(self, **kwargs: object) -> object:
+            return object()
+
+        def record_graph_retrieval_shadow(self, **kwargs: object) -> object:
+            records.append(kwargs)
+            return object()
+
+    retriever = SimpleNamespace(
+        retrieve_with_lanes=AsyncMock(
+            return_value=(
+                [{"id": "baseline", "summary": "base"}],
+                [{"id": "semantic", "summary": "sem"}],
+                [{"id": "keyword", "summary": "key"}],
+            )
+        ),
+        build_injection_block=MagicMock(return_value=("block", ["baseline"])),
+    )
+    store = SimpleNamespace(
+        list_items_for_dashboard=MagicMock(
+            return_value=(
+                [
+                    {
+                        "id": "g1",
+                        "memory_type": "event",
+                        "summary": "NetworkX 实体图谱可以提升上次方案找回",
+                        "source_ref": "cli:local:1",
+                        "scope_channel": "cli",
+                        "scope_chat_id": "local",
+                        "extra_json": {"active_topics": ["NetworkX 实体图谱"]},
+                    }
+                ],
+                1,
+            )
+        )
+    )
+    engine = _make_default_engine(retriever=cast(Any, retriever))
+    engine._experiment_runner = _Runner()
+    engine._graph_retrieval_enabled = True
+    engine._graph_retrieval_max_nodes = 200
+    engine._graph_retrieval_max_hops = 2
+    engine._v2_store = store
+
+    result = await engine.retrieve(
+        MemoryEngineRetrieveRequest(
+            query="上次那个图谱方案",
+            scope=MemoryScope(session_key="cli:local", channel="cli", chat_id="local"),
+            hints={"memory_types": ["event"], "require_scope_match": True},
+            top_k=3,
+        )
+    )
+
+    assert [hit.id for hit in result.hits] == ["baseline"]
+    assert records
+    assert records[0]["experimental_result"]["graph_hit_count"] >= 1
+    assert records[0]["experimental_result"]["graph_ids"] == ["g1"]
+
+
+@pytest.mark.asyncio
+async def test_default_memory_engine_records_rerank_shadow_without_changing_hits() -> (
+    None
+):
+    records: list[dict[str, object]] = []
+
+    class _Runner:
+        enabled = True
+
+        def record_tri_retrieval_shadow(self, **kwargs: object) -> object:
+            return object()
+
+        def record_graph_retrieval_shadow(self, **kwargs: object) -> object:
+            return object()
+
+        def record_rerank_shadow(self, **kwargs: object) -> object:
+            records.append(kwargs)
+            return object()
+
+    retriever = SimpleNamespace(
+        retrieve_with_lanes=AsyncMock(
+            return_value=(
+                [{"id": "baseline", "summary": "base", "score": 0.88}],
+                [{"id": "semantic", "summary": "sem", "score": 0.8}],
+                [{"id": "keyword", "summary": "key", "keyword_score": 0.7}],
+            )
+        ),
+        build_injection_block=MagicMock(return_value=("block", ["baseline"])),
+    )
+    store = SimpleNamespace(
+        list_items_for_dashboard=MagicMock(
+            return_value=(
+                [
+                    {
+                        "id": "prov",
+                        "memory_type": "procedure",
+                        "summary": "上次方案需要保留来源",
+                        "source_ref": "cli:local:1",
+                        "scope_channel": "cli",
+                        "scope_chat_id": "local",
+                    }
+                ],
+                1,
+            )
+        )
+    )
+    engine = _make_default_engine(retriever=cast(Any, retriever))
+    engine._experiment_runner = _Runner()
+    engine._v2_store = store
+    engine._rerank_shadow_enabled = True
+    engine._graph_retrieval_enabled = False
+
+    result = await engine.retrieve(
+        MemoryEngineRetrieveRequest(
+            query="上次那个方案",
+            scope=MemoryScope(session_key="cli:local", channel="cli", chat_id="local"),
+            hints={"memory_types": ["event", "procedure"], "require_scope_match": True},
+            top_k=3,
+        )
+    )
+
+    assert [hit.id for hit in result.hits] == ["baseline"]
+    assert result.text_block == "block"
+    assert records
+    assert records[0]["baseline_result"]["baseline_ids"] == ["baseline"]
+    assert "reranked_ids" in records[0]["experimental_result"]
+
+
+@pytest.mark.asyncio
+async def test_default_memory_engine_records_injection_governance_without_changing_prompt() -> (
+    None
+):
+    records: list[dict[str, object]] = []
+
+    class _Runner:
+        enabled = True
+
+        def record_tri_retrieval_shadow(self, **kwargs: object) -> object:
+            return object()
+
+        def record_graph_retrieval_shadow(self, **kwargs: object) -> object:
+            return object()
+
+        def record_rerank_shadow(self, **kwargs: object) -> object:
+            return object()
+
+        def record_injection_governance_shadow(self, **kwargs: object) -> object:
+            records.append(kwargs)
+            return object()
+
+    retriever = SimpleNamespace(
+        retrieve_with_lanes=AsyncMock(
+            return_value=(
+                [
+                    {
+                        "id": "e1",
+                        "memory_type": "event",
+                        "summary": "低置信历史",
+                        "score": 0.51,
+                    },
+                    {
+                        "id": "p1",
+                        "memory_type": "procedure",
+                        "summary": "回答先给技术版再给易懂版",
+                        "score": 0.85,
+                        "source_ref": "cli:local:1",
+                    },
+                ],
+                [],
+                [],
+            )
+        ),
+        build_injection_block=MagicMock(return_value=("baseline block", ["e1", "p1"])),
+    )
+    engine = _make_default_engine(retriever=cast(Any, retriever))
+    engine._experiment_runner = _Runner()
+    engine._v2_store = SimpleNamespace(
+        list_items_for_dashboard=MagicMock(return_value=([], 0))
+    )
+    engine._rerank_shadow_enabled = False
+    engine._injection_governance_shadow_enabled = True
+
+    result = await engine.retrieve(
+        MemoryEngineRetrieveRequest(
+            query="回答要求",
+            scope=MemoryScope(session_key="cli:local", channel="cli", chat_id="local"),
+            top_k=2,
+        )
+    )
+
+    assert result.text_block == "baseline block"
+    assert [hit.id for hit in result.hits] == ["e1", "p1"]
+    assert records
+    assert records[0]["baseline_result"]["baseline_injected_ids"] == ["e1", "p1"]
+    assert "experimental_injected_ids" in records[0]["experimental_result"]
+
+
+@pytest.mark.asyncio
+async def test_default_memory_engine_records_version_chain_without_changing_hits() -> (
+    None
+):
+    records: list[dict[str, object]] = []
+
+    class _Runner:
+        enabled = True
+
+        def record_version_chain_shadow(self, **kwargs: object) -> object:
+            records.append(kwargs)
+            return object()
+
+    retriever = SimpleNamespace(
+        retrieve_with_lanes=AsyncMock(
+            return_value=([{"id": "old", "status": "superseded"}], [], [])
+        ),
+        build_injection_block=MagicMock(return_value=("block", ["old"])),
+    )
+    store = SimpleNamespace(
+        list_items_for_dashboard=MagicMock(
+            return_value=(
+                [
+                    {
+                        "id": "old",
+                        "status": "superseded",
+                        "summary": "旧规则",
+                        "source_ref": "cli:local:1",
+                    },
+                    {
+                        "id": "new",
+                        "status": "active",
+                        "summary": "新规则",
+                        "source_ref": "cli:local:2",
+                    },
+                ],
+                2,
+            )
+        ),
+        list_replacements=MagicMock(
+            return_value=[
+                {
+                    "old_item_id": "old",
+                    "new_item_id": "new",
+                    "relation_type": "supersede",
+                }
+            ]
+        ),
+    )
+    engine = _make_default_engine(retriever=cast(Any, retriever))
+    engine._experiment_runner = _Runner()
+    engine._v2_store = store
+    engine._version_chain_shadow_enabled = True
+    engine._provenance_shadow_enabled = False
+
+    result = await engine.retrieve(
+        MemoryEngineRetrieveRequest(
+            query="旧规则",
+            scope=MemoryScope(session_key="cli:local", channel="cli", chat_id="local"),
+            top_k=3,
+        )
+    )
+
+    assert result.text_block == "block"
+    assert [hit.id for hit in result.hits] == ["old"]
+    assert records
+    assert records[0]["experimental_result"]["active_leaf_ids"] == ["new"]
+    assert records[0]["metrics"]["stale_recalled_count"] == 1
+
+
+@pytest.mark.asyncio
+async def test_default_memory_engine_records_provenance_without_changing_prompt() -> (
+    None
+):
+    records: list[dict[str, object]] = []
+
+    class _Runner:
+        enabled = True
+
+        def record_provenance_shadow(self, **kwargs: object) -> object:
+            records.append(kwargs)
+            return object()
+
+    retriever = SimpleNamespace(
+        retrieve_with_lanes=AsyncMock(
+            return_value=(
+                [{"id": "m1", "source_ref": '["cli:local:1"]#profile'}],
+                [],
+                [],
+            )
+        ),
+        build_injection_block=MagicMock(return_value=("real block", ["m1"])),
+    )
+    store = SimpleNamespace(
+        list_items_for_dashboard=MagicMock(
+            return_value=(
+                [
+                    {
+                        "id": "m1",
+                        "source_ref": '["cli:local:1"]#profile',
+                        "scope_channel": "cli",
+                        "scope_chat_id": "local",
+                    }
+                ],
+                1,
+            )
+        )
+    )
+    engine = _make_default_engine(retriever=cast(Any, retriever))
+    engine._experiment_runner = _Runner()
+    engine._v2_store = store
+    engine._version_chain_shadow_enabled = False
+    engine._provenance_shadow_enabled = True
+
+    result = await engine.retrieve(
+        MemoryEngineRetrieveRequest(
+            query="profile",
+            scope=MemoryScope(session_key="cli:local", channel="cli", chat_id="local"),
+            top_k=3,
+        )
+    )
+
+    assert result.text_block == "real block"
+    raw_items = cast(list[object], cast(dict[str, object], result.raw)["items"])
+    assert cast(dict[str, object], raw_items[0])["id"] == "m1"
+    assert records
+    assert records[0]["metrics"]["source_ref_coverage"] == 1.0
+
+
+def test_default_memory_engine_shadow_item_listing_reads_multiple_pages() -> None:
+    calls: list[dict[str, object]] = []
+
+    def _list_items_for_dashboard(
+        **kwargs: object,
+    ) -> tuple[list[dict[str, object]], int]:
+        calls.append(kwargs)
+        page = int(kwargs.get("page") or 1)
+        if page == 1:
+            return ([{"id": "m1"}], 2)
+        if page == 2:
+            return ([{"id": "m2"}], 2)
+        return ([], 2)
+
+    store = SimpleNamespace(
+        list_items_for_dashboard=MagicMock(side_effect=_list_items_for_dashboard)
+    )
+    engine = _make_default_engine()
+    engine._v2_store = store
+
+    items = engine._list_shadow_memory_items(status="", page_size=1, max_pages=5)
+
+    assert [item["id"] for item in items] == ["m1", "m2"]
+    assert [call["page"] for call in calls] == [1, 2]
+
+
 async def test_default_engine_keeps_history_injected_ids():
     retriever = SimpleNamespace(
         retrieve=AsyncMock(
@@ -183,14 +620,19 @@ async def test_default_engine_keeps_history_injected_ids():
                 }
             ]
         ),
-        build_injection_block=lambda items: ("## 【相关历史】\n- 用户昨天提过 FitBit", ["e1"]),
+        build_injection_block=lambda items: (
+            "## 【相关历史】\n- 用户昨天提过 FitBit",
+            ["e1"],
+        ),
     )
     engine = _make_default_engine(retriever=cast(Any, retriever))
 
     history_result = await engine.retrieve(
         MemoryEngineRetrieveRequest(
             query="Fitbit 型号",
-            scope=MemoryScope(session_key="telegram:1", channel="telegram", chat_id="1"),
+            scope=MemoryScope(
+                session_key="telegram:1", channel="telegram", chat_id="1"
+            ),
             mode="episodic",
             hints={"memory_types": ["event"], "require_scope_match": True},
             top_k=8,
@@ -223,6 +665,117 @@ async def test_default_memory_engine_ingest_delegates_to_post_worker():
     assert result.accepted is True
     assert result.raw["engine"] == "default"
     worker.run.assert_awaited_once()
+
+
+def test_default_memory_engine_constructs_experiment_runner_when_enabled(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from plugins.default_memory.config import (
+        DefaultMemoryConfig,
+        MemoryExperimentsConfig,
+    )
+
+    captured: dict[str, object] = {}
+
+    class _Store:
+        def __init__(self, path: Path) -> None:
+            self.path = path
+            self.calls: list[dict[str, object]] = []
+            captured["store"] = self
+
+        def close(self) -> None:
+            pass
+
+        def list_items_for_dashboard(self, **kwargs: object):
+            self.calls.append(dict(kwargs))
+            return ([{"id": "mem_existing", "summary": "已有记忆"}], 1)
+
+    class _Embedder:
+        def __init__(self, **kwargs: object) -> None:
+            pass
+
+        def close(self) -> None:
+            pass
+
+    class _Memorizer:
+        def __init__(self, store: object, embedder: object) -> None:
+            pass
+
+    class _Retriever:
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            pass
+
+    class _Tagger:
+        def __init__(self, **kwargs: object) -> None:
+            pass
+
+    class _Worker:
+        def __init__(self, **kwargs: object) -> None:
+            captured.update(kwargs)
+
+    monkeypatch.setattr("plugins.default_memory.engine.MemoryStore2", _Store)
+    monkeypatch.setattr("plugins.default_memory.engine.Embedder", _Embedder)
+    monkeypatch.setattr("plugins.default_memory.engine.Memorizer", _Memorizer)
+    monkeypatch.setattr("plugins.default_memory.engine.Retriever", _Retriever)
+    monkeypatch.setattr("plugins.default_memory.engine.ProcedureTagger", _Tagger)
+    monkeypatch.setattr(
+        "plugins.default_memory.engine.PostResponseMemoryWorker", _Worker
+    )
+
+    config = SimpleNamespace(
+        memory=SimpleNamespace(
+            embedding=SimpleNamespace(
+                base_url="",
+                api_key="",
+                model="text-embedding-v3",
+            )
+        ),
+        light_base_url="",
+        base_url="",
+        light_api_key="",
+        api_key="key",
+        light_model="",
+        model="model",
+    )
+    default_config = DefaultMemoryConfig(
+        memory_experiments=MemoryExperimentsConfig(enabled=True, mode="shadow")
+    )
+    http_resources = SimpleNamespace(external_default=object())
+    provider = SimpleNamespace()
+
+    DefaultMemoryEngine(
+        config=config,
+        default_config=default_config,
+        workspace=tmp_path,
+        provider=provider,
+        http_resources=http_resources,
+        event_publisher=None,
+    )
+
+    assert captured["experiment_runner"] is not None
+    assert captured["experiment_runner"].enabled is True
+    assert captured["experiment_runner"]._existing_memory_snapshot() == [
+        {"id": "mem_existing", "summary": "已有记忆"}
+    ]
+    store = captured["store"]
+    assert isinstance(store, _Store)
+    assert store.calls == [{"status": "active", "page_size": 200}]
+
+
+def test_default_memory_engine_experiment_runner_accepts_existing_memory_provider() -> (
+    None
+):
+    from plugins.default_memory.config import MemoryExperimentsConfig
+    from plugins.default_memory.experiments import MemoryExperimentRunner
+
+    runner = MemoryExperimentRunner(
+        workspace=Path("."),
+        config=MemoryExperimentsConfig(enabled=True, mode="shadow"),
+        existing_memory_provider=lambda: [{"id": "mem_1", "summary": "hello"}],
+    )
+
+    assert runner._existing_memory_snapshot() == [{"id": "mem_1", "summary": "hello"}]
 
 
 async def test_default_memory_engine_handles_turn_committed_via_event_bus():
@@ -389,7 +942,9 @@ async def test_default_memory_engine_consolidates_ready_session_from_lifecycle()
     await event_bus.aclose()
 
 
-async def test_markdown_consolidation_advances_window_when_consumer_fails(tmp_path: Path):
+async def test_markdown_consolidation_advances_window_when_consumer_fails(
+    tmp_path: Path,
+):
     event_bus = EventBus()
 
     async def _fail_consolidation(_event):
@@ -853,4 +1408,6 @@ def test_build_memory_runtime_exposes_default_memory_engine(
 
     assert runtime.engine is not None
     assert runtime.engine.describe().name == "default"
-    assert MemoryCapability.SEMANTICS_RICH_MEMORY in runtime.engine.describe().capabilities
+    assert (
+        MemoryCapability.SEMANTICS_RICH_MEMORY in runtime.engine.describe().capabilities
+    )

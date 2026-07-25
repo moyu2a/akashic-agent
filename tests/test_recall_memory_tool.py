@@ -77,6 +77,15 @@ class _StaticEmbedder:
         return [1.0, 0.0]
 
 
+class _CountingEmbedder:
+    def __init__(self) -> None:
+        self.calls: list[str] = []
+
+    async def embed(self, text: str) -> list[float]:
+        self.calls.append(text)
+        return [1.0, 0.0]
+
+
 class _KeywordOnlyStore:
     def __init__(self) -> None:
         self.vector_search_called = False
@@ -378,6 +387,41 @@ def test_store_keyword_search_respects_required_scope(tmp_path: Path) -> None:
     )
 
     assert [item["summary"] for item in hits] == ["用户在当前会话讨论支付问题"]
+
+
+@pytest.mark.asyncio
+async def test_retriever_retrieve_with_lanes_returns_fused_and_lane_items() -> None:
+    vector_hits: list[_MemoryHit] = [
+        {"id": "vec1", "memory_type": "event", "summary": "向量命中", "score": 0.9}
+    ]
+    keyword_hits: list[_MemoryHit] = [
+        {
+            "id": "kw1",
+            "memory_type": "event",
+            "summary": "关键词命中",
+            "keyword_score": 1.0,
+        }
+    ]
+    store = _FusionStore(vector_groups=[vector_hits], keyword_hits=keyword_hits)
+    retriever = Retriever(cast(MemoryStore2, store), cast(Embedder, _StaticEmbedder()))
+
+    fused, semantic, keyword = await retriever.retrieve_with_lanes("支付", top_k=3)
+
+    assert [item["id"] for item in semantic] == ["vec1"]
+    assert [item["id"] for item in keyword] == ["kw1"]
+    assert {item["id"] for item in fused} == {"vec1", "kw1"}
+    assert len(store.vector_kwargs) == 1
+
+
+@pytest.mark.asyncio
+async def test_retriever_retrieve_with_lanes_does_not_add_extra_embed_calls() -> None:
+    store = _FusionStore(vector_groups=[[]], keyword_hits=[])
+    embedder = _CountingEmbedder()
+    retriever = Retriever(cast(MemoryStore2, store), cast(Embedder, embedder))
+
+    await retriever.retrieve_with_lanes("支付", aux_queries=["付款"], top_k=3)
+
+    assert embedder.calls == ["支付", "付款"]
 
 
 @pytest.mark.asyncio

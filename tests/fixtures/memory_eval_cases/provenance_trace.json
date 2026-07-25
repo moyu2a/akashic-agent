@@ -1,0 +1,57 @@
+{
+  "id": "provenance_trace",
+  "title": "Source references should be parseable for evidence tracing",
+  "category": "provenance",
+  "phase_targets": ["phase4b"],
+  "config_profiles": ["off", "phase4", "all"],
+  "setup": {
+    "scope": {"session_key": "cli:local", "channel": "cli", "chat_id": "local"},
+    "memory_items": [
+      {
+        "id": "m_source_msg",
+        "memory_type": "profile",
+        "summary": "用户使用 Linux 工作站",
+        "status": "active",
+        "source_ref": "[\"cli:local:msg-1\"]",
+        "scope_channel": "cli",
+        "scope_chat_id": "local"
+      },
+      {
+        "id": "m_orphan",
+        "memory_type": "profile",
+        "summary": "用户有一个未溯源事实",
+        "status": "active",
+        "source_ref": "",
+        "scope_channel": "cli",
+        "scope_chat_id": "local"
+      }
+    ],
+    "query": "我用什么工作环境？"
+  },
+  "expectations": {
+    "should_recall_ids": ["m_source_msg"],
+    "should_not_recall_ids": ["m_orphan"],
+    "expected_trace_features": ["provenance_shadow"],
+    "expected_metric_keys": {
+      "provenance_shadow": [
+        "source_ref_coverage",
+        "parse_success_rate",
+        "orphan_memory_count"
+      ]
+    },
+    "profile_expectations": {
+      "off": {"forbidden_trace_features": ["provenance_shadow"]},
+      "phase4": {
+        "required_trace_features": ["provenance_shadow"],
+        "metric_keys": {
+          "provenance_shadow": [
+            "source_ref_coverage",
+            "parse_success_rate",
+            "orphan_memory_count"
+          ]
+        }
+      },
+      "all": {"required_trace_features": ["provenance_shadow"]}
+    }
+  }
+}

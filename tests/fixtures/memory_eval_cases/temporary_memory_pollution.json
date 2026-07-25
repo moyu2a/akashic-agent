@@ -1,0 +1,39 @@
+{
+  "id": "temporary_memory_pollution",
+  "title": "Temporary information should be visible as write pollution risk",
+  "category": "write_value",
+  "phase_targets": ["phase1"],
+  "config_profiles": ["off", "phase1", "all"],
+  "setup": {
+    "scope": {"session_key": "cli:local", "channel": "cli", "chat_id": "local"},
+    "memory_items": [],
+    "conversation": [
+      {"role": "user", "content": "临时测试变量是 abc，本次会话结束后不要记住。"},
+      {"role": "assistant", "content": "收到。"}
+    ],
+    "memorize_calls": [
+      {
+        "summary": "用户临时测试变量是 abc，本次会话结束后不要记住",
+        "result": "ok item_id=mem_tmp status=new"
+      }
+    ]
+  },
+  "expectations": {
+    "should_recall_ids": [],
+    "should_not_recall_ids": ["mem_tmp"],
+    "expected_trace_features": ["write_value_score"],
+    "expected_metric_keys": {
+      "write_value_score": ["temporary_risk_count", "policy_reject_count"]
+    },
+    "profile_expectations": {
+      "off": {"forbidden_trace_features": ["write_value_score"]},
+      "phase1": {
+        "required_trace_features": ["write_value_score"],
+        "metric_keys": {
+          "write_value_score": ["temporary_risk_count", "policy_reject_count"]
+        }
+      },
+      "all": {"required_trace_features": ["write_value_score"]}
+    }
+  }
+}

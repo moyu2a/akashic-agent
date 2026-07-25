@@ -94,6 +94,35 @@ class Retriever:
         time_end: datetime | None = None,
         keyword_enabled: bool = True,
     ) -> list[dict]:
+        items, _vector_items, _keyword_items = await self.retrieve_with_lanes(
+            query,
+            memory_types=memory_types,
+            top_k=top_k,
+            scope_channel=scope_channel,
+            scope_chat_id=scope_chat_id,
+            require_scope_match=require_scope_match,
+            aux_queries=aux_queries,
+            score_threshold=score_threshold,
+            time_start=time_start,
+            time_end=time_end,
+            keyword_enabled=keyword_enabled,
+        )
+        return items
+
+    async def retrieve_with_lanes(
+        self,
+        query: str,
+        memory_types: list[str] | None = None,
+        top_k: int | None = None,
+        scope_channel: str | None = None,
+        scope_chat_id: str | None = None,
+        require_scope_match: bool = False,
+        aux_queries: list[str] | None = None,
+        score_threshold: float | None = None,
+        time_start: datetime | None = None,
+        time_end: datetime | None = None,
+        keyword_enabled: bool = True,
+    ) -> tuple[list[dict], list[dict], list[dict]]:
         # 1. query 与辅助 query 一起进入向量 lane，避免多入口语义漂移。
         actual_top_k = self._top_k if top_k is None else max(1, int(top_k))
         actual_threshold = (
@@ -135,7 +164,7 @@ class Retriever:
             len(keyword_items),
             len(items),
         )
-        return items
+        return items, vector_items, keyword_items
 
     async def _retrieve_vector_lanes(
         self,

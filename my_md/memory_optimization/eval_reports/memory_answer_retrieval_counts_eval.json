@@ -1,0 +1,266 @@
+{
+  "chain_rows": [
+    {
+      "adjacent_miss_reduction": 0,
+      "adjacent_miss_reduction_rate_percent": 0.0,
+      "adjacent_recall_delta_points": 0.0,
+      "adjacent_relative_recall_lift_percent": 0.0,
+      "adjacent_success_delta": 0,
+      "cumulative_miss_reduction": 0,
+      "cumulative_miss_reduction_rate_percent": 0.0,
+      "cumulative_recall_delta_points": 0.0,
+      "cumulative_relative_recall_lift_percent": 0.0,
+      "cumulative_success_delta": 0,
+      "feature_names": [],
+      "miss_count": 22,
+      "profile_name": "chain_memory_base",
+      "recall_rate": 98.9,
+      "success_count": 1978,
+      "target_count": 2000
+    },
+    {
+      "adjacent_miss_reduction": 22,
+      "adjacent_miss_reduction_rate_percent": 100.0,
+      "adjacent_recall_delta_points": 1.1,
+      "adjacent_relative_recall_lift_percent": 1.1122,
+      "adjacent_success_delta": 22,
+      "cumulative_miss_reduction": 22,
+      "cumulative_miss_reduction_rate_percent": 100.0,
+      "cumulative_recall_delta_points": 1.1,
+      "cumulative_relative_recall_lift_percent": 1.1122,
+      "cumulative_success_delta": 22,
+      "feature_names": [
+        "tri_retrieval"
+      ],
+      "miss_count": 0,
+      "profile_name": "chain_tri_retrieval",
+      "recall_rate": 100.0,
+      "success_count": 2000,
+      "target_count": 2000
+    },
+    {
+      "adjacent_miss_reduction": 0,
+      "adjacent_miss_reduction_rate_percent": null,
+      "adjacent_recall_delta_points": 0.0,
+      "adjacent_relative_recall_lift_percent": 0.0,
+      "adjacent_success_delta": 0,
+      "cumulative_miss_reduction": 22,
+      "cumulative_miss_reduction_rate_percent": 100.0,
+      "cumulative_recall_delta_points": 1.1,
+      "cumulative_relative_recall_lift_percent": 1.1122,
+      "cumulative_success_delta": 22,
+      "feature_names": [
+        "tri_retrieval",
+        "graph_retrieval"
+      ],
+      "miss_count": 0,
+      "profile_name": "chain_graph_retrieval",
+      "recall_rate": 100.0,
+      "success_count": 2000,
+      "target_count": 2000
+    },
+    {
+      "adjacent_miss_reduction": 0,
+      "adjacent_miss_reduction_rate_percent": null,
+      "adjacent_recall_delta_points": 0.0,
+      "adjacent_relative_recall_lift_percent": 0.0,
+      "adjacent_success_delta": 0,
+      "cumulative_miss_reduction": 22,
+      "cumulative_miss_reduction_rate_percent": 100.0,
+      "cumulative_recall_delta_points": 1.1,
+      "cumulative_relative_recall_lift_percent": 1.1122,
+      "cumulative_success_delta": 22,
+      "feature_names": [
+        "tri_retrieval",
+        "graph_retrieval",
+        "rerank_shadow",
+        "injection_governance_shadow"
+      ],
+      "miss_count": 0,
+      "profile_name": "chain_rerank_injection",
+      "recall_rate": 100.0,
+      "success_count": 2000,
+      "target_count": 2000
+    },
+    {
+      "adjacent_miss_reduction": -2,
+      "adjacent_miss_reduction_rate_percent": null,
+      "adjacent_recall_delta_points": -0.1,
+      "adjacent_relative_recall_lift_percent": -0.1,
+      "adjacent_success_delta": -2,
+      "cumulative_miss_reduction": 20,
+      "cumulative_miss_reduction_rate_percent": 90.9091,
+      "cumulative_recall_delta_points": 1.0,
+      "cumulative_relative_recall_lift_percent": 1.0111,
+      "cumulative_success_delta": 20,
+      "feature_names": [
+        "tri_retrieval",
+        "graph_retrieval",
+        "rerank_shadow",
+        "injection_governance_shadow",
+        "version_chain_shadow",
+        "provenance_shadow"
+      ],
+      "miss_count": 2,
+      "profile_name": "chain_version_provenance",
+      "recall_rate": 99.9,
+      "success_count": 1998,
+      "target_count": 2000
+    },
+    {
+      "adjacent_miss_reduction": 0,
+      "adjacent_miss_reduction_rate_percent": 0.0,
+      "adjacent_recall_delta_points": 0.0,
+      "adjacent_relative_recall_lift_percent": 0.0,
+      "adjacent_success_delta": 0,
+      "cumulative_miss_reduction": 20,
+      "cumulative_miss_reduction_rate_percent": 90.9091,
+      "cumulative_recall_delta_points": 1.0,
+      "cumulative_relative_recall_lift_percent": 1.0111,
+      "cumulative_success_delta": 20,
+      "feature_names": [
+        "tri_retrieval",
+        "graph_retrieval",
+        "rerank_shadow",
+        "injection_governance_shadow",
+        "version_chain_shadow",
+        "provenance_shadow"
+      ],
+      "miss_count": 2,
+      "profile_name": "chain_all_on",
+      "recall_rate": 99.9,
+      "success_count": 1998,
+      "target_count": 2000
+    }
+  ],
+  "generated_at": "2026-07-21T00:00:00+00:00",
+  "metrics": {
+    "answer_feature_names": [
+      "tri_retrieval",
+      "graph_retrieval",
+      "rerank_shadow",
+      "injection_governance_shadow",
+      "version_chain_shadow",
+      "provenance_shadow"
+    ],
+    "baseline_profile": "memory_base",
+    "case_count": 1000,
+    "chain_baseline_profile": "chain_memory_base",
+    "chain_profile_count": 6,
+    "disabled_controls_excluded": true,
+    "forbidden_answer_features": [
+      "sleep_consolidation_shadow",
+      "write_value_score"
+    ],
+    "future_metrics_not_measured": [
+      "answer_correctness",
+      "evidence_grounding",
+      "source_ref_hit",
+      "noise_control",
+      "context_cost"
+    ],
+    "measurement_mode": "offline_answer_retrieval_count_eval",
+    "single_profile_count": 6,
+    "sleep_consolidation_excluded": true,
+    "target_count": 2000,
+    "timestamp_mode": "fixed_for_deterministic_eval",
+    "write_governance_excluded": true
+  },
+  "single_module_rows": [
+    {
+      "feature_names": [],
+      "miss_count": 22,
+      "miss_reduction_rate_percent": 0.0,
+      "miss_reduction_vs_baseline": 0,
+      "profile_name": "memory_base",
+      "recall_delta_points_vs_baseline": 0.0,
+      "recall_rate": 98.9,
+      "relative_recall_lift_percent": 0.0,
+      "success_count": 1978,
+      "success_delta_vs_baseline": 0,
+      "target_count": 2000
+    },
+    {
+      "feature_names": [
+        "tri_retrieval"
+      ],
+      "miss_count": 0,
+      "miss_reduction_rate_percent": 100.0,
+      "miss_reduction_vs_baseline": 22,
+      "profile_name": "tri_retrieval_only",
+      "recall_delta_points_vs_baseline": 1.1,
+      "recall_rate": 100.0,
+      "relative_recall_lift_percent": 1.1122,
+      "success_count": 2000,
+      "success_delta_vs_baseline": 22,
+      "target_count": 2000
+    },
+    {
+      "feature_names": [
+        "graph_retrieval"
+      ],
+      "miss_count": 6,
+      "miss_reduction_rate_percent": 72.7273,
+      "miss_reduction_vs_baseline": 16,
+      "profile_name": "graph_only",
+      "recall_delta_points_vs_baseline": 0.8,
+      "recall_rate": 99.7,
+      "relative_recall_lift_percent": 0.8089,
+      "success_count": 1994,
+      "success_delta_vs_baseline": 16,
+      "target_count": 2000
+    },
+    {
+      "feature_names": [
+        "rerank_shadow",
+        "injection_governance_shadow"
+      ],
+      "miss_count": 416,
+      "miss_reduction_rate_percent": -1790.9091,
+      "miss_reduction_vs_baseline": -394,
+      "profile_name": "rerank_only",
+      "recall_delta_points_vs_baseline": -19.7,
+      "recall_rate": 79.2,
+      "relative_recall_lift_percent": -19.9191,
+      "success_count": 1584,
+      "success_delta_vs_baseline": -394,
+      "target_count": 2000
+    },
+    {
+      "feature_names": [
+        "version_chain_shadow",
+        "provenance_shadow"
+      ],
+      "miss_count": 1000,
+      "miss_reduction_rate_percent": -4445.4545,
+      "miss_reduction_vs_baseline": -978,
+      "profile_name": "version_provenance_only",
+      "recall_delta_points_vs_baseline": -48.9,
+      "recall_rate": 50.0,
+      "relative_recall_lift_percent": -49.4439,
+      "success_count": 1000,
+      "success_delta_vs_baseline": -978,
+      "target_count": 2000
+    },
+    {
+      "feature_names": [
+        "tri_retrieval",
+        "graph_retrieval",
+        "rerank_shadow",
+        "injection_governance_shadow",
+        "version_chain_shadow",
+        "provenance_shadow"
+      ],
+      "miss_count": 2,
+      "miss_reduction_rate_percent": 90.9091,
+      "miss_reduction_vs_baseline": 20,
+      "profile_name": "all_on",
+      "recall_delta_points_vs_baseline": 1.0,
+      "recall_rate": 99.9,
+      "relative_recall_lift_percent": 1.0111,
+      "success_count": 1998,
+      "success_delta_vs_baseline": 20,
+      "target_count": 2000
+    }
+  ]
+}

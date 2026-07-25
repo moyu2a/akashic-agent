@@ -1,5 +1,362 @@
 # Document RAG P10a Progress
 
+## 2026-07-22 Memory Phase 6s Sleep Hygiene Source-Backed Evidence
+
+- User asked to execute the reviewed Phase 6s plan.
+- Scope stayed shadow / dry-run:
+  - no `AgentLoop`, `Reasoner`, `ToolExecutor`, production retrieval, prompt injection, or production memory storage changes;
+  - no real memory merge/delete/supersede;
+  - no production `sessions.db` or memory DB writes.
+- Task 1 added source evidence aggregate metrics to `memory2/eval_sleep_hygiene_evidence.py`:
+  - `source_evidence_metrics`;
+  - `source_evidence_metrics_by_action`;
+  - source support status counts;
+  - Markdown source evidence tables;
+  - fixture-only `_source_expected_terms` support.
+- Task 1 TDD evidence:
+  - RED: `tests/test_memory_sleep_hygiene_evidence.py::test_sleep_hygiene_report_exposes_source_evidence_metrics` failed with missing `source_evidence_metrics`;
+  - GREEN: `tests/test_memory_sleep_hygiene_evidence.py` -> `12 passed`.
+  - Commit: `80ba815 feat: add sleep hygiene source evidence metrics`.
+- Task 2 added `memory2/eval_sleep_hygiene_source_fixture.py`:
+  - builds deterministic all-case sleep hygiene fixtures;
+  - writes a fixture `sessions.db` through real `SessionStore`;
+  - assigns supported, missing, unsupported, session-ref-not-fetchable, parse-failed, and missing-source states;
+  - produces expected status counts for evaluated rows only.
+- Task 2 TDD evidence:
+  - RED: `tests/test_memory_sleep_hygiene_source_fixture.py` failed because the module did not exist;
+  - GREEN: `tests/test_memory_sleep_hygiene_source_fixture.py tests/test_memory_sleep_hygiene_provenance.py` -> `11 passed`.
+  - Commit: `5be2f78 feat: add sleep hygiene source-backed fixture`.
+- Task 3 added CLI fixture mode:
+  - `--source-fixture-mode none|balanced`;
+  - `--source-fixture-db PATH`;
+  - fixture mode forces `source_fetch_mode=session-store`;
+  - target metric checkpoint source is `sleep_hygiene_source_backed_fixture` only for fixture mode, and `sleep_hygiene_session_store` for ordinary session-store mode.
+- Task 3 TDD evidence:
+  - RED: CLI fixture test failed with unrecognized `--source-fixture-mode` / `--source-fixture-db`;
+  - GREEN: `tests/test_memory_sleep_hygiene_evidence_cli.py` -> `6 passed`.
+  - Generated source-backed report under `my_md/memory_optimization/eval_reports/sleep_hygiene_source_backed_v1/`.
+  - Commit: `b57baaa feat: add sleep hygiene source-backed report`.
+- Source-backed V1 report headline:
+  - `case_count = 160`;
+  - `scanned_active_item_count = 224`;
+  - `evaluated_evidence_row_count = 200`;
+  - `source_fetch_mode = session-store`;
+  - `source_ref_coverage_rate = 81.5%`;
+  - `source_ref_parse_success_rate = 82.2086%`;
+  - `source_fetch_success_rate = 36.1963%`;
+  - `source_support_rate = 18.4049%`;
+  - `missing_source_count = 75`;
+  - `unsupported_source_count = 29`;
+  - `session_ref_not_fetchable_count = 37`;
+  - `malformed_source_ref_count = 29`.
+- Task 4 tightened dry-run patch source safety:
+  - patch entries now include `source_fetch_mode`, `source_backed_action_safe`, and `source_backed_block_reason`;
+  - only true cleanup candidates with `source_fetch_mode=session-store`, successful fetch, and `source_support_status=supported` are source-backed safe;
+  - proxy sources are rejected for source-backed safety even when marked supported.
+- Task 4 TDD evidence:
+  - RED: patch test failed with missing `source_backed_action_safe`;
+  - GREEN: `tests/test_memory_sleep_hygiene_patch.py` -> `3 passed`.
+  - Regenerated source-backed report and patch.
+  - Patch gate result: `200` rows, `12` source-backed safe, `24` requires review, `73` source_not_fetchable, `11` source_not_supporting_summary, `80` not_cleanup_candidate.
+  - Commit: `fee1d5a feat: gate sleep hygiene patch by source evidence`.
+- Final review follow-up:
+  - fixed fixture DB overwrite risk by adding a fixture marker and refusing to overwrite an existing non-fixture session DB;
+  - allowed rebuilding legacy unmarked source fixture DBs only when they clearly contain the old fixture shape;
+  - fixed fixture CLI output so it reports `case_set=all`, matching the actual all-case fixture pack;
+  - fixed source-backed report Markdown so `source_fetch_mode=session-store` reports `session-store 回源成功率`, not proxy 回源成功率.
+- Current conclusion:
+  - V3 cleanup / review separation remains the cleanup-safety baseline;
+  - Phase 6s adds evidence trust: source refs can now be tested against real `SessionStore` rows in fixture mode;
+  - active cleanup is still closed because most candidates do not yet satisfy source-backed safety;
+  - source support is deterministic term matching, not full semantic entailment;
+  - fixture `sessions.db` is controlled test data, not production natural traffic.
+- Interpretation of low source-backed rates:
+  - low `source_fetch_success_rate` and `source_support_rate` are expected for this fixture because it intentionally mixes supported, missing, unsupported, session-level, malformed, and missing source states;
+  - the result should be read as a safety-gate validation, not as cleanup candidate recall regression;
+  - V3 still owns cleanup recall / precision interpretation, while Phase 6s owns evidence trust and active-cleanup eligibility.
+- Current problems to solve next:
+  - message-level `source_ref` quality is not high enough for active cleanup;
+  - session-level refs such as `cli:local@post_response` cannot restore exact source messages;
+  - malformed source refs need schema validation before long-term memory write;
+  - original-message support is only deterministic term matching and needs stronger semantic evidence if used for real deletion;
+  - no production natural traffic or real memory DB cleanup has been measured yet.
+
+## 2026-07-22 Memory Phase 6o Expanded Write Governance Real LLM Eval
+
+- User asked to execute the reviewed plan for expanding write-governance real LLM shadow evaluation.
+- Preflight confirmed the total write-governance candidate universe:
+  - `total = 1200`
+  - `common = 600`
+  - `hard = 600`
+  - six categories with `200` candidates each.
+- Preflight also reproduced the sampler issue:
+  - old `select_write_governance_online_candidates(case_set="all", limit=240)` returned `common = 240`, `hard = 0`;
+  - categories were balanced, but common/hard was not.
+- Added TDD regression in `tests/test_memory_write_governance_online_eval.py`:
+  - `limit=24` must return common `12` / hard `12`, six categories with `4` each;
+  - `limit=240` must return common `120` / hard `120`, six categories with `40` each.
+- Verified RED:
+  - `.venv/bin/python -m pytest tests/test_memory_write_governance_online_eval.py::test_select_write_governance_online_candidates_balances_case_set_and_category -q -p no:cacheprovider`
+  - failed because `Counter({'common': 24})` did not match common `12` / hard `12`.
+- Implemented common/hard + category stratified limited selection in `memory2/eval_write_governance_online.py`.
+- Focused sampler tests passed:
+  - `.venv/bin/python -m pytest tests/test_memory_write_governance_online_eval.py::test_select_write_governance_online_candidates_balances_categories tests/test_memory_write_governance_online_eval.py::test_select_write_governance_online_candidates_balances_case_set_and_category -q -p no:cacheprovider`
+  - `2 passed in 0.21s`.
+- Ran fake-provider full 1200 online shadow:
+  - reports: `/tmp/akashic-memory-write-governance-expanded-fake/reports`
+  - target metrics: `/tmp/akashic-memory-write-governance-expanded-fake/target`
+  - `candidate_count = 1200`
+  - `checkpoint rows = 1200`
+  - `evidence rows = 1200`
+  - `infra_passed = True`
+  - `provider_error_count = 0`
+  - `timeout_count = 0`
+  - `total_token_count = 36000`
+  - `avg_latency_ms = 31.8925`
+- Ran real LLM expanded 240 online shadow with external provider access:
+  - reports: `/tmp/akashic-memory-write-governance-expanded-real-240/reports`
+  - target metrics: `/tmp/akashic-memory-write-governance-expanded-real-240/target`
+  - checkpoint: `/tmp/akashic-memory-write-governance-expanded-real-240/reports/checkpoint.jsonl`
+  - evidence: `/tmp/akashic-memory-write-governance-expanded-real-240/reports/memory_write_governance_online_evidence.jsonl`
+- Real 240 run summary:
+  - `candidate_count = 240`
+  - `checkpoint rows = 240`
+  - `evidence rows = 240`
+  - `common = 120`
+  - `hard = 120`
+  - six categories with `40` candidates each
+  - `real_llm_enabled = True`
+  - `infra_passed = True`
+  - `provider_error_count = 0`
+  - `timeout_count = 0`
+  - `completed_call_count = 240`
+  - `skipped_from_checkpoint_count = 0`
+  - `total_token_count = 1236228`
+  - `avg_latency_ms = 2366.625`
+- Real 240 evidence distribution:
+  - useful `80`: after `allow = 80`, reject `0`, review `0`;
+  - pollution `80`: after `reject = 80`, allow `0`, review `0`;
+  - duplicate `40`: after `reject = 40`, allow `0`, review `0`;
+  - conflict `40`: after `review = 40`, allow `0`, reject `0`.
+- Target metrics online evidence row:
+  - `online_write_record_count = 240`
+  - useful write precision `33.3333% -> 100.0%`
+  - pollution block rate `0.0% -> 100.0%`
+  - duplicate control rate `0.0% -> 100.0%`
+  - conflict review rate `0.0% -> 100.0%`
+  - write reduction rate `0.0% -> 66.6667%`
+  - false reject rate `0.0% -> 0.0%`
+  - false accept rate `100.0% -> 0.0%`
+- Optional real 1200 run was not executed by default. The 240 run is the current main result; 1200 should require explicit cost/time approval.
+- Boundary: this is still test-set-driven real LLM shadow evaluation. It is not natural production traffic, not LLM-generated memory candidate extraction quality, and it does not write production memory because `skip_post_memory=True`.
+- Follow-up documentation update: expanded `my_md/memory_optimization/07-memory-write-governance-count-eval.md` with a detailed test scheme covering test purpose, three evaluation layers, candidate universe, 240-case stratified sampling, label mapping, runtime chain, metric formulas, baseline definition, acceptance criteria, failure handling, and boundaries.
+
+## 2026-07-21 Memory Phase 6o Write Governance Real LLM Pilot
+
+- Continued the write-governance online shadow work after commit `cfe0569`.
+- The already committed runner is `scripts/run_memory_write_governance_online_eval.py`; it sends pre-labeled write candidates through real `AgentLoop.process_direct()`, keeps `skip_post_memory=True`, and emits target-metric-compatible `memory_write_governance_online_evidence.jsonl`.
+- Fake-provider smoke had already passed on `24` balanced candidates: useful `8` all allow, pollution `8` all reject, duplicate `4` all reject, conflict `4` all review.
+- Real LLM pilot initially timed out inside the sandbox. Running the same command with the project config and external provider access succeeded.
+- Real LLM pilot report:
+  - `/tmp/akashic-memory-write-governance-online-real-pilot-v2/reports/memory_write_governance_online_eval.json`
+  - `/tmp/akashic-memory-write-governance-online-real-pilot-v2/reports/memory_write_governance_online_eval.md`
+  - `/tmp/akashic-memory-write-governance-online-real-pilot-v2/reports/memory_write_governance_online_evidence.jsonl`
+- Real target-metric report:
+  - `/tmp/akashic-memory-write-governance-online-real-pilot-v2/target/memory_target_metrics_eval.json`
+  - `/tmp/akashic-memory-write-governance-online-real-pilot-v2/target/memory_target_metrics_eval.md`
+- Real pilot summary:
+  - `candidate_count = 24`
+  - `real_llm_enabled = True`
+  - `infra_passed = True`
+  - `provider_error_count = 0`
+  - `timeout_count = 0`
+  - `total_token_count = 124099`
+  - `avg_latency_ms = 2790.7917`
+- Target metrics online evidence row:
+  - useful write precision `33.3333% -> 100.0%`
+  - pollution block rate `0.0% -> 100.0%`
+  - duplicate control rate `0.0% -> 100.0%`
+  - conflict review rate `0.0% -> 100.0%`
+  - write reduction rate `0.0% -> 66.6667%`
+  - false reject rate `0.0% -> 0.0%`
+  - false accept rate `100.0% -> 0.0%`
+- Boundary: this is real LLM plus real AgentLoop path, but still test-set-driven shadow evaluation. It is not natural production traffic and does not evaluate LLM-generated memory candidate extraction.
+
+## 2026-07-20 Memory Phase 6k Real LLM Core Eval
+
+- User asked to proceed with the plan and then review/fix it before executing.
+- Wrote `docs/superpowers/plans/2026-07-20-memory-phase6k-real-llm-core-eval.md`.
+- Plan review feedback: the real run needed an explicit `--checkpoint-jsonl`, and the profile slice should be labeled as answer/retrieval core matrix rather than implying full coverage.
+- Patched the plan to make the checkpoint path explicit and to state that this phase only promotes answer/retrieval rows from real LLM.
+- Added a CLI regression test for the comprehensive case pack core matrix:
+  - `tests/test_memory_comprehensive_online_cli.py::test_comprehensive_online_cli_accepts_comprehensive_case_pack_core_matrix`
+- Ran the fake-provider core matrix:
+  - command completed successfully;
+  - `case_count = 1280`;
+  - `profile_count = 4`;
+  - `prompt_variant_count = 1`;
+  - `repeat_count = 1`.
+- Started the real LLM core matrix with checkpointing enabled; the run wrote `/tmp/akashic-memory-phase6k-real/reports/memory_comprehensive_online_eval.checkpoint.jsonl`.
+- Manually stopped the run after 325 real calls to control time/cost. The checkpoint report was rebuilt at:
+  - `/tmp/akashic-memory-phase6k-real/checkpoint-report/memory_comprehensive_online_eval.json`
+  - `/tmp/akashic-memory-phase6k-real/checkpoint-report/memory_comprehensive_online_eval.md`
+- Partial real checkpoint summary:
+  - `case_count = 325`
+  - `unique_case_count = 82`
+  - `profile_count = 4`
+  - `prompt_variant_count = 1`
+  - `repeat_count = 1`
+  - `answer_rule_pass_rate = 24.0`
+  - `memory_grounding_pass_rate = 74.7692`
+  - `forbidden_violation_rate = 15.3846`
+  - `avg_latency_ms = 4635.4431`
+  - `total_token_count = 1754732`
+- Converted that checkpoint into `/tmp/akashic-memory-phase6k-target/memory_target_metrics_eval.json` and `.md` after fixing the target-metric writer so online checkpoint rows do not force version-chain online fields.
+- The current phase remains partial; it is not the full 1280-run final answer/retrieval conclusion.
+
+## 2026-07-20 Memory Phase 6j Comprehensive Case Pack
+
+- User asked to avoid overcomplicating real evidence collection for now and directly write a more complete target-oriented evaluation set.
+- Preserved the existing default 80-case behavior by adding explicit `case_pack="standard" | "comprehensive"` to `build_quantitative_eval_cases()`.
+- Added a `comprehensive` pack that generates 320 cases: 20 scenario categories, common/hard sets, and 8 variants per set.
+- Added new scenario coverage: entity aliases, temporal preference override, low-value write filtering, costly/high-risk tool confirmation, injection noise, missing source_ref, session boundary, sleep compaction, causal consistency, and entropy/value write signals.
+- Wired `--case-pack standard|comprehensive` into:
+  - `scripts/run_memory_quantitative_uplift_eval.py`
+  - `scripts/run_memory_quantitative_chain_eval.py`
+  - `scripts/run_memory_quantitative_balanced_eval.py`
+  - `scripts/run_memory_target_metrics_eval.py`
+  - `scripts/run_memory_comprehensive_online_eval.py`
+- Added tests for 320-case pack shape and target-metric CLI consumption.
+- First full 320-case target metric smoke failed on `hard_costly_call_preference_*` because the noise summary shared query keywords and was injected as ranked context. Adjusted that scenario's unrelated noise text and reran.
+- Full 320-case target metric smoke passed into `/tmp/akashic-memory-comprehensive-pack` without overwriting formal `my_md` reports.
+- Smoke summary: `case_count = 320`, `common_case_count = 160`, `hard_case_count = 160`, `case_record_count = 1920`, write candidates `960`, hygiene scanned units `2400`.
+- Smoke target metrics: tri `98.125% -> 100%`, graph `98.75% -> 100%`, rerank/injection `98.125% -> 100%`, version/provenance `97.5% -> 100%`, write pollution block after `100%`, sleep token saving after `32.8125%`.
+- This remains offline proxy/shadow evidence and does not claim real LLM production quality.
+
+## 2026-07-20 Memory Phase 6i Evidence Input Hardening
+
+- Created `docs/superpowers/plans/2026-07-20-memory-phase6i-evidence-input-hardening.md`.
+- Plan review found the first validation scope was too loose: string booleans, bool token values, negative token values, and unsupported `defer` / `archived` domains could still become metrics.
+- Revised implementation to validate exact builder-supported domains:
+  - write decisions: `allow`, `reject`, `review`;
+  - write labels: `useful`, `pollution`, `duplicate`, `conflict`;
+  - hygiene states: `active`, `merged`, `stale`, `low_value_removed`;
+  - hygiene labels: `duplicate`, `stale`, `low_value`, `retained`.
+- Evidence input now supports JSON arrays, wrapped `{"records": [...]}` JSON, and JSONL.
+- Evidence validation rejects missing fields, non-boolean booleans, unsupported decision/state/label values, and nonnegative-token violations.
+- Focused evidence-input tests passed: `7 passed in 3.11s`.
+- Full target metric test pair passed: `25 passed in 10.51s`.
+- Compile check passed for `memory2/eval_target_metrics.py` and `tests/test_memory_target_metrics_cli.py`.
+- `git diff --check` exited `0`.
+
+## 2026-07-20 Memory Phase 6h Doc Sync And Verification
+
+- Created a dedicated plan for syncing the Phase 6h memory target-metric docs and verifying the current report vocabulary.
+- Updated the memory experiment planning log so Phase 6h is marked complete instead of pending.
+- The canonical target-metric conclusion remains offline and proxy-based: tri `93.75% -> 100%`, graph `97.5% -> 100%`, rerank/injection `93.75% -> 100%`, version/provenance `90% -> 100%`.
+- The forked version-chain fixture now makes `conflict_chain_detection_rate` measurable on hard / overall rows, while common remains `unavailable`.
+- Next gap stays the same: write-governance and sleep-consolidation still need stronger real evidence inputs before the report can move beyond shadow / proxy tables.
+
+## 2026-07-20 Memory Phase 6h Planning Request
+
+- User requested the next memory iteration after Phase 6g.
+- Next candidate work identified:
+  - locate the remaining graph retrieval hard miss behind `98.75%`;
+  - add forked replacement-chain fixtures so `conflict_chain_detection_rate` becomes measurable;
+  - add write-governance and sleep-consolidation evidence inputs instead of only shadow estimates.
+- Current formal report remains `offline_trace_real_baseline_target_metrics` with `online_status = gated_no_checkpoint`.
+- This entry only records the next plan target; implementation has not started yet.
+
+## 2026-07-20 Memory Phase 6g Version Metrics And Hard Cases
+
+- User requested a complete plan, review, revision, execution, result summary, and documentation update for the next memory evaluation step.
+- Used the writing-plans, requesting-code-review, and test-driven-development skills.
+- Reviewed and revised `docs/superpowers/plans/2026-07-20-memory-phase6g-version-and-hard-cases.md`.
+- Independent plan review found one critical issue: baseline miss ids could be reintroduced by ordinary query-term matching if only the forced-recall branch was skipped. The plan was revised so explicit baseline misses are skipped from the whole baseline loop.
+- Plan review also confirmed `expected_conflict_chain_count` must be `0` for current fixtures because they only contain `old -> target` single chains, not forked conflicts.
+- Added RED tests for:
+  - version/provenance using active-version targets rather than generic `should_recall_ids`;
+  - hard tri/graph retrieval baseline being lower than after;
+  - explicit baseline miss ids not failing baseline validation while still being recovered experimentally;
+  - Markdown/JSON exposing `current_version_recall_rate` and `conflict_chain_detection_rate`.
+- Confirmed RED: 4 focused tests failed as expected before implementation.
+- Implemented:
+  - `expected_active_version_ids`, `expected_stale_version_ids`, and `expected_conflict_chain_count` in generated quantitative cases;
+  - explicit `baseline_miss_recall_ids` for selected hard tri/graph variants;
+  - baseline recall skipping for explicit misses;
+  - graph baseline lane filtering so graph lane can show experimental recovery;
+  - version target metrics `current_version_recall_rate`, `stale_version_misuse_rate`, and `conflict_chain_detection_rate`;
+  - Markdown report version-chain专项指标.
+- Focused tests after implementation: `4 passed in 2.09s`.
+- Broader target/eval/version suite: `.venv/bin/python -m pytest tests/test_memory_target_metrics.py tests/test_memory_target_metrics_cli.py tests/test_memory_eval_runner.py tests/test_memory_version_chain_experiments.py -q` -> `28 passed in 4.96s`.
+- Regenerated formal report:
+  - `my_md/memory_optimization/eval_reports/memory_target_metrics_eval.json`
+  - `my_md/memory_optimization/eval_reports/memory_target_metrics_eval.md`
+- Formal report metadata remains:
+  - `measurement_mode = offline_trace_real_baseline_target_metrics`
+  - `online_status = gated_no_checkpoint`
+  - `online_row_count = 0`
+  - `real_llm_used = False`
+- Current overall target recall results:
+  - 三路召回: `93.75% -> 100%`, `+6.25` points.
+  - 图谱召回: `93.75% -> 98.75%`, `+5` points.
+  - 重排与注入治理: `93.75% -> 100%`, `+6.25` points.
+  - 版本链与溯源: `90% -> 100%`, `+10` points.
+- Current hard target recall results:
+  - 三路召回: `87.5% -> 100%`, `+12.5` points.
+  - 图谱召回: `87.5% -> 97.5%`, `+10` points.
+  - 版本链当前有效版本召回率: `80% -> 100%`, `+20` points.
+- Current version专项指标:
+  - `current_version_recall_rate`: overall `90% -> 100%`.
+  - `stale_version_misuse_rate`: overall `0% -> 0%`.
+  - `conflict_chain_detection_rate`: `unavailable`, because no forked replacement chain fixture exists yet.
+- Updated:
+  - `my_md/memory_optimization/eval_reports/memory_target_metrics_eval.json`
+  - `my_md/memory_optimization/eval_reports/memory_target_metrics_eval.md`
+  - `my_md/memory_optimization/05-memory-target-metric-eval-plan.md`
+  - `my_md/memory_optimization/README.md`
+  - `my_md/memory_optimization/02-memory-quality-metrics.md`
+  - `my_md/memory_optimization/04-memory-plugin-experiment-roadmap.md`
+  - `task_plan.md`
+  - `findings.md`
+  - `progress.md`
+- Remaining caveats:
+  - This is still offline target-oriented data, not real online LLM output.
+  - hard miss is deliberately constructed for measurement, not a natural distribution estimate.
+  - graph retrieval still leaves `2.5` points on hard subset.
+  - conflict-chain detection needs forked replacement-chain cases before it can be measured.
+
+## 2026-07-17 Memory Phase 4 Plan
+
+- User requested using the plan skill to prepare the next memory phase.
+- Reviewed current worktree state, existing Phase 3 plan, memory experiment config/runner, `DefaultMemoryEngine.retrieve()`, `MemoryStore2.list_replacements()`, `list_items_for_dashboard()`, and memory optimization roadmap.
+- Created `docs/superpowers/plans/2026-07-17-memory-phase4-version-provenance-shadow.md`.
+- Plan scope: Phase 4a version chain shadow and Phase 4b provenance shadow only; no AgentLoop, Reasoner, ToolExecutor, real recall, real write, prompt injection, database schema, or `uv.lock` changes.
+- The plan defines new config flags, trace writer methods, pure function modules, engine shadow wiring, focused tests, broader memory verification, and documentation updates.
+- Ordinary `git status --short` does not show the new plan because `/docs/` is ignored; use `git add -f docs/superpowers/plans/2026-07-17-memory-phase4-version-provenance-shadow.md` if the plan should be committed.
+- Reviewed and revised the Phase 4 plan:
+  - version chains now count only replacement-linked graphs, not standalone active memories;
+  - recalled baseline items are merged into the version-chain snapshot to avoid false stale-recall metrics when the dashboard snapshot is incomplete;
+  - provenance now distinguishes scanned-memory cross-scope count from current-recall cross-scope risk;
+  - engine wiring now includes a bounded paginated shadow item reader and a direct pagination contract test.
+- Executed the Phase 4 plan in shadow-only mode:
+  - added `version_chain_shadow_enabled` and `provenance_shadow_enabled` config flags;
+  - added `record_version_chain_shadow()` and `record_provenance_shadow()` trace writers;
+  - added `memory2/version_chain_experiments.py` and `memory2/provenance_experiments.py`;
+  - wired `DefaultMemoryEngine.retrieve()` to record Phase 4 shadows after real injection without changing returned hits, raw items, or text block;
+  - updated memory optimization docs with Phase 4a/4b scope, metrics, and verification.
+- Verification:
+  - focused Phase 4 suite: `45 passed`;
+  - broader memory suite: `136 passed, 3 skipped, 1 warning`;
+  - full pytest: `1915 passed, 3 skipped, 3 warnings`;
+  - `compileall plugins/default_memory memory2 tests -q`: passed;
+  - `git diff --check`: passed.
+- Commit was intentionally not created in this step because Phase 3 changes are still uncommitted in the same files; committing now would mix Phase 3 and Phase 4 changes. `uv.lock` remains dirty and excluded.
+- Documentation follow-up:
+  - updated memory optimization README and roadmap to replace stale "pending compileall/diff" wording with measured verification results;
+  - replaced the old Phase 4 `fetch_success_rate` wording with the actual shadow-only metrics;
+  - added execution status to `docs/superpowers/plans/2026-07-17-memory-phase4-version-provenance-shadow.md` so future sessions can recover both the plan and the completed verification state.
+
 ## 2026-07-15 LA-002 Task 10 Verification
 
 - Started from `main` at `26b2b70`; branch is 22 commits ahead of `origin/main`.
@@ -406,3 +763,708 @@
   - decomposed work into 10 TDD/review tasks with an LA-002a checkpoint after models/store/service/request identity/recovery and LA-002b after controlled read-only runtime integration;
   - added three-way claim disposition (`created/request_replay/active_conflict`), protected transport request identity, lease renewal, recursive redaction, registry risk snapshots, explicit pending-to-running transition, and full compatibility/live gates during self-review;
   - all approved product decisions map to negative tests; no implementation code was changed while planning.
+
+## 2026-07-20 Memory Target Metric Evaluation
+
+- User approved replacing broad score interpretation with target-specific percentage metrics.
+- Updated memory optimization documentation to explain the new three-group evaluation:
+  - answer/retrieval group for tri-retrieval, graph retrieval, rerank/injection, and version/provenance;
+  - write-governance group for write-value governance;
+  - memory-hygiene group for sleep consolidation, provenance, and version-chain library-health signals.
+- Added `my_md/memory_optimization/05-memory-target-metric-eval-plan.md` as the dedicated design/measurement document.
+- Wrote implementation plan at `docs/superpowers/plans/2026-07-20-memory-target-metric-eval.md` and reviewed it. Scope was constrained to the existing 80 deterministic cases and checkpoint reuse documentation; no new real LLM calls in this task.
+- Added `memory2/eval_target_metrics.py`, `scripts/run_memory_target_metrics_eval.py`, `tests/test_memory_target_metrics.py`, and `tests/test_memory_target_metrics_cli.py`.
+- Focused target metric tests passed: `10 passed in 2.31s`.
+- Generated `my_md/memory_optimization/eval_reports/memory_target_metrics_eval.json` and `.md` for 80 cases.
+- First generated report exposed two presentation issues: target recall before used trace-internal baseline ids and candidate/scanned count columns used case counts. Corrected both and regenerated the report.
+- Historical first report highlights, later superseded by the realistic-baseline report below:
+  - three retrieval-side modules have target recall `0% -> 100%`;
+  - version/provenance has target recall `0% -> 50%`, evidence hit `94.0975%`, wrong recall `0%`;
+  - write governance has pollution block `0% -> 100%`, duplicate control `80%`, write reduction `100%`;
+  - sleep consolidation has scanned count `600`, source_ref coverage `86.6072%`, token saving `33.482%`, recall retention `100%`.
+- This first report used a presentation baseline and should not be used for final uplift claims after the realistic-baseline correction.
+- Final verification:
+  - `.venv/bin/python -m pytest tests/test_memory_target_metrics.py tests/test_memory_target_metrics_cli.py -q` -> `10 passed in 2.59s`.
+  - `.venv/bin/python -m pytest tests/test_memory_quantitative_uplift.py tests/test_memory_layered_scoring.py tests/test_memory_layered_scoring_cli.py -q` -> `27 passed in 7.09s`.
+  - `.venv/bin/python -m compileall memory2/eval_target_metrics.py scripts/run_memory_target_metrics_eval.py tests/test_memory_target_metrics.py tests/test_memory_target_metrics_cli.py -q` -> exit `0`.
+  - `git diff --check` -> exit `0`.
+
+## 2026-07-20 Memory Realistic Target Metrics
+
+- User asked to replace the fixed `before = 0` target-metric presentation with方案三: offline real before/after plus online checkpoint/evidence support for 召回与回答、写入治理、记忆库卫生.
+- Wrote and reviewed `docs/superpowers/plans/2026-07-20-memory-realistic-target-metrics.md`.
+- Independent plan review found critical issues: fake-provider could be mislabeled as real LLM, online rows were not paired by `(case_id, prompt_variant, repeat_index)`, table rows lacked source columns, and write/hygiene before fields could still be fake zeros. Revised the plan before implementation.
+- Implemented TDD changes in `memory2/eval_target_metrics.py` and tests:
+  - `before` for answer/retrieval now uses trace baseline ids.
+  - fixed-zero before values are replaced with `unavailable` when no baseline event/denominator exists.
+  - rows include `measurement_layer`, `measurement_source`, `checkpoint_source`, and optional `gated_reason`.
+  - online checkpoint answer rows are paired by `(case_id, prompt_variant, repeat_index)`.
+  - online write/hygiene evidence JSON inputs are supported separately from answer checkpoints.
+  - CLI supports `--online-checkpoint-jsonl`, `--online-checkpoint-source`, `--online-write-evidence-json`, and `--online-hygiene-evidence-json`.
+- Focused target tests after implementation: `.venv/bin/python -m pytest tests/test_memory_target_metrics.py tests/test_memory_target_metrics_cli.py -q` -> `14 passed in 3.17s`.
+- Regenerated formal offline report at `my_md/memory_optimization/eval_reports/memory_target_metrics_eval.json` and `.md`.
+- Formal report now has `measurement_mode = offline_trace_real_baseline_target_metrics`, `online_status = gated_no_checkpoint`, `online_row_count = 0`.
+- Main formal offline conclusion at Phase 6f time; superseded by Phase 6g hard-miss/version-aware report above:
+  - 三路召回: target recall `100% -> 100%`, wrong recall after `15%`.
+  - 图谱召回: target recall `100% -> 100%`, wrong recall before/after both `15%`.
+  - 重排与注入治理: target recall `100% -> 100%`, wrong injection after `0%`.
+  - 版本链与溯源: target recall `100% -> 50%`, evidence hit after `94.0975%`, wrong recall after `0%`.
+  - 写入价值治理: 240 candidates, pollution block after `100%`, duplicate control after `80%`, write reduction after `100%`.
+  - 睡眠巩固: 600 scanned, source_ref coverage after `86.6072%`, token saving after `33.482%`, recall retention after `100%`.
+- Fake-provider smoke:
+  - comprehensive checkpoint command wrote `/tmp/akashic-memory-online-target-smoke/checkpoint.jsonl`.
+  - target smoke report wrote `/tmp/akashic-memory-online-target-smoke-target-report/memory_target_metrics_eval.json` and `.md`.
+  - smoke output had `online_row_count = 6`; answer rows used `online_checkpoint/comprehensive_online_checkpoint/fake_provider`, write row used `online_evidence/write_governance_evidence_json/fake_provider`, hygiene row used `online_evidence/memory_hygiene_evidence_json/fake_provider`.
+  - This validates the checkpoint/evidence transformation path only; it is not real provider quality and was not written to formal `my_md` reports.
+- Final verification:
+  - `.venv/bin/python -m pytest tests/test_memory_target_metrics.py tests/test_memory_target_metrics_cli.py -q` -> `14 passed in 3.24s`.
+  - `.venv/bin/python -m pytest tests/test_memory_quantitative_uplift.py tests/test_memory_layered_scoring.py tests/test_memory_layered_scoring_cli.py -q` -> `27 passed in 6.74s`.
+  - `.venv/bin/python -m compileall memory2/eval_target_metrics.py scripts/run_memory_target_metrics_eval.py tests/test_memory_target_metrics.py tests/test_memory_target_metrics_cli.py -q` -> exit `0`.
+  - `git diff --check` -> exit `0`.
+- Follow-up documentation update:
+  - Updated `my_md/memory_optimization/01-memory-optimization-roadmap.md` with the current finding that the 80-case set is not discriminative enough for recall uplift.
+  - Updated `02-memory-quality-metrics.md` and `04-memory-plugin-experiment-roadmap.md` to replace stale `0% -> 100%` Phase 6f results with the realistic-baseline results.
+  - Updated `README.md`, `task_plan.md`, and `findings.md` to record current problems and the recommended next step: version-chain metric/case repair plus harder retrieval cases before more real LLM spending.
+
+## 2026-07-21 Memory Baseline Plus Enhancements
+
+- User clarified the desired evaluation framing: `off` should not be treated as the main baseline. The main comparison should be original memory behavior plus enhancement modules.
+- Updated quantitative uplift semantics so `memory_base` is the original-memory baseline and `off` is only the disabled-enhancement control.
+- Updated chain semantics so `chain_memory_base` is the chain baseline and `chain_off` is only the disabled-enhancement control row.
+- Added count-oriented fields to quantitative summaries: `target_count`, `success_count`, `miss_count`, `recall_rate`, `grounding_count`, and `forbidden_count`.
+- Regenerated:
+  - `memory_quantitative_uplift_eval.json/.md`
+  - `memory_quantitative_chain_eval.json/.md`
+  - `memory_layered_scoring_eval.json/.md`
+- Current 80-case offline results under the new baseline:
+  - quantitative uplift: `baseline_main_score = 94.375`, `all_on_main_score = 69.5543`, `total_uplift_points = -24.8207`;
+  - chain uplift: `chain_memory_base = 94.375`, `chain_all_on = 69.5543`, `total_chain_uplift_points = -24.8207`;
+  - layered scoring: `baseline_total_layered_score = 94.375`, `final_total_layered_score = 54.9521`, `total_layered_uplift_points = -39.4229`.
+- Focused verification:
+  - `.venv/bin/python -m pytest tests/test_memory_quantitative_uplift.py tests/test_memory_quantitative_chain_cli.py tests/test_memory_quantitative_uplift_cli.py tests/test_memory_layered_scoring.py tests/test_memory_comprehensive_online_eval.py tests/test_memory_comprehensive_online_cli.py -q -p no:cacheprovider` -> `50 passed`.
+  - `git diff --check` -> exit `0`.
+- Next step: commit the current memory evaluation baseline changes, then build the 320-case count/percentage report that compares each enhancement against original memory rather than against disabled memory.
+
+## 2026-07-21 Memory 320 Case Baseline Plus Count Report
+
+- Ran the comprehensive 320-case offline quantitative uplift report into `/tmp/akashic-memory-320-baseline-plus`.
+- Ran the comprehensive 320-case offline quantitative chain report into `/tmp/akashic-memory-320-baseline-plus`.
+- Added `my_md/memory_optimization/06-memory-320-baseline-plus-count-eval.md`.
+- Linked the new document from `my_md/memory_optimization/README.md`.
+- Main count results:
+  - original memory baseline: `628/640` recalled, `12/640` missed, recall rate `98.12%`;
+  - tri retrieval: `640/640` recalled, +12 recalled, +1.88 percentage points;
+  - graph retrieval: `638/640` recalled, +10 recalled, +1.57 percentage points;
+  - all-on: `370/640` recalled, -258 recalled, -40.31 percentage points.
+- Conclusion: answer/retrieval enhancements should not be evaluated against disabled memory. Tri retrieval and graph retrieval show measurable recall gains over original memory, while all-on currently performs worse and needs routing/layered evaluation before active rollout.
+
+## 2026-07-21 Memory Answer Comprehensive V2
+
+- Added explicit `answer_comprehensive_v2` case pack for answer/retrieval-only evaluation.
+- Pack size is `1000` cases: `25` answer/retrieval scenarios, `20` variants, and common/hard sets.
+- Generated formal reports:
+  - `my_md/memory_optimization/eval_reports/memory_answer_retrieval_counts_eval.json`
+  - `my_md/memory_optimization/eval_reports/memory_answer_retrieval_counts_eval.md`
+- Main offline count results:
+  - original memory baseline: `1978/2000` recalled, `22/2000` missed, `98.9%` recall;
+  - tri retrieval: `2000/2000` recalled, +22 recalled, +1.1 percentage points;
+  - graph retrieval: `1994/2000` recalled, +16 recalled, +0.8 percentage points;
+  - chain rerank/injection: `2000/2000` recalled, +22 recalled over baseline, +1.1 percentage points;
+  - chain version/provenance: `1998/2000` recalled, +20 recalled over baseline, +1.0 percentage points;
+  - answer-only all-on: `1998/2000` recalled, +20 recalled, +1.0 percentage points.
+- Write governance and sleep consolidation are excluded from the answer/retrieval main table rows and underlying feature sets; they should continue to use separate write/hygiene evidence metrics.
+- Added interview-facing explanation to `06-memory-320-baseline-plus-count-eval.md`: retrieval modules improve coverage, while rerank/injection/version/provenance modules are governance layers that should be evaluated in chain context.
+- Focused verification:
+  - `.venv/bin/python -m pytest tests/test_memory_quantitative_uplift.py tests/test_memory_answer_retrieval_counts.py tests/test_memory_answer_retrieval_counts_cli.py tests/test_memory_quantitative_chain_cli.py tests/test_memory_quantitative_uplift_cli.py -q -p no:cacheprovider` -> `30 passed in 59.58s`.
+  - `.venv/bin/python -m compileall memory2/eval_answer_retrieval_counts.py scripts/run_memory_answer_retrieval_counts_eval.py tests/test_memory_answer_retrieval_counts.py tests/test_memory_answer_retrieval_counts_cli.py -q` -> exit `0`.
+  - `git diff --check` and `git diff --cached --check` -> exit `0`.
+
+## 2026-07-21 Memory Write Governance Offline Count Eval
+
+- Built a 1200-candidate offline write-governance evaluation.
+- Baseline is original write behavior: `1200/1200` candidates are counted as written.
+- Enhanced profile is write-value governance: `allow` writes, `reject/review` do not directly write.
+- Generated:
+  - `my_md/memory_optimization/eval_reports/memory_write_governance_counts_eval.json`
+  - `my_md/memory_optimization/eval_reports/memory_write_governance_counts_eval.md`
+- Added linked documentation:
+  - `my_md/memory_optimization/07-memory-write-governance-count-eval.md`
+- Main offline results:
+  - 治理后直接写入 `202/1200`，写入减少率 `83.1667%`;
+  - 有用候选保留率 `35.0%`;
+  - 污染候选控制率 `92.25%`;
+  - 误伤率 `65.0%`;
+  - 漏拦率 `7.75%`;
+  - 冲突复核缺口率 `71.0%`.
+- Current conclusion: write governance already shows strong pollution control for temporary and assistant-inference candidates, but useful-memory retention and conflict review routing are not good enough for online claims.
+- Online evaluation remains gated until the offline table is reviewed and the useful-retention/conflict-review weaknesses are addressed.
+- Follow-up analysis:
+  - The `65.0%` false reject rate is a conservative "not directly written" metric, because it includes both `reject` and `review`.
+  - Direct reject false rejects are `80/400 = 20.0%`; review deferrals are `180/400 = 45.0%`.
+  - Main causes are broad temporary markers such as `测试`, weak implicit long-term value recognition in hard cases, and insufficient conflict-to-review routing.
+  - Next implementation should split false-reject metrics, narrow temporary risk, add long-term value signals, and route conflicts to review before any online write-governance test.
+
+## 2026-07-21 Memory Write Governance Policy Tuning
+
+- Tuned `score_write_candidate_shadow()` without lowering the main allow threshold:
+  - narrowed temporary markers so broad `测试` no longer rejects long-term test plans;
+  - added implicit long-term value markers such as stable requirements, follow-up reusable constraints, cross-session/default-rule wording, and priorities;
+  - added lightweight existing-memory conflict detection that routes likely conflicts to `review`;
+  - kept temporary, assistant inference, and duplicate pollution protections.
+- Split write-governance false reject reporting:
+  - direct reject false reject;
+  - review deferral;
+  - not-directly-written useful candidate rate.
+- Regenerated:
+  - `my_md/memory_optimization/eval_reports/memory_write_governance_counts_eval.json`
+  - `my_md/memory_optimization/eval_reports/memory_write_governance_counts_eval.md`
+- Updated:
+  - `my_md/memory_optimization/07-memory-write-governance-count-eval.md`
+  - `my_md/memory_optimization/README.md`
+- Before/after results:
+  - useful retention: `35.0% -> 37.5%`;
+  - pollution control: `92.25% -> 97.25%`;
+  - direct reject false reject: `20.0% -> 12.5%`;
+  - review deferral: `45.0% -> 50.0%`;
+  - not-directly-written useful candidate rate: `65.0% -> 62.5%`;
+  - false accept: `7.75% -> 2.75%`;
+  - conflict review miss: `71.0% -> 2.0%`.
+- Metric gate passed:
+  - useful retention `> 35.0`;
+  - pollution control `>= 90.0`;
+  - direct reject false reject `< 20.0`;
+  - conflict review miss `< 71.0`.
+- Current conclusion: tuning strongly improved conflict routing and direct reject mistakes while preserving pollution control. Remaining weakness is hard useful candidates: they still go mostly to `review`, so review processing or richer value scoring is needed before online write-governance claims.
+- Recommended next step:
+  - Build an offline-first review resolver for `review` candidates.
+  - The resolver should output `approve_write`, `keep_review`, or `reject`.
+  - Its purpose is to turn safe, high-value review candidates into final writes without lowering the initial `allow` threshold.
+  - Main metrics should be useful final retention, hard useful final retention, conflict review preservation, duplicate hard leakage, and pollution control.
+  - Target gates: useful final retention above `60%`, hard useful final retention above `40%`, pollution control at least `90%`, conflict review preservation at least `95%`, duplicate hard leakage below `10%`.
+
+## 2026-07-21 Memory Write Governance Review Resolver
+
+- Implemented an offline-only `review` resolver and final write safety gate for write-governance candidates.
+- Added `memory2/write_governance_review.py` with:
+  - `resolve_write_review_candidate()`;
+  - `apply_final_write_safety_gate()`;
+  - `WriteReviewResolution`.
+- The resolver and safety gate decisions use only production-available signals: candidate summary, score result, existing memories, and source_ref. Eval grouping labels such as category, case_set, and subtype remain reporting-only and are not decision inputs.
+- Extended `memory2/eval_write_governance_counts.py` so the report keeps first-stage direct-write metrics and separately adds final-decision metrics.
+- Regenerated:
+  - `my_md/memory_optimization/eval_reports/memory_write_governance_counts_eval.json`
+  - `my_md/memory_optimization/eval_reports/memory_write_governance_counts_eval.md`
+- Main offline results:
+  - first-stage direct write remains `172/1200`;
+  - review candidates: `449`;
+  - review promoted writes: `203`;
+  - review kept: `196`;
+  - review rejected: `50`;
+  - final writes after resolver and safety gate: `350/1200`;
+  - useful final retention: `87.5%`;
+  - hard useful final retention: `75.0%`;
+  - final pollution control: `100.0%`;
+  - conflict review preservation: `98.0%`;
+  - hard duplicate leakage: `0.0%`.
+- Important implementation adjustment:
+  - Duplicate leakage was not fully solvable in resolver-only logic because some hard duplicate rows were first-stage `allow`, not `review`.
+  - A final write safety gate was added after first-stage allow / resolver promotion, so every provisional final write is checked once more before counting as written.
+- Current conclusion:
+  - The offline chain now shows the intended write-governance shape: direct write stays conservative, useful review candidates can be recovered, conflicts stay in review, and duplicate/pollution candidates do not leak into final writes.
+  - This is still offline shadow evaluation only. It does not change live AgentLoop, production memory DB writes, observe DB writes, or real LLM behavior.
+- Gap to ideal state:
+  - Useful final retention is `87.5%`; ideal is `100%`, so the gap is `50/400` useful candidates or `12.5` percentage points.
+  - Hard useful final retention is `75.0%`; ideal is `100%`, so the gap is `50/200` hard useful candidates or `25` percentage points.
+  - Conflict review preservation is `98.0%`; ideal is `100%`, so the gap is `4/200` conflict candidates or `2` percentage points.
+  - Final pollution control is `100.0%` and hard duplicate leakage is `0.0%`, so these two are already at the strict ideal target in this offline set.
+  - Main remaining weakness is useful hard-candidate recovery, not pollution control.
+- Focused verification:
+  - `.venv/bin/python -m pytest tests/test_memory_write_governance_counts.py -q -p no:cacheprovider` -> `26 passed in 0.98s`.
+  - `.venv/bin/python -m pytest tests/test_memory_write_governance_counts_cli.py -q -p no:cacheprovider` -> `1 passed in 0.20s`.
+  - Resolver metric gate passed with useful final retention `87.5%`, hard useful final retention `75.0%`, final pollution control `100.0%`, conflict review preservation `98.0%`, duplicate hard leakage `0.0%`.
+  - Final focused suite `.venv/bin/python -m pytest tests/test_memory_write_governance_counts.py tests/test_memory_write_governance_counts_cli.py tests/test_post_response_memory_experiments.py -q -p no:cacheprovider` -> `32 passed in 1.52s`.
+  - Compileall and diff checks exited `0`.
+
+## 2026-07-21 Memory Hard Useful Recovery Tuning
+
+- Root cause:
+  - The remaining `50/200` hard useful misses were all first-stage `reject` with reason `temporary_state`.
+  - The phrase `除非用户临时改口` was being treated as temporary memory pollution because the marker used broad standalone `临时`.
+  - The remaining `4/200` conflict misses were also first-stage `reject` with reason `temporary_state`, caused by broad `不要记` matching inside `不要记录来源`.
+- Implementation:
+  - Added precise temporary-risk detection in `plugins/default_memory/experiments.py`.
+  - Removed broad standalone `临时`, `不要记`, and English `temporary` from temporary-risk matching.
+  - Kept precise temporary rejection markers such as `今天这次`, `本轮调试`, `只用于当前`, `先不用长期保存`, `不要写入长期记忆`, `不要记住`, and `do not remember`.
+  - Added regression tests for Chinese stable exception wording, English `temporary exception`, conflict wording `不要记录来源`, and precise temporary rejection samples.
+  - Added strict ideal gap metrics to the write-governance count report.
+- Regenerated:
+  - `my_md/memory_optimization/eval_reports/memory_write_governance_counts_eval.json`
+  - `my_md/memory_optimization/eval_reports/memory_write_governance_counts_eval.md`
+- Before/after metrics:
+  - useful final retention: `87.5% -> 100.0%`;
+  - hard useful final retention: `75.0% -> 100.0%`;
+  - conflict review preservation: `98.0% -> 100.0%`;
+  - final pollution control: `100.0% -> 100.0%`;
+  - hard duplicate leakage: `0.0% -> 0.0%`;
+  - useful final gap: `50/400 -> 0/400`;
+  - hard useful final gap: `50/200 -> 0/200`;
+  - conflict review gap: `4/200 -> 0/200`;
+  - strict ideal gap: `54 -> 0`.
+- Strict metric gate passed:
+  - useful final retention `100.0%`;
+  - hard useful final retention `100.0%`;
+  - final pollution control `100.0%`;
+  - conflict review preservation `100.0%`;
+  - hard duplicate leakage `0.0%`;
+  - strict ideal gap `0`.
+- Final verification:
+  - `.venv/bin/python -m pytest tests/test_memory_write_governance_counts.py tests/test_memory_write_governance_counts_cli.py tests/test_post_response_memory_experiments.py tests/test_memory_experiments_runner.py tests/test_memory_eval_runner.py -q -p no:cacheprovider` -> `70 passed in 1.64s`.
+  - `.venv/bin/python -m compileall plugins/default_memory/experiments.py memory2/write_governance_review.py memory2/eval_write_governance_counts.py tests/test_memory_write_governance_counts.py tests/test_memory_write_governance_counts_cli.py -q` -> exit `0`.
+  - `git diff --check` -> exit `0`.
+  - `git diff --cached --check` -> exit `0`.
+- Current conclusion:
+  - The offline write-governance chain now reaches the strict ideal target on the 1200-candidate synthetic set.
+  - This still only affects offline/shadow scoring and reports. It does not change live AgentLoop behavior, production memory DB writes, observe DB writes, or real LLM behavior.
+
+## 2026-07-21 Memory Write Governance Key Data Documentation
+
+- Updated memory optimization docs to record the current Phase 6n write-governance key data and online boundary.
+- Key offline dataset configuration:
+  - `1200` generated write candidates;
+  - common `600`, hard `600`;
+  - 6 categories, `200` candidates each;
+  - categories: `valuable_preference`, `stable_fact`, `temporary`, `assistant_inference`, `duplicate`, `conflict`;
+  - each category has 5 common subtypes and 5 hard subtypes, with 20 variants per subtype;
+  - generation formula: `2 * 6 * 5 * 20 = 1200`.
+- Baseline meaning:
+  - original write behavior writes `1200/1200`;
+  - useful candidates are retained `400/400`;
+  - pollution/duplicate/conflict candidates are also written `800/800`;
+  - baseline pollution control is `0%`, write reduction is `0%`.
+- Current enhanced write-governance chain:
+  - first-stage direct write `172/1200`;
+  - write reduction `85.6667%`;
+  - first-stage pollution control `97.25%`;
+  - review candidates `503`;
+  - review promoted writes `253`;
+  - final writes `400/1200`;
+  - useful final retention `100.0%`;
+  - hard useful final retention `100.0%`;
+  - final pollution control `100.0%`;
+  - conflict review preservation `100.0%`;
+  - hard duplicate leakage `0.0%`;
+  - strict ideal gap `0`.
+- Updated docs:
+  - `my_md/memory_optimization/07-memory-write-governance-count-eval.md`;
+  - `my_md/memory_optimization/README.md`;
+  - `my_md/memory_optimization/05-memory-target-metric-eval-plan.md`;
+  - `my_md/memory_optimization/02-memory-quality-metrics.md`;
+  - `my_md/memory_optimization/04-memory-plugin-experiment-roadmap.md`.
+- Important boundary:
+  - this dataset is synthetic/template-based offline evidence, not online production sampling;
+  - online claims still require real write-candidate evidence: summary, existing memories, source_ref, baseline/proposed decision, actual write/review/reject result, and future recall usefulness where possible.
+
+## 2026-07-21 Memory Write Governance Online Shadow Eval
+
+- Implemented a test-set-driven write-governance online shadow evaluator.
+- New files:
+  - `memory2/eval_write_governance_online.py`;
+  - `scripts/run_memory_write_governance_online_eval.py`;
+  - `tests/test_memory_write_governance_online_eval.py`;
+  - `tests/test_memory_write_governance_online_cli.py`.
+- The runner uses pre-labeled `memory2/eval_write_governance_cases.py` candidates, runs them through real `AgentLoop.process_direct()`, optionally calls a real LLM, and outputs target-metric-compatible write evidence JSONL.
+- Safety boundary:
+  - default real LLM gate remains closed;
+  - fake-provider mode is available for smoke tests;
+  - every run uses `skip_post_memory=True`;
+  - production memory DB, observe DB, live AgentLoop behavior, ToolExecutor, and ToolRegistry are not changed;
+  - labels come from the test set, not model self-judgment.
+- Important correction during execution:
+  - plain `--limit 24` over the original candidate builder only selected useful candidates, which made pollution/duplicate/conflict metrics unavailable;
+  - added balanced category selection in `select_write_governance_online_candidates()` so small samples cover all 6 categories.
+- Fake-provider smoke report:
+  - command output directory: `/tmp/akashic-memory-write-governance-online-fake-v2/reports`;
+  - target metric output directory: `/tmp/akashic-memory-write-governance-online-fake-v2/target`;
+  - `candidate_count = 24`;
+  - `real_llm_enabled = False`;
+  - `infra_passed = True`;
+  - `provider_error_count = 0`;
+  - `timeout_count = 0`;
+  - `total_token_count = 720`;
+  - `avg_latency_ms = 34.5417`.
+- Fake-provider evidence distribution:
+  - useful `8`: after allow `8`, reject `0`, review `0`;
+  - pollution `8`: after allow `0`, reject `8`, review `0`;
+  - duplicate `4`: after allow `0`, reject `4`, review `0`;
+  - conflict `4`: after allow `0`, reject `0`, review `4`.
+- Target metrics online evidence row:
+  - `online_write_record_count = 24`;
+  - useful write precision `33.3333% -> 100.0%`;
+  - pollution block rate `0.0% -> 100.0%`;
+  - duplicate control rate `0.0% -> 100.0%`;
+  - conflict review rate `0.0% -> 100.0%`;
+  - write reduction rate `0.0% -> 66.6667%`;
+  - false reject rate `0.0% -> 0.0%`;
+  - false accept rate `100.0% -> 0.0%`.
+- Focused verification:
+  - `.venv/bin/python -m pytest tests/test_memory_write_governance_online_eval.py tests/test_memory_write_governance_online_cli.py tests/test_memory_target_metrics_cli.py -q -p no:cacheprovider` -> `21 passed in 15.51s`.
+- Real LLM pilot was not run in this step because it consumes provider quota and the plan requires explicit approval at execution time.
+
+## 2026-07-22 Sleep Hygiene Evidence Eval
+
+- Executed the revised sleep hygiene evidence plan.
+- Added deterministic case generation for duplicate, stale, low-value, and retained cohorts.
+- Added evidence conversion from `sleep_consolidation_shadow` to target-metric-compatible `online_hygiene_records`.
+- Added retained safety counters so retained memories are not hard-coded as safe:
+  - `retained_candidate_leak_count`;
+  - `unexpected_candidate_count`;
+  - `false_positive_cleanup_rate`.
+- Added CLI report generation via `scripts/run_memory_sleep_hygiene_evidence_eval.py`.
+- Generated formal reports under `my_md/memory_optimization/eval_reports/sleep_hygiene_evidence/`.
+- Current 600-case output:
+  - `case_count = 600`;
+  - `scanned_active_item_count = 750`;
+  - `evaluated_evidence_row_count = 600`;
+  - duplicate candidate identification `100.0%`;
+  - stale candidate identification `100.0%`;
+  - low-value candidate identification `100.0%`;
+  - source_ref coverage `90.0%`;
+  - proxy source fetch success `100.0%`;
+  - shadow estimated token saving `64.0138%`;
+  - retained memory retention `100.0%`;
+  - retained candidate leak count `0`;
+  - unexpected candidate count `0`;
+  - false positive cleanup rate `0.0%`;
+  - applied change count `0`.
+- Boundary:
+  - this remains offline evidence / shadow-only;
+  - no real memory DB cleanup happened;
+  - no production prompt token reduction is claimed;
+  - proxy source fetch success is not real message lookup.
+
+## 2026-07-22 Sleep Hygiene Hard Eval V2
+
+- Executed the hard / adversarial sleep hygiene V2 plan.
+- Added per-item expected states in `SleepHygieneCase`:
+  - `case_set`;
+  - `scenario`;
+  - `expected_item_states`;
+  - `evaluated_item_ids()`;
+  - `expected_state_for()`.
+- Added hard case generation for:
+  - near merge but not duplicate;
+  - old high-value retained memory;
+  - temporary-looking but pinned memory;
+  - identical content across scopes;
+  - opposite preference conflict;
+  - multi-duplicate pairwise semantics;
+  - missing source but important memory;
+  - stale-derived low-value memory.
+- Added evidence rows for every evaluated item, including:
+  - `case_id`;
+  - `case_set`;
+  - `scenario`;
+  - `expected_after_state`.
+- Added `strip_sleep_hygiene_evidence_for_target_metrics()` so dedicated report records can include extra fields while target metrics receive the strict schema.
+- Added group metrics for `standard`, `hard`, and `overall`:
+  - `case_count`;
+  - `evaluated_item_count`;
+  - `evidence_row_count`;
+  - `candidate_recall`;
+  - `candidate_precision`;
+  - `retained_protection_rate`;
+  - `false_positive_cleanup_rate`;
+  - `safe_evidence_estimated_token_saving_rate`.
+- Added CLI flags:
+  - `--case-set standard|hard|all`;
+  - `--hard-per-scenario`.
+- Generated formal V2 reports under `my_md/memory_optimization/eval_reports/sleep_hygiene_evidence_v2/`.
+- Current V2 result:
+  - standard: `600` cases, `600` evaluated items, candidate recall `100.0%`, candidate precision `100.0%`, retained protection `100.0%`, false positive cleanup `0.0%`, safe evidence token saving `64.0138%`;
+  - hard: `320` cases, `520` evaluated items, candidate recall `100.0%`, candidate precision `75.0%`, retained protection `90.0%`, false positive cleanup `10.0%`, safe evidence token saving `unsafe`;
+  - overall: `920` cases, `1120` evaluated items, candidate recall `100.0%`, candidate precision `93.4426%`, retained protection `92.7273%`, false positive cleanup `7.2727%`, safe evidence token saving `unsafe`.
+- Key conclusion:
+  - V1 standard 100% was a functionality/happy-path result;
+  - V2 hard set reveals boundary risk;
+  - current shadow identifies intended cleanup candidates well, but near-merge retained memories can become non-active candidates, so merge suggestion must not be presented as safe cleanup.
+- Follow-up direction recorded in docs:
+  - split hard metrics by scenario;
+  - separate `merge suggestion` from real `cleanup candidate`;
+  - route near-merge to review instead of cleanup;
+  - replace proxy source fetch with real `source_ref` lookup evidence;
+  - generate active dry-run patch without writing DB;
+  - require high hard precision, retained protection, real source fetch, and recoverability before any real merge / supersede.
+
+## 2026-07-22 Sleep Hygiene Safety V3
+
+- Executed the V3 sleep hygiene safety plan after committing the documentation baseline.
+- Added hard scenario metrics:
+  - `scenario_metrics`;
+  - Markdown hard scenario breakdown.
+- Split candidate semantics:
+  - `cleanup candidate` for safe duplicate / stale / low-value cleanup candidates;
+  - `merge suggestion` for near-merge review-only cases;
+  - retained near-merge rows keep `after_state = active`;
+  - raw shadow signal is preserved in `shadow_after_state`.
+- Added local evidence fields:
+  - `source_ref`;
+  - `candidate_action`;
+  - `candidate_source`;
+  - `requires_review`;
+  - `safe_cleanup_candidate`;
+  - `source_ref_parse_success`;
+  - `source_fetch_mode`;
+  - `source_support_status`;
+  - `source_support_reason`.
+- Added evaluator-side provenance module:
+  - proxy resolver for synthetic reports;
+  - mapping resolver for deterministic tests;
+  - session-store resolver for fixture or real `sessions.db` checks via `SessionStore.fetch_by_ids()`.
+- Added non-mutating dry-run patch:
+  - `would_merge`;
+  - `would_mark_stale`;
+  - `would_remove_low_value`;
+  - `would_keep`;
+  - `requires_review`;
+  - `writes_real_db = false`;
+  - `recoverability_status`;
+  - `recoverability_reason`.
+- Generated V3 reports under `my_md/memory_optimization/eval_reports/sleep_hygiene_evidence_v3/`.
+- V3 formal synthetic result:
+  - standard: `600` cases, `600` rows, cleanup recall `100.0%`, cleanup precision `100.0%`, retained protection `100.0%`, false positive cleanup `0.0%`, safe cleanup token saving `64.0138%`;
+  - hard: `320` cases, `520` rows, cleanup recall `100.0%`, cleanup precision `100.0%`, retained protection `100.0%`, false positive cleanup `0.0%`, merge suggestions `40`, review required `120`, safe cleanup token saving `23.7952%`;
+  - overall: `920` cases, `1120` rows, cleanup recall `100.0%`, cleanup precision `100.0%`, retained protection `100.0%`, false positive cleanup `0.0%`, merge suggestions `40`, review required `120`, safe cleanup token saving `42.5121%`.
+- Near-merge result:
+  - `40` cases / `80` rows;
+  - `merge_suggestion_count = 40`;
+  - `review_required_count = 40`;
+  - `safe_cleanup_token_saving_rate = 0.0%`.
+- Boundary:
+  - formal V3 run uses `source_fetch_mode = proxy`;
+  - session-store mode is covered by tests but not used to claim synthetic source lookup success;
+  - no real memory DB cleanup happened;
+  - no real prompt token reduction is claimed;
+  - active gate remains closed.
+
+## 2026-07-22 Source Ref Quality Shadow
+
+- Goal: quantify whether message-level `source_ref` normalization can improve source-backed evidence quality before changing production memory writes.
+- Added a pure shadow normalizer:
+  - `memory2/source_ref_quality.py`;
+  - keeps valid same-session message-level refs;
+  - upgrades session-level, missing, malformed, or foreign baseline refs only when explicit current-session candidate message IDs are available;
+  - filters duplicate, malformed, and foreign candidate message IDs.
+- Added a guarded evaluator:
+  - `memory2/eval_source_ref_quality.py`;
+  - evaluator consumes an injected `SourceRefResolver` and does not open arbitrary session DB paths;
+  - fixture builder refuses to overwrite an existing unmarked `sessions.db`;
+  - fixture resolver opener refuses unmarked DBs;
+  - baseline and normalized source refs both enforce same-session message IDs before resolver lookup;
+  - `source_backed_eligible` means source fetch succeeded and `source_support_status == "supported"`.
+- Added CLI:
+  - `scripts/run_memory_source_ref_quality_eval.py`;
+  - only supports guarded fixture mode in this phase;
+  - writes JSON and Markdown reports under `my_md/memory_optimization/eval_reports/source_ref_quality_shadow_v1/`.
+- Current synthetic controlled fixture result:
+  - candidates: `6`;
+  - message-level coverage: `33.3333% -> 83.3333%`;
+  - parse success: `66.6667% -> 100.0%`;
+  - real source fetch success: `33.3333% -> 83.3333%`;
+  - source support: `16.6667% -> 66.6667%`;
+  - source-backed eligible: `1/6 -> 4/6`;
+  - malformed source_ref count: `1 -> 0`.
+- Boundary:
+  - synthetic controlled fixture / shadow-only;
+  - no production online uplift claim;
+  - no `memory_items.source_ref` rewrite;
+  - no production `sessions.db` or memory DB writes;
+  - no active cleanup.
+
+## 2026-07-24 Answer Retrieval Metric Plan Boundary
+
+- Goal: improve the answer/retrieval count report so interview-facing recall numbers show both raw counts and relative percentages against the original memory baseline.
+- Reviewed plan conclusion:
+  - keep this phase limited to offline deterministic count metrics;
+  - measured tables are only single-module uplift and cumulative chain uplift;
+  - answer correctness, evidence hit, noise control, and context cost require real LLM / trace evidence and must not be rendered as measured result tables in this offline report.
+- Documentation updated before implementation:
+  - `my_md/memory_optimization/06-memory-320-baseline-plus-count-eval.md`;
+  - `my_md/memory_optimization/README.md`.
+- Implementation completed:
+  - added relative recall lift and miss reduction percentages to the single-module table;
+  - added adjacent / cumulative relative recall lift, miss reduction percentages, and cumulative miss reduction count to the chain table;
+  - regenerated `memory_answer_retrieval_counts_eval.json` and `.md`;
+  - kept answer correctness, evidence hit, noise control, and context cost as future unmeasured metrics for online / trace-evidence evaluation.
+- Current regenerated key results:
+  - original memory baseline: `1978/2000`, recall `98.9%`;
+  - tri retrieval: `2000/2000`, relative recall lift `1.1122%`, miss reduction `100.0%`;
+  - graph retrieval: `1994/2000`, relative recall lift `0.8089%`, miss reduction `72.7273%`;
+  - chain rerank injection: remains `2000/2000`, cumulative relative recall lift `1.1122%`;
+  - chain all on: `1998/2000`, cumulative relative recall lift `1.0111%`, cumulative miss reduction `90.9091%`.
+- Verification:
+  - `.venv/bin/python -m pytest tests/test_memory_answer_retrieval_counts.py tests/test_memory_answer_retrieval_counts_cli.py -q -p no:cacheprovider` => `9 passed in 103.19s`;
+  - `git diff --check` => passed.
+- Additional documentation sync after user requested experiment data update:
+  - `my_md/memory_optimization/02-memory-quality-metrics.md` now records Phase 6m Answer Comprehensive V2 scale, single-module results, chain results, formulas, and offline-only boundary;
+  - `my_md/memory_optimization/05-memory-target-metric-eval-plan.md` now records the current recall coverage table and explicitly lists which answer/evidence/noise/cost data require online trace evidence;
+  - `my_md/memory_optimization/04-memory-plugin-experiment-roadmap.md` now records the current recall coverage results under the Phase 6f/6m roadmap context.
+- Documentation sync:
+  - recorded the current conclusion that message-level source_ref governance improves traceability on the 200-case target-driven fixture;
+  - added metric definitions for message-level coverage, parse success, real source fetch success, source support, and source-backed eligible;
+  - recorded the boundary that this does not prove production natural traffic or LLM extraction quality.
+- Verification so far:
+  - `.venv/bin/python -m pytest tests/test_memory_source_ref_quality.py tests/test_memory_source_ref_quality_cli.py -q -p no:cacheprovider` => `18 passed`.
+  - `.venv/bin/python -m pytest tests/test_memory_source_ref_quality.py tests/test_memory_source_ref_quality_cli.py tests/test_memory_sleep_hygiene_provenance.py tests/test_memory_sleep_hygiene_evidence.py tests/test_memory_sleep_hygiene_source_fixture.py -q -p no:cacheprovider` => `43 passed`.
+- Code review fixes before commit:
+  - fixed Chinese `expected_terms` tuple handling so strings are not split into characters;
+  - tightened baseline/scoped message refs to require current `session_key` and numeric message sequence;
+  - clarified Phase 6t metric denominators as all-candidate rates;
+  - prevented fixture marker checks from creating a missing DB path.
+
+## 2026-07-24 Memory Answer Quality Online Uplift Report
+
+- User asked to execute the reviewed plan for answer-quality online uplift reporting.
+- Implemented report-only changes in `memory2/eval_comprehensive_online.py`:
+  - added `ANSWER_QUALITY_PROFILES`;
+  - added `profile_answer_quality_uplift_vs_memory_base`;
+  - added `chain_answer_quality_uplift_rows`;
+  - added `answer_quality_required_profiles`, `answer_quality_missing_profiles`, and `answer_quality_partial_matrix`;
+  - added Markdown sections for answer quality uplift, chain uplift, and cost/latency observation.
+- Scope boundary:
+  - no production `AgentLoop`, `Reasoner`, `ToolExecutor`, `ToolRegistry`, memory write, or observe DB behavior changed;
+  - `chain_write_value` and `chain_sleep_consolidation` are filtered out of the answer-quality table;
+  - `chain_all_on` is marked as `combo/check`, not a pure single-module gain.
+- TDD / verification so far:
+  - RED for missing `profile_answer_quality_uplift_vs_memory_base` observed;
+  - RED for missing `chain_answer_quality_uplift_rows` observed;
+  - RED for missing Markdown sections observed;
+  - `tests/test_memory_comprehensive_online_eval.py` -> `14 passed`;
+  - `tests/test_memory_comprehensive_online_cli.py` -> `8 passed`.
+- Fake-provider smoke:
+  - command output directory: `/tmp/akashic-memory-answer-quality-uplift-fake/reports`;
+  - `case_count = 240`;
+  - `profile_count = 6`;
+  - `real_llm_enabled = False`;
+  - `infra_passed = True`;
+  - `answer_quality_partial_matrix = False`;
+  - `answer_quality_missing_profiles = []`;
+  - profiles included: `chain_memory_base`, `chain_tri_retrieval`, `chain_graph_retrieval`, `chain_rerank_injection`, `chain_version_provenance`, `chain_all_on`.
+- Fake-provider result boundary:
+  - these values validate schema and calculation only;
+  - they are not real LLM performance results and should not be used as answer-quality uplift evidence.
+- Existing checkpoint attempt:
+  - `/tmp/akashic-memory-phase6k-real/reports/memory_comprehensive_online_eval.checkpoint.jsonl` was not present on this machine;
+  - no checkpoint-only real report was rebuilt;
+  - no new real LLM calls were started.
+
+## 2026-07-24 Memory Answer Quality Real LLM Full Eval
+
+- User asked to execute the reviewed real LLM answer/retrieval uplift plan.
+- Independent plan review found two important interpretation issues:
+  - current online answer profiles are ordered evidence-source comparisons, not strict cumulative feature toggles;
+  - `chain_all_on` currently uses `sleep_consolidation.filtered_active_ids`, so it is only a compatibility/check row, not a sleep-free pure retrieval module.
+- Plan was revised before execution:
+  - renamed the second table to ordered profile comparison;
+  - added per-profile completeness checks;
+  - documented that `answer_debug` must not be copied or committed.
+- Preflight:
+  - `build_quantitative_eval_cases(case_pack="comprehensive", case_set="all") = 320`;
+  - config path `/home/jjh/git_work/akashic-agent/config.toml`;
+  - provider `openai`;
+  - model `deepseek-v4-flash`;
+  - `api_key_present = True`;
+  - full matrix size `320 * 6 * 1 * 1 = 1920`.
+- Real 10-case smoke:
+  - output `/tmp/akashic-memory-answer-quality-real-smoke-v1/reports`;
+  - `case_count = 60`;
+  - `unique_case_count = 10`;
+  - `profile_count = 6`;
+  - `real_llm_enabled = True`;
+  - `infra_passed = True`;
+  - `provider_error_count = 0`;
+  - `timeout_count = 0`;
+  - `answer_rule_pass_rate = 35.0`;
+  - `memory_grounding_pass_rate = 83.3333`;
+  - `forbidden_violation_rate = 16.6667`;
+  - `avg_total_token_count = 5465.65`;
+  - `avg_latency_ms = 3868.2667`.
+- Full real LLM run:
+  - output `/tmp/akashic-memory-answer-quality-real-full-v1/reports`;
+  - checkpoint `/tmp/akashic-memory-answer-quality-real-full-v1/reports/memory_comprehensive_online_eval.checkpoint.jsonl`;
+  - checkpoint-only report `/tmp/akashic-memory-answer-quality-real-full-v1/checkpoint-report`;
+  - `case_count = 1920`;
+  - `unique_case_count = 320`;
+  - `completed_call_count = 1920`;
+  - `checkpoint_input_count = 1920`;
+  - `profile_count = 6`;
+  - `prompt_variant_count = 1`;
+  - `repeat_count = 1`;
+  - `real_llm_enabled = True`;
+  - `infra_passed = True`;
+  - `provider_error_count = 0`;
+  - `timeout_count = 0`;
+  - `excluded_infra_failure_count = 0`;
+  - `answer_quality_partial_matrix = False`;
+  - `answer_quality_missing_profiles = []`;
+  - `total_token_count = 10593288`;
+  - `avg_total_token_count = 5517.3375`;
+  - `avg_latency_ms = 4350.3875`.
+- Full real LLM single-profile answer quality:
+  - original memory baseline: answer `135/320 = 42.1875%`, grounding `308/320 = 96.25%`, forbidden `12.1875%`;
+  - tri retrieval: answer `91/320 = 28.4375%`, answer lift `-32.5926%`, grounding `100.0%`, forbidden `30.0%`;
+  - graph retrieval: answer `84/320 = 26.25%`, answer lift `-37.7778%`, grounding `100.0%`, forbidden `29.6875%`;
+  - rerank/injection governance: answer `127/320 = 39.6875%`, answer lift `-5.9259%`, grounding `100.0%`, forbidden `9.6875%`;
+  - version/provenance: answer `129/320 = 40.3125%`, answer lift `-4.4444%`, grounding `0.0%`, forbidden `0.9375%`;
+  - all-on check: answer `75/320 = 23.4375%`, answer lift `-44.4444%`, grounding `100.0%`, forbidden `24.6875%`.
+- Conclusion:
+  - this is the first complete 320-case / 1920-call real LLM answer-quality matrix for the answer/retrieval table;
+  - original memory baseline is strongest for current answer rules;
+  - tri and graph improve grounding to `100.0%` but hurt answer rate and increase forbidden risk, so recall expansion alone is not enough;
+  - rerank/injection governance is the strongest enhanced answer profile and lowers forbidden below baseline;
+  - version/provenance appears valuable for forbidden control but its grounding mapping is defective in this report;
+  - full all-on is not a winning default in current form; next work should focus on scene routing, evidence-injection prompting, forbidden/noise control, and version grounding mapping.
+- Documentation supplement after user requested all parameters/metrics:
+  - `my_md/memory_optimization/06-memory-320-baseline-plus-count-eval.md` now includes full run parameters, infrastructure status, overall metrics, single-profile uplift, cost/latency, and ordered profile comparison;
+  - `my_md/memory_optimization/05-memory-target-metric-eval-plan.md` now includes answer-quality pass, grounding pass, forbidden violation, pass/fail case counts, token, and latency summary;
+  - the report remains bounded as controlled test-set real LLM evidence, not natural production traffic.
+
+## 2026-07-23 Source Ref Quality Expanded Case Pack
+
+- Goal: replace the 6-row source_ref smoke fixture with a broader target-driven test set because no production real samples are currently available.
+- Added expanded case pack:
+  - `memory2/eval_source_ref_quality_cases.py`;
+  - `200` deterministic candidates;
+  - common `100` and hard `100`;
+  - 10 scenarios, each with `20` cases.
+- Added grouped reporting:
+  - `report.group_metrics["case_sets"]`;
+  - `report.group_metrics["scenarios"]`;
+  - strict candidate ID grouping contract: `{case_set}::{scenario}::{index}`.
+- Added CLI support:
+  - `--case-pack smoke|expanded`;
+  - `--common-per-scenario`;
+  - `--hard-per-scenario`;
+  - expanded mode still uses only guarded fixture DBs and rejects existing unmarked `sessions.db`.
+- Generated formal expanded report:
+  - `my_md/memory_optimization/eval_reports/source_ref_quality_expanded_v1/memory_source_ref_quality_eval.json`;
+  - `my_md/memory_optimization/eval_reports/source_ref_quality_expanded_v1/memory_source_ref_quality_eval.md`;
+  - `my_md/memory_optimization/eval_reports/source_ref_quality_expanded_v1/fixture_sessions.db`.
+- Current expanded result:
+  - candidates: `200`;
+  - message-level coverage: `40.0% -> 90.0%`;
+  - parse success: `80.0% -> 100.0%`;
+  - real source fetch success: `20.0% -> 80.0%`;
+  - source support: `10.0% -> 70.0%`;
+  - source-backed eligible: `20/200 -> 140/200`;
+  - common after eligible: `80.0%`;
+  - hard after eligible: `60.0%`.
+- Commits:
+  - `c8249fe feat: add expanded source ref quality case pack`;
+  - `536f1f6 feat: add grouped source ref quality metrics`;
+  - `86e9838 feat: add expanded source ref quality report`.
+- Boundary:
+  - synthetic controlled fixture / shadow-only;
+  - no production online uplift claim;
+  - no `memory_items.source_ref` rewrite;
+  - no production `sessions.db` or memory DB writes;
+  - no active cleanup.
