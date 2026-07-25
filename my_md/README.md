@@ -22,6 +22,7 @@
 - [architecture/05-proactive-agent.md](./architecture/05-proactive-agent.md): 主动推送机制。
 - [interview/06-interview-notes.md](./interview/06-interview-notes.md): 求职和面试表达稿。
 - [interview/07-module-interview-qa.md](./interview/07-module-interview-qa.md): 模块设计模拟面试问答记录。
+- [interview/08-architecture-diagram.md](./interview/08-architecture-diagram.md): 整体架构图、消息链路、上下文、Prompt、Skill、工具、记忆、观测和面试问答整理。
 - [learning/08-ordered-learning-outline.md](./learning/08-ordered-learning-outline.md): 重新排序后的模块学习大纲。
 - [rag/09-document-rag-extension-plan.md](./rag/09-document-rag-extension-plan.md): Document RAG、GraphRAG、LLM Wiki、LoRA 等后续延伸计划。
 - [rag/10-document-rag-design.md](./rag/10-document-rag-design.md): Document RAG 设计边界、数据结构、工具接口和接入方式。
