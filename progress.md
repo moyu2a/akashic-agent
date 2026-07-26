@@ -1,5 +1,70 @@
 # Document RAG P10a Progress
 
+## 2026-07-26 Tool Governance P4 Approved File Side Effects
+
+- User requested plan review with review skill, revision if needed, then execution in `tool-approval-next`.
+- Plan reviewed locally; a reviewer subagent was also dispatched for read-only plan review.
+- Plan revisions made before execution:
+  - normalized `/rollback_tool` to take `<approval_id>`;
+  - removed unnecessary `agent/tool_hooks/types.py` modification from Task 4;
+  - clarified direct managed-file blocking applies only when a non-P4 trusted approval context is present, while unapproved file writes still defer and save payloads.
+- Task 1 RED: `tests/test_side_effect_payload_vault.py` failed with missing `agent.policies.side_effect_payload_vault`.
+- Task 1 GREEN: `tests/test_side_effect_payload_vault.py` -> `3 passed in 0.11s`.
+- Task 1 commit: `5cb0c79 feat: add side effect payload vault`.
+- Task 2 RED: `tests/test_file_change_plan.py` failed with missing `agent.policies.file_change_plan`.
+- Task 2 GREEN: `tests/test_file_change_plan.py` -> `4 passed in 0.13s`.
+- Task 2 commit: `93392e3 feat: add file side effect change planning`.
+- Task 3 RED: `tests/test_approved_side_effect_store.py` failed with missing `agent.policies.approved_side_effect_store`.
+- Task 3 GREEN: `tests/test_approved_side_effect_store.py` -> `2 passed in 0.16s`.
+- Task 3 commit: `55f9d27 feat: add approved side effect store`.
+- Task 4 RED: `tests/test_tool_executor_approval_workflow.py tests/test_tool_governance_p3_contract.py` failed because `ToolApprovalRuntime.__init__()` did not accept `side_effect_vault`.
+- Task 4 GREEN: `tests/test_tool_executor_approval_workflow.py tests/test_tool_governance_p3_contract.py` -> `15 passed in 0.90s`.
+- Task 4 commit: `006c841 feat: route approved file side effects through managed runtime`.
+- Task 5 RED: `tests/test_approved_side_effect_runtime.py` failed with missing `agent.policies.approved_side_effect_runtime`.
+- Task 5 first GREEN attempt found a plan test-order bug: the test rolled back before asserting the applied file content; fixed test and plan.
+- Task 5 GREEN: `tests/test_approved_side_effect_runtime.py` -> `2 passed in 0.20s`; compileall for `agent/policies/approved_side_effect_runtime.py` exited `0`.
+- Task 5 commit: `465668d feat: add approved side effect runtime`.
+- Plan reviewer returned Critical feedback:
+  - Task 7 must modify `agent/task_plan/store.py`, not `agent/task_plan/execution_store.py`;
+  - Task 7 needs an atomic waiting-authorization completion path because ordinary `record_tool_event()` / `finish_attempt()` require a running leased attempt;
+  - status commands need a way to pass `TaskExecutionService` into `ApprovedSideEffectRuntime`.
+- Plan reviewer Important feedback applied:
+  - direct managed-file block now keeps the standard approval payload envelope;
+  - status command tests now include an end-to-end `edit_file` apply/rollback case.
+- Task 6 RED: `tests/test_status_commands_approved_side_effects.py` failed because `ToolApprovalCommandModule.__init__()` did not accept `workspace`.
+- Task 6 first GREEN attempt failed because fixed 2026-07-26 test time made approvals expired against real current UTC command runtime; test fixture was changed to current UTC.
+- Task 6 GREEN plus Task 4 follow-up: `tests/test_tool_executor_approval_workflow.py tests/test_tool_governance_p3_contract.py tests/test_status_commands_approved_side_effects.py tests/test_lifecycle_phases.py` -> `55 passed in 1.78s`; compileall for touched status/executor/tests exited `0`.
+- Task 6 commit: `f51e91c feat: add approved side effect status commands`.
+- Task 7 RED: `tests/test_task_execution_file_side_effect_resume.py` failed with `managed_side_effect_payload_missing`, proving TaskExecution defer did not preserve P4 file payloads.
+- Task 7 implementation added TaskExecution defer payload capture, PluginContext/PluginManager/bootstrap service wiring, `TaskPlanStore.get_waiting_execution_attempt_by_approval_id(...)`, and atomic `complete_authorized_file_side_effect_attempt(...)`.
+- Task 7 GREEN: `tests/test_task_execution_file_side_effect_resume.py` -> `3 passed in 0.81s`; TaskExecution regression combo -> `8 passed in 1.34s`; compileall for touched TaskExecution/status/runtime files exited `0`.
+- Task 7 commit: `13fc952 feat: resume task execution approved file side effects`.
+- Task 8 RED: `tests/test_tool_governance_p4_contract.py tests/test_observe_writer.py` failed with `KeyError: 'approved_side_effect_lifecycle'`, proving observe slim traces did not preserve P4 lifecycle metadata.
+- Task 8 implementation added `approved_side_effect_lifecycle` slimming in `plugins/observe/plugin.py`, preserving only bounded approval/runtime metadata and dropping raw content, args summaries, commands, body/cookie/token fields, diff refs, and diff text.
+- Task 8 GREEN: `tests/test_tool_governance_p4_contract.py tests/test_observe_writer.py` -> `18 passed in 0.57s`.
+- Task 8 compile/diff gates: `PYTHONDONTWRITEBYTECODE=1 uv run python -m compileall plugins/observe tests/test_tool_governance_p4_contract.py tests/test_observe_writer.py` exited `0`; `git diff --check` exited `0`.
+- Task 8 review found two Important gaps:
+  - real status-command P4 lifecycle events were written to `TurnCommitted.extra` but observe only slimmed lifecycle events attached to tool calls;
+  - P4 contract tests used direct runtime setup and did not themselves cover normal `ToolExecutor` defer payload capture plus direct approved file execution blocking.
+- Task 8 review follow-up RED: `tests/test_tool_governance_p4_contract.py tests/test_observe_writer.py` failed with `AssertionError: assert []` for empty emitted observe `tool_calls`, proving status-command extra lifecycle was not observed.
+- Task 8 review follow-up implementation:
+  - `_emit_turn_trace` now appends a synthetic bounded `approved_side_effect_lifecycle` trace group from `TurnCommitted.extra`;
+  - observe redaction test now includes raw path-shaped fields;
+  - P4 contract now covers real `ToolExecutor` defer payload storage, approved direct managed-file blocking, and successful managed runtime apply.
+- Task 8 final GREEN: `tests/test_tool_governance_p4_contract.py tests/test_observe_writer.py` -> `20 passed in 0.78s`; compileall for observe/P4 tests exited `0`; `git diff --check` exited `0`.
+- Task 8 amended commit: `95a58db test: add p4 side effect governance contract`.
+- Task 9 verification:
+  - P4 focused suite -> `21 passed in 1.74s`;
+  - P1/P2/P3/P4 focused baseline -> `72 passed in 2.86s`;
+  - compatibility plus P4 coverage -> `270 passed in 8.68s`;
+  - P4 compileall exited `0`;
+  - `git diff --check` emitted no output.
+- Task 9 docs updated:
+  - `my_md/governance/02-current-issues.md`;
+  - `my_md/governance/04-fix-roadmap.md`;
+  - `my_md/governance/08-tool-invocation-policy-p1-status.md`.
+- P4 boundary recorded: file-only approved side-effect execution is implemented for `write_file/edit_file`; shell, external side effects, destructive operations, Docker/Podman sandbox, and full queryable `ToolAuditLedger` remain follow-up work.
+
 ## 2026-07-22 Memory Phase 6s Sleep Hygiene Source-Backed Evidence
 
 - User asked to execute the reviewed Phase 6s plan.

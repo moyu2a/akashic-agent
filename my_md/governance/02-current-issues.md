@@ -696,7 +696,13 @@ Task 10 证据：
   - P3 focused suite：`65 passed in 2.24s`。
   - P3 compatibility suite：`262 passed in 6.79s`。
   - P3 contract：`5 passed in 0.59s`。
-- 剩余边界单独转入 P4：`/approve_tool` 当前只负责批准状态，不自动重放 passive 工具调用；diff/snapshot/rollback/sandbox 完成前，不开放 TaskExecution write/edit/shell side-effect resume。
+- P4 已完成第一版 approved file side-effect execution safety loop：`write_file/edit_file` 的 approved request 不再由普通 ToolExecutor 直接执行，而是进入 managed side-effect runtime。该 runtime 从 workspace 私有 payload vault 读取原始参数，重新执行 P1 resource policy，生成 snapshot/diff preview，通过 trusted status/admin command apply，记录 rollback handle，并在成功后 finalize approval。TaskExecution `waiting_authorization` 仅对 P4 文件工具开放恢复；shell、external side-effect、destructive 操作仍不恢复。
+- P4 文件闭环验证证据：
+  - P4 focused suite：`21 passed in 1.74s`。
+  - P1/P2/P3/P4 focused suite：`72 passed in 2.86s`。
+  - compatibility plus P4 coverage：`270 passed in 8.68s`。
+  - compileall 退出码 `0`；`git diff --check` 无输出。
+- 仍开放的后续边界：shell sandbox、external API side-effect replay、destructive 操作执行、完整可查询 `ToolAuditLedger`、retention 和 dashboard/admin 审计检索。
 
 ### LA-004 final-only provider tool syntax normalization（open）
 

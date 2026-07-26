@@ -1,5 +1,51 @@
 # Document RAG P10a Intent Preload Plan
 
+## 2026-07-26 Tool Governance P4 Approved File Side Effects
+
+Goal: implement the first approved side-effect execution safety loop for file writes while preserving P1/P2/P3 guarantees.
+
+1. Private side-effect payload vault - complete
+2. File snapshot/diff/apply/rollback primitives - complete
+3. Approved side-effect store - complete
+4. Managed file side-effect routing in ToolExecutor - complete
+5. Approved side-effect runtime - complete
+6. Trusted status commands `/prepare_tool`, `/run_approved_tool`, `/rollback_tool` - complete
+7. TaskExecution file side-effect resume bridge - complete
+8. Observe slim trace and P4 contract tests - complete
+9. Governance docs and final verification - in progress
+
+Current result:
+
+- P4 已完成第一版 approved file side-effect execution safety loop：`write_file/edit_file` 的 approved request 不再由普通 ToolExecutor 直接执行，而是进入 managed side-effect runtime。该 runtime 从 workspace 私有 payload vault 读取原始参数，重新执行 P1 resource policy，生成 snapshot/diff preview，通过 trusted status/admin command apply，记录 rollback handle，并在成功后 finalize approval。TaskExecution `waiting_authorization` 仅对 P4 文件工具开放恢复；shell、external side-effect、destructive 操作仍不恢复。
+- Latest commits:
+  - `5cb0c79 feat: add side effect payload vault`
+  - `93392e3 feat: add file side effect change planning`
+  - `55f9d27 feat: add approved side effect store`
+  - `006c841 feat: route approved file side effects through managed runtime`
+  - `465668d feat: add approved side effect runtime`
+  - `f51e91c feat: add approved side effect status commands`
+  - `13fc952 feat: resume task execution approved file side effects`
+  - `95a58db test: add p4 side effect governance contract`
+- Verification recorded for Task 9:
+  - P4 focused suite: `21 passed in 1.74s`
+  - P1/P2/P3/P4 focused baseline: `72 passed in 2.86s`
+  - compatibility plus P4 coverage: `270 passed in 8.68s`
+  - compileall exited `0`; `git diff --check` emitted no output
+- Remaining boundaries after P4a:
+  - shell approved execution and sandbox are not implemented;
+  - external API side-effect replay is not implemented;
+  - destructive operations remain denied/not restored;
+  - Docker/Podman, non-root user, read-only rootfs, and resource limits remain P4b/P5;
+  - complete queryable `ToolAuditLedger`, retention, and dashboard/admin audit search remain P5.
+
+Errors Encountered:
+
+| Error | Attempt | Resolution |
+| --- | --- | --- |
+| Task 8 RED failed with missing `approved_side_effect_lifecycle` in slim observe output | 1 | Added observe allowlist handling for call-attached P4 lifecycle metadata. |
+| Review found status-command P4 lifecycle events in `TurnCommitted.extra` were not observed | 1 | Added synthetic bounded lifecycle group from turn extra and regression coverage. |
+| Review found P4 contract did not cover executor defer/direct-block integration | 1 | Added contract test for real `ToolExecutor` defer payload storage, approved direct file blocking, and managed runtime apply. |
+
 ## Goal
 
 Implement turn-local Document RAG tool intent preload without changing always-on policy or writing intent decisions to `ToolDiscoveryState` / LRU.
