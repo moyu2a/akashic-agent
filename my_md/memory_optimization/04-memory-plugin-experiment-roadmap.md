@@ -488,6 +488,38 @@ chain_off
 
 注意：报告 JSON 顶层 `passed = False` 表示答案质量没有全量通过。CLI 对 checkpoint-only 报告返回 0 只代表有效样本报告生成成功，不代表 answer-level 质量达标。
 
+### Phase 6m 真实 answer-quality 失败归因与版本 grounding 修复
+
+Phase 6m 之后补了一个专门的失败归因层，用来解释完整真实 LLM answer-quality 矩阵里的失败类型。这个报告不重新调用模型，也不改历史结果，只读取既有 report JSON 或 checkpoint JSONL：
+
+```text
+my_md/memory_optimization/eval_reports/online_failure_attribution/online_failure_attribution.json
+my_md/memory_optimization/eval_reports/online_failure_attribution/online_failure_attribution.md
+```
+
+归因结果显示：
+
+| profile | answer_fail | grounding_fail | forbidden_fail | 主要问题 |
+| --- | ---: | ---: | ---: | --- |
+| chain_tri_retrieval | 229 | 0 | 96 | 召回到证据，但回答没有稳定用对，并且 forbidden 风险升高。 |
+| chain_graph_retrieval | 236 | 0 | 95 | 图谱召回扩大了证据面，但还缺少更强的过滤和回答约束。 |
+| chain_rerank_injection | 193 | 0 | 31 | 注入治理能降低 forbidden，但答案命中仍需继续优化。 |
+| chain_version_provenance | 191 | 320 | 3 | grounding 失败主要来自评测口径和 active version evidence 不一致。 |
+
+因此当前的下一步不是继续盲目扩大召回，而是：
+
+- 对三路召回和图谱召回做噪声控制、forbidden 过滤和场景路由。
+- 对重排与注入治理继续优化回答证据组织。
+- 先修复版本链 grounding 评测口径，再决定是否补跑真实 LLM。
+
+版本链 grounding 修复已经完成在评测层：`chain_version_provenance` 的答案期望改为优先使用 `expected_active_version_ids`，与 `version_chain_shadow.active_leaf_ids` 对齐。它没有修改生产 `AgentLoop`、真实召回、真实写入或 prompt 注入。
+
+验证边界：
+
+- 旧 checkpoint-only 报告仍显示 `chain_version_provenance grounding = 0.0%`，这是预期结果，因为 checkpoint 已保存旧评分布尔值，不能事后重算。
+- fresh fake-provider 验证报告位于 `my_md/memory_optimization/eval_reports/version_grounding_fake_validation/`，20 case 切片中 `chain_memory_base` 和 `chain_version_provenance` 都是 `20/20 grounding = 100.0%`。
+- 要得到修复后的真实线上结果，需要下一轮对受影响 profile 做有界真实 LLM fresh rerun。
+
 ### 写入价值与睡眠巩固的专项评测
 
 本轮 Phase 6e 是 answer-level 评测，它天然更偏向检索、图谱、重排和注入治理。写入价值和睡眠巩固不应该只用这张表判断强弱。

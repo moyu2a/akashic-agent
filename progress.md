@@ -43,6 +43,23 @@
   - `chain_graph_retrieval`: `320` rows, `236` answer failures, `0` grounding failures, `95` forbidden failures, `82` forbidden introduced vs baseline, primary issue `grounded_but_answer_failed`;
   - `chain_rerank_injection`: `320` rows, `193` answer failures, `0` grounding failures, `31` forbidden failures, `15` forbidden introduced vs baseline, primary issue `grounded_but_answer_failed`;
   - `chain_version_provenance`: `320` rows, `191` answer failures, `320` grounding failures, `3` forbidden failures, `320` `missing_expected_memory_ids`, primary issue `grounding_only_failure`.
+- Task 2 implemented profile-aware version/provenance grounding:
+  - added `answer_expectation_for_profile()` in `memory2/eval_comprehensive_online.py`;
+  - `chain_version_provenance` now uses `expected_active_version_ids` for grounding when available;
+  - this matches `version_chain_shadow.active_leaf_ids`, the evidence source injected by that profile.
+- Task 2 focused tests:
+  - `test_version_provenance_grounding_uses_active_version_ids`;
+  - `test_version_provenance_online_scoring_not_forced_to_graph_ids`;
+  - `tests/test_memory_comprehensive_online_eval.py` -> `16 passed`.
+- Report validation:
+  - checkpoint-only historical rebuild: `my_md/memory_optimization/eval_reports/answer_quality_real_full_after_version_grounding_fix/memory_comprehensive_online_eval.{json,md}`;
+  - checkpoint rebuild still reports `chain_version_provenance grounding = 0.0%`, expected because old checkpoint rows store old final booleans;
+  - fresh fake-provider validation: `my_md/memory_optimization/eval_reports/version_grounding_fake_validation/memory_comprehensive_online_eval.{json,md}`;
+  - fake-provider slice result: `case_count = 40`, `chain_memory_base grounding = 20/20 = 100.0%`, `chain_version_provenance grounding = 20/20 = 100.0%`.
+- Current conclusion:
+  - historical version-chain grounding failure is an evaluation expected-id mismatch, not proof that version evidence cannot be injected;
+  - future scorer runs no longer force version/provenance to include graph ids;
+  - a bounded fresh real LLM rerun is still required before claiming updated real online grounding percentages.
 
 ## 2026-07-26 Memory Next Post-Merge Regression Repair
 

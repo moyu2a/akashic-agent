@@ -4,7 +4,7 @@ import asyncio
 import hashlib
 import json
 import time
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Sequence
@@ -31,6 +31,7 @@ from core.memory.engine import (
 )
 from memory2.eval_cases import EvalCase
 from memory2.eval_llm_sample import (
+    AnswerExpectation,
     LLMSampleAnswerDebugRecord,
     _extract_token_counts,
     _memory_summaries_by_id,
@@ -262,6 +263,22 @@ def profile_evidence_source(profile_name: str) -> str:
     if profile_name not in sources:
         raise ValueError(f"unknown profile_name: {profile_name}")
     return sources[profile_name]
+
+
+def answer_expectation_for_profile(
+    case: EvalCase,
+    profile_name: str,
+) -> AnswerExpectation:
+    expectation = answer_expectation_from_case(case)
+    if profile_name == "chain_version_provenance":
+        active_ids = tuple(
+            str(item_id)
+            for item_id in case.expectations.get("expected_active_version_ids", ())
+            if str(item_id)
+        )
+        if active_ids:
+            return replace(expectation, expected_memory_ids=active_ids)
+    return expectation
 
 
 def build_comprehensive_run_specs(
@@ -666,7 +683,7 @@ async def _run_comprehensive_case(
 
     score = score_answer_text(
         answer,
-        answer_expectation_from_case(spec.case),
+        answer_expectation_for_profile(spec.case, spec.profile_name),
         memory.used_memory_ids,
     )
     failures.extend(score.failures)

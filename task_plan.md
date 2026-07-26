@@ -7,9 +7,9 @@ Goal: create a reproducible online answer-quality failure attribution report and
 1. Write implementation plan for online failure attribution and version grounding repair - complete
 2. Review the plan before execution - complete
 3. Implement Task 1 online failure attribution report - complete
-4. Implement Task 2 profile-aware version/provenance grounding fix - pending
-5. Rebuild checkpoint/fake-provider reports and update docs - pending
-6. Run final regression and commit - pending
+4. Implement Task 2 profile-aware version/provenance grounding fix - complete
+5. Rebuild checkpoint/fake-provider reports and update docs - complete
+6. Run final regression and commit - complete
 
 Plan:
 
@@ -53,6 +53,34 @@ Task 1 result:
   - `chain_graph_retrieval`: 236 answer failures, 0 grounding failures, 95 forbidden failures, 82 forbidden introduced vs baseline;
   - `chain_rerank_injection`: 193 answer failures, 0 grounding failures, 31 forbidden failures, 15 forbidden introduced vs baseline;
   - `chain_version_provenance`: 191 answer failures, 320 grounding failures, 3 forbidden failures, 320 `missing_expected_memory_ids`.
+
+Task 2 result:
+
+- Added profile-aware answer expectations in `memory2/eval_comprehensive_online.py`.
+- `chain_version_provenance` now scores grounding against `expected_active_version_ids` when those ids exist.
+- This aligns scoring with the profile's evidence source, `version_chain_shadow.active_leaf_ids`.
+- Added regression tests in `tests/test_memory_comprehensive_online_eval.py`:
+  - `test_version_provenance_grounding_uses_active_version_ids`
+  - `test_version_provenance_online_scoring_not_forced_to_graph_ids`
+- Focused verification:
+  - `tests/test_memory_comprehensive_online_eval.py` -> `16 passed`.
+- Report rebuild / validation:
+  - historical checkpoint-only report written to `my_md/memory_optimization/eval_reports/answer_quality_real_full_after_version_grounding_fix/`;
+  - it still shows historical `chain_version_provenance grounding = 0.0%`, which is expected because checkpoint rows already store old `memory_grounding_passed` values;
+  - fresh fake-provider scorer validation written to `my_md/memory_optimization/eval_reports/version_grounding_fake_validation/`;
+  - 20-case slice shows `chain_memory_base grounding = 20/20 = 100.0%` and `chain_version_provenance grounding = 20/20 = 100.0%`.
+
+Current conclusion:
+
+- The old real report's version-chain grounding failure is explained by an evaluation-side expected-id mismatch.
+- The scorer path for future runs is fixed.
+- Old checkpoint-only reports remain historical evidence and must not be used to claim the fix changed old real percentages.
+- The next trustworthy real number requires a bounded fresh real LLM rerun for `chain_version_provenance` after this fix.
+
+Final verification:
+
+- `PYTHONDONTWRITEBYTECODE=1 /home/jjh/git_work/akashic-agent/.worktrees/memory-experiments-phase0/.venv/bin/python -m pytest tests/test_memory_online_failure_attribution.py tests/test_memory_comprehensive_online_eval.py tests/test_memory_target_metrics.py tests/test_memory_answer_retrieval_counts.py -q -p no:cacheprovider` -> `42 passed in 116.97s`.
+- `git diff --check` -> passed.
 
 Constraints:
 

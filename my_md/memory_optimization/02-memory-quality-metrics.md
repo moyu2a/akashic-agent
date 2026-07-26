@@ -574,6 +574,62 @@ checkpoint 重建版路径：
 
 这份结果只覆盖 answer/retrieval 核心矩阵，不包含写入治理和睡眠巩固的真实 evidence。写入治理后续已通过 Phase 6o 单独补了 `240` 条真实 LLM 线上 shadow evidence；睡眠巩固仍缺真实 evidence。
 
+### Phase 6m 的真实回答质量失败归因
+
+为了说明“为什么某些模块召回更多但回答效果没有提升”，新增了线上失败归因报告。它只读取已有真实 LLM 报告或 checkpoint，不重新调用模型，也不重新评分历史 checkpoint。
+
+报告路径：
+
+```text
+my_md/memory_optimization/eval_reports/online_failure_attribution/online_failure_attribution.json
+my_md/memory_optimization/eval_reports/online_failure_attribution/online_failure_attribution.md
+```
+
+核心归因结果：
+
+| profile | cases | answer_fail | grounding_fail | forbidden_fail | primary_issue | 解释 |
+| --- | ---: | ---: | ---: | ---: | --- | --- |
+| chain_memory_base | 320 | 185 | 12 | 39 | grounded_but_answer_failed | 原始记忆也有大量“拿到证据但回答没过规则”的问题。 |
+| chain_tri_retrieval | 320 | 229 | 0 | 96 | grounded_but_answer_failed | 三路召回证据命中稳定，但噪声和 forbidden 风险明显增加。 |
+| chain_graph_retrieval | 320 | 236 | 0 | 95 | grounded_but_answer_failed | 图谱召回同样不是缺证据，而是证据使用和过滤不足。 |
+| chain_rerank_injection | 320 | 193 | 0 | 31 | grounded_but_answer_failed | 重排与注入治理显著降低 forbidden，但仍需提升答案组织能力。 |
+| chain_version_provenance | 320 | 191 | 320 | 3 | grounding_only_failure | 历史报告的 grounding 失败来自评测期望 ID 与版本链 active leaf 证据不一致。 |
+| chain_all_on | 320 | 245 | 0 | 79 | grounded_but_answer_failed | 全开组合不是最优策略，仍需要场景路由和候选去噪。 |
+
+由此得到的结论：
+
+- 三路召回和图谱召回的主要问题不是“没有召回到”，而是召回后进入 prompt 的内容让模型更容易答偏或触发 forbidden。
+- 重排与注入治理是当前最接近原始基线的增强 profile，因为它在保持 grounding 的同时明显降低 forbidden。
+- 版本链与溯源在历史真实报告中的 `grounding = 0.0%` 不能直接解释为版本链能力无效，需要先修复评测侧 grounding 口径。
+
+### Phase 6m 的版本链 grounding 口径修复
+
+修复点只在评测层：
+
+```text
+chain_version_provenance
+  旧口径：用通用 answer expectation，里面可能包含 target id 和 graph id
+  新口径：优先用 expected_active_version_ids，只要求当前有效版本 active leaf 被使用
+```
+
+这样做的原因是：版本链 profile 的证据来源本来就是 `version_chain_shadow.active_leaf_ids`。如果仍用包含 graph id 的通用期望打分，就会把“版本链没有注入图谱证据”误判成 grounding failure。
+
+验证结果：
+
+| 验证方式 | 数据 | 结果 | 结论 |
+| --- | --- | --- | --- |
+| 历史 checkpoint-only 重建 | 1920 条旧真实 LLM checkpoint | `chain_version_provenance grounding = 0.0%` | 预期保持不变，因为 checkpoint 已经存了旧布尔值，不能事后改分。 |
+| fresh fake-provider scorer 验证 | 20 case * 2 profile = 40 rows | `chain_memory_base grounding = 20/20`，`chain_version_provenance grounding = 20/20` | 新 scorer 不再强制期待 graph id，版本链 grounding 口径已对齐 active version evidence。 |
+
+fresh fake-provider 报告路径：
+
+```text
+my_md/memory_optimization/eval_reports/version_grounding_fake_validation/memory_comprehensive_online_eval.json
+my_md/memory_optimization/eval_reports/version_grounding_fake_validation/memory_comprehensive_online_eval.md
+```
+
+后续要得到修复后的真实线上百分比，需要对 `chain_version_provenance` 做一次有界真实 LLM 续跑或 fresh rerun；不能用旧 checkpoint-only 报告声称真实 grounding 已提升。
+
 ### Phase 6e 的综合线上 answer-level report
 
 Phase 6e 把离线 80 个目标导向 case 接到真实 `AgentLoop.process_direct()` 和真实 LLM 上。完整设计规模是：

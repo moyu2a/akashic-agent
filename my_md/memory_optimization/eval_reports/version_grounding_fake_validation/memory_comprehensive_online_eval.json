@@ -1,0 +1,2033 @@
+{
+  "case_records": [
+    {
+      "answer_length": 28,
+      "answer_rule_passed": true,
+      "case_id": "common_preference_recall_01",
+      "category": "common_preference_recall",
+      "completion_token_count": 10,
+      "evidence_source": "original_memory_baseline",
+      "expected_memory_used": true,
+      "failures": [],
+      "forbidden_contains_violation_count": 0,
+      "latency_ms": 18,
+      "memory_grounding_passed": true,
+      "passed": true,
+      "profile_name": "chain_memory_base",
+      "prompt_token_count": 20,
+      "prompt_variant": "baseline",
+      "provider_error": false,
+      "repeat_index": 0,
+      "timeout": false,
+      "token_metrics_available": true,
+      "total_token_count": 30,
+      "used_memory_id_count": 6
+    },
+    {
+      "answer_length": 28,
+      "answer_rule_passed": true,
+      "case_id": "common_preference_recall_01",
+      "category": "common_preference_recall",
+      "completion_token_count": 10,
+      "evidence_source": "version_chain.active_leaf_ids",
+      "expected_memory_used": true,
+      "failures": [],
+      "forbidden_contains_violation_count": 0,
+      "latency_ms": 17,
+      "memory_grounding_passed": true,
+      "passed": true,
+      "profile_name": "chain_version_provenance",
+      "prompt_token_count": 20,
+      "prompt_variant": "baseline",
+      "provider_error": false,
+      "repeat_index": 0,
+      "timeout": false,
+      "token_metrics_available": true,
+      "total_token_count": 30,
+      "used_memory_id_count": 1
+    },
+    {
+      "answer_length": 28,
+      "answer_rule_passed": true,
+      "case_id": "common_tool_preference_01",
+      "category": "common_tool_preference",
+      "completion_token_count": 10,
+      "evidence_source": "original_memory_baseline",
+      "expected_memory_used": true,
+      "failures": [],
+      "forbidden_contains_violation_count": 0,
+      "latency_ms": 18,
+      "memory_grounding_passed": true,
+      "passed": true,
+      "profile_name": "chain_memory_base",
+      "prompt_token_count": 20,
+      "prompt_variant": "baseline",
+      "provider_error": false,
+      "repeat_index": 0,
+      "timeout": false,
+      "token_metrics_available": true,
+      "total_token_count": 30,
+      "used_memory_id_count": 5
+    },
+    {
+      "answer_length": 28,
+      "answer_rule_passed": true,
+      "case_id": "common_tool_preference_01",
+      "category": "common_tool_preference",
+      "completion_token_count": 10,
+      "evidence_source": "version_chain.active_leaf_ids",
+      "expected_memory_used": true,
+      "failures": [],
+      "forbidden_contains_violation_count": 0,
+      "latency_ms": 23,
+      "memory_grounding_passed": true,
+      "passed": true,
+      "profile_name": "chain_version_provenance",
+      "prompt_token_count": 20,
+      "prompt_variant": "baseline",
+      "provider_error": false,
+      "repeat_index": 0,
+      "timeout": false,
+      "token_metrics_available": true,
+      "total_token_count": 30,
+      "used_memory_id_count": 1
+    },
+    {
+      "answer_length": 17,
+      "answer_rule_passed": true,
+      "case_id": "common_style_preference_01",
+      "category": "common_style_preference",
+      "completion_token_count": 10,
+      "evidence_source": "original_memory_baseline",
+      "expected_memory_used": true,
+      "failures": [],
+      "forbidden_contains_violation_count": 0,
+      "latency_ms": 26,
+      "memory_grounding_passed": true,
+      "passed": true,
+      "profile_name": "chain_memory_base",
+      "prompt_token_count": 20,
+      "prompt_variant": "baseline",
+      "provider_error": false,
+      "repeat_index": 0,
+      "timeout": false,
+      "token_metrics_available": true,
+      "total_token_count": 30,
+      "used_memory_id_count": 5
+    },
+    {
+      "answer_length": 17,
+      "answer_rule_passed": true,
+      "case_id": "common_style_preference_01",
+      "category": "common_style_preference",
+      "completion_token_count": 10,
+      "evidence_source": "version_chain.active_leaf_ids",
+      "expected_memory_used": true,
+      "failures": [],
+      "forbidden_contains_violation_count": 0,
+      "latency_ms": 23,
+      "memory_grounding_passed": true,
+      "passed": true,
+      "profile_name": "chain_version_provenance",
+      "prompt_token_count": 20,
+      "prompt_variant": "baseline",
+      "provider_error": false,
+      "repeat_index": 0,
+      "timeout": false,
+      "token_metrics_available": true,
+      "total_token_count": 30,
+      "used_memory_id_count": 1
+    },
+    {
+      "answer_length": 23,
+      "answer_rule_passed": true,
+      "case_id": "common_tri_rrf_01",
+      "category": "common_tri_rrf",
+      "completion_token_count": 10,
+      "evidence_source": "original_memory_baseline",
+      "expected_memory_used": true,
+      "failures": [],
+      "forbidden_contains_violation_count": 0,
+      "latency_ms": 26,
+      "memory_grounding_passed": true,
+      "passed": true,
+      "profile_name": "chain_memory_base",
+      "prompt_token_count": 20,
+      "prompt_variant": "baseline",
+      "provider_error": false,
+      "repeat_index": 0,
+      "timeout": false,
+      "token_metrics_available": true,
+      "total_token_count": 30,
+      "used_memory_id_count": 5
+    },
+    {
+      "answer_length": 23,
+      "answer_rule_passed": true,
+      "case_id": "common_tri_rrf_01",
+      "category": "common_tri_rrf",
+      "completion_token_count": 10,
+      "evidence_source": "version_chain.active_leaf_ids",
+      "expected_memory_used": true,
+      "failures": [],
+      "forbidden_contains_violation_count": 0,
+      "latency_ms": 26,
+      "memory_grounding_passed": true,
+      "passed": true,
+      "profile_name": "chain_version_provenance",
+      "prompt_token_count": 20,
+      "prompt_variant": "baseline",
+      "provider_error": false,
+      "repeat_index": 0,
+      "timeout": false,
+      "token_metrics_available": true,
+      "total_token_count": 30,
+      "used_memory_id_count": 1
+    },
+    {
+      "answer_length": 28,
+      "answer_rule_passed": true,
+      "case_id": "common_graph_bridge_01",
+      "category": "common_graph_bridge",
+      "completion_token_count": 10,
+      "evidence_source": "original_memory_baseline",
+      "expected_memory_used": true,
+      "failures": [],
+      "forbidden_contains_violation_count": 0,
+      "latency_ms": 24,
+      "memory_grounding_passed": true,
+      "passed": true,
+      "profile_name": "chain_memory_base",
+      "prompt_token_count": 20,
+      "prompt_variant": "baseline",
+      "provider_error": false,
+      "repeat_index": 0,
+      "timeout": false,
+      "token_metrics_available": true,
+      "total_token_count": 30,
+      "used_memory_id_count": 6
+    },
+    {
+      "answer_length": 28,
+      "answer_rule_passed": true,
+      "case_id": "common_graph_bridge_01",
+      "category": "common_graph_bridge",
+      "completion_token_count": 10,
+      "evidence_source": "version_chain.active_leaf_ids",
+      "expected_memory_used": true,
+      "failures": [],
+      "forbidden_contains_violation_count": 0,
+      "latency_ms": 25,
+      "memory_grounding_passed": true,
+      "passed": true,
+      "profile_name": "chain_version_provenance",
+      "prompt_token_count": 20,
+      "prompt_variant": "baseline",
+      "provider_error": false,
+      "repeat_index": 0,
+      "timeout": false,
+      "token_metrics_available": true,
+      "total_token_count": 30,
+      "used_memory_id_count": 1
+    },
+    {
+      "answer_length": 21,
+      "answer_rule_passed": false,
+      "case_id": "common_version_chain_01",
+      "category": "common_version_chain",
+      "completion_token_count": 10,
+      "evidence_source": "original_memory_baseline",
+      "expected_memory_used": true,
+      "failures": [
+        "missing_expected_answer_term",
+        "missing_expected_answer_term",
+        "missing_expected_answer_term_group",
+        "missing_expected_answer_term_group"
+      ],
+      "forbidden_contains_violation_count": 0,
+      "latency_ms": 26,
+      "memory_grounding_passed": true,
+      "passed": false,
+      "profile_name": "chain_memory_base",
+      "prompt_token_count": 20,
+      "prompt_variant": "baseline",
+      "provider_error": false,
+      "repeat_index": 0,
+      "timeout": false,
+      "token_metrics_available": true,
+      "total_token_count": 30,
+      "used_memory_id_count": 5
+    },
+    {
+      "answer_length": 21,
+      "answer_rule_passed": false,
+      "case_id": "common_version_chain_01",
+      "category": "common_version_chain",
+      "completion_token_count": 10,
+      "evidence_source": "version_chain.active_leaf_ids",
+      "expected_memory_used": true,
+      "failures": [
+        "missing_expected_answer_term",
+        "missing_expected_answer_term",
+        "missing_expected_answer_term_group",
+        "missing_expected_answer_term_group"
+      ],
+      "forbidden_contains_violation_count": 0,
+      "latency_ms": 25,
+      "memory_grounding_passed": true,
+      "passed": false,
+      "profile_name": "chain_version_provenance",
+      "prompt_token_count": 20,
+      "prompt_variant": "baseline",
+      "provider_error": false,
+      "repeat_index": 0,
+      "timeout": false,
+      "token_metrics_available": true,
+      "total_token_count": 30,
+      "used_memory_id_count": 1
+    },
+    {
+      "answer_length": 21,
+      "answer_rule_passed": false,
+      "case_id": "common_cross_scope_01",
+      "category": "common_cross_scope",
+      "completion_token_count": 10,
+      "evidence_source": "original_memory_baseline",
+      "expected_memory_used": true,
+      "failures": [
+        "missing_expected_answer_term",
+        "missing_expected_answer_term",
+        "missing_expected_answer_term_group",
+        "missing_expected_answer_term_group"
+      ],
+      "forbidden_contains_violation_count": 0,
+      "latency_ms": 28,
+      "memory_grounding_passed": true,
+      "passed": false,
+      "profile_name": "chain_memory_base",
+      "prompt_token_count": 20,
+      "prompt_variant": "baseline",
+      "provider_error": false,
+      "repeat_index": 0,
+      "timeout": false,
+      "token_metrics_available": true,
+      "total_token_count": 30,
+      "used_memory_id_count": 6
+    },
+    {
+      "answer_length": 21,
+      "answer_rule_passed": false,
+      "case_id": "common_cross_scope_01",
+      "category": "common_cross_scope",
+      "completion_token_count": 10,
+      "evidence_source": "version_chain.active_leaf_ids",
+      "expected_memory_used": true,
+      "failures": [
+        "missing_expected_answer_term",
+        "missing_expected_answer_term",
+        "missing_expected_answer_term_group",
+        "missing_expected_answer_term_group"
+      ],
+      "forbidden_contains_violation_count": 0,
+      "latency_ms": 29,
+      "memory_grounding_passed": true,
+      "passed": false,
+      "profile_name": "chain_version_provenance",
+      "prompt_token_count": 20,
+      "prompt_variant": "baseline",
+      "provider_error": false,
+      "repeat_index": 0,
+      "timeout": false,
+      "token_metrics_available": true,
+      "total_token_count": 30,
+      "used_memory_id_count": 1
+    },
+    {
+      "answer_length": 21,
+      "answer_rule_passed": false,
+      "case_id": "common_duplicate_cleanup_01",
+      "category": "common_duplicate_cleanup",
+      "completion_token_count": 10,
+      "evidence_source": "original_memory_baseline",
+      "expected_memory_used": true,
+      "failures": [
+        "missing_expected_answer_term",
+        "missing_expected_answer_term_group",
+        "missing_expected_answer_term_group"
+      ],
+      "forbidden_contains_violation_count": 0,
+      "latency_ms": 36,
+      "memory_grounding_passed": true,
+      "passed": false,
+      "profile_name": "chain_memory_base",
+      "prompt_token_count": 20,
+      "prompt_variant": "baseline",
+      "provider_error": false,
+      "repeat_index": 0,
+      "timeout": false,
+      "token_metrics_available": true,
+      "total_token_count": 30,
+      "used_memory_id_count": 6
+    },
+    {
+      "answer_length": 21,
+      "answer_rule_passed": false,
+      "case_id": "common_duplicate_cleanup_01",
+      "category": "common_duplicate_cleanup",
+      "completion_token_count": 10,
+      "evidence_source": "version_chain.active_leaf_ids",
+      "expected_memory_used": true,
+      "failures": [
+        "missing_expected_answer_term",
+        "missing_expected_answer_term_group",
+        "missing_expected_answer_term_group"
+      ],
+      "forbidden_contains_violation_count": 0,
+      "latency_ms": 29,
+      "memory_grounding_passed": true,
+      "passed": false,
+      "profile_name": "chain_version_provenance",
+      "prompt_token_count": 20,
+      "prompt_variant": "baseline",
+      "provider_error": false,
+      "repeat_index": 0,
+      "timeout": false,
+      "token_metrics_available": true,
+      "total_token_count": 30,
+      "used_memory_id_count": 1
+    },
+    {
+      "answer_length": 21,
+      "answer_rule_passed": false,
+      "case_id": "common_conflict_resolution_01",
+      "category": "common_conflict_resolution",
+      "completion_token_count": 10,
+      "evidence_source": "original_memory_baseline",
+      "expected_memory_used": true,
+      "failures": [
+        "missing_expected_answer_term",
+        "missing_expected_answer_term_group",
+        "missing_expected_answer_term_group"
+      ],
+      "forbidden_contains_violation_count": 0,
+      "latency_ms": 24,
+      "memory_grounding_passed": true,
+      "passed": false,
+      "profile_name": "chain_memory_base",
+      "prompt_token_count": 20,
+      "prompt_variant": "baseline",
+      "provider_error": false,
+      "repeat_index": 0,
+      "timeout": false,
+      "token_metrics_available": true,
+      "total_token_count": 30,
+      "used_memory_id_count": 4
+    },
+    {
+      "answer_length": 21,
+      "answer_rule_passed": false,
+      "case_id": "common_conflict_resolution_01",
+      "category": "common_conflict_resolution",
+      "completion_token_count": 10,
+      "evidence_source": "version_chain.active_leaf_ids",
+      "expected_memory_used": true,
+      "failures": [
+        "missing_expected_answer_term",
+        "missing_expected_answer_term_group",
+        "missing_expected_answer_term_group"
+      ],
+      "forbidden_contains_violation_count": 0,
+      "latency_ms": 22,
+      "memory_grounding_passed": true,
+      "passed": false,
+      "profile_name": "chain_version_provenance",
+      "prompt_token_count": 20,
+      "prompt_variant": "baseline",
+      "provider_error": false,
+      "repeat_index": 0,
+      "timeout": false,
+      "token_metrics_available": true,
+      "total_token_count": 30,
+      "used_memory_id_count": 1
+    },
+    {
+      "answer_length": 21,
+      "answer_rule_passed": false,
+      "case_id": "common_stale_sleep_01",
+      "category": "common_stale_sleep",
+      "completion_token_count": 10,
+      "evidence_source": "original_memory_baseline",
+      "expected_memory_used": true,
+      "failures": [
+        "missing_expected_answer_term",
+        "missing_expected_answer_term",
+        "missing_expected_answer_term_group",
+        "missing_expected_answer_term_group"
+      ],
+      "forbidden_contains_violation_count": 0,
+      "latency_ms": 23,
+      "memory_grounding_passed": true,
+      "passed": false,
+      "profile_name": "chain_memory_base",
+      "prompt_token_count": 20,
+      "prompt_variant": "baseline",
+      "provider_error": false,
+      "repeat_index": 0,
+      "timeout": false,
+      "token_metrics_available": true,
+      "total_token_count": 30,
+      "used_memory_id_count": 4
+    },
+    {
+      "answer_length": 21,
+      "answer_rule_passed": false,
+      "case_id": "common_stale_sleep_01",
+      "category": "common_stale_sleep",
+      "completion_token_count": 10,
+      "evidence_source": "version_chain.active_leaf_ids",
+      "expected_memory_used": true,
+      "failures": [
+        "missing_expected_answer_term",
+        "missing_expected_answer_term",
+        "missing_expected_answer_term_group",
+        "missing_expected_answer_term_group"
+      ],
+      "forbidden_contains_violation_count": 0,
+      "latency_ms": 22,
+      "memory_grounding_passed": true,
+      "passed": false,
+      "profile_name": "chain_version_provenance",
+      "prompt_token_count": 20,
+      "prompt_variant": "baseline",
+      "provider_error": false,
+      "repeat_index": 0,
+      "timeout": false,
+      "token_metrics_available": true,
+      "total_token_count": 30,
+      "used_memory_id_count": 1
+    },
+    {
+      "answer_length": 21,
+      "answer_rule_passed": false,
+      "case_id": "common_entity_alias_01",
+      "category": "common_entity_alias",
+      "completion_token_count": 10,
+      "evidence_source": "original_memory_baseline",
+      "expected_memory_used": true,
+      "failures": [
+        "missing_expected_answer_term",
+        "missing_expected_answer_term_group"
+      ],
+      "forbidden_contains_violation_count": 0,
+      "latency_ms": 34,
+      "memory_grounding_passed": true,
+      "passed": false,
+      "profile_name": "chain_memory_base",
+      "prompt_token_count": 20,
+      "prompt_variant": "baseline",
+      "provider_error": false,
+      "repeat_index": 0,
+      "timeout": false,
+      "token_metrics_available": true,
+      "total_token_count": 30,
+      "used_memory_id_count": 5
+    },
+    {
+      "answer_length": 21,
+      "answer_rule_passed": false,
+      "case_id": "common_entity_alias_01",
+      "category": "common_entity_alias",
+      "completion_token_count": 10,
+      "evidence_source": "version_chain.active_leaf_ids",
+      "expected_memory_used": true,
+      "failures": [
+        "missing_expected_answer_term",
+        "missing_expected_answer_term_group"
+      ],
+      "forbidden_contains_violation_count": 0,
+      "latency_ms": 27,
+      "memory_grounding_passed": true,
+      "passed": false,
+      "profile_name": "chain_version_provenance",
+      "prompt_token_count": 20,
+      "prompt_variant": "baseline",
+      "provider_error": false,
+      "repeat_index": 0,
+      "timeout": false,
+      "token_metrics_available": true,
+      "total_token_count": 30,
+      "used_memory_id_count": 1
+    },
+    {
+      "answer_length": 21,
+      "answer_rule_passed": false,
+      "case_id": "common_temporal_preference_01",
+      "category": "common_temporal_preference",
+      "completion_token_count": 10,
+      "evidence_source": "original_memory_baseline",
+      "expected_memory_used": true,
+      "failures": [
+        "missing_expected_answer_term",
+        "missing_expected_answer_term",
+        "missing_expected_answer_term_group",
+        "missing_expected_answer_term_group"
+      ],
+      "forbidden_contains_violation_count": 0,
+      "latency_ms": 29,
+      "memory_grounding_passed": true,
+      "passed": false,
+      "profile_name": "chain_memory_base",
+      "prompt_token_count": 20,
+      "prompt_variant": "baseline",
+      "provider_error": false,
+      "repeat_index": 0,
+      "timeout": false,
+      "token_metrics_available": true,
+      "total_token_count": 30,
+      "used_memory_id_count": 3
+    },
+    {
+      "answer_length": 21,
+      "answer_rule_passed": false,
+      "case_id": "common_temporal_preference_01",
+      "category": "common_temporal_preference",
+      "completion_token_count": 10,
+      "evidence_source": "version_chain.active_leaf_ids",
+      "expected_memory_used": true,
+      "failures": [
+        "missing_expected_answer_term",
+        "missing_expected_answer_term",
+        "missing_expected_answer_term_group",
+        "missing_expected_answer_term_group"
+      ],
+      "forbidden_contains_violation_count": 0,
+      "latency_ms": 28,
+      "memory_grounding_passed": true,
+      "passed": false,
+      "profile_name": "chain_version_provenance",
+      "prompt_token_count": 20,
+      "prompt_variant": "baseline",
+      "provider_error": false,
+      "repeat_index": 0,
+      "timeout": false,
+      "token_metrics_available": true,
+      "total_token_count": 30,
+      "used_memory_id_count": 1
+    },
+    {
+      "answer_length": 21,
+      "answer_rule_passed": false,
+      "case_id": "common_low_value_filter_01",
+      "category": "common_low_value_filter",
+      "completion_token_count": 10,
+      "evidence_source": "original_memory_baseline",
+      "expected_memory_used": true,
+      "failures": [
+        "missing_expected_answer_term",
+        "missing_expected_answer_term",
+        "missing_expected_answer_term_group",
+        "missing_expected_answer_term_group"
+      ],
+      "forbidden_contains_violation_count": 0,
+      "latency_ms": 23,
+      "memory_grounding_passed": true,
+      "passed": false,
+      "profile_name": "chain_memory_base",
+      "prompt_token_count": 20,
+      "prompt_variant": "baseline",
+      "provider_error": false,
+      "repeat_index": 0,
+      "timeout": false,
+      "token_metrics_available": true,
+      "total_token_count": 30,
+      "used_memory_id_count": 5
+    },
+    {
+      "answer_length": 21,
+      "answer_rule_passed": false,
+      "case_id": "common_low_value_filter_01",
+      "category": "common_low_value_filter",
+      "completion_token_count": 10,
+      "evidence_source": "version_chain.active_leaf_ids",
+      "expected_memory_used": true,
+      "failures": [
+        "missing_expected_answer_term",
+        "missing_expected_answer_term",
+        "missing_expected_answer_term_group",
+        "missing_expected_answer_term_group"
+      ],
+      "forbidden_contains_violation_count": 0,
+      "latency_ms": 24,
+      "memory_grounding_passed": true,
+      "passed": false,
+      "profile_name": "chain_version_provenance",
+      "prompt_token_count": 20,
+      "prompt_variant": "baseline",
+      "provider_error": false,
+      "repeat_index": 0,
+      "timeout": false,
+      "token_metrics_available": true,
+      "total_token_count": 30,
+      "used_memory_id_count": 1
+    },
+    {
+      "answer_length": 21,
+      "answer_rule_passed": false,
+      "case_id": "common_costly_call_preference_01",
+      "category": "common_costly_call_preference",
+      "completion_token_count": 10,
+      "evidence_source": "original_memory_baseline",
+      "expected_memory_used": true,
+      "failures": [
+        "missing_expected_answer_term",
+        "missing_expected_answer_term_group",
+        "missing_expected_answer_term_group"
+      ],
+      "forbidden_contains_violation_count": 0,
+      "latency_ms": 29,
+      "memory_grounding_passed": true,
+      "passed": false,
+      "profile_name": "chain_memory_base",
+      "prompt_token_count": 20,
+      "prompt_variant": "baseline",
+      "provider_error": false,
+      "repeat_index": 0,
+      "timeout": false,
+      "token_metrics_available": true,
+      "total_token_count": 30,
+      "used_memory_id_count": 5
+    },
+    {
+      "answer_length": 21,
+      "answer_rule_passed": false,
+      "case_id": "common_costly_call_preference_01",
+      "category": "common_costly_call_preference",
+      "completion_token_count": 10,
+      "evidence_source": "version_chain.active_leaf_ids",
+      "expected_memory_used": true,
+      "failures": [
+        "missing_expected_answer_term",
+        "missing_expected_answer_term_group",
+        "missing_expected_answer_term_group"
+      ],
+      "forbidden_contains_violation_count": 0,
+      "latency_ms": 27,
+      "memory_grounding_passed": true,
+      "passed": false,
+      "profile_name": "chain_version_provenance",
+      "prompt_token_count": 20,
+      "prompt_variant": "baseline",
+      "provider_error": false,
+      "repeat_index": 0,
+      "timeout": false,
+      "token_metrics_available": true,
+      "total_token_count": 30,
+      "used_memory_id_count": 1
+    },
+    {
+      "answer_length": 21,
+      "answer_rule_passed": false,
+      "case_id": "common_injection_noise_01",
+      "category": "common_injection_noise",
+      "completion_token_count": 10,
+      "evidence_source": "original_memory_baseline",
+      "expected_memory_used": true,
+      "failures": [
+        "missing_expected_answer_term",
+        "missing_expected_answer_term",
+        "missing_expected_answer_term_group",
+        "missing_expected_answer_term_group"
+      ],
+      "forbidden_contains_violation_count": 0,
+      "latency_ms": 27,
+      "memory_grounding_passed": true,
+      "passed": false,
+      "profile_name": "chain_memory_base",
+      "prompt_token_count": 20,
+      "prompt_variant": "baseline",
+      "provider_error": false,
+      "repeat_index": 0,
+      "timeout": false,
+      "token_metrics_available": true,
+      "total_token_count": 30,
+      "used_memory_id_count": 5
+    },
+    {
+      "answer_length": 21,
+      "answer_rule_passed": false,
+      "case_id": "common_injection_noise_01",
+      "category": "common_injection_noise",
+      "completion_token_count": 10,
+      "evidence_source": "version_chain.active_leaf_ids",
+      "expected_memory_used": true,
+      "failures": [
+        "missing_expected_answer_term",
+        "missing_expected_answer_term",
+        "missing_expected_answer_term_group",
+        "missing_expected_answer_term_group"
+      ],
+      "forbidden_contains_violation_count": 0,
+      "latency_ms": 27,
+      "memory_grounding_passed": true,
+      "passed": false,
+      "profile_name": "chain_version_provenance",
+      "prompt_token_count": 20,
+      "prompt_variant": "baseline",
+      "provider_error": false,
+      "repeat_index": 0,
+      "timeout": false,
+      "token_metrics_available": true,
+      "total_token_count": 30,
+      "used_memory_id_count": 1
+    },
+    {
+      "answer_length": 21,
+      "answer_rule_passed": false,
+      "case_id": "common_source_ref_missing_01",
+      "category": "common_source_ref_missing",
+      "completion_token_count": 10,
+      "evidence_source": "original_memory_baseline",
+      "expected_memory_used": true,
+      "failures": [
+        "missing_expected_answer_term",
+        "missing_expected_answer_term",
+        "missing_expected_answer_term_group",
+        "missing_expected_answer_term_group"
+      ],
+      "forbidden_contains_violation_count": 0,
+      "latency_ms": 25,
+      "memory_grounding_passed": true,
+      "passed": false,
+      "profile_name": "chain_memory_base",
+      "prompt_token_count": 20,
+      "prompt_variant": "baseline",
+      "provider_error": false,
+      "repeat_index": 0,
+      "timeout": false,
+      "token_metrics_available": true,
+      "total_token_count": 30,
+      "used_memory_id_count": 5
+    },
+    {
+      "answer_length": 21,
+      "answer_rule_passed": false,
+      "case_id": "common_source_ref_missing_01",
+      "category": "common_source_ref_missing",
+      "completion_token_count": 10,
+      "evidence_source": "version_chain.active_leaf_ids",
+      "expected_memory_used": true,
+      "failures": [
+        "missing_expected_answer_term",
+        "missing_expected_answer_term",
+        "missing_expected_answer_term_group",
+        "missing_expected_answer_term_group"
+      ],
+      "forbidden_contains_violation_count": 0,
+      "latency_ms": 31,
+      "memory_grounding_passed": true,
+      "passed": false,
+      "profile_name": "chain_version_provenance",
+      "prompt_token_count": 20,
+      "prompt_variant": "baseline",
+      "provider_error": false,
+      "repeat_index": 0,
+      "timeout": false,
+      "token_metrics_available": true,
+      "total_token_count": 30,
+      "used_memory_id_count": 1
+    },
+    {
+      "answer_length": 21,
+      "answer_rule_passed": false,
+      "case_id": "common_session_boundary_01",
+      "category": "common_session_boundary",
+      "completion_token_count": 10,
+      "evidence_source": "original_memory_baseline",
+      "expected_memory_used": true,
+      "failures": [
+        "missing_expected_answer_term",
+        "missing_expected_answer_term",
+        "missing_expected_answer_term_group",
+        "missing_expected_answer_term_group"
+      ],
+      "forbidden_contains_violation_count": 0,
+      "latency_ms": 25,
+      "memory_grounding_passed": true,
+      "passed": false,
+      "profile_name": "chain_memory_base",
+      "prompt_token_count": 20,
+      "prompt_variant": "baseline",
+      "provider_error": false,
+      "repeat_index": 0,
+      "timeout": false,
+      "token_metrics_available": true,
+      "total_token_count": 30,
+      "used_memory_id_count": 4
+    },
+    {
+      "answer_length": 21,
+      "answer_rule_passed": false,
+      "case_id": "common_session_boundary_01",
+      "category": "common_session_boundary",
+      "completion_token_count": 10,
+      "evidence_source": "version_chain.active_leaf_ids",
+      "expected_memory_used": true,
+      "failures": [
+        "missing_expected_answer_term",
+        "missing_expected_answer_term",
+        "missing_expected_answer_term_group",
+        "missing_expected_answer_term_group"
+      ],
+      "forbidden_contains_violation_count": 0,
+      "latency_ms": 24,
+      "memory_grounding_passed": true,
+      "passed": false,
+      "profile_name": "chain_version_provenance",
+      "prompt_token_count": 20,
+      "prompt_variant": "baseline",
+      "provider_error": false,
+      "repeat_index": 0,
+      "timeout": false,
+      "token_metrics_available": true,
+      "total_token_count": 30,
+      "used_memory_id_count": 1
+    },
+    {
+      "answer_length": 21,
+      "answer_rule_passed": false,
+      "case_id": "common_sleep_compaction_01",
+      "category": "common_sleep_compaction",
+      "completion_token_count": 10,
+      "evidence_source": "original_memory_baseline",
+      "expected_memory_used": true,
+      "failures": [
+        "missing_expected_answer_term",
+        "missing_expected_answer_term_group"
+      ],
+      "forbidden_contains_violation_count": 0,
+      "latency_ms": 23,
+      "memory_grounding_passed": true,
+      "passed": false,
+      "profile_name": "chain_memory_base",
+      "prompt_token_count": 20,
+      "prompt_variant": "baseline",
+      "provider_error": false,
+      "repeat_index": 0,
+      "timeout": false,
+      "token_metrics_available": true,
+      "total_token_count": 30,
+      "used_memory_id_count": 5
+    },
+    {
+      "answer_length": 21,
+      "answer_rule_passed": false,
+      "case_id": "common_sleep_compaction_01",
+      "category": "common_sleep_compaction",
+      "completion_token_count": 10,
+      "evidence_source": "version_chain.active_leaf_ids",
+      "expected_memory_used": true,
+      "failures": [
+        "missing_expected_answer_term",
+        "missing_expected_answer_term_group"
+      ],
+      "forbidden_contains_violation_count": 0,
+      "latency_ms": 23,
+      "memory_grounding_passed": true,
+      "passed": false,
+      "profile_name": "chain_version_provenance",
+      "prompt_token_count": 20,
+      "prompt_variant": "baseline",
+      "provider_error": false,
+      "repeat_index": 0,
+      "timeout": false,
+      "token_metrics_available": true,
+      "total_token_count": 30,
+      "used_memory_id_count": 1
+    },
+    {
+      "answer_length": 21,
+      "answer_rule_passed": false,
+      "case_id": "common_causal_consistency_01",
+      "category": "common_causal_consistency",
+      "completion_token_count": 10,
+      "evidence_source": "original_memory_baseline",
+      "expected_memory_used": true,
+      "failures": [
+        "missing_expected_answer_term",
+        "missing_expected_answer_term",
+        "missing_expected_answer_term_group",
+        "missing_expected_answer_term_group"
+      ],
+      "forbidden_contains_violation_count": 0,
+      "latency_ms": 25,
+      "memory_grounding_passed": true,
+      "passed": false,
+      "profile_name": "chain_memory_base",
+      "prompt_token_count": 20,
+      "prompt_variant": "baseline",
+      "provider_error": false,
+      "repeat_index": 0,
+      "timeout": false,
+      "token_metrics_available": true,
+      "total_token_count": 30,
+      "used_memory_id_count": 6
+    },
+    {
+      "answer_length": 21,
+      "answer_rule_passed": false,
+      "case_id": "common_causal_consistency_01",
+      "category": "common_causal_consistency",
+      "completion_token_count": 10,
+      "evidence_source": "version_chain.active_leaf_ids",
+      "expected_memory_used": true,
+      "failures": [
+        "missing_expected_answer_term",
+        "missing_expected_answer_term",
+        "missing_expected_answer_term_group",
+        "missing_expected_answer_term_group"
+      ],
+      "forbidden_contains_violation_count": 0,
+      "latency_ms": 27,
+      "memory_grounding_passed": true,
+      "passed": false,
+      "profile_name": "chain_version_provenance",
+      "prompt_token_count": 20,
+      "prompt_variant": "baseline",
+      "provider_error": false,
+      "repeat_index": 0,
+      "timeout": false,
+      "token_metrics_available": true,
+      "total_token_count": 30,
+      "used_memory_id_count": 1
+    },
+    {
+      "answer_length": 21,
+      "answer_rule_passed": false,
+      "case_id": "common_entropy_value_01",
+      "category": "common_entropy_value",
+      "completion_token_count": 10,
+      "evidence_source": "original_memory_baseline",
+      "expected_memory_used": true,
+      "failures": [
+        "missing_expected_answer_term",
+        "missing_expected_answer_term",
+        "missing_expected_answer_term_group",
+        "missing_expected_answer_term_group"
+      ],
+      "forbidden_contains_violation_count": 0,
+      "latency_ms": 26,
+      "memory_grounding_passed": true,
+      "passed": false,
+      "profile_name": "chain_memory_base",
+      "prompt_token_count": 20,
+      "prompt_variant": "baseline",
+      "provider_error": false,
+      "repeat_index": 0,
+      "timeout": false,
+      "token_metrics_available": true,
+      "total_token_count": 30,
+      "used_memory_id_count": 5
+    },
+    {
+      "answer_length": 21,
+      "answer_rule_passed": false,
+      "case_id": "common_entropy_value_01",
+      "category": "common_entropy_value",
+      "completion_token_count": 10,
+      "evidence_source": "version_chain.active_leaf_ids",
+      "expected_memory_used": true,
+      "failures": [
+        "missing_expected_answer_term",
+        "missing_expected_answer_term",
+        "missing_expected_answer_term_group",
+        "missing_expected_answer_term_group"
+      ],
+      "forbidden_contains_violation_count": 0,
+      "latency_ms": 27,
+      "memory_grounding_passed": true,
+      "passed": false,
+      "profile_name": "chain_version_provenance",
+      "prompt_token_count": 20,
+      "prompt_variant": "baseline",
+      "provider_error": false,
+      "repeat_index": 0,
+      "timeout": false,
+      "token_metrics_available": true,
+      "total_token_count": 30,
+      "used_memory_id_count": 1
+    }
+  ],
+  "failure_records": [
+    {
+      "case_id": "common_version_chain_01",
+      "failure": "missing_expected_answer_term",
+      "profile_name": "chain_memory_base",
+      "prompt_variant": "baseline",
+      "repeat_index": 0
+    },
+    {
+      "case_id": "common_version_chain_01",
+      "failure": "missing_expected_answer_term",
+      "profile_name": "chain_memory_base",
+      "prompt_variant": "baseline",
+      "repeat_index": 0
+    },
+    {
+      "case_id": "common_version_chain_01",
+      "failure": "missing_expected_answer_term_group",
+      "profile_name": "chain_memory_base",
+      "prompt_variant": "baseline",
+      "repeat_index": 0
+    },
+    {
+      "case_id": "common_version_chain_01",
+      "failure": "missing_expected_answer_term_group",
+      "profile_name": "chain_memory_base",
+      "prompt_variant": "baseline",
+      "repeat_index": 0
+    },
+    {
+      "case_id": "common_version_chain_01",
+      "failure": "missing_expected_answer_term",
+      "profile_name": "chain_version_provenance",
+      "prompt_variant": "baseline",
+      "repeat_index": 0
+    },
+    {
+      "case_id": "common_version_chain_01",
+      "failure": "missing_expected_answer_term",
+      "profile_name": "chain_version_provenance",
+      "prompt_variant": "baseline",
+      "repeat_index": 0
+    },
+    {
+      "case_id": "common_version_chain_01",
+      "failure": "missing_expected_answer_term_group",
+      "profile_name": "chain_version_provenance",
+      "prompt_variant": "baseline",
+      "repeat_index": 0
+    },
+    {
+      "case_id": "common_version_chain_01",
+      "failure": "missing_expected_answer_term_group",
+      "profile_name": "chain_version_provenance",
+      "prompt_variant": "baseline",
+      "repeat_index": 0
+    },
+    {
+      "case_id": "common_cross_scope_01",
+      "failure": "missing_expected_answer_term",
+      "profile_name": "chain_memory_base",
+      "prompt_variant": "baseline",
+      "repeat_index": 0
+    },
+    {
+      "case_id": "common_cross_scope_01",
+      "failure": "missing_expected_answer_term",
+      "profile_name": "chain_memory_base",
+      "prompt_variant": "baseline",
+      "repeat_index": 0
+    },
+    {
+      "case_id": "common_cross_scope_01",
+      "failure": "missing_expected_answer_term_group",
+      "profile_name": "chain_memory_base",
+      "prompt_variant": "baseline",
+      "repeat_index": 0
+    },
+    {
+      "case_id": "common_cross_scope_01",
+      "failure": "missing_expected_answer_term_group",
+      "profile_name": "chain_memory_base",
+      "prompt_variant": "baseline",
+      "repeat_index": 0
+    },
+    {
+      "case_id": "common_cross_scope_01",
+      "failure": "missing_expected_answer_term",
+      "profile_name": "chain_version_provenance",
+      "prompt_variant": "baseline",
+      "repeat_index": 0
+    },
+    {
+      "case_id": "common_cross_scope_01",
+      "failure": "missing_expected_answer_term",
+      "profile_name": "chain_version_provenance",
+      "prompt_variant": "baseline",
+      "repeat_index": 0
+    },
+    {
+      "case_id": "common_cross_scope_01",
+      "failure": "missing_expected_answer_term_group",
+      "profile_name": "chain_version_provenance",
+      "prompt_variant": "baseline",
+      "repeat_index": 0
+    },
+    {
+      "case_id": "common_cross_scope_01",
+      "failure": "missing_expected_answer_term_group",
+      "profile_name": "chain_version_provenance",
+      "prompt_variant": "baseline",
+      "repeat_index": 0
+    },
+    {
+      "case_id": "common_duplicate_cleanup_01",
+      "failure": "missing_expected_answer_term",
+      "profile_name": "chain_memory_base",
+      "prompt_variant": "baseline",
+      "repeat_index": 0
+    },
+    {
+      "case_id": "common_duplicate_cleanup_01",
+      "failure": "missing_expected_answer_term_group",
+      "profile_name": "chain_memory_base",
+      "prompt_variant": "baseline",
+      "repeat_index": 0
+    },
+    {
+      "case_id": "common_duplicate_cleanup_01",
+      "failure": "missing_expected_answer_term_group",
+      "profile_name": "chain_memory_base",
+      "prompt_variant": "baseline",
+      "repeat_index": 0
+    },
+    {
+      "case_id": "common_duplicate_cleanup_01",
+      "failure": "missing_expected_answer_term",
+      "profile_name": "chain_version_provenance",
+      "prompt_variant": "baseline",
+      "repeat_index": 0
+    },
+    {
+      "case_id": "common_duplicate_cleanup_01",
+      "failure": "missing_expected_answer_term_group",
+      "profile_name": "chain_version_provenance",
+      "prompt_variant": "baseline",
+      "repeat_index": 0
+    },
+    {
+      "case_id": "common_duplicate_cleanup_01",
+      "failure": "missing_expected_answer_term_group",
+      "profile_name": "chain_version_provenance",
+      "prompt_variant": "baseline",
+      "repeat_index": 0
+    },
+    {
+      "case_id": "common_conflict_resolution_01",
+      "failure": "missing_expected_answer_term",
+      "profile_name": "chain_memory_base",
+      "prompt_variant": "baseline",
+      "repeat_index": 0
+    },
+    {
+      "case_id": "common_conflict_resolution_01",
+      "failure": "missing_expected_answer_term_group",
+      "profile_name": "chain_memory_base",
+      "prompt_variant": "baseline",
+      "repeat_index": 0
+    },
+    {
+      "case_id": "common_conflict_resolution_01",
+      "failure": "missing_expected_answer_term_group",
+      "profile_name": "chain_memory_base",
+      "prompt_variant": "baseline",
+      "repeat_index": 0
+    },
+    {
+      "case_id": "common_conflict_resolution_01",
+      "failure": "missing_expected_answer_term",
+      "profile_name": "chain_version_provenance",
+      "prompt_variant": "baseline",
+      "repeat_index": 0
+    },
+    {
+      "case_id": "common_conflict_resolution_01",
+      "failure": "missing_expected_answer_term_group",
+      "profile_name": "chain_version_provenance",
+      "prompt_variant": "baseline",
+      "repeat_index": 0
+    },
+    {
+      "case_id": "common_conflict_resolution_01",
+      "failure": "missing_expected_answer_term_group",
+      "profile_name": "chain_version_provenance",
+      "prompt_variant": "baseline",
+      "repeat_index": 0
+    },
+    {
+      "case_id": "common_stale_sleep_01",
+      "failure": "missing_expected_answer_term",
+      "profile_name": "chain_memory_base",
+      "prompt_variant": "baseline",
+      "repeat_index": 0
+    },
+    {
+      "case_id": "common_stale_sleep_01",
+      "failure": "missing_expected_answer_term",
+      "profile_name": "chain_memory_base",
+      "prompt_variant": "baseline",
+      "repeat_index": 0
+    },
+    {
+      "case_id": "common_stale_sleep_01",
+      "failure": "missing_expected_answer_term_group",
+      "profile_name": "chain_memory_base",
+      "prompt_variant": "baseline",
+      "repeat_index": 0
+    },
+    {
+      "case_id": "common_stale_sleep_01",
+      "failure": "missing_expected_answer_term_group",
+      "profile_name": "chain_memory_base",
+      "prompt_variant": "baseline",
+      "repeat_index": 0
+    },
+    {
+      "case_id": "common_stale_sleep_01",
+      "failure": "missing_expected_answer_term",
+      "profile_name": "chain_version_provenance",
+      "prompt_variant": "baseline",
+      "repeat_index": 0
+    },
+    {
+      "case_id": "common_stale_sleep_01",
+      "failure": "missing_expected_answer_term",
+      "profile_name": "chain_version_provenance",
+      "prompt_variant": "baseline",
+      "repeat_index": 0
+    },
+    {
+      "case_id": "common_stale_sleep_01",
+      "failure": "missing_expected_answer_term_group",
+      "profile_name": "chain_version_provenance",
+      "prompt_variant": "baseline",
+      "repeat_index": 0
+    },
+    {
+      "case_id": "common_stale_sleep_01",
+      "failure": "missing_expected_answer_term_group",
+      "profile_name": "chain_version_provenance",
+      "prompt_variant": "baseline",
+      "repeat_index": 0
+    },
+    {
+      "case_id": "common_entity_alias_01",
+      "failure": "missing_expected_answer_term",
+      "profile_name": "chain_memory_base",
+      "prompt_variant": "baseline",
+      "repeat_index": 0
+    },
+    {
+      "case_id": "common_entity_alias_01",
+      "failure": "missing_expected_answer_term_group",
+      "profile_name": "chain_memory_base",
+      "prompt_variant": "baseline",
+      "repeat_index": 0
+    },
+    {
+      "case_id": "common_entity_alias_01",
+      "failure": "missing_expected_answer_term",
+      "profile_name": "chain_version_provenance",
+      "prompt_variant": "baseline",
+      "repeat_index": 0
+    },
+    {
+      "case_id": "common_entity_alias_01",
+      "failure": "missing_expected_answer_term_group",
+      "profile_name": "chain_version_provenance",
+      "prompt_variant": "baseline",
+      "repeat_index": 0
+    },
+    {
+      "case_id": "common_temporal_preference_01",
+      "failure": "missing_expected_answer_term",
+      "profile_name": "chain_memory_base",
+      "prompt_variant": "baseline",
+      "repeat_index": 0
+    },
+    {
+      "case_id": "common_temporal_preference_01",
+      "failure": "missing_expected_answer_term",
+      "profile_name": "chain_memory_base",
+      "prompt_variant": "baseline",
+      "repeat_index": 0
+    },
+    {
+      "case_id": "common_temporal_preference_01",
+      "failure": "missing_expected_answer_term_group",
+      "profile_name": "chain_memory_base",
+      "prompt_variant": "baseline",
+      "repeat_index": 0
+    },
+    {
+      "case_id": "common_temporal_preference_01",
+      "failure": "missing_expected_answer_term_group",
+      "profile_name": "chain_memory_base",
+      "prompt_variant": "baseline",
+      "repeat_index": 0
+    },
+    {
+      "case_id": "common_temporal_preference_01",
+      "failure": "missing_expected_answer_term",
+      "profile_name": "chain_version_provenance",
+      "prompt_variant": "baseline",
+      "repeat_index": 0
+    },
+    {
+      "case_id": "common_temporal_preference_01",
+      "failure": "missing_expected_answer_term",
+      "profile_name": "chain_version_provenance",
+      "prompt_variant": "baseline",
+      "repeat_index": 0
+    },
+    {
+      "case_id": "common_temporal_preference_01",
+      "failure": "missing_expected_answer_term_group",
+      "profile_name": "chain_version_provenance",
+      "prompt_variant": "baseline",
+      "repeat_index": 0
+    },
+    {
+      "case_id": "common_temporal_preference_01",
+      "failure": "missing_expected_answer_term_group",
+      "profile_name": "chain_version_provenance",
+      "prompt_variant": "baseline",
+      "repeat_index": 0
+    },
+    {
+      "case_id": "common_low_value_filter_01",
+      "failure": "missing_expected_answer_term",
+      "profile_name": "chain_memory_base",
+      "prompt_variant": "baseline",
+      "repeat_index": 0
+    },
+    {
+      "case_id": "common_low_value_filter_01",
+      "failure": "missing_expected_answer_term",
+      "profile_name": "chain_memory_base",
+      "prompt_variant": "baseline",
+      "repeat_index": 0
+    },
+    {
+      "case_id": "common_low_value_filter_01",
+      "failure": "missing_expected_answer_term_group",
+      "profile_name": "chain_memory_base",
+      "prompt_variant": "baseline",
+      "repeat_index": 0
+    },
+    {
+      "case_id": "common_low_value_filter_01",
+      "failure": "missing_expected_answer_term_group",
+      "profile_name": "chain_memory_base",
+      "prompt_variant": "baseline",
+      "repeat_index": 0
+    },
+    {
+      "case_id": "common_low_value_filter_01",
+      "failure": "missing_expected_answer_term",
+      "profile_name": "chain_version_provenance",
+      "prompt_variant": "baseline",
+      "repeat_index": 0
+    },
+    {
+      "case_id": "common_low_value_filter_01",
+      "failure": "missing_expected_answer_term",
+      "profile_name": "chain_version_provenance",
+      "prompt_variant": "baseline",
+      "repeat_index": 0
+    },
+    {
+      "case_id": "common_low_value_filter_01",
+      "failure": "missing_expected_answer_term_group",
+      "profile_name": "chain_version_provenance",
+      "prompt_variant": "baseline",
+      "repeat_index": 0
+    },
+    {
+      "case_id": "common_low_value_filter_01",
+      "failure": "missing_expected_answer_term_group",
+      "profile_name": "chain_version_provenance",
+      "prompt_variant": "baseline",
+      "repeat_index": 0
+    },
+    {
+      "case_id": "common_costly_call_preference_01",
+      "failure": "missing_expected_answer_term",
+      "profile_name": "chain_memory_base",
+      "prompt_variant": "baseline",
+      "repeat_index": 0
+    },
+    {
+      "case_id": "common_costly_call_preference_01",
+      "failure": "missing_expected_answer_term_group",
+      "profile_name": "chain_memory_base",
+      "prompt_variant": "baseline",
+      "repeat_index": 0
+    },
+    {
+      "case_id": "common_costly_call_preference_01",
+      "failure": "missing_expected_answer_term_group",
+      "profile_name": "chain_memory_base",
+      "prompt_variant": "baseline",
+      "repeat_index": 0
+    },
+    {
+      "case_id": "common_costly_call_preference_01",
+      "failure": "missing_expected_answer_term",
+      "profile_name": "chain_version_provenance",
+      "prompt_variant": "baseline",
+      "repeat_index": 0
+    },
+    {
+      "case_id": "common_costly_call_preference_01",
+      "failure": "missing_expected_answer_term_group",
+      "profile_name": "chain_version_provenance",
+      "prompt_variant": "baseline",
+      "repeat_index": 0
+    },
+    {
+      "case_id": "common_costly_call_preference_01",
+      "failure": "missing_expected_answer_term_group",
+      "profile_name": "chain_version_provenance",
+      "prompt_variant": "baseline",
+      "repeat_index": 0
+    },
+    {
+      "case_id": "common_injection_noise_01",
+      "failure": "missing_expected_answer_term",
+      "profile_name": "chain_memory_base",
+      "prompt_variant": "baseline",
+      "repeat_index": 0
+    },
+    {
+      "case_id": "common_injection_noise_01",
+      "failure": "missing_expected_answer_term",
+      "profile_name": "chain_memory_base",
+      "prompt_variant": "baseline",
+      "repeat_index": 0
+    },
+    {
+      "case_id": "common_injection_noise_01",
+      "failure": "missing_expected_answer_term_group",
+      "profile_name": "chain_memory_base",
+      "prompt_variant": "baseline",
+      "repeat_index": 0
+    },
+    {
+      "case_id": "common_injection_noise_01",
+      "failure": "missing_expected_answer_term_group",
+      "profile_name": "chain_memory_base",
+      "prompt_variant": "baseline",
+      "repeat_index": 0
+    },
+    {
+      "case_id": "common_injection_noise_01",
+      "failure": "missing_expected_answer_term",
+      "profile_name": "chain_version_provenance",
+      "prompt_variant": "baseline",
+      "repeat_index": 0
+    },
+    {
+      "case_id": "common_injection_noise_01",
+      "failure": "missing_expected_answer_term",
+      "profile_name": "chain_version_provenance",
+      "prompt_variant": "baseline",
+      "repeat_index": 0
+    },
+    {
+      "case_id": "common_injection_noise_01",
+      "failure": "missing_expected_answer_term_group",
+      "profile_name": "chain_version_provenance",
+      "prompt_variant": "baseline",
+      "repeat_index": 0
+    },
+    {
+      "case_id": "common_injection_noise_01",
+      "failure": "missing_expected_answer_term_group",
+      "profile_name": "chain_version_provenance",
+      "prompt_variant": "baseline",
+      "repeat_index": 0
+    },
+    {
+      "case_id": "common_source_ref_missing_01",
+      "failure": "missing_expected_answer_term",
+      "profile_name": "chain_memory_base",
+      "prompt_variant": "baseline",
+      "repeat_index": 0
+    },
+    {
+      "case_id": "common_source_ref_missing_01",
+      "failure": "missing_expected_answer_term",
+      "profile_name": "chain_memory_base",
+      "prompt_variant": "baseline",
+      "repeat_index": 0
+    },
+    {
+      "case_id": "common_source_ref_missing_01",
+      "failure": "missing_expected_answer_term_group",
+      "profile_name": "chain_memory_base",
+      "prompt_variant": "baseline",
+      "repeat_index": 0
+    },
+    {
+      "case_id": "common_source_ref_missing_01",
+      "failure": "missing_expected_answer_term_group",
+      "profile_name": "chain_memory_base",
+      "prompt_variant": "baseline",
+      "repeat_index": 0
+    },
+    {
+      "case_id": "common_source_ref_missing_01",
+      "failure": "missing_expected_answer_term",
+      "profile_name": "chain_version_provenance",
+      "prompt_variant": "baseline",
+      "repeat_index": 0
+    },
+    {
+      "case_id": "common_source_ref_missing_01",
+      "failure": "missing_expected_answer_term",
+      "profile_name": "chain_version_provenance",
+      "prompt_variant": "baseline",
+      "repeat_index": 0
+    },
+    {
+      "case_id": "common_source_ref_missing_01",
+      "failure": "missing_expected_answer_term_group",
+      "profile_name": "chain_version_provenance",
+      "prompt_variant": "baseline",
+      "repeat_index": 0
+    },
+    {
+      "case_id": "common_source_ref_missing_01",
+      "failure": "missing_expected_answer_term_group",
+      "profile_name": "chain_version_provenance",
+      "prompt_variant": "baseline",
+      "repeat_index": 0
+    },
+    {
+      "case_id": "common_session_boundary_01",
+      "failure": "missing_expected_answer_term",
+      "profile_name": "chain_memory_base",
+      "prompt_variant": "baseline",
+      "repeat_index": 0
+    },
+    {
+      "case_id": "common_session_boundary_01",
+      "failure": "missing_expected_answer_term",
+      "profile_name": "chain_memory_base",
+      "prompt_variant": "baseline",
+      "repeat_index": 0
+    },
+    {
+      "case_id": "common_session_boundary_01",
+      "failure": "missing_expected_answer_term_group",
+      "profile_name": "chain_memory_base",
+      "prompt_variant": "baseline",
+      "repeat_index": 0
+    },
+    {
+      "case_id": "common_session_boundary_01",
+      "failure": "missing_expected_answer_term_group",
+      "profile_name": "chain_memory_base",
+      "prompt_variant": "baseline",
+      "repeat_index": 0
+    },
+    {
+      "case_id": "common_session_boundary_01",
+      "failure": "missing_expected_answer_term",
+      "profile_name": "chain_version_provenance",
+      "prompt_variant": "baseline",
+      "repeat_index": 0
+    },
+    {
+      "case_id": "common_session_boundary_01",
+      "failure": "missing_expected_answer_term",
+      "profile_name": "chain_version_provenance",
+      "prompt_variant": "baseline",
+      "repeat_index": 0
+    },
+    {
+      "case_id": "common_session_boundary_01",
+      "failure": "missing_expected_answer_term_group",
+      "profile_name": "chain_version_provenance",
+      "prompt_variant": "baseline",
+      "repeat_index": 0
+    },
+    {
+      "case_id": "common_session_boundary_01",
+      "failure": "missing_expected_answer_term_group",
+      "profile_name": "chain_version_provenance",
+      "prompt_variant": "baseline",
+      "repeat_index": 0
+    },
+    {
+      "case_id": "common_sleep_compaction_01",
+      "failure": "missing_expected_answer_term",
+      "profile_name": "chain_memory_base",
+      "prompt_variant": "baseline",
+      "repeat_index": 0
+    },
+    {
+      "case_id": "common_sleep_compaction_01",
+      "failure": "missing_expected_answer_term_group",
+      "profile_name": "chain_memory_base",
+      "prompt_variant": "baseline",
+      "repeat_index": 0
+    },
+    {
+      "case_id": "common_sleep_compaction_01",
+      "failure": "missing_expected_answer_term",
+      "profile_name": "chain_version_provenance",
+      "prompt_variant": "baseline",
+      "repeat_index": 0
+    },
+    {
+      "case_id": "common_sleep_compaction_01",
+      "failure": "missing_expected_answer_term_group",
+      "profile_name": "chain_version_provenance",
+      "prompt_variant": "baseline",
+      "repeat_index": 0
+    },
+    {
+      "case_id": "common_causal_consistency_01",
+      "failure": "missing_expected_answer_term",
+      "profile_name": "chain_memory_base",
+      "prompt_variant": "baseline",
+      "repeat_index": 0
+    },
+    {
+      "case_id": "common_causal_consistency_01",
+      "failure": "missing_expected_answer_term",
+      "profile_name": "chain_memory_base",
+      "prompt_variant": "baseline",
+      "repeat_index": 0
+    },
+    {
+      "case_id": "common_causal_consistency_01",
+      "failure": "missing_expected_answer_term_group",
+      "profile_name": "chain_memory_base",
+      "prompt_variant": "baseline",
+      "repeat_index": 0
+    },
+    {
+      "case_id": "common_causal_consistency_01",
+      "failure": "missing_expected_answer_term_group",
+      "profile_name": "chain_memory_base",
+      "prompt_variant": "baseline",
+      "repeat_index": 0
+    },
+    {
+      "case_id": "common_causal_consistency_01",
+      "failure": "missing_expected_answer_term",
+      "profile_name": "chain_version_provenance",
+      "prompt_variant": "baseline",
+      "repeat_index": 0
+    },
+    {
+      "case_id": "common_causal_consistency_01",
+      "failure": "missing_expected_answer_term",
+      "profile_name": "chain_version_provenance",
+      "prompt_variant": "baseline",
+      "repeat_index": 0
+    },
+    {
+      "case_id": "common_causal_consistency_01",
+      "failure": "missing_expected_answer_term_group",
+      "profile_name": "chain_version_provenance",
+      "prompt_variant": "baseline",
+      "repeat_index": 0
+    },
+    {
+      "case_id": "common_causal_consistency_01",
+      "failure": "missing_expected_answer_term_group",
+      "profile_name": "chain_version_provenance",
+      "prompt_variant": "baseline",
+      "repeat_index": 0
+    },
+    {
+      "case_id": "common_entropy_value_01",
+      "failure": "missing_expected_answer_term",
+      "profile_name": "chain_memory_base",
+      "prompt_variant": "baseline",
+      "repeat_index": 0
+    },
+    {
+      "case_id": "common_entropy_value_01",
+      "failure": "missing_expected_answer_term",
+      "profile_name": "chain_memory_base",
+      "prompt_variant": "baseline",
+      "repeat_index": 0
+    },
+    {
+      "case_id": "common_entropy_value_01",
+      "failure": "missing_expected_answer_term_group",
+      "profile_name": "chain_memory_base",
+      "prompt_variant": "baseline",
+      "repeat_index": 0
+    },
+    {
+      "case_id": "common_entropy_value_01",
+      "failure": "missing_expected_answer_term_group",
+      "profile_name": "chain_memory_base",
+      "prompt_variant": "baseline",
+      "repeat_index": 0
+    },
+    {
+      "case_id": "common_entropy_value_01",
+      "failure": "missing_expected_answer_term",
+      "profile_name": "chain_version_provenance",
+      "prompt_variant": "baseline",
+      "repeat_index": 0
+    },
+    {
+      "case_id": "common_entropy_value_01",
+      "failure": "missing_expected_answer_term",
+      "profile_name": "chain_version_provenance",
+      "prompt_variant": "baseline",
+      "repeat_index": 0
+    },
+    {
+      "case_id": "common_entropy_value_01",
+      "failure": "missing_expected_answer_term_group",
+      "profile_name": "chain_version_provenance",
+      "prompt_variant": "baseline",
+      "repeat_index": 0
+    },
+    {
+      "case_id": "common_entropy_value_01",
+      "failure": "missing_expected_answer_term_group",
+      "profile_name": "chain_version_provenance",
+      "prompt_variant": "baseline",
+      "repeat_index": 0
+    }
+  ],
+  "generated_at": "2026-07-19T00:00:00+00:00",
+  "metrics": {
+    "answer_quality_missing_profiles": [
+      "chain_tri_retrieval",
+      "chain_graph_retrieval",
+      "chain_rerank_injection",
+      "chain_all_on"
+    ],
+    "answer_quality_partial_matrix": true,
+    "answer_quality_passed": false,
+    "answer_quality_required_profiles": [
+      "chain_memory_base",
+      "chain_tri_retrieval",
+      "chain_graph_retrieval",
+      "chain_rerank_injection",
+      "chain_version_provenance",
+      "chain_all_on"
+    ],
+    "answer_rule_pass_rate": 25.0,
+    "avg_latency_ms": 25.525,
+    "avg_total_token_count": 30.0,
+    "baseline_profile": "chain_memory_base",
+    "case_count": 40,
+    "chain_adjacent_uplift": {
+      "chain_memory_base": 0.0,
+      "chain_version_provenance": 0.0
+    },
+    "chain_answer_quality_uplift_rows": [
+      {
+        "adjacent_answer_pass_delta_points": 0.0,
+        "adjacent_grounding_pass_delta_points": 0.0,
+        "answer_rule_pass_rate": 25.0,
+        "case_count": 20,
+        "cumulative_answer_pass_delta_points": 0.0,
+        "cumulative_answer_pass_relative_lift_percent": 0.0,
+        "cumulative_grounding_pass_delta_points": 0.0,
+        "cumulative_grounding_pass_relative_lift_percent": 0.0,
+        "is_combo_check_row": false,
+        "memory_grounding_pass_rate": 100.0,
+        "previous_profile": null,
+        "profile_name": "chain_memory_base"
+      },
+      {
+        "adjacent_answer_pass_delta_points": 0.0,
+        "adjacent_grounding_pass_delta_points": 0.0,
+        "answer_rule_pass_rate": 25.0,
+        "case_count": 20,
+        "cumulative_answer_pass_delta_points": 0.0,
+        "cumulative_answer_pass_relative_lift_percent": 0.0,
+        "cumulative_grounding_pass_delta_points": 0.0,
+        "cumulative_grounding_pass_relative_lift_percent": 0.0,
+        "is_combo_check_row": false,
+        "memory_grounding_pass_rate": 100.0,
+        "previous_profile": "chain_memory_base",
+        "profile_name": "chain_version_provenance"
+      }
+    ],
+    "completed_call_count": 40,
+    "concurrency": 1,
+    "control_profile": "chain_off",
+    "evaluation_level": "comprehensive_online_agentloop",
+    "failed_answer_case_count": 30,
+    "forbidden_violation_rate": 0.0,
+    "full_answer_included": false,
+    "infra_passed": true,
+    "memory_grounding_pass_rate": 100.0,
+    "metric_sources": {
+      "offline_retrieval_proxy": "existing offline trace retrieval metrics",
+      "online_answer_level": "real AgentLoop answer scoring",
+      "online_balanced_proxy": "online answer-level fields converted into balanced proxy dimensions",
+      "real_db_readonly_sampling_background": "aggregate-only real memory DB sampling status"
+    },
+    "online_balanced_proxy_summaries": {
+      "chain_memory_base": {
+        "answer_derived_retrieval_proxy_score": "unavailable",
+        "answer_score": 25.0,
+        "available_dimensions": [
+          "answer_score",
+          "grounding_score",
+          "governance_score"
+        ],
+        "efficiency_score": "unavailable",
+        "formula": "balanced_score = 0.30 * answer_score + 0.25 * retrieval_proxy_score + 0.20 * grounding_score + 0.15 * governance_score + 0.10 * efficiency_score; unavailable dimensions are omitted and remaining weights are normalized",
+        "governance_score": 100.0,
+        "grounding_score": 100.0,
+        "metric_source": "online_balanced_proxy",
+        "online_balanced_proxy_delta": 0.0,
+        "online_balanced_proxy_score": 65.3846,
+        "unavailable_dimensions": [
+          "retrieval_proxy_score",
+          "efficiency_score"
+        ]
+      },
+      "chain_version_provenance": {
+        "answer_derived_retrieval_proxy_score": 25.0,
+        "answer_score": 25.0,
+        "available_dimensions": [
+          "answer_score",
+          "retrieval_proxy_score",
+          "grounding_score",
+          "governance_score"
+        ],
+        "efficiency_score": "unavailable",
+        "formula": "balanced_score = 0.30 * answer_score + 0.25 * retrieval_proxy_score + 0.20 * grounding_score + 0.15 * governance_score + 0.10 * efficiency_score; unavailable dimensions are omitted and remaining weights are normalized",
+        "governance_score": 100.0,
+        "grounding_score": 100.0,
+        "metric_source": "online_balanced_proxy",
+        "online_balanced_proxy_delta": -11.2179,
+        "online_balanced_proxy_score": 54.1667,
+        "unavailable_dimensions": [
+          "efficiency_score"
+        ]
+      }
+    },
+    "passed_case_count": 10,
+    "profile_answer_quality_uplift_vs_memory_base": {
+      "chain_memory_base": {
+        "answer_pass_delta_points": 0.0,
+        "answer_pass_relative_lift_percent": 0.0,
+        "answer_rule_pass_rate": 25.0,
+        "answer_success_count": 5,
+        "avg_latency_ms": 25.75,
+        "avg_latency_overhead_ms": 0.0,
+        "avg_latency_reduction_percent": 0.0,
+        "avg_total_token_count": 30.0,
+        "avg_total_token_overhead": 0.0,
+        "avg_total_token_reduction_percent": 0.0,
+        "baseline_profile": "chain_memory_base",
+        "case_count": 20,
+        "forbidden_case_count": 0,
+        "forbidden_violation_delta_points": 0.0,
+        "forbidden_violation_rate": 0.0,
+        "forbidden_violation_reduction_percent": null,
+        "grounding_pass_delta_points": 0.0,
+        "grounding_pass_relative_lift_percent": 0.0,
+        "grounding_success_count": 20,
+        "is_combo_check_row": false,
+        "memory_grounding_pass_rate": 100.0
+      },
+      "chain_version_provenance": {
+        "answer_pass_delta_points": 0.0,
+        "answer_pass_relative_lift_percent": 0.0,
+        "answer_rule_pass_rate": 25.0,
+        "answer_success_count": 5,
+        "avg_latency_ms": 25.3,
+        "avg_latency_overhead_ms": -0.45,
+        "avg_latency_reduction_percent": 1.7476,
+        "avg_total_token_count": 30.0,
+        "avg_total_token_overhead": 0.0,
+        "avg_total_token_reduction_percent": 0.0,
+        "baseline_profile": "chain_memory_base",
+        "case_count": 20,
+        "forbidden_case_count": 0,
+        "forbidden_violation_delta_points": 0.0,
+        "forbidden_violation_rate": 0.0,
+        "forbidden_violation_reduction_percent": null,
+        "grounding_pass_delta_points": 0.0,
+        "grounding_pass_relative_lift_percent": 0.0,
+        "grounding_success_count": 20,
+        "is_combo_check_row": false,
+        "memory_grounding_pass_rate": 100.0
+      }
+    },
+    "profile_count": 2,
+    "profile_summaries": {
+      "chain_memory_base": {
+        "answer_rule_pass_rate": 25.0,
+        "answer_success_count": 5,
+        "avg_latency_ms": 25.75,
+        "avg_total_token_count": 30.0,
+        "case_count": 20,
+        "evidence_source": "original_memory_baseline",
+        "forbidden_case_count": 0,
+        "forbidden_violation_rate": 0.0,
+        "grounding_success_count": 20,
+        "main_score": 47.5,
+        "memory_grounding_pass_rate": 100.0,
+        "token_metrics_available": true
+      },
+      "chain_version_provenance": {
+        "answer_rule_pass_rate": 25.0,
+        "answer_success_count": 5,
+        "avg_latency_ms": 25.3,
+        "avg_total_token_count": 30.0,
+        "case_count": 20,
+        "evidence_source": "version_chain.active_leaf_ids",
+        "forbidden_case_count": 0,
+        "forbidden_violation_rate": 0.0,
+        "grounding_success_count": 20,
+        "main_score": 47.5,
+        "memory_grounding_pass_rate": 100.0,
+        "token_metrics_available": true
+      }
+    },
+    "profile_uplift_vs_memory_base": {
+      "chain_memory_base": 0.0,
+      "chain_version_provenance": 0.0
+    },
+    "profile_uplift_vs_off": {
+      "chain_memory_base": "unavailable",
+      "chain_version_provenance": "unavailable"
+    },
+    "prompt_included": false,
+    "prompt_variant_count": 1,
+    "provider_error_count": 0,
+    "raw_memory_summary_included": false,
+    "raw_query_included": false,
+    "real_llm_enabled": false,
+    "real_memory_sample_metrics": {
+      "cross_scope_sample_unavailable": 1,
+      "invalid_extra_json_count": 0,
+      "memory_item_count": 0,
+      "missing_scope_count": 0,
+      "missing_table_count": 1,
+      "replacement_count": 0,
+      "sample_count": 0,
+      "usable_memory_item_count": 0,
+      "version_chain_sample_unavailable": 1
+    },
+    "repeat_count": 1,
+    "session_text_included": false,
+    "skipped_from_checkpoint_count": 0,
+    "timeout_count": 0,
+    "token_metrics_available": true,
+    "total_token_count": 1200,
+    "unique_case_count": 20
+  },
+  "passed": false,
+  "run_id": "dc976d47572b9770"
+}

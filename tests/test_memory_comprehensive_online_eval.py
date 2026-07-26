@@ -7,6 +7,7 @@ from typing import Any
 
 from agent.provider import LLMResponse
 from memory2.eval_comprehensive_online import (
+    answer_expectation_for_profile,
     build_comprehensive_online_report_from_checkpoint,
     build_comprehensive_run_specs,
     evidence_ids_for_profile,
@@ -184,6 +185,57 @@ def test_middle_profiles_use_distinct_shadow_evidence_sets() -> None:
     assert tri_vs_version == len(cases)
     assert graph_vs_rerank == len(cases)
     assert graph_vs_tri >= len(cases) // 2
+
+
+def test_version_provenance_grounding_uses_active_version_ids() -> None:
+    case = next(
+        item
+        for item in build_quantitative_eval_cases(case_pack="comprehensive")
+        if item.expectations.get("expected_active_version_ids")
+    )
+
+    expectation = answer_expectation_for_profile(case, "chain_version_provenance")
+
+    assert expectation.expected_memory_ids == tuple(
+        case.expectations["expected_active_version_ids"]
+    )
+    assert all(
+        item_id in evidence_ids_for_profile(case, "chain_version_provenance")
+        for item_id in expectation.expected_memory_ids
+    )
+
+
+def test_version_provenance_online_scoring_not_forced_to_graph_ids(
+    tmp_path: Path,
+) -> None:
+    case = next(
+        item
+        for item in build_quantitative_eval_cases(case_pack="comprehensive")
+        if item.expectations.get("expected_active_version_ids")
+    )
+    specs = build_comprehensive_run_specs(
+        [case],
+        profiles=("chain_version_provenance",),
+        prompt_variants=("baseline",),
+        repeats=1,
+    )
+
+    report = asyncio.run(
+        run_comprehensive_online_eval(
+            specs,
+            tmp_path / "workspace",
+            ComprehensiveScriptedProvider(),
+            model="scripted",
+            timeout_s=5.0,
+            real_llm_enabled=False,
+        )
+    )
+
+    record = report.case_records[0]
+    assert record["memory_grounding_passed"] is True
+    assert "missing expected memory ids" not in "\n".join(
+        str(failure) for failure in record["failures"]
+    )
 
 
 def test_build_comprehensive_run_specs_can_create_320_answer_runs() -> None:
