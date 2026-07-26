@@ -780,6 +780,10 @@ class TaskExecutionRuntimeCoordinator:
             policy_reason=policy_reason,
             arguments=raw_arguments,
         )
+        self._approval_runtime.record_managed_side_effect_payload(
+            record,
+            arguments=raw_arguments,
+        )
         metadata["approval_request_id"] = record.approval_request_id
         metadata["expires_at"] = record.expires_at
         metadata["args_hash"] = record.args_hash

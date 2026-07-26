@@ -5,7 +5,7 @@ import sqlite3
 import threading
 from collections.abc import Iterator
 from contextlib import contextmanager
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -528,6 +528,26 @@ class TaskPlanStore:
             ).fetchone()
         return None if row is None else row_to_execution_attempt(row)
 
+    def get_waiting_execution_attempt_by_approval_id(
+        self,
+        *,
+        session_key: str,
+        approval_request_id: str,
+    ) -> TaskExecutionAttempt | None:
+        with self._connect() as conn:
+            row = conn.execute(
+                """
+                SELECT * FROM task_execution_attempts
+                WHERE session_key = ?
+                  AND status = 'waiting_authorization'
+                  AND json_extract(requested_arguments_json, '$.approval_request_id') = ?
+                ORDER BY updated_at DESC
+                LIMIT 1
+                """,
+                (session_key, approval_request_id),
+            ).fetchone()
+        return None if row is None else row_to_execution_attempt(row)
+
     def get_active_execution_attempt(self, task_id: str) -> TaskExecutionAttempt | None:
         with self._connect() as conn:
             row = self._fetch_active_execution_attempt(conn, task_id)
@@ -813,6 +833,166 @@ class TaskPlanStore:
                 )
                 conn.commit()
                 return self._require_execution_attempt(conn, attempt_id)
+            except Exception:
+                conn.rollback()
+                raise
+
+    def complete_authorized_file_side_effect_attempt(
+        self,
+        *,
+        session_key: str,
+        approval_request_id: str,
+        owner_instance_id: str,
+        now: datetime,
+        lease_seconds: int,
+        tool_name: str,
+        args_hash: str,
+        result_preview: str,
+    ) -> TaskExecutionAttempt:
+        timestamp = _datetime_to_iso(now)
+        lease_expires_at = normalize_execution_lease_timestamp(
+            _datetime_to_iso(now + timedelta(seconds=lease_seconds))
+        )
+        result_summary = "Authorized file side effect applied."
+        terminal_reason = "authorized_file_side_effect_executed"
+        with self._lock, self._connect() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            try:
+                row = conn.execute(
+                    """
+                    SELECT * FROM task_execution_attempts
+                    WHERE session_key = ?
+                      AND status = 'waiting_authorization'
+                      AND json_extract(requested_arguments_json, '$.approval_request_id') = ?
+                    ORDER BY updated_at DESC
+                    LIMIT 1
+                    """,
+                    (session_key, approval_request_id),
+                ).fetchone()
+                if row is None:
+                    raise TaskExecutionAttemptNotFoundError(
+                        "waiting_authorization_attempt_not_found"
+                    )
+                attempt = row_to_execution_attempt(row)
+                if attempt.requested_tool_name not in {"write_file", "edit_file"}:
+                    raise ExecutionAttemptConflictError(
+                        "authorized_side_effect_tool_not_supported"
+                    )
+                if attempt.requested_tool_name != tool_name:
+                    raise ExecutionAttemptConflictError(
+                        "authorized_side_effect_tool_mismatch"
+                    )
+                if attempt.requested_arguments.get("args_hash") != args_hash:
+                    raise ExecutionAttemptConflictError(
+                        "authorized_side_effect_args_hash_mismatch"
+                    )
+                conn.execute(
+                    """
+                    UPDATE task_execution_attempts
+                    SET status = 'running',
+                        owner_instance_id = ?,
+                        lease_expires_at = ?,
+                        updated_at = ?
+                    WHERE attempt_id = ? AND status = 'waiting_authorization'
+                    """,
+                    (
+                        owner_instance_id,
+                        lease_expires_at,
+                        timestamp,
+                        attempt.attempt_id,
+                    ),
+                )
+                cur = conn.execute(
+                    """
+                    UPDATE task_steps
+                    SET status = 'in_progress',
+                        started_at = COALESCE(started_at, ?)
+                    WHERE step_id = ? AND task_id = ? AND status = 'pending'
+                    """,
+                    (timestamp, attempt.step_id, attempt.task_id),
+                )
+                if cur.rowcount != 1:
+                    raise ExecutionAttemptConflictError(
+                        "execution step resume conflict"
+                    )
+                self._append_execution_event_in_transaction(
+                    conn,
+                    attempt_id=attempt.attempt_id,
+                    event_type="tool_finished",
+                    created_at=timestamp,
+                    tool_name=tool_name,
+                    tool_call_id=approval_request_id,
+                    source_turn_id=attempt.source_turn_id,
+                    tool_risk="write",
+                    tool_capabilities=tuple(attempt.requested_capabilities),
+                    counts_as_work=True,
+                    invoker_reached=True,
+                    invoker_succeeded=True,
+                    execution_status="success",
+                    result_ok=True,
+                    arguments_hash=args_hash,
+                    result_preview=result_preview,
+                )
+                cur = conn.execute(
+                    """
+                    UPDATE task_execution_attempts
+                    SET status = 'succeeded',
+                        result_summary = ?,
+                        terminal_reason = ?,
+                        updated_at = ?,
+                        finished_at = ?
+                    WHERE attempt_id = ? AND status = 'running'
+                    """,
+                    (
+                        result_summary,
+                        terminal_reason,
+                        timestamp,
+                        timestamp,
+                        attempt.attempt_id,
+                    ),
+                )
+                if cur.rowcount != 1:
+                    raise ExecutionAttemptConflictError(
+                        "execution attempt authorized finalize conflict"
+                    )
+                cur = conn.execute(
+                    """
+                    UPDATE task_steps
+                    SET status = 'completed',
+                        result_summary = ?,
+                        completed_at = ?
+                    WHERE step_id = ? AND task_id = ? AND status = 'in_progress'
+                    """,
+                    (
+                        result_summary,
+                        timestamp,
+                        attempt.step_id,
+                        attempt.task_id,
+                    ),
+                )
+                if cur.rowcount != 1:
+                    raise ExecutionAttemptConflictError(
+                        "execution step authorized finalize conflict"
+                    )
+                if self._task_steps_are_complete(conn, attempt.task_id):
+                    conn.execute(
+                        """
+                        UPDATE task_plans
+                        SET status = 'completed', updated_at = ?, completed_at = ?
+                        WHERE task_id = ? AND status = 'active'
+                        """,
+                        (timestamp, timestamp, attempt.task_id),
+                    )
+                    self._after_execution_mutation("authorized_side_effect_plan_completion")
+                self._append_execution_event_in_transaction(
+                    conn,
+                    attempt_id=attempt.attempt_id,
+                    event_type="attempt_succeeded",
+                    created_at=timestamp,
+                    result_preview=result_summary,
+                )
+                conn.commit()
+                return self._require_execution_attempt(conn, attempt.attempt_id)
             except Exception:
                 conn.rollback()
                 raise

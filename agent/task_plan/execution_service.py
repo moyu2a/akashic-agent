@@ -338,6 +338,30 @@ class TaskExecutionService:
             raise TaskExecutionConflictError(str(exc)) from exc
         return self._snapshot(deferred)
 
+    def complete_authorized_file_side_effect(
+        self,
+        *,
+        session_key: str,
+        approval_request_id: str,
+        tool_name: str,
+        args_hash: str,
+        result_preview: str,
+    ) -> TaskExecutionSnapshot:
+        try:
+            attempt = self._store.complete_authorized_file_side_effect_attempt(
+                session_key=session_key,
+                approval_request_id=approval_request_id,
+                owner_instance_id=self._runtime_instance_id,
+                now=self._now(),
+                lease_seconds=self._config.lease_seconds,
+                tool_name=bounded_execution_preview(tool_name, max_chars=128),
+                args_hash=bounded_execution_preview(args_hash, max_chars=128),
+                result_preview=bounded_execution_preview(result_preview),
+            )
+        except (ExecutionAttemptConflictError, TaskExecutionAttemptNotFoundError) as exc:
+            raise TaskExecutionConflictError(str(exc)) from exc
+        return self._snapshot(attempt)
+
     def abort_attempt(
         self, *, session_key: str, attempt_id: str, reason: str
     ) -> TaskExecutionSnapshot:

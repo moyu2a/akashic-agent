@@ -477,6 +477,11 @@ class StatusCommands(Plugin):
             side_effect_vault = ToolApprovalRuntime.side_effect_vault_from_workspace(
                 self.context.workspace
             )
+        task_execution_service = getattr(
+            self.context,
+            "task_execution_service",
+            None,
+        )
         modules: list[object] = [
             MemoryStatusCommandModule(plugin_name),
             KVCacheCommandModule(plugin_name, db_path),
@@ -489,6 +494,7 @@ class StatusCommands(Plugin):
                     workspace=self.context.workspace,
                     side_effect_store=side_effect_store,
                     side_effect_vault=side_effect_vault,
+                    task_execution_service=task_execution_service,
                 )
             )
         return cast(
