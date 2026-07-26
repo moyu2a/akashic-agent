@@ -34,6 +34,12 @@ from agent.policies.resource_policy import (
     ResourcePolicyDecision,
     ResourcePolicyEngine,
 )
+from agent.policies.side_effect_payload_vault import (
+    MANAGED_FILE_SIDE_EFFECT_TOOLS,
+    SideEffectPayload,
+    SideEffectPayloadRecord,
+    SideEffectPayloadVault,
+)
 from agent.policies.tool_access import ToolAccessGateway
 from agent.policies.tool_access_types import (
     ToolAccessContext,
@@ -80,6 +86,7 @@ __all__ = [
     "DocRagPreloadDecision",
     "DefaultToolRiskStrategy",
     "HistoryRoutePolicy",
+    "MANAGED_FILE_SIDE_EFFECT_TOOLS",
     "RouteDecision",
     "RouteDecisionConfidence",
     "RouteDecisionReasonCode",
@@ -89,6 +96,9 @@ __all__ = [
     "ResourcePolicyEngine",
     "RiskStrategyContext",
     "RiskStrategyDecision",
+    "SideEffectPayload",
+    "SideEffectPayloadRecord",
+    "SideEffectPayloadVault",
     "SpawnDecision",
     "SpawnDecisionConfidence",
     "SpawnDecisionMeta",
