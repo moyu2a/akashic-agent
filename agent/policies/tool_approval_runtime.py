@@ -7,6 +7,10 @@ from pathlib import Path
 from agent.policies.tool_approval import canonical_args_hash
 from agent.policies.tool_approval_context import TrustedApprovalContext
 from agent.policies.tool_approval_decision import ToolApprovalDecision
+from agent.policies.side_effect_payload_vault import (
+    MANAGED_FILE_SIDE_EFFECT_TOOLS,
+    SideEffectPayloadVault,
+)
 from agent.policies.tool_audit import build_tool_approval_audit_event
 from agent.policies.tool_approval_store import (
     ToolApprovalRequestRecord,
@@ -19,10 +23,12 @@ class ToolApprovalRuntime:
         self,
         store: ToolApprovalStore,
         *,
+        side_effect_vault: SideEffectPayloadVault | None = None,
         now_factory: Callable[[], datetime] | None = None,
         approval_ttl: timedelta = timedelta(minutes=15),
     ) -> None:
         self._store = store
+        self.side_effect_vault = side_effect_vault
         self._now_factory = now_factory or _utcnow
         self._approval_ttl = approval_ttl
 
@@ -35,6 +41,10 @@ class ToolApprovalRuntime:
         )
         path.parent.mkdir(parents=True, exist_ok=True)
         return path
+
+    @staticmethod
+    def side_effect_vault_from_workspace(workspace: str | Path) -> SideEffectPayloadVault:
+        return SideEffectPayloadVault(SideEffectPayloadVault.root_for_workspace(workspace))
 
     @property
     def store(self) -> ToolApprovalStore:
@@ -67,6 +77,28 @@ class ToolApprovalRuntime:
             arguments=arguments,
             now=self._now(),
             ttl=self._approval_ttl,
+        )
+
+    def record_managed_side_effect_payload(
+        self,
+        record: ToolApprovalRequestRecord,
+        *,
+        arguments: Mapping[str, object],
+    ) -> None:
+        if self.side_effect_vault is None:
+            return
+        if record.tool_name not in MANAGED_FILE_SIDE_EFFECT_TOOLS:
+            return
+        self.side_effect_vault.put_payload(
+            approval_request_id=record.approval_request_id,
+            request_id=record.request_id,
+            session_key=record.session_key,
+            tool_name=record.tool_name,
+            approval_scope=record.approval_scope,
+            args_hash=record.args_hash,
+            arguments=dict(arguments),
+            created_at=self._now(),
+            expires_at=record.expires_at,
         )
 
     def consume_for_execution(

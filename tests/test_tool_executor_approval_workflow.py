@@ -11,6 +11,7 @@ from agent.policies.tool_approval_context import (
     TrustedApprovalContext,
     trusted_approval_from_runtime,
 )
+from agent.policies.side_effect_payload_vault import SideEffectPayloadVault
 from agent.policies.tool_approval_runtime import ToolApprovalRuntime
 from agent.policies.tool_approval_store import ToolApprovalStore
 from agent.tool_hooks import ToolExecutionRequest, ToolExecutor
@@ -48,6 +49,9 @@ def _runtime(
 ) -> ToolApprovalRuntime:
     return ToolApprovalRuntime(
         ToolApprovalStore(tmp_path / "approvals.db"),
+        side_effect_vault=SideEffectPayloadVault(
+            SideEffectPayloadVault.root_for_workspace(tmp_path)
+        ),
         now_factory=clock or MutableClock(),
         approval_ttl=ttl,
     )
@@ -77,6 +81,28 @@ def _write_request(
     )
 
 
+def _external_request(
+    *,
+    call_id: str = "call-external",
+    arguments: Mapping[str, object] | None = None,
+    trusted_approval_context: TrustedApprovalContext | None = None,
+) -> ToolExecutionRequest:
+    return ToolExecutionRequest(
+        call_id=call_id,
+        tool_name="send_webhook",
+        arguments=dict(arguments)
+        if arguments is not None
+        else {"target": "example-webhook"},
+        source="passive",
+        session_key="cli:session-1",
+        channel="cli",
+        chat_id="chat-1",
+        registered=True,
+        registry_risk="external-side-effect",
+        trusted_approval_context=trusted_approval_context,
+    )
+
+
 def _defer_write(
     runtime: ToolApprovalRuntime,
     invoker: RecordingInvoker,
@@ -86,6 +112,24 @@ def _defer_write(
     result = _run(
         ToolExecutor(approval_runtime=runtime).execute(
             _write_request(call_id=call_id), invoker
+        )
+    )
+    payload = json.loads(result.output)
+    approval_request_id = payload["approval_request"]["approval_request_id"]
+    record = runtime.store.get_request(approval_request_id)
+    assert record is not None
+    return result, record
+
+
+def _defer_external(
+    runtime: ToolApprovalRuntime,
+    invoker: RecordingInvoker,
+    *,
+    call_id: str = "call-external",
+):
+    result = _run(
+        ToolExecutor(approval_runtime=runtime).execute(
+            _external_request(call_id=call_id), invoker
         )
     )
     payload = json.loads(result.output)
@@ -128,6 +172,28 @@ def test_deferred_write_persists_pending_approval_id(tmp_path: Path) -> None:
     assert "hello" not in str(payload["approval_request"]["args_summary"])
 
 
+def test_executor_records_file_payload_when_write_is_deferred(tmp_path: Path) -> None:
+    runtime = _runtime(tmp_path)
+    invoker = RecordingInvoker()
+
+    result = _run(
+        ToolExecutor(approval_runtime=runtime).execute(
+            _write_request(
+                arguments={"path": "notes.md", "content": "raw-secret-content"}
+            ),
+            invoker,
+        )
+    )
+    payload = json.loads(result.output)
+    approval_id = payload["approval_request"]["approval_request_id"]
+
+    assert runtime.side_effect_vault is not None
+    loaded = runtime.side_effect_vault.get_payload(approval_id)
+    assert loaded is not None
+    assert loaded.arguments == {"path": "notes.md", "content": "raw-secret-content"}
+    assert invoker.calls == []
+
+
 def test_executor_defer_trace_includes_approval_requested_event(
     tmp_path: Path,
 ) -> None:
@@ -154,7 +220,7 @@ def test_executor_defer_trace_includes_approval_requested_event(
     assert "raw-secret-content" not in str(event)
 
 
-def test_trusted_approved_write_executes_once_and_marks_executed(
+def test_executor_does_not_directly_execute_approved_managed_file_tool(
     tmp_path: Path,
 ) -> None:
     runtime = _runtime(tmp_path)
@@ -173,11 +239,11 @@ def test_trusted_approved_write_executes_once_and_marks_executed(
         )
     )
 
-    assert result.status == "success"
-    assert result.invoker_reached is True
-    assert result.invoker_succeeded is True
-    assert invoker.calls == [("write_file", {"path": "notes.md", "content": "hello"})]
-    assert runtime.store.get_request(record.approval_request_id).status == "executed"
+    assert result.status == "deferred"
+    assert result.invoker_reached is False
+    assert "approved_side_effect_requires_managed_apply" in str(result.output)
+    assert invoker.calls == []
+    assert runtime.store.get_request(record.approval_request_id).status == "approved"
 
 
 def test_executor_approved_execution_trace_includes_consumed_and_executed_events(
@@ -185,7 +251,7 @@ def test_executor_approved_execution_trace_includes_consumed_and_executed_events
 ) -> None:
     runtime = _runtime(tmp_path)
     invoker = RecordingInvoker()
-    _, record = _defer_write(runtime, invoker)
+    _, record = _defer_external(runtime, invoker)
     _approve(runtime, record)
     trusted = trusted_approval_from_runtime(
         approval_request_id=record.approval_request_id,
@@ -195,7 +261,7 @@ def test_executor_approved_execution_trace_includes_consumed_and_executed_events
 
     result = _run(
         ToolExecutor(approval_runtime=runtime).execute(
-            _write_request(trusted_approval_context=trusted), invoker
+            _external_request(trusted_approval_context=trusted), invoker
         )
     )
 
@@ -206,16 +272,16 @@ def test_executor_approved_execution_trace_includes_consumed_and_executed_events
         assert event["approval_request_id"] == record.approval_request_id
         assert event["request_id"] == record.request_id
         assert event["session_key"] == record.session_key
-        assert event["tool_name"] == "write_file"
+        assert event["tool_name"] == "send_webhook"
         assert event["args_hash"] == record.args_hash
         assert "content" not in event
         assert "args_summary" not in event
 
 
-def test_reusing_consumed_approval_does_not_execute(tmp_path: Path) -> None:
+def test_reusing_consumed_external_approval_does_not_execute(tmp_path: Path) -> None:
     runtime = _runtime(tmp_path)
     invoker = RecordingInvoker()
-    _, record = _defer_write(runtime, invoker)
+    _, record = _defer_external(runtime, invoker)
     _approve(runtime, record)
     trusted = trusted_approval_from_runtime(
         approval_request_id=record.approval_request_id,
@@ -224,13 +290,13 @@ def test_reusing_consumed_approval_does_not_execute(tmp_path: Path) -> None:
     )
     _run(
         ToolExecutor(approval_runtime=runtime).execute(
-            _write_request(trusted_approval_context=trusted), invoker
+            _external_request(trusted_approval_context=trusted), invoker
         )
     )
 
     second = _run(
         ToolExecutor(approval_runtime=runtime).execute(
-            _write_request(trusted_approval_context=trusted), invoker
+            _external_request(trusted_approval_context=trusted), invoker
         )
     )
 
@@ -342,7 +408,7 @@ def test_denied_or_expired_approval_does_not_execute(tmp_path: Path) -> None:
     clock = MutableClock()
     runtime = _runtime(tmp_path, clock=clock, ttl=timedelta(seconds=1))
     invoker = RecordingInvoker()
-    _, denied_record = _defer_write(runtime, invoker)
+    _, denied_record = _defer_external(runtime, invoker)
     runtime.store.deny_request(
         approval_request_id=denied_record.approval_request_id,
         request_id=denied_record.request_id,
@@ -362,12 +428,12 @@ def test_denied_or_expired_approval_does_not_execute(tmp_path: Path) -> None:
 
     denied_result = _run(
         ToolExecutor(approval_runtime=runtime).execute(
-            _write_request(trusted_approval_context=denied_trusted), invoker
+            _external_request(trusted_approval_context=denied_trusted), invoker
         )
     )
 
     clock.now = datetime(2026, 7, 24, 12, 0, tzinfo=UTC)
-    expired_result, expired_record = _defer_write(
+    expired_result, expired_record = _defer_external(
         runtime, invoker, call_id="call-expired"
     )
     assert expired_result.status == "deferred"
@@ -389,7 +455,7 @@ def test_denied_or_expired_approval_does_not_execute(tmp_path: Path) -> None:
     )
     expired_consume_result = _run(
         ToolExecutor(approval_runtime=runtime).execute(
-            _write_request(
+            _external_request(
                 call_id="call-expired",
                 trusted_approval_context=expired_trusted,
             ),

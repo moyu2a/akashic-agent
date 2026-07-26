@@ -170,7 +170,12 @@ def _approval_runtime_from_context(
     if workspace is None:
         return None
     db_path = ToolApprovalRuntime.approval_db_path_from_workspace(workspace)
-    return ToolApprovalRuntime(ToolApprovalStore(db_path))
+    return ToolApprovalRuntime(
+        ToolApprovalStore(db_path),
+        side_effect_vault=ToolApprovalRuntime.side_effect_vault_from_workspace(
+            workspace
+        ),
+    )
 
 
 def _completion_trace(

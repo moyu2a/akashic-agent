@@ -13,6 +13,7 @@ from agent.policies.tool_approval_context import (
     TrustedApprovalContext,
     trusted_approval_from_runtime,
 )
+from agent.policies.side_effect_payload_vault import SideEffectPayloadVault
 from agent.policies.tool_approval_decision import ToolApprovalDecision
 from agent.policies.tool_approval_runtime import ToolApprovalRuntime
 from agent.policies.tool_approval_store import ToolApprovalStore
@@ -60,6 +61,9 @@ def _runtime(
 ) -> ToolApprovalRuntime:
     return ToolApprovalRuntime(
         ToolApprovalStore(tmp_path / "approvals.db"),
+        side_effect_vault=SideEffectPayloadVault(
+            SideEffectPayloadVault.root_for_workspace(tmp_path)
+        ),
         now_factory=clock or _Clock(),
         approval_ttl=ttl,
     )
@@ -89,6 +93,28 @@ def _write_request(
     )
 
 
+def _external_request(
+    *,
+    call_id: str = "p3-external",
+    arguments: Mapping[str, object] | None = None,
+    trusted_approval_context: TrustedApprovalContext | None = None,
+) -> ToolExecutionRequest:
+    return ToolExecutionRequest(
+        call_id=call_id,
+        tool_name="send_webhook",
+        arguments=dict(arguments)
+        if arguments is not None
+        else {"target": "example-webhook"},
+        source="passive",
+        session_key="cli:p3",
+        channel="cli",
+        chat_id="p3",
+        registered=True,
+        registry_risk="external-side-effect",
+        trusted_approval_context=trusted_approval_context,
+    )
+
+
 def _approve(runtime: ToolApprovalRuntime, approval_request_id: str) -> object:
     record = runtime.store.get_request(approval_request_id)
     assert record is not None
@@ -114,10 +140,26 @@ def _defer_write(runtime: ToolApprovalRuntime, invoker: _RecordingInvoker) -> st
     return str(payload["approval_request"]["approval_request_id"])
 
 
+def _defer_external(
+    runtime: ToolApprovalRuntime,
+    invoker: _RecordingInvoker,
+    *,
+    call_id: str = "p3-external",
+) -> str:
+    result = _run(
+        ToolExecutor(approval_runtime=runtime).execute(
+            _external_request(call_id=call_id), invoker
+        )
+    )
+    payload = json.loads(result.output)
+    assert result.status == "deferred"
+    return str(payload["approval_request"]["approval_request_id"])
+
+
 def test_p3_real_defer_approve_resume_executes_once(tmp_path: Path) -> None:
     runtime = _runtime(tmp_path)
     invoker = _RecordingInvoker()
-    approval_request_id = _defer_write(runtime, invoker)
+    approval_request_id = _defer_external(runtime, invoker)
     record = _approve(runtime, approval_request_id)
     trusted = trusted_approval_from_runtime(
         approval_request_id=record.approval_request_id,
@@ -127,20 +169,20 @@ def test_p3_real_defer_approve_resume_executes_once(tmp_path: Path) -> None:
 
     result = _run(
         ToolExecutor(approval_runtime=runtime).execute(
-            _write_request(trusted_approval_context=trusted),
+            _external_request(trusted_approval_context=trusted),
             invoker,
         )
     )
     reused = _run(
         ToolExecutor(approval_runtime=runtime).execute(
-            _write_request(trusted_approval_context=trusted),
+            _external_request(trusted_approval_context=trusted),
             invoker,
         )
     )
 
     assert result.status == "success"
     assert result.invoker_reached is True
-    assert invoker.calls == [("write_file", {"path": "notes.md", "content": "private"})]
+    assert invoker.calls == [("send_webhook", {"target": "example-webhook"})]
     assert runtime.store.get_request(record.approval_request_id).status == "executed"
     assert reused.status == "deferred"
     assert reused.invoker_reached is False
@@ -154,7 +196,7 @@ def test_p3_changed_args_denied_expired_or_reused_approval_do_not_execute(
     runtime = _runtime(tmp_path, clock=clock, ttl=timedelta(seconds=1))
     invoker = _RecordingInvoker()
 
-    changed_id = _defer_write(runtime, invoker)
+    changed_id = _defer_external(runtime, invoker)
     changed_record = _approve(runtime, changed_id)
     changed_trusted = trusted_approval_from_runtime(
         approval_request_id=changed_record.approval_request_id,
@@ -163,15 +205,15 @@ def test_p3_changed_args_denied_expired_or_reused_approval_do_not_execute(
     )
     changed = _run(
         ToolExecutor(approval_runtime=runtime).execute(
-            _write_request(
-                arguments={"path": "notes.md", "content": "changed"},
+            _external_request(
+                arguments={"target": "changed-webhook"},
                 trusted_approval_context=changed_trusted,
             ),
             invoker,
         )
     )
 
-    denied_id = _defer_write(runtime, invoker)
+    denied_id = _defer_external(runtime, invoker)
     denied_record = runtime.store.get_request(denied_id)
     assert denied_record is not None
     runtime.store.deny_request(
@@ -187,7 +229,7 @@ def test_p3_changed_args_denied_expired_or_reused_approval_do_not_execute(
     )
     denied = _run(
         ToolExecutor(approval_runtime=runtime).execute(
-            _write_request(
+            _external_request(
                 trusted_approval_context=trusted_approval_from_runtime(
                     approval_request_id=denied_record.approval_request_id,
                     actor="user",
@@ -198,12 +240,13 @@ def test_p3_changed_args_denied_expired_or_reused_approval_do_not_execute(
         )
     )
 
-    expired_id = _defer_write(runtime, invoker)
+    expired_id = _defer_external(runtime, invoker, call_id="p3-expired")
     expired_record = _approve(runtime, expired_id)
     clock.now = clock.now + timedelta(seconds=2)
     expired = _run(
         ToolExecutor(approval_runtime=runtime).execute(
-            _write_request(
+            _external_request(
+                call_id="p3-expired",
                 trusted_approval_context=trusted_approval_from_runtime(
                     approval_request_id=expired_record.approval_request_id,
                     actor="user",

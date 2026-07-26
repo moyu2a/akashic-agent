@@ -7,6 +7,7 @@ from typing import Any, Awaitable, Callable, Protocol
 from agent.policies.tool_approval import build_approval_payload
 from agent.policies.tool_approval_decision import ToolApprovalDecision
 from agent.policies.tool_approval_runtime import ToolApprovalRuntime
+from agent.policies.side_effect_payload_vault import MANAGED_FILE_SIDE_EFFECT_TOOLS
 from agent.policies.tool_audit import build_tool_audit_event
 from agent.policies.tool_invocation_policy import (
     ToolInvocationContext,
@@ -137,6 +138,32 @@ class ToolExecutor:
             approval_scope = _approval_scope_from_trace(policy_trace)
             approval_decision: ToolApprovalDecision | None = None
             approval_lifecycle: list[dict[str, object]] = []
+            if (
+                request.tool_name in MANAGED_FILE_SIDE_EFFECT_TOOLS
+                and request.trusted_approval_context is not None
+                and request.trusted_approval_context.source
+                != "approved_side_effect_runtime"
+            ):
+                return ToolExecutionResult(
+                    status="deferred",
+                    output=_managed_side_effect_required_output(
+                        request.trusted_approval_context.approval_request_id
+                    ),
+                    final_arguments=final_arguments,
+                    invoker_reached=False,
+                    invoker_succeeded=False,
+                    extra_messages=extra_messages,
+                    pre_hook_trace=pre_trace,
+                    post_hook_trace=post_trace,
+                    policy_trace=policy_trace,
+                    audit_trace=_audit_trace(
+                        request,
+                        final_arguments,
+                        policy_decision,
+                        invoker_reached=False,
+                        invoker_succeeded=False,
+                    ),
+                )
             if self._approval_runtime is not None:
                 approval_decision = self._approval_runtime.consume_for_execution(
                     trusted_context=request.trusted_approval_context,
@@ -191,6 +218,10 @@ class ToolExecutor:
                 )
                 approval_request_id = record.approval_request_id
                 expires_at = record.expires_at
+                self._approval_runtime.record_managed_side_effect_payload(
+                    record,
+                    arguments=final_arguments,
+                )
                 approval_lifecycle.append(
                     self._approval_runtime.lifecycle_event_from_record(
                         record,
@@ -648,6 +679,21 @@ def _policy_block_output(decision: ToolInvocationDecision) -> str:
             "message": "工具调用被调用级安全策略拒绝。",
             "policy": trace,
             "invoker_reached": False,
+        },
+        ensure_ascii=False,
+    )
+
+
+def _managed_side_effect_required_output(approval_request_id: str) -> str:
+    return json.dumps(
+        {
+            "ok": False,
+            "error_code": "approved_side_effect_requires_managed_apply",
+            "approval_request_id": approval_request_id,
+            "message": (
+                "Approved file side effects must be prepared and applied through "
+                "the managed P4 runtime."
+            ),
         },
         ensure_ascii=False,
     )
