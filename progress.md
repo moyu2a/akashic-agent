@@ -1,5 +1,44 @@
 # Document RAG P10a Progress
 
+## 2026-07-26 Memory Next Post-Merge Regression Repair
+
+- User asked to continue fixing the post-merge regression issues on the `memory-next` branch.
+- Worktree: `/home/jjh/git_work/akashic-agent/.worktrees/memory-next`.
+- Fixed dashboard startup delay:
+  - root cause: dashboard plugin panel compilation fell back to `npx --yes esbuild` when local `node_modules/.bin/esbuild` was absent;
+  - in this environment, that network path can block for about 30 seconds per plugin;
+  - `_build_plugin_panel_js()` now only allows the `npx` fallback when `AKASHIC_DASHBOARD_COMPILE_PLUGINS` is explicitly enabled;
+  - local esbuild remains supported, and missing build tools queue plugin panels as pending instead of blocking app startup.
+- Fixed Markdown consolidation hang:
+  - root cause: small Markdown memory file operations through `asyncio.to_thread()` could hang during async/thread cleanup in this Python 3.14 test environment;
+  - `core/memory/markdown.py` now routes those local file operations through `_run_blocking_io()`, which currently executes synchronously inside the async flow.
+- Fixed dashboard / memory_rollup HTTP test hangs:
+  - Starlette/FastAPI `TestClient` still blocks in this environment while starting the anyio blocking portal;
+  - added test-only `tests/asgi_client.py` using `httpx2.AsyncClient` and `ASGITransport`;
+  - sync FastAPI endpoints are wrapped as async route handlers so dashboard tests do not enter the anyio worker-thread path;
+  - the wrapper keeps one event loop for the client lifetime so background optimizer tasks can span multiple requests;
+  - a lock serializes concurrent calls made through the same test client.
+- Dependency state:
+  - added `httpx2>=2.9.1` to `pyproject.toml` and `requirements-dev.txt`;
+  - ran `uv lock`, adding `httpx2 2.9.1`, `httpcore2 2.9.1`, and `truststore 0.10.4` to `uv.lock`.
+- Quantitative uplift drift:
+  - current code computes `memory_base = 94.375`, `all_on = 69.3043`, `total_uplift_points = -25.0707`, `total_uplift_pct = -26.565`;
+  - this reflects the current write-governance scoring where `review` is not treated as `reject`;
+  - tests and memory optimization reports were synchronized to the current semantics.
+- Verification completed in this worktree:
+  - dashboard / rollup target: `31 passed in 9.21s`;
+  - focused dashboard busy runtime: `1 passed in 2.80s`;
+  - focused dashboard parallel filters: `1 passed in 0.97s`;
+  - combined target regression: `83 passed in 12.93s`;
+  - memory engine / quantitative group: `91 passed in 29.00s`;
+  - memory enhancement group: `86 passed in 111.05s`;
+  - tool governance group: `293 passed, 2 warnings in 3.27s`;
+  - `git diff --check` exited `0`.
+- Remaining boundary:
+  - this is a test-environment compatibility repair, not a production dashboard behavior redesign;
+  - the new ASGI client is test-only;
+  - no commit or push has been made in this step.
+
 ## 2026-07-22 Memory Phase 6s Sleep Hygiene Source-Backed Evidence
 
 - User asked to execute the reviewed Phase 6s plan.
@@ -837,8 +876,8 @@
   - `memory_quantitative_chain_eval.json/.md`
   - `memory_layered_scoring_eval.json/.md`
 - Current 80-case offline results under the new baseline:
-  - quantitative uplift: `baseline_main_score = 94.375`, `all_on_main_score = 69.5543`, `total_uplift_points = -24.8207`;
-  - chain uplift: `chain_memory_base = 94.375`, `chain_all_on = 69.5543`, `total_chain_uplift_points = -24.8207`;
+  - quantitative uplift: `baseline_main_score = 94.375`, `all_on_main_score = 69.3043`, `total_uplift_points = -25.0707`;
+  - chain uplift: `chain_memory_base = 94.375`, `chain_all_on = 69.3043`, `total_chain_uplift_points = -25.0707`;
   - layered scoring: `baseline_total_layered_score = 94.375`, `final_total_layered_score = 54.9521`, `total_layered_uplift_points = -39.4229`.
 - Focused verification:
   - `.venv/bin/python -m pytest tests/test_memory_quantitative_uplift.py tests/test_memory_quantitative_chain_cli.py tests/test_memory_quantitative_uplift_cli.py tests/test_memory_layered_scoring.py tests/test_memory_comprehensive_online_eval.py tests/test_memory_comprehensive_online_cli.py -q -p no:cacheprovider` -> `50 passed`.

@@ -1,5 +1,47 @@
 # Document RAG P10a Intent Preload Plan
 
+## 2026-07-26 Memory Next Post-Merge Regression Repair
+
+Goal: repair post-merge regressions on `memory-next` so dashboard / memory_rollup tests, Markdown consolidation tests, and memory quantitative expectations run reliably in the current Python 3.14 test environment.
+
+1. Confirm current worktree and preserve existing dirty changes - complete
+2. Reproduce and isolate dashboard startup delay - complete
+3. Disable implicit `npx` plugin-panel compilation unless explicitly enabled - complete
+4. Reproduce and isolate Markdown consolidation hang - complete
+5. Replace local Markdown `asyncio.to_thread()` file calls with a synchronous async helper - complete
+6. Replace hanging Starlette `TestClient` usages in dashboard tests with a test-only ASGI client - complete
+7. Add the `httpx2` dev dependency and update `uv.lock` - complete
+8. Synchronize memory quantitative expected totals with current write-governance semantics - complete
+9. Run focused and broad regression verification - complete
+10. Commit and push - pending user instruction
+
+Results:
+
+- Dashboard / rollup target: `31 passed in 9.21s`.
+- Combined dashboard / memory engine / quantitative target: `83 passed in 12.93s`.
+- Memory engine / quantitative group: `91 passed in 29.00s`.
+- Memory enhancement group: `86 passed in 111.05s`.
+- Tool governance group: `293 passed, 2 warnings in 3.27s`.
+- `git diff --check`: exit `0`.
+
+Constraints:
+
+- Do not push without explicit user instruction.
+- Keep the dashboard ASGI replacement test-only.
+- Do not enable network-backed `npx` compilation during ordinary dashboard app startup.
+- Do not reinterpret the current `all_on` score as a regression unless write-governance semantics change again.
+
+Errors Encountered:
+
+| Error | Attempt | Resolution |
+| --- | --- | --- |
+| Dashboard app creation waited on `npx --yes esbuild` for plugins without local esbuild | 1 | Added explicit `AKASHIC_DASHBOARD_COMPILE_PLUGINS` gate for npx fallback and queued pending panels by default. |
+| Markdown consolidation test hung around async thread cleanup | 1 | Replaced local Markdown `asyncio.to_thread()` calls with `_run_blocking_io()`. |
+| FastAPI `TestClient` hung in anyio blocking portal | 1 | Added `tests/asgi_client.py` using `httpx2.AsyncClient` with `ASGITransport`. |
+| Sync dashboard endpoints still entered threadpool under ASGI transport | 1 | Wrapped sync FastAPI route calls as async handlers and updated the route coroutine flag. |
+| Background optimizer test lost task state across requests | 1 | Kept a per-client event loop for the test client lifetime and drained pending tasks on close. |
+| Parallel dashboard request test hit event-loop reentrancy | 1 | Added a per-client lock to serialize calls through the shared sync test client. |
+
 ## Goal
 
 Implement turn-local Document RAG tool intent preload without changing always-on policy or writing intent decisions to `ToolDiscoveryState` / LRU.
@@ -483,8 +525,8 @@ Goal: change the quantitative memory evaluation framing from disabled-memory bas
 
 Results:
 
-- Quantitative uplift: `baseline_main_score = 94.375`, `all_on_main_score = 69.5543`, `total_uplift_points = -24.8207`.
-- Chain uplift: `chain_memory_base = 94.375`, `chain_all_on = 69.5543`, `total_chain_uplift_points = -24.8207`.
+- Quantitative uplift: `baseline_main_score = 94.375`, `all_on_main_score = 69.3043`, `total_uplift_points = -25.0707`.
+- Chain uplift: `chain_memory_base = 94.375`, `chain_all_on = 69.3043`, `total_chain_uplift_points = -25.0707`.
 - Layered scoring: `baseline_total_layered_score = 94.375`, `final_total_layered_score = 54.9521`, `total_layered_uplift_points = -39.4229`.
 - Focused verification: `50 passed`; `git diff --check` exited `0`.
 

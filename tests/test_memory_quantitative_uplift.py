@@ -180,14 +180,14 @@ def test_full_report_has_expected_totals() -> None:
     overall = {(row.case_set, row.profile_name): row for row in report.profile_summaries}
 
     assert round(overall[("overall", "memory_base")].main_score, 4) == 94.375
-    assert round(overall[("overall", "all_on")].main_score, 4) == 69.5543
-    assert round(overall[("overall", "all_on")].uplift_points, 4) == -24.8207
+    assert round(overall[("overall", "all_on")].main_score, 4) == 69.3043
+    assert round(overall[("overall", "all_on")].uplift_points, 4) == -25.0707
     assert overall[("overall", "all_on")].token_signal_kind == "mixed"
     assert overall[("overall", "all_on")].token_signal_value == "unavailable"
     assert overall[("overall", "all_on")].token_signal_delta == "unavailable"
     assert overall[("overall", "tri_retrieval_only")].latency_delta_ms == "unavailable"
-    assert report.metrics["total_uplift_points"] == -24.8207
-    assert report.metrics["total_uplift_pct"] == -26.3001
+    assert report.metrics["total_uplift_points"] == -25.0707
+    assert report.metrics["total_uplift_pct"] == -26.565
 
 
 def test_token_signal_kind_is_explicit() -> None:

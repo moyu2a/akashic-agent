@@ -6,13 +6,13 @@ import sqlite3
 import threading
 from datetime import datetime
 
-from fastapi.testclient import TestClient
-
 from bootstrap.dashboard_api import create_dashboard_app as _create_dashboard_app
+import bootstrap.dashboard_api as dashboard_api
 from plugins.default_memory.engine import DefaultMemoryEngine
 from memory2.store import MemoryStore2
 from proactive_v2.state import ProactiveStateStore
 from session.store import SessionStore
+from tests.asgi_client import TestClient
 
 
 class _DashboardMemoryAdmin:
@@ -50,6 +50,32 @@ class _DashboardMemoryAdmin:
 def create_dashboard_app(tmp_path, **kwargs):
     kwargs.setdefault("memory_admin", _DashboardMemoryAdmin(tmp_path))
     return _create_dashboard_app(tmp_path, **kwargs)
+
+
+def test_plugin_panel_build_queues_npx_without_sync_compile(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    project_root = tmp_path / "project"
+    plugin_dir = project_root / "plugins" / "demo"
+    plugin_dir.mkdir(parents=True)
+    (plugin_dir / "dashboard_panel.ts").write_text("console.log('demo')\n")
+    monkeypatch.setattr(dashboard_api.shutil, "which", lambda name: f"/usr/bin/{name}")
+    calls: list[tuple[list[str], str]] = []
+    monkeypatch.setattr(
+        dashboard_api,
+        "_run_esbuild",
+        lambda cmd, ts_path, js_path, name: calls.append((cmd, name)),
+    )
+    with dashboard_api._pending_plugins_lock:
+        dashboard_api._pending_plugins.clear()
+
+    dashboard_api._build_plugin_panel_js(project_root, plugin_dir)
+
+    assert calls == []
+    with dashboard_api._pending_plugins_lock:
+        assert dashboard_api._pending_plugins == [(project_root, plugin_dir)]
+        dashboard_api._pending_plugins.clear()
 
 
 class _ManualConsolidator:

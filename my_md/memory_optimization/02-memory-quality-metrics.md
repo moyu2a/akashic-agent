@@ -300,8 +300,8 @@ main_score = 0.7 * answer_rule_pass_rate
 - `common_case_count = 40`
 - `hard_case_count = 40`
 - `baseline_main_score = 94.375`
-- `all_on_main_score = 69.5543`
-- `total_uplift_points = -24.8207`
+- `all_on_main_score = 69.3043`
+- `total_uplift_points = -25.0707`
 - `total_uplift_pct = 596.017`
 
 单项 uplift：
@@ -335,7 +335,7 @@ main_score = 0.7 * answer_rule_pass_rate
 - 单项总表回答“单独打开某个能力，相比关闭状态提升多少”。
 - 链路总表回答“按工程链路累计打开能力，每一步相比上一步提升或下降多少”。
 - 链路里的 `uplift_points` 是相邻增益，不是相对 baseline 的总增益。
-- 当前离线结果：`chain_memory_base = 94.375`，`chain_all_on = 69.5543`，`total_chain_uplift_points = -24.8207`；`chain_off` 只作为关闭增强控制组。
+- 当前离线结果：`chain_memory_base = 94.375`，`chain_all_on = 69.3043`，`total_chain_uplift_points = -25.0707`；`chain_off` 只作为关闭增强控制组。
 - 当前相邻增益：写入价值 `+48.3345`，三路召回 `+19.5826`，图谱召回 `+0.1943`，重排与注入治理 `-2.8802`，版本链与溯源 `-2.1295`，睡眠巩固 `-3.5`，全开校验 `0`。
 - 负相邻增益不等于功能无效；它说明当前平均评分公式把即时回答能力、治理能力和后台维护能力放在同一张主分里，后续需要做组合权重、场景路由和 active 化策略。
 
