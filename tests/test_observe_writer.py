@@ -9,6 +9,8 @@ from typing import cast
 
 import pytest
 
+from bus.events_lifecycle import TurnCommitted
+
 _observe_db = importlib.import_module("plugins.observe.db")
 _observe_events = importlib.import_module("plugins.observe.events")
 _observe_migration = importlib.import_module("plugins.observe.migrate_legacy_rag")
@@ -24,8 +26,17 @@ migrate_legacy_rag_tables = getattr(_observe_migration, "migrate_legacy_rag_tabl
 _run_cleanup = cast(Callable[[Path], None], getattr(_observe_retention, "_run_cleanup"))
 _write_turn = getattr(_observe_writer, "_write_turn")
 TraceWriter = getattr(_observe_writer, "TraceWriter")
+_emit_turn_trace = getattr(_observe_plugin, "_emit_turn_trace")
 _slim_tool_calls = getattr(_observe_plugin, "_slim_tool_calls")
 _slim_tool_chain = getattr(_observe_plugin, "_slim_tool_chain")
+
+
+class _RecordingObserveWriter:
+    def __init__(self) -> None:
+        self.events: list[object] = []
+
+    def emit(self, event: object) -> None:
+        self.events.append(event)
 
 
 def test_observe_slim_trace_preserves_boundary_metadata() -> None:
@@ -152,6 +163,153 @@ def test_observe_slim_trace_preserves_approval_lifecycle_fields_without_args_sum
     assert "command" not in event
     assert "content" not in event
     assert flat_event["tool_name"] == "write_file"
+
+
+def test_observe_slim_trace_preserves_approved_side_effect_lifecycle_without_sensitive_fields() -> None:
+    tool_chain = [
+        {
+            "text": "",
+            "calls": [
+                {
+                    "name": "write_file",
+                    "arguments": {"path": "notes.md", "content": "raw-secret-content"},
+                    "status": "deferred",
+                    "result": '{"ok": false}',
+                    "approved_side_effect_lifecycle": [
+                        {
+                            "event_type": "approved_side_effect_lifecycle",
+                            "approval_request_id": "approval-1",
+                            "request_id": "call-1",
+                            "session_key": "cli:1",
+                            "actor": "status_command",
+                            "tool_name": "write_file",
+                            "approval_scope": "tool_call",
+                            "args_hash": "abc123",
+                            "status": "preview_ready",
+                            "preview_id": "preview-1",
+                            "target_path_hash": "path-hash",
+                            "before_hash": "before",
+                            "after_hash": "after",
+                            "diff_truncated": False,
+                            "rollback_id": "rollback-1",
+                            "execution_status": "applied",
+                            "rollback_status": "available",
+                            "created_at": "2026-07-26T01:00:00+00:00",
+                            "diff_ref": "tool_side_effects/artifacts/preview/change.diff",
+                            "path": "notes.md",
+                            "target_path": "/tmp/workspace/notes.md",
+                            "before_path": "/tmp/workspace/.before",
+                            "after_path": "/tmp/workspace/.after",
+                            "payload_path": "/tmp/workspace/tool_side_effects/payloads/a.json",
+                            "content": "raw-secret-content",
+                            "args_summary": {"content": {"preview": "raw-secret-content"}},
+                            "command": "rm file.txt",
+                            "body": "secret-body",
+                            "cookie": "secret-cookie",
+                            "token": "secret-token",
+                            "diff_text": "-before\n+raw-secret-content\n",
+                        }
+                    ],
+                }
+            ],
+        }
+    ]
+
+    slim_chain = _slim_tool_chain(tool_chain)
+    slim_calls = _slim_tool_calls(tool_chain)
+
+    event = slim_chain[0]["calls"][0]["approved_side_effect_lifecycle"][0]
+    flat_event = slim_calls[0]["approved_side_effect_lifecycle"][0]
+    encoded = json.dumps(event, ensure_ascii=False)
+    assert event["event_type"] == "approved_side_effect_lifecycle"
+    assert event["approval_request_id"] == "approval-1"
+    assert event["status"] == "preview_ready"
+    assert event["args_hash"] == "abc123"
+    assert event["preview_id"] == "preview-1"
+    assert event["target_path_hash"] == "path-hash"
+    assert event["diff_truncated"] is False
+    assert "raw-secret-content" not in encoded
+    for key in (
+        "content",
+        "args_summary",
+        "command",
+        "body",
+        "cookie",
+        "token",
+        "diff_ref",
+        "diff_text",
+        "path",
+        "target_path",
+        "before_path",
+        "after_path",
+        "payload_path",
+    ):
+        assert key not in event
+    assert flat_event["tool_name"] == "write_file"
+
+
+def test_observe_turn_trace_includes_status_command_side_effect_lifecycle_without_sensitive_fields() -> None:
+    writer = _RecordingObserveWriter()
+    raw_secret = "raw-secret-content"
+    _emit_turn_trace(
+        writer,
+        TurnCommitted(
+            session_key="cli:1",
+            channel="cli",
+            chat_id="1",
+            input_message="/run_approved_tool approval-1",
+            persisted_user_message="/run_approved_tool approval-1",
+            assistant_response="status: file_change_applied",
+            tools_used=[],
+            tool_chain_raw=[],
+            extra={
+                "approved_side_effect_lifecycle": [
+                    {
+                        "event_type": "approved_side_effect_lifecycle",
+                        "approval_request_id": "approval-1",
+                        "request_id": "call-1",
+                        "session_key": "cli:1",
+                        "actor": "status_command",
+                        "tool_name": "write_file",
+                        "approval_scope": "tool_call",
+                        "args_hash": "abc123",
+                        "status": "applied",
+                        "preview_id": "preview-1",
+                        "target_path_hash": "path-hash",
+                        "before_hash": "before",
+                        "after_hash": "after",
+                        "diff_truncated": False,
+                        "rollback_id": "rollback-1",
+                        "execution_status": "applied",
+                        "rollback_status": "available",
+                        "created_at": "2026-07-26T01:00:00+00:00",
+                        "target_path": "/tmp/workspace/notes.md",
+                        "payload_path": "/tmp/workspace/tool_side_effects/payloads/a.json",
+                        "diff_text": f"-before\n+{raw_secret}\n",
+                        "content": raw_secret,
+                        "token": "secret-token",
+                    }
+                ]
+            },
+        ),
+    )
+
+    event = writer.events[0]
+    assert event.tool_calls
+    assert event.tool_chain_json is not None
+    encoded = json.dumps(
+        {
+            "tool_calls": event.tool_calls,
+            "tool_chain_json": json.loads(event.tool_chain_json),
+        },
+        ensure_ascii=False,
+    )
+    assert "approved_side_effect_lifecycle" in encoded
+    assert "approval-1" in encoded
+    assert raw_secret not in encoded
+    assert "secret-token" not in encoded
+    assert "/tmp/workspace/notes.md" not in encoded
+    assert "payload_path" not in encoded
 
 
 def test_observe_slim_call_redacts_sensitive_tool_arguments() -> None:

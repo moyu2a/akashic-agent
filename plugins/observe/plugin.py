@@ -80,7 +80,7 @@ def _emit_turn_trace(writer: _ObserveWriter, event: TurnCommitted) -> None:
 
     post_reply_budget = event.post_reply_budget
     react_stats = event.react_stats
-    tool_chain = event.tool_chain_raw
+    tool_chain = _tool_chain_with_extra_lifecycle(event.tool_chain_raw, event.extra)
     tool_chain_json = (
         json.dumps(_slim_tool_chain(tool_chain), ensure_ascii=False)
         if tool_chain
@@ -119,6 +119,34 @@ def _emit_turn_trace(writer: _ObserveWriter, event: TurnCommitted) -> None:
         event.session_key,
         len(tool_calls),
     )
+
+
+def _tool_chain_with_extra_lifecycle(
+    tool_chain: list[dict[str, object]],
+    extra: Mapping[str, object],
+) -> list[dict[str, object]]:
+    side_effect_lifecycle = extra.get("approved_side_effect_lifecycle")
+    if not isinstance(side_effect_lifecycle, list):
+        return tool_chain
+    events = [
+        event for event in side_effect_lifecycle if isinstance(event, Mapping)
+    ]
+    if not events:
+        return tool_chain
+    return [
+        *tool_chain,
+        {
+            "text": "",
+            "calls": [
+                {
+                    "name": "approved_side_effect_lifecycle",
+                    "arguments": {},
+                    "result": "",
+                    "approved_side_effect_lifecycle": events,
+                }
+            ],
+        },
+    ]
 
 
 def _to_rag_query_log(event: RetrievalCompleted):
@@ -243,6 +271,15 @@ def _slim_call(
         ]
         if events:
             out["approval_lifecycle"] = events
+    side_effect_lifecycle = call.get("approved_side_effect_lifecycle")
+    if isinstance(side_effect_lifecycle, list):
+        events = [
+            _slim_approved_side_effect_lifecycle_event(event)
+            for event in side_effect_lifecycle
+            if isinstance(event, Mapping)
+        ]
+        if events:
+            out["approved_side_effect_lifecycle"] = events
     return out
 
 
@@ -281,6 +318,35 @@ def _slim_approval_lifecycle_event(event: Mapping[object, object]) -> dict[str, 
             "decided_at",
             "consumed_at",
             "executed_at",
+        )
+        if key in event
+    }
+
+
+def _slim_approved_side_effect_lifecycle_event(
+    event: Mapping[object, object],
+) -> dict[str, object]:
+    return {
+        key: event.get(key)
+        for key in (
+            "event_type",
+            "approval_request_id",
+            "request_id",
+            "session_key",
+            "tool_name",
+            "approval_scope",
+            "args_hash",
+            "status",
+            "actor",
+            "preview_id",
+            "target_path_hash",
+            "before_hash",
+            "after_hash",
+            "diff_truncated",
+            "rollback_id",
+            "execution_status",
+            "rollback_status",
+            "created_at",
         )
         if key in event
     }
