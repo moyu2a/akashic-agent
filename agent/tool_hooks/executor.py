@@ -147,7 +147,13 @@ class ToolExecutor:
                 return ToolExecutionResult(
                     status="deferred",
                     output=_managed_side_effect_required_output(
-                        request.trusted_approval_context.approval_request_id
+                        policy_decision,
+                        tool_name=request.tool_name,
+                        arguments=final_arguments,
+                        approval_scope=approval_scope,
+                        approval_request_id=(
+                            request.trusted_approval_context.approval_request_id
+                        ),
                     ),
                     final_arguments=final_arguments,
                     invoker_reached=False,
@@ -684,17 +690,31 @@ def _policy_block_output(decision: ToolInvocationDecision) -> str:
     )
 
 
-def _managed_side_effect_required_output(approval_request_id: str) -> str:
+def _managed_side_effect_required_output(
+    decision: ToolInvocationDecision,
+    *,
+    tool_name: str,
+    arguments: dict[str, Any],
+    approval_scope: str,
+    approval_request_id: str,
+) -> str:
+    trace = decision.to_trace_metadata()
+    payload = build_approval_payload(
+        tool_name=tool_name,
+        arguments=arguments,
+        action="defer",
+        reason="approved_side_effect_requires_managed_apply",
+        risk=str(trace["risk"]),
+        approval_scope=approval_scope,
+        approval_request_id=approval_request_id,
+    )
+    payload["message"] = (
+        "Approved file side effects must be prepared and applied through "
+        "the managed P4 runtime."
+    )
+    payload["policy"] = trace
     return json.dumps(
-        {
-            "ok": False,
-            "error_code": "approved_side_effect_requires_managed_apply",
-            "approval_request_id": approval_request_id,
-            "message": (
-                "Approved file side effects must be prepared and applied through "
-                "the managed P4 runtime."
-            ),
-        },
+        payload,
         ensure_ascii=False,
     )
 

@@ -242,6 +242,13 @@ def test_executor_does_not_directly_execute_approved_managed_file_tool(
     assert result.status == "deferred"
     assert result.invoker_reached is False
     assert "approved_side_effect_requires_managed_apply" in str(result.output)
+    payload = json.loads(result.output)
+    assert payload["error_code"] == "approved_side_effect_requires_managed_apply"
+    assert (
+        payload["approval_request"]["approval_request_id"]
+        == record.approval_request_id
+    )
+    assert "hello" not in str(payload["approval_request"]["args_summary"])
     assert invoker.calls == []
     assert runtime.store.get_request(record.approval_request_id).status == "approved"
 
