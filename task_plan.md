@@ -1,5 +1,66 @@
 # Document RAG P10a Intent Preload Plan
 
+## 2026-07-26 Memory Online Attribution And Version Grounding Plan
+
+Goal: create a reproducible online answer-quality failure attribution report and fix the `chain_version_provenance` grounding metric before spending more real LLM calls.
+
+1. Write implementation plan for online failure attribution and version grounding repair - complete
+2. Review the plan before execution - complete
+3. Implement Task 1 online failure attribution report - complete
+4. Implement Task 2 profile-aware version/provenance grounding fix - pending
+5. Rebuild checkpoint/fake-provider reports and update docs - pending
+6. Run final regression and commit - pending
+
+Plan:
+
+- `docs/superpowers/plans/2026-07-26-memory-online-attribution-version-grounding.md`
+
+Current inputs:
+
+- Real LLM full answer-quality report:
+  - `/tmp/akashic-memory-answer-quality-real-full-v1/reports/memory_comprehensive_online_eval.json`
+  - `/tmp/akashic-memory-answer-quality-real-full-v1/checkpoint-report/memory_comprehensive_online_eval.json`
+- Current online result:
+  - `chain_memory_base answer_rate = 42.1875%`, grounding `96.25%`, forbidden `12.1875%`;
+  - `chain_tri_retrieval answer_rate = 28.4375%`, grounding `100%`, forbidden `30%`;
+  - `chain_graph_retrieval answer_rate = 26.25%`, grounding `100%`, forbidden `29.6875%`;
+  - `chain_rerank_injection answer_rate = 39.6875%`, grounding `100%`, forbidden `9.6875%`;
+  - `chain_version_provenance answer_rate = 40.3125%`, grounding `0%`, forbidden `0.9375%`;
+  - `chain_all_on answer_rate = 23.4375%`, grounding `100%`, forbidden `24.6875%`.
+
+Working hypothesis:
+
+- The first issue is not raw recall shortage. Tri/graph retrieve evidence but increase forbidden/noise, hurting final answers.
+- The second issue is likely evaluation-side grounding mismatch for `chain_version_provenance`: generic answer expectations include both target and graph ids, while the version/provenance evidence source intentionally uses `version_chain.active_leaf_ids`.
+
+Plan review result:
+
+- Independent review verdict: required revision before execution.
+- Critical fix applied: historical checkpoint rows already contain final `memory_grounding_passed` booleans, so checkpoint-only rebuilds cannot prove a scorer fix or change old `chain_version_provenance` grounding values.
+- Important fix applied: Task 2 tests now require a fresh fake-provider/evaluation path that exercises scoring, not a hand-written checkpoint row with `memory_grounding_passed=True`.
+- Important fix applied: Task 1 CLI now explicitly supports both report JSON and checkpoint JSONL, matching the stated input boundary.
+- Minor fix applied: Task 1 attribution now includes paired comparison against matching `chain_memory_base` rows and failure-code distribution / examples should be produced during implementation.
+
+Task 1 result:
+
+- Added `memory2/eval_online_failure_attribution.py`, `scripts/run_memory_online_failure_attribution.py`, and `tests/test_memory_online_failure_attribution.py`.
+- Focused test: `tests/test_memory_online_failure_attribution.py` -> `4 passed`.
+- Generated report:
+  - `my_md/memory_optimization/eval_reports/online_failure_attribution/online_failure_attribution.json`
+  - `my_md/memory_optimization/eval_reports/online_failure_attribution/online_failure_attribution.md`
+- Historical real LLM attribution summary:
+  - `chain_tri_retrieval`: 229 answer failures, 0 grounding failures, 96 forbidden failures, 78 forbidden introduced vs baseline;
+  - `chain_graph_retrieval`: 236 answer failures, 0 grounding failures, 95 forbidden failures, 82 forbidden introduced vs baseline;
+  - `chain_rerank_injection`: 193 answer failures, 0 grounding failures, 31 forbidden failures, 15 forbidden introduced vs baseline;
+  - `chain_version_provenance`: 191 answer failures, 320 grounding failures, 3 forbidden failures, 320 `missing_expected_memory_ids`.
+
+Constraints:
+
+- Do not change production `AgentLoop`, `Reasoner`, `ToolExecutor`, memory writes, or production prompt behavior.
+- Do not run a new full real LLM matrix until checkpoint/fake-provider verification is complete.
+- Keep all-on labeled as `combo/check`.
+- Do not push without explicit user instruction.
+
 ## 2026-07-26 Memory Next Post-Merge Regression Repair
 
 Goal: repair post-merge regressions on `memory-next` so dashboard / memory_rollup tests, Markdown consolidation tests, and memory quantitative expectations run reliably in the current Python 3.14 test environment.

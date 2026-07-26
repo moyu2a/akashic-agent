@@ -1,5 +1,49 @@
 # Document RAG P10a Progress
 
+## 2026-07-26 Memory Online Attribution And Version Grounding Plan
+
+- User asked to call the plan skill and create a plan for the next two memory-next mainline steps:
+  - Step 1: online answer-quality failure attribution;
+  - Step 2: `chain_version_provenance` grounding repair.
+- Created the formal implementation plan:
+  - `docs/superpowers/plans/2026-07-26-memory-online-attribution-version-grounding.md`.
+- The plan starts from the newer real LLM online answer-quality report, not the offline retrieval-count table:
+  - `/tmp/akashic-memory-answer-quality-real-full-v1/checkpoint-report/memory_comprehensive_online_eval.json`;
+  - 320 unique cases, 6 profiles, 1920 completed real LLM calls, 0 provider errors, 0 timeouts.
+- Current problem statement recorded in the plan:
+  - tri/graph reach `100%` grounding but hurt answer rate and raise forbidden rate;
+  - rerank/injection is the best current enhanced profile because it keeps grounding at `100%` while lowering forbidden rate;
+  - version/provenance has likely evaluation-side grounding mismatch because answer rate is close to baseline and forbidden is low, but grounding is `0%`.
+- Code context checked before planning:
+  - `memory2/eval_comprehensive_online.py` owns `evidence_ids_for_profile()`, checkpoint report rebuilding, profile summaries, and answer-quality tables;
+  - `ComprehensiveOnlineMemoryEngine.retrieve()` injects ids from `evidence_ids_for_profile()`;
+  - scoring currently calls `score_answer_text(answer, answer_expectation_from_case(spec.case), memory.used_memory_ids)`;
+  - generated answer expectations include both target and graph ids, while `chain_version_provenance` uses only `version_chain_shadow.active_leaf_ids`.
+- Independent plan review completed:
+  - reviewer found a critical issue: checkpoint-only rebuilds cannot prove the version grounding fix because checkpoint rows already store final `memory_grounding_passed` values and do not contain answer text for rescoring;
+  - reviewer found an important Task 2 test issue: hand-written checkpoint rows with `memory_grounding_passed=True` would not test the scorer;
+  - reviewer found an important Task 1 mismatch: the plan said JSONL checkpoint support but the CLI snippet only accepted report JSON;
+  - reviewer recommended failure-code distribution / top examples for deeper tri/graph attribution.
+- Plan was revised:
+  - checkpoint inputs are now attribution-only / historical evidence;
+  - scorer fix validation now uses direct profile-aware expectation tests plus fresh fake-provider online eval path;
+  - attribution CLI now has `--input-json` and `--checkpoint-jsonl`;
+  - attribution profile rows now include paired deltas against matching `chain_memory_base` rows.
+- Task 1 implemented online failure attribution:
+  - added `memory2/eval_online_failure_attribution.py`;
+  - added `scripts/run_memory_online_failure_attribution.py`;
+  - added `tests/test_memory_online_failure_attribution.py`;
+  - RED: focused attribution test first failed with `ModuleNotFoundError: No module named 'memory2.eval_online_failure_attribution'`;
+  - GREEN: `tests/test_memory_online_failure_attribution.py` -> `4 passed`.
+- Generated attribution reports:
+  - report JSON input: `my_md/memory_optimization/eval_reports/online_failure_attribution/online_failure_attribution.{json,md}`;
+  - checkpoint JSONL input smoke: `/tmp/akashic-memory-online-failure-attribution-checkpoint/online_failure_attribution.{json,md}`.
+- Task 1 attribution findings:
+  - `chain_tri_retrieval`: `320` rows, `229` answer failures, `0` grounding failures, `96` forbidden failures, `78` forbidden introduced vs baseline, primary issue `grounded_but_answer_failed`;
+  - `chain_graph_retrieval`: `320` rows, `236` answer failures, `0` grounding failures, `95` forbidden failures, `82` forbidden introduced vs baseline, primary issue `grounded_but_answer_failed`;
+  - `chain_rerank_injection`: `320` rows, `193` answer failures, `0` grounding failures, `31` forbidden failures, `15` forbidden introduced vs baseline, primary issue `grounded_but_answer_failed`;
+  - `chain_version_provenance`: `320` rows, `191` answer failures, `320` grounding failures, `3` forbidden failures, `320` `missing_expected_memory_ids`, primary issue `grounding_only_failure`.
+
 ## 2026-07-26 Memory Next Post-Merge Regression Repair
 
 - User asked to continue fixing the post-merge regression issues on the `memory-next` branch.
