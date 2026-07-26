@@ -69,6 +69,11 @@ Task 2 result:
   - it still shows historical `chain_version_provenance grounding = 0.0%`, which is expected because checkpoint rows already store old `memory_grounding_passed` values;
   - fresh fake-provider scorer validation written to `my_md/memory_optimization/eval_reports/version_grounding_fake_validation/`;
   - 20-case slice shows `chain_memory_base grounding = 20/20 = 100.0%` and `chain_version_provenance grounding = 20/20 = 100.0%`.
+- Small real LLM smoke recorded for later reference:
+  - `/tmp/akashic-memory-version-grounding-smoke/reports/memory_comprehensive_online_eval.{json,md}`;
+  - `case_count = 10`, `unique_case_count = 5`, `profile_count = 2`;
+  - `chain_memory_base answer_rate = 60%`, `chain_version_provenance answer_rate = 80%`;
+  - both profiles had `grounding_rate = 100%` and `forbidden_rate = 0%`.
 
 Current conclusion:
 
@@ -76,6 +81,7 @@ Current conclusion:
 - The scorer path for future runs is fixed.
 - Old checkpoint-only reports remain historical evidence and must not be used to claim the fix changed old real percentages.
 - The next trustworthy real number requires a bounded fresh real LLM rerun for `chain_version_provenance` after this fix.
+- The new smoke is only a gate check and should not be promoted to the final online conclusion.
 
 Final verification:
 

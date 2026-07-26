@@ -56,6 +56,12 @@
   - checkpoint rebuild still reports `chain_version_provenance grounding = 0.0%`, expected because old checkpoint rows store old final booleans;
   - fresh fake-provider validation: `my_md/memory_optimization/eval_reports/version_grounding_fake_validation/memory_comprehensive_online_eval.{json,md}`;
   - fake-provider slice result: `case_count = 40`, `chain_memory_base grounding = 20/20 = 100.0%`, `chain_version_provenance grounding = 20/20 = 100.0%`.
+- Small real LLM smoke recorded:
+  - `/tmp/akashic-memory-version-grounding-smoke/reports/memory_comprehensive_online_eval.{json,md}`;
+  - `case_count = 10`, `unique_case_count = 5`, `profile_count = 2`;
+  - `chain_memory_base answer_rate = 60%`, `chain_version_provenance answer_rate = 80%`;
+  - both profiles had `grounding_rate = 100%` and `forbidden_rate = 0%`;
+  - this is only a gate check, not a final conclusion.
 - Current conclusion:
   - historical version-chain grounding failure is an evaluation expected-id mismatch, not proof that version evidence cannot be injected;
   - future scorer runs no longer force version/provenance to include graph ids;

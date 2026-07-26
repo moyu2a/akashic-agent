@@ -630,6 +630,33 @@ my_md/memory_optimization/eval_reports/version_grounding_fake_validation/memory_
 
 后续要得到修复后的真实线上百分比，需要对 `chain_version_provenance` 做一次有界真实 LLM 续跑或 fresh rerun；不能用旧 checkpoint-only 报告声称真实 grounding 已提升。
 
+### Phase 6m 的小型真实 LLM smoke
+
+在版本链 grounding 口径修复后，补跑了一个非常小的真实 LLM smoke，只验证修复没有把真实调用链打坏：
+
+```text
+case_count = 10
+unique_case_count = 5
+profile_count = 2
+profiles = chain_memory_base, chain_version_provenance
+```
+
+报告路径：
+
+```text
+/tmp/akashic-memory-version-grounding-smoke/reports/memory_comprehensive_online_eval.json
+/tmp/akashic-memory-version-grounding-smoke/reports/memory_comprehensive_online_eval.md
+```
+
+结果：
+
+| profile | answer_rate | grounding_rate | forbidden_rate | avg_tokens | avg_latency_ms |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| chain_memory_base | 60% | 100% | 0% | 5551.2 | 6619.6 |
+| chain_version_provenance | 80% | 100% | 0% | 5243.6 | 3647.4 |
+
+这组 smoke 只说明版本链 grounding 修复后的真实调用链可以跑通，且在这个极小样本上没有出现 grounding 回退或 forbidden 问题。它不能替代 20/40 case 的有界复测，更不能替代全量真实 LLM 结论。
+
 ### Phase 6e 的综合线上 answer-level report
 
 Phase 6e 把离线 80 个目标导向 case 接到真实 `AgentLoop.process_direct()` 和真实 LLM 上。完整设计规模是：

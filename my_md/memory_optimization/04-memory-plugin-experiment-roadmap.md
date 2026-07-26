@@ -519,6 +519,7 @@ my_md/memory_optimization/eval_reports/online_failure_attribution/online_failure
 - 旧 checkpoint-only 报告仍显示 `chain_version_provenance grounding = 0.0%`，这是预期结果，因为 checkpoint 已保存旧评分布尔值，不能事后重算。
 - fresh fake-provider 验证报告位于 `my_md/memory_optimization/eval_reports/version_grounding_fake_validation/`，20 case 切片中 `chain_memory_base` 和 `chain_version_provenance` 都是 `20/20 grounding = 100.0%`。
 - 要得到修复后的真实线上结果，需要下一轮对受影响 profile 做有界真实 LLM fresh rerun。
+- 之后又补了一个极小真实 LLM smoke，路径是 `/tmp/akashic-memory-version-grounding-smoke/reports/memory_comprehensive_online_eval.{json,md}`，只跑 `chain_memory_base` 和 `chain_version_provenance` 两个 profile、5 个 case。结果是两者 grounding 都为 `100%`，`chain_version_provenance answer_rate = 80%`、`chain_memory_base answer_rate = 60%`。这只是门槛检查，不能替代后续 20/40 case 的有界复测。
 
 ### 写入价值与睡眠巩固的专项评测
 
