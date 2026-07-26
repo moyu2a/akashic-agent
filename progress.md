@@ -62,6 +62,12 @@
   - `chain_memory_base answer_rate = 60%`, `chain_version_provenance answer_rate = 80%`;
   - both profiles had `grounding_rate = 100%` and `forbidden_rate = 0%`;
   - this is only a gate check, not a final conclusion.
+- Routing analysis recorded:
+  - tri rescue is concentrated in `tool_preference`, `conflict_resolution`, `temporal_preference`, and `preference_recall`;
+  - tri regressions are concentrated in `style_preference`, `source_ref_missing`, `entropy_value`, and `hard_tool_preference`;
+  - graph rescue is concentrated in `tri_rrf`, `version_chain`, `graph_bridge`, `source_ref_missing`, `session_boundary`, and `entity_alias`;
+  - graph regressions are concentrated in `tool_preference`, `temporal_preference`, `conflict_resolution`, and `style_preference`;
+  - conclusion: tri/graph need scene routing, not global default on/off.
 - Current conclusion:
   - historical version-chain grounding failure is an evaluation expected-id mismatch, not proof that version evidence cannot be injected;
   - future scorer runs no longer force version/provenance to include graph ids;

@@ -520,6 +520,10 @@ my_md/memory_optimization/eval_reports/online_failure_attribution/online_failure
 - fresh fake-provider 验证报告位于 `my_md/memory_optimization/eval_reports/version_grounding_fake_validation/`，20 case 切片中 `chain_memory_base` 和 `chain_version_provenance` 都是 `20/20 grounding = 100.0%`。
 - 要得到修复后的真实线上结果，需要下一轮对受影响 profile 做有界真实 LLM fresh rerun。
 - 之后又补了一个极小真实 LLM smoke，路径是 `/tmp/akashic-memory-version-grounding-smoke/reports/memory_comprehensive_online_eval.{json,md}`，只跑 `chain_memory_base` 和 `chain_version_provenance` 两个 profile、5 个 case。结果是两者 grounding 都为 `100%`，`chain_version_provenance answer_rate = 80%`、`chain_memory_base answer_rate = 60%`。这只是门槛检查，不能替代后续 20/40 case 的有界复测。
+- 从完整真实 answer-quality 报告再往下拆，三路召回和图谱召回都不适合无条件全开：
+  - 三路召回在 `tool_preference`、`conflict_resolution`、`temporal_preference`、`preference_recall` 等场景更容易救活基线，但在 `style_preference`、`source_ref_missing`、`entropy_value`、`hard_tool_preference` 等场景更容易回退；
+  - 图谱召回在 `tri_rrf`、`version_chain`、`graph_bridge`、`source_ref_missing`、`session_boundary`、`entity_alias` 等场景更容易救活基线，但在 `tool_preference`、`temporal_preference`、`conflict_resolution`、`style_preference` 上也会回退；
+  - 所以下一步应把三路和图谱纳入场景路由层，而不是继续把它们当成全局默认增强。
 
 ### 写入价值与睡眠巩固的专项评测
 
