@@ -20,6 +20,11 @@ from agent.policies.history_route import (
     RouteDecisionReasonCode,
     RouteDecisionSource,
 )
+from agent.policies.approved_side_effect_store import (
+    ApprovedSideEffectAuditEvent,
+    ApprovedSideEffectRecord,
+    ApprovedSideEffectStore,
+)
 from agent.policies.task_control_arbiter import (
     TaskControlIntentArbiter,
     TaskControlIntentDecision,
@@ -79,6 +84,9 @@ from agent.policies.tool_risk_strategy import (
 )
 
 __all__ = [
+    "ApprovedSideEffectAuditEvent",
+    "ApprovedSideEffectRecord",
+    "ApprovedSideEffectStore",
     "DecisionMeta",
     "DelegationPolicy",
     "DOC_RAG_TOOL_NAMES",
