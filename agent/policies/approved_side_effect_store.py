@@ -41,10 +41,57 @@ CREATE TABLE IF NOT EXISTS approved_side_effects (
     rollback_id TEXT NOT NULL DEFAULT '',
     execution_status TEXT NOT NULL DEFAULT '',
     rollback_status TEXT NOT NULL DEFAULT '',
+    command_hash TEXT NOT NULL DEFAULT '',
+    sandbox_backend TEXT NOT NULL DEFAULT '',
+    sandbox_image TEXT NOT NULL DEFAULT '',
+    sandbox_user TEXT NOT NULL DEFAULT '',
+    sandbox_memory_limit TEXT NOT NULL DEFAULT '',
+    sandbox_cpus TEXT NOT NULL DEFAULT '',
+    sandbox_pids_limit INTEGER NOT NULL DEFAULT 0,
+    network_mode TEXT NOT NULL DEFAULT '',
+    workspace_mount_mode TEXT NOT NULL DEFAULT '',
+    timeout_seconds INTEGER NOT NULL DEFAULT 0,
+    background_requested INTEGER NOT NULL DEFAULT 0,
+    background_allowed INTEGER NOT NULL DEFAULT 0,
+    exit_code INTEGER DEFAULT NULL,
+    stdout_ref TEXT NOT NULL DEFAULT '',
+    stderr_ref TEXT NOT NULL DEFAULT '',
+    stdout_hash TEXT NOT NULL DEFAULT '',
+    stderr_hash TEXT NOT NULL DEFAULT '',
+    stdout_bytes INTEGER NOT NULL DEFAULT 0,
+    stderr_bytes INTEGER NOT NULL DEFAULT 0,
+    stdout_truncated INTEGER NOT NULL DEFAULT 0,
+    stderr_truncated INTEGER NOT NULL DEFAULT 0,
+    duration_ms INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
 )
 """
+
+_SHELL_METADATA_COLUMNS = {
+    "command_hash": "TEXT NOT NULL DEFAULT ''",
+    "sandbox_backend": "TEXT NOT NULL DEFAULT ''",
+    "sandbox_image": "TEXT NOT NULL DEFAULT ''",
+    "sandbox_user": "TEXT NOT NULL DEFAULT ''",
+    "sandbox_memory_limit": "TEXT NOT NULL DEFAULT ''",
+    "sandbox_cpus": "TEXT NOT NULL DEFAULT ''",
+    "sandbox_pids_limit": "INTEGER NOT NULL DEFAULT 0",
+    "network_mode": "TEXT NOT NULL DEFAULT ''",
+    "workspace_mount_mode": "TEXT NOT NULL DEFAULT ''",
+    "timeout_seconds": "INTEGER NOT NULL DEFAULT 0",
+    "background_requested": "INTEGER NOT NULL DEFAULT 0",
+    "background_allowed": "INTEGER NOT NULL DEFAULT 0",
+    "exit_code": "INTEGER DEFAULT NULL",
+    "stdout_ref": "TEXT NOT NULL DEFAULT ''",
+    "stderr_ref": "TEXT NOT NULL DEFAULT ''",
+    "stdout_hash": "TEXT NOT NULL DEFAULT ''",
+    "stderr_hash": "TEXT NOT NULL DEFAULT ''",
+    "stdout_bytes": "INTEGER NOT NULL DEFAULT 0",
+    "stderr_bytes": "INTEGER NOT NULL DEFAULT 0",
+    "stdout_truncated": "INTEGER NOT NULL DEFAULT 0",
+    "stderr_truncated": "INTEGER NOT NULL DEFAULT 0",
+    "duration_ms": "INTEGER NOT NULL DEFAULT 0",
+}
 
 _CREATE_AUDIT_SQL = """
 CREATE TABLE IF NOT EXISTS approved_side_effect_audit_events (
@@ -76,6 +123,28 @@ class ApprovedSideEffectRecord:
     rollback_id: str = ""
     execution_status: str = ""
     rollback_status: str = ""
+    command_hash: str = ""
+    sandbox_backend: str = ""
+    sandbox_image: str = ""
+    sandbox_user: str = ""
+    sandbox_memory_limit: str = ""
+    sandbox_cpus: str = ""
+    sandbox_pids_limit: int = 0
+    network_mode: str = ""
+    workspace_mount_mode: str = ""
+    timeout_seconds: int = 0
+    background_requested: bool = False
+    background_allowed: bool = False
+    exit_code: int | None = None
+    stdout_ref: str = ""
+    stderr_ref: str = ""
+    stdout_hash: str = ""
+    stderr_hash: str = ""
+    stdout_bytes: int = 0
+    stderr_bytes: int = 0
+    stdout_truncated: bool = False
+    stderr_truncated: bool = False
+    duration_ms: int = 0
 
 
 @dataclass(frozen=True)
@@ -208,6 +277,93 @@ class ApprovedSideEffectStore:
             assignments={"execution_status": execution_status},
         )
 
+    def record_shell_preview(
+        self,
+        *,
+        approval_request_id: str,
+        preview_id: str,
+        command_hash: str,
+        sandbox_backend: str,
+        sandbox_image: str,
+        sandbox_user: str,
+        sandbox_memory_limit: str,
+        sandbox_cpus: str,
+        sandbox_pids_limit: int,
+        network_mode: str,
+        workspace_mount_mode: str,
+        timeout_seconds: int,
+        background_requested: bool,
+        background_allowed: bool,
+        actor: str,
+        now: datetime,
+    ) -> ApprovedSideEffectRecord:
+        return self._update(
+            approval_request_id=approval_request_id,
+            status="preview_ready",
+            event_type="shell_preview_ready",
+            actor=actor,
+            now=now,
+            assignments={
+                "preview_id": preview_id,
+                "command_hash": command_hash,
+                "sandbox_backend": sandbox_backend,
+                "sandbox_image": sandbox_image,
+                "sandbox_user": sandbox_user,
+                "sandbox_memory_limit": sandbox_memory_limit,
+                "sandbox_cpus": sandbox_cpus,
+                "sandbox_pids_limit": sandbox_pids_limit,
+                "network_mode": network_mode,
+                "workspace_mount_mode": workspace_mount_mode,
+                "timeout_seconds": timeout_seconds,
+                "background_requested": int(background_requested),
+                "background_allowed": int(background_allowed),
+            },
+        )
+
+    def mark_shell_executed(
+        self,
+        *,
+        approval_request_id: str,
+        execution_status: str,
+        exit_code: int | None,
+        stdout_ref: str,
+        stderr_ref: str,
+        stdout_hash: str,
+        stderr_hash: str,
+        stdout_bytes: int,
+        stderr_bytes: int,
+        stdout_truncated: bool,
+        stderr_truncated: bool,
+        duration_ms: int,
+        actor: str,
+        now: datetime,
+    ) -> ApprovedSideEffectRecord:
+        _validate_shell_artifact_ref(stdout_ref)
+        _validate_shell_artifact_ref(stderr_ref)
+        status: SideEffectStatus = (
+            "executed" if execution_status == "sandbox_executed" else "execution_failed"
+        )
+        return self._update(
+            approval_request_id=approval_request_id,
+            status=status,
+            event_type="shell_executed",
+            actor=actor,
+            now=now,
+            assignments={
+                "execution_status": execution_status,
+                "exit_code": exit_code,
+                "stdout_ref": stdout_ref,
+                "stderr_ref": stderr_ref,
+                "stdout_hash": stdout_hash,
+                "stderr_hash": stderr_hash,
+                "stdout_bytes": stdout_bytes,
+                "stderr_bytes": stderr_bytes,
+                "stdout_truncated": int(stdout_truncated),
+                "stderr_truncated": int(stderr_truncated),
+                "duration_ms": duration_ms,
+            },
+        )
+
     def mark_rolled_back(
         self,
         *,
@@ -265,6 +421,15 @@ class ApprovedSideEffectStore:
         with self._connect() as conn:
             conn.execute(_CREATE_SIDE_EFFECTS_SQL)
             conn.execute(_CREATE_AUDIT_SQL)
+            existing_columns = {
+                str(row["name"])
+                for row in conn.execute("PRAGMA table_info(approved_side_effects)")
+            }
+            for name, definition in _SHELL_METADATA_COLUMNS.items():
+                if name not in existing_columns:
+                    conn.execute(
+                        f"ALTER TABLE approved_side_effects ADD COLUMN {name} {definition}"
+                    )
             conn.commit()
 
     def _connect(self) -> sqlite3.Connection:
@@ -290,6 +455,7 @@ class ApprovedSideEffectStore:
         *,
         approval_request_id: str,
         status: SideEffectStatus,
+        event_type: str | None = None,
         actor: str,
         now: datetime,
         assignments: dict[str, object],
@@ -312,7 +478,7 @@ class ApprovedSideEffectStore:
             self._append_event(
                 conn,
                 approval_request_id=approval_request_id,
-                event_type=status,
+                event_type=event_type or status,
                 actor=actor,
                 created_at=now_iso,
             )
@@ -375,6 +541,28 @@ def _record_from_row(row: sqlite3.Row) -> ApprovedSideEffectRecord:
         rollback_id=str(row["rollback_id"]),
         execution_status=str(row["execution_status"]),
         rollback_status=str(row["rollback_status"]),
+        command_hash=str(row["command_hash"]),
+        sandbox_backend=str(row["sandbox_backend"]),
+        sandbox_image=str(row["sandbox_image"]),
+        sandbox_user=str(row["sandbox_user"]),
+        sandbox_memory_limit=str(row["sandbox_memory_limit"]),
+        sandbox_cpus=str(row["sandbox_cpus"]),
+        sandbox_pids_limit=int(row["sandbox_pids_limit"]),
+        network_mode=str(row["network_mode"]),
+        workspace_mount_mode=str(row["workspace_mount_mode"]),
+        timeout_seconds=int(row["timeout_seconds"]),
+        background_requested=bool(row["background_requested"]),
+        background_allowed=bool(row["background_allowed"]),
+        exit_code=int(row["exit_code"]) if row["exit_code"] is not None else None,
+        stdout_ref=str(row["stdout_ref"]),
+        stderr_ref=str(row["stderr_ref"]),
+        stdout_hash=str(row["stdout_hash"]),
+        stderr_hash=str(row["stderr_hash"]),
+        stdout_bytes=int(row["stdout_bytes"]),
+        stderr_bytes=int(row["stderr_bytes"]),
+        stdout_truncated=bool(row["stdout_truncated"]),
+        stderr_truncated=bool(row["stderr_truncated"]),
+        duration_ms=int(row["duration_ms"]),
     )
 
 
@@ -392,3 +580,16 @@ def _to_iso(value: datetime) -> str:
     if value.tzinfo is None:
         raise ValueError("side-effect timestamps must be timezone-aware")
     return value.isoformat()
+
+
+def _validate_shell_artifact_ref(ref: str) -> None:
+    path = Path(ref)
+    if (
+        path.is_absolute()
+        or len(path.parts) < 2
+        or path.parts[0] != "artifacts"
+        or any(part in {"", ".", ".."} for part in path.parts)
+    ):
+        raise ValueError(
+            "shell artifact refs must be relative to tool_side_effects/artifacts"
+        )
