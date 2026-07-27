@@ -59,24 +59,33 @@ def _run_shell(root: Path, command: str) -> Any:
 
 
 def test_shell_safety_blocks_sudo_without_non_interactive(tmp_path: Path) -> None:
-    result = _run_shell(_make_plugin_root(tmp_path), "sudo pacman -Syu --noconfirm")
+    command = "sudo pacman -Syu --noconfirm"
+    result = _run_shell(_make_plugin_root(tmp_path), command)
 
     assert result.status == "denied"
-    assert "sudo -n" in result.output
+    assert result.output == "工具调用被拦截"
+    assert command not in result.output
+    assert result.final_arguments == {}
 
 
 def test_shell_safety_blocks_interactive_editor(tmp_path: Path) -> None:
-    result = _run_shell(_make_plugin_root(tmp_path), "sudo -n vim /etc/example.service")
+    command = "sudo -n vim /etc/example.service"
+    result = _run_shell(_make_plugin_root(tmp_path), command)
 
     assert result.status == "denied"
-    assert "vim" in result.output
+    assert result.output == "工具调用被拦截"
+    assert command not in result.output
+    assert result.final_arguments == {}
 
 
 def test_shell_safety_blocks_package_write_without_noconfirm(tmp_path: Path) -> None:
-    result = _run_shell(_make_plugin_root(tmp_path), "pacman -Syu")
+    command = "pacman -Syu"
+    result = _run_shell(_make_plugin_root(tmp_path), command)
 
     assert result.status == "denied"
-    assert "--noconfirm" in result.output
+    assert result.output == "工具调用被拦截"
+    assert command not in result.output
+    assert result.final_arguments == {}
 
 
 def test_shell_safety_passes_non_interactive_package_write_to_policy(
@@ -85,7 +94,7 @@ def test_shell_safety_passes_non_interactive_package_write_to_policy(
     result = _run_shell(_make_plugin_root(tmp_path), "sudo -n pacman -Syu --noconfirm")
 
     assert result.status == "deferred"
-    assert result.final_arguments["command"] == "sudo -n pacman -Syu --noconfirm"
+    assert result.final_arguments == {}
     assert result.policy_trace["reason"] == "risk_strategy_shell_requires_approval"
 
 
@@ -93,5 +102,5 @@ def test_shell_safety_passes_package_query_to_policy(tmp_path: Path) -> None:
     result = _run_shell(_make_plugin_root(tmp_path), "pacman -Q")
 
     assert result.status == "deferred"
-    assert result.final_arguments["command"] == "pacman -Q"
+    assert result.final_arguments == {}
     assert result.policy_trace["reason"] == "risk_strategy_shell_requires_approval"
