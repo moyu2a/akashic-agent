@@ -76,3 +76,10 @@ Observed result:
 
 - The raw shell command remains stored only in the private vault payload file.
 - The existing unsupported-tool test needed adjustment because `shell` is now a managed side-effect tool for this task.
+
+## Post-review fix
+
+- Removed the extra `chmod` on the shared `tool_side_effects` parent directory so only the payload subtree is forced private.
+- Re-ran the Task 1 focused shell vault test and the full vault test file after the fix:
+  - `1 passed in 0.12s`
+  - `4 passed in 0.13s`

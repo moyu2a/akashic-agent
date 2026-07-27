@@ -38,7 +38,6 @@ class SideEffectPayload:
 class SideEffectPayloadVault:
     def __init__(self, root: str | Path) -> None:
         self.root = Path(root).expanduser().resolve()
-        self._ensure_private_dir(self.root.parent)
         self._ensure_private_dir(self.root)
 
     @staticmethod
