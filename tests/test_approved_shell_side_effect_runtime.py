@@ -26,8 +26,8 @@ class RecordingSandboxRunner:
             ok=True,
             reason="sandbox_executed",
             exit_code=0,
-            stdout_path=str(preview.artifact_dir / "stdout.txt"),
-            stderr_path=str(preview.artifact_dir / "stderr.txt"),
+            stdout_path="stdout.txt",
+            stderr_path="stderr.txt",
             stdout_hash="stdout-hash",
             stderr_hash="stderr-hash",
             stdout_bytes=3,
@@ -287,6 +287,9 @@ def test_approved_shell_runtime_finalizes_failed_execution_on_runner_exception(t
     assert result.ok is False
     assert result.reason == "shell_sandbox_unavailable"
     assert approval_runtime.store.get_request(approval_id).status == "execution_failed"
+    stored = runtime.side_effect_store.get_by_approval_id(approval_id)
+    assert stored is not None
+    assert stored.status == "execution_failed"
 
 
 def test_approved_shell_runtime_rejects_out_of_tree_artifact_refs_before_store_update(tmp_path: Path) -> None:
@@ -327,9 +330,52 @@ def test_approved_shell_runtime_rejects_out_of_tree_artifact_refs_before_store_u
     assert approval_runtime.store.get_request(approval_id).status == "execution_failed"
     stored = runtime.side_effect_store.get_by_approval_id(approval_id)
     assert stored is not None
-    assert stored.status == "preview_ready"
+    assert stored.status == "execution_failed"
     assert stored.stdout_ref == ""
     assert stored.stderr_ref == ""
+
+
+def test_approved_shell_runtime_rejects_absolute_artifact_refs_before_store_update(
+    tmp_path: Path,
+) -> None:
+    workspace = tmp_path
+    approval_runtime = _approval_runtime(workspace)
+    approval_id = _approved_shell(approval_runtime, {"command": "echo hi", "description": "say hi"})
+
+    class AbsoluteArtifactRunner:
+        def backend_name(self) -> str:
+            return "podman"
+
+        def run(self, preview, command: str) -> SandboxRunResult:
+            return SandboxRunResult(
+                ok=True,
+                reason="sandbox_executed",
+                exit_code=0,
+                stdout_path=str(preview.artifact_dir / "stdout.txt"),
+                stderr_path=str(preview.artifact_dir / "stderr.txt"),
+                stdout_hash="stdout-hash",
+                stderr_hash="stderr-hash",
+                stdout_bytes=3,
+                stderr_bytes=0,
+                stdout_truncated=False,
+                stderr_truncated=False,
+                duration_ms=100,
+            )
+
+    runtime = ApprovedShellSideEffectRuntime(
+        approval_runtime=approval_runtime,
+        side_effect_store=ApprovedSideEffectStore(ApprovedSideEffectStore.db_path_from_workspace(workspace)),
+        sandbox_runner=AbsoluteArtifactRunner(),
+    )
+
+    result = runtime.apply(approval_id, "cli:test", "status_command", workspace, (str(workspace),))
+
+    assert result.ok is False
+    assert result.reason == "shell_artifact_path_invalid"
+    assert approval_runtime.store.get_request(approval_id).status == "execution_failed"
+    stored = runtime.side_effect_store.get_by_approval_id(approval_id)
+    assert stored is not None
+    assert stored.status == "execution_failed"
 
 
 def test_approved_shell_runtime_does_not_support_rollback(tmp_path: Path) -> None:

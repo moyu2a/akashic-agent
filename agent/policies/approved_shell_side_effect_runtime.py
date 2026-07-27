@@ -219,9 +219,10 @@ class ApprovedShellSideEffectRuntime:
         try:
             stdout_ref = _artifact_ref(preview, result.stdout_path)
             stderr_ref = _artifact_ref(preview, result.stderr_path)
+            result_reason = _safe_runner_reason(result.reason, result.ok)
             self.side_effect_store.mark_shell_executed(
                 approval_request_id=approval_request_id,
-                execution_status=result.reason,
+                execution_status=result_reason,
                 exit_code=result.exit_code,
                 stdout_ref=stdout_ref,
                 stderr_ref=stderr_ref,
@@ -257,13 +258,13 @@ class ApprovedShellSideEffectRuntime:
         if not result.ok:
             return self._error(
                 approval_request_id,
-                result.reason,
+                _safe_runner_reason(result.reason, result.ok),
                 "Approved shell execution failed.",
                 preview_id=side_effect.preview_id,
             )
         return ApprovedShellSideEffectResult(
             ok=True,
-            reason=result.reason,
+            reason=_safe_runner_reason(result.reason, result.ok),
             approval_request_id=approval_request_id,
             message="Approved shell command executed in sandbox.",
             preview_id=side_effect.preview_id,
@@ -406,6 +407,15 @@ class ApprovedShellSideEffectRuntime:
         reason: str,
         preview_id: str,
     ) -> ApprovedShellSideEffectResult:
+        try:
+            self.side_effect_store.mark_execution_failed(
+                approval_request_id=record.approval_request_id,
+                execution_status=reason,
+                actor=actor,
+                now=self.now(),
+            )
+        except Exception:
+            pass
         self.approval_runtime.finalize_execution(
             approval_request_id=record.approval_request_id,
             request_id=record.request_id,
@@ -455,12 +465,13 @@ def _workspace_ref(workspace: Path, path: Path) -> str:
 def _artifact_ref(preview: ShellSandboxPreview, raw_path: str) -> str:
     artifact_dir = preview.artifact_dir.resolve()
     candidate = Path(raw_path).expanduser()
-    if not candidate.is_absolute():
-        candidate = artifact_dir / candidate
+    if candidate.is_absolute():
+        raise ValueError("shell artifact path must be relative to sandbox artifact directory")
+    candidate = artifact_dir / candidate
     resolved = candidate.resolve()
     if resolved == artifact_dir or artifact_dir not in resolved.parents:
         raise ValueError("shell artifact path outside sandbox artifact directory")
-    return str(resolved.relative_to(artifact_dir.parent.parent))
+    return str(Path("artifacts") / preview.preview_id / resolved.relative_to(artifact_dir))
 
 
 def _sanitized_resource_metadata(decision: Any) -> dict[str, object]:
@@ -477,3 +488,21 @@ def _preview_metadata(tool_name: str, args_hash: str, preview: ShellSandboxPrevi
         "args_hash": args_hash,
         **preview.to_metadata(),
     }
+
+
+def _safe_runner_reason(reason: str, ok: bool) -> str:
+    safe_reason = str(reason or "").strip()
+    if ok:
+        return safe_reason if safe_reason == "sandbox_executed" else "sandbox_executed"
+    if safe_reason in {
+        "sandbox_exit_nonzero",
+        "sandbox_timeout",
+        "sandbox_execution_failed",
+        "shell_sandbox_unavailable",
+        "shell_sandbox_image_unavailable",
+        "shell_sandbox_launch_failed",
+        "shell_sandbox_policy_invalid",
+        "shell_artifact_path_invalid",
+    }:
+        return safe_reason
+    return "sandbox_execution_failed"
