@@ -83,3 +83,10 @@ Observed result:
 - Re-ran the Task 1 focused shell vault test and the full vault test file after the fix:
   - `1 passed in 0.12s`
   - `4 passed in 0.13s`
+
+## Re-review fix
+
+- Added an explicit regression assertion that a pre-existing shared `tool_side_effects` parent remains `0o755` while the payload vault root is forced to `0o700`.
+- Re-ran the focused shell vault test and full vault test file:
+  - `1 passed in 0.12s`
+  - `4 passed in 0.13s`

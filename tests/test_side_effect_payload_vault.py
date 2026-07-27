@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import stat
 from datetime import UTC, datetime
 from pathlib import Path
@@ -40,6 +41,9 @@ def test_payload_vault_stores_exact_file_tool_arguments_privately(
 
 def test_payload_vault_stores_exact_shell_arguments_privately(tmp_path: Path) -> None:
     vault_root = SideEffectPayloadVault.root_for_workspace(tmp_path)
+    shared_parent = vault_root.parent
+    shared_parent.mkdir(parents=True)
+    os.chmod(shared_parent, 0o755)
     vault = SideEffectPayloadVault(vault_root)
     arguments = {
         "command": "pytest tests/test_shell.py -q",
@@ -63,6 +67,7 @@ def test_payload_vault_stores_exact_shell_arguments_privately(tmp_path: Path) ->
     assert loaded is not None
     assert loaded.record == record
     assert loaded.arguments == arguments
+    assert stat.S_IMODE(shared_parent.stat().st_mode) == 0o755
     assert stat.S_IMODE(vault_root.stat().st_mode) == 0o700
     assert stat.S_IMODE(record.payload_path.parent.stat().st_mode) == 0o700
     assert stat.S_IMODE(record.payload_path.stat().st_mode) == 0o600
