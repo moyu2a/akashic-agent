@@ -9,7 +9,7 @@
   - compatibility suite: `275 passed in 9.07s`.
   - compileall exited `0`; `git diff --check` emitted no output.
 - Open follow-ups: P5 queryable `ToolAuditLedger`, then external API side-effect replay; destructive execution, TaskExecution shell resume, shell rollback, and network-enabled shell sandbox remain unavailable.
-- Documentation commit: `0a9635a docs: record p4b sandboxed approved shell workflow`.
+- Documentation commit: `8d3076a docs: record p4b sandboxed approved shell workflow`.
 
 ## 2026-07-26 Tool Governance P4 Approved File Side Effects
 

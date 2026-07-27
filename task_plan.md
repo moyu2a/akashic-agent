@@ -9,7 +9,7 @@ Goal: record the completed first-version sandboxed approved shell workflow and f
 3. Run compatibility suite - complete (`275 passed in 9.07s`)
 4. Run compileall and whitespace checks - complete (compileall exit `0`; `git diff --check` no output)
 5. Record governance boundary and follow-up order - complete
-6. Commit Task 8 documentation - complete (`0a9635a docs: record p4b sandboxed approved shell workflow`)
+6. Commit Task 8 documentation - complete (`8d3076a docs: record p4b sandboxed approved shell workflow`)
 
 Current result:
 
