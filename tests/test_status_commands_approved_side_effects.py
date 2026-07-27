@@ -248,3 +248,55 @@ async def test_run_approved_tool_shell_uses_sandbox_runtime_without_raw_command(
     assert "stdout_text" not in encoded_metadata
     assert "stderr_text" not in encoded_metadata
     assert "payload_path" not in encoded_metadata
+
+
+@pytest.mark.asyncio
+async def test_rollback_tool_shell_is_unsupported_without_raw_command_leakage(
+    tmp_path: Path,
+) -> None:
+    workspace = tmp_path
+    runtime = _approval_runtime(workspace)
+    command = "echo rollback-secret-token"
+    args = {"command": command, "description": "say hi"}
+    record = runtime.record_defer_request(
+        request_id="call-shell-rollback",
+        session_key="cli:local",
+        channel="cli",
+        chat_id="local",
+        source="passive",
+        tool_name="shell",
+        risk="external-side-effect",
+        approval_scope="tool_call",
+        policy_reason="risk_strategy_shell_requires_approval",
+        arguments=args,
+    )
+    runtime.record_managed_side_effect_payload(record, arguments=args)
+    runtime.store.approve_request(
+        approval_request_id=record.approval_request_id,
+        request_id=record.request_id,
+        session_key=record.session_key,
+        tool_name=record.tool_name,
+        approval_scope=record.approval_scope,
+        args_hash=record.args_hash,
+        actor="status_command",
+        now=runtime._now(),
+    )
+    module = ToolApprovalCommandModule(
+        "status_commands",
+        runtime.store,
+        workspace=workspace,
+        side_effect_store=ApprovedSideEffectStore(
+            ApprovedSideEffectStore.db_path_from_workspace(workspace)
+        ),
+        side_effect_vault=runtime.side_effect_vault,
+        shell_sandbox_runner=RecordingSandboxRunner(),
+    )
+
+    await _run_command(module, f"/run_approved_tool {record.approval_request_id}")
+    rolled_back = await _run_command(
+        module, f"/rollback_tool {record.approval_request_id}"
+    )
+
+    assert "rollback_not_supported_for_shell" in rolled_back.abort_reply
+    assert command not in rolled_back.abort_reply
+    assert command not in json.dumps(rolled_back.extra_metadata, ensure_ascii=False)

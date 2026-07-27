@@ -14,7 +14,13 @@ from agent.policies.tool_approval_context import (
 from agent.policies.side_effect_payload_vault import SideEffectPayloadVault
 from agent.policies.tool_approval_runtime import ToolApprovalRuntime
 from agent.policies.tool_approval_store import ToolApprovalStore
-from agent.tool_hooks import ToolExecutionRequest, ToolExecutor
+from agent.tool_hooks import (
+    HookContext,
+    HookOutcome,
+    ToolExecutionRequest,
+    ToolExecutor,
+    ToolHook,
+)
 
 
 UTC = timezone.utc
@@ -35,6 +41,20 @@ class RecordingInvoker:
     async def __call__(self, tool_name: str, arguments: dict[str, Any]) -> object:
         self.calls.append((tool_name, dict(arguments)))
         return {"tool": tool_name, "arguments": dict(arguments)}
+
+
+class DenyShellHook(ToolHook):
+    name = "deny_shell"
+    event = "pre_tool_use"
+
+    def matches(self, ctx: HookContext) -> bool:
+        return ctx.request.tool_name == "shell"
+
+    async def run(self, ctx: HookContext) -> HookOutcome:
+        return HookOutcome(
+            decision="deny",
+            reason=f"blocked command: {ctx.current_arguments['command']}",
+        )
 
 
 def _run(coro: Any) -> Any:
@@ -331,6 +351,37 @@ def test_executor_redacts_denied_destructive_shell_command(tmp_path: Path) -> No
 
     assert denied.status == "denied"
     assert command not in denied.output
+    assert command not in json.dumps(denied.policy_trace, ensure_ascii=False)
+    assert command not in json.dumps(denied.audit_trace, ensure_ascii=False)
+    assert invoker.calls == []
+
+
+def test_executor_redacts_shell_pre_hook_denial_reason(tmp_path: Path) -> None:
+    runtime = _runtime(tmp_path)
+    invoker = RecordingInvoker()
+    command = "echo secret-token"
+    request = ToolExecutionRequest(
+        call_id="call-pre-hook-denied-shell",
+        tool_name="shell",
+        arguments={"command": command},
+        source="passive",
+        session_key="cli:session-1",
+        channel="cli",
+        chat_id="chat-1",
+        registered=True,
+        registry_risk="external-side-effect",
+    )
+
+    denied = _run(
+        ToolExecutor(
+            hooks=[DenyShellHook()], approval_runtime=runtime
+        ).execute(request, invoker)
+    )
+
+    assert denied.status == "denied"
+    assert denied.invoker_reached is False
+    assert command not in denied.output
+    assert command not in json.dumps(denied.pre_hook_trace, default=vars)
     assert command not in json.dumps(denied.policy_trace, ensure_ascii=False)
     assert command not in json.dumps(denied.audit_trace, ensure_ascii=False)
     assert invoker.calls == []

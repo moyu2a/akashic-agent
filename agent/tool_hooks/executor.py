@@ -100,9 +100,14 @@ class ToolExecutor:
             )
         final_arguments = dict(current_arguments)
         if denied_reason:
+            output = denied_reason
+            if request.tool_name == "shell":
+                output = "工具调用被拦截"
+                pre_trace = _redact_shell_hook_traces(pre_trace)
+                extra_messages = _redact_shell_hook_messages(extra_messages)
             return ToolExecutionResult(
                 status="denied",
-                output=denied_reason,
+                output=output,
                 final_arguments=final_arguments,
                 invoker_reached=False,
                 invoker_succeeded=False,
@@ -505,9 +510,14 @@ class ToolExecutor:
                 pre_hook_trace=pre_trace,
             )
         if denied_reason:
+            output = denied_reason
+            if request.tool_name == "shell":
+                output = "工具调用被拦截"
+                pre_trace = _redact_shell_hook_traces(pre_trace)
+                extra_messages = _redact_shell_hook_messages(extra_messages)
             return ToolExecutionResult(
                 status="denied",
-                output=denied_reason,
+                output=output,
                 final_arguments=dict(current_arguments),
                 invoker_reached=False,
                 invoker_succeeded=False,
@@ -806,6 +816,17 @@ def _policy_defer_output(
 
 
 def _redact_shell_trace(value: object) -> object:
+    if isinstance(value, HookTraceItem):
+        return HookTraceItem(
+            hook_name=value.hook_name,
+            event=value.event,
+            matched=value.matched,
+            decision=value.decision,
+            reason="[redacted_shell_hook_detail]" if value.reason else "",
+            extra_message=(
+                "[redacted_shell_hook_detail]" if value.extra_message else ""
+            ),
+        )
     if isinstance(value, dict):
         return {
             key: (
@@ -820,3 +841,18 @@ def _redact_shell_trace(value: object) -> object:
     if isinstance(value, tuple):
         return tuple(_redact_shell_trace(item) for item in value)
     return value
+
+
+def _redact_shell_hook_traces(
+    traces: list[HookTraceItem],
+) -> list[HookTraceItem]:
+    redacted = _redact_shell_trace(traces)
+    if isinstance(redacted, list) and all(
+        isinstance(trace, HookTraceItem) for trace in redacted
+    ):
+        return redacted
+    return []
+
+
+def _redact_shell_hook_messages(messages: list[str]) -> list[str]:
+    return ["[redacted_shell_hook_detail]" for message in messages if message]
