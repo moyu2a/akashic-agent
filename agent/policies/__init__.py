@@ -49,6 +49,11 @@ from agent.policies.shell_sandbox_plan import (
     prepare_shell_sandbox_preview,
     shell_command_hash,
 )
+from agent.policies.shell_sandbox_runner import (
+    DockerPodmanSandboxRunner,
+    SandboxRunner,
+    SandboxRunResult,
+)
 from agent.policies.side_effect_payload_vault import (
     MANAGED_FILE_SIDE_EFFECT_TOOLS,
     MANAGED_SHELL_SIDE_EFFECT_TOOLS,
@@ -107,6 +112,7 @@ __all__ = [
     "DocRagIntentConfidence",
     "DocRagPreloadDecision",
     "DefaultToolRiskStrategy",
+    "DockerPodmanSandboxRunner",
     "HistoryRoutePolicy",
     "MANAGED_FILE_SIDE_EFFECT_TOOLS",
     "MANAGED_SHELL_SIDE_EFFECT_TOOLS",
@@ -122,6 +128,8 @@ __all__ = [
     "RiskStrategyDecision",
     "ShellSandboxPolicy",
     "ShellSandboxPreview",
+    "SandboxRunner",
+    "SandboxRunResult",
     "SideEffectPayload",
     "SideEffectPayloadRecord",
     "SideEffectPayloadVault",
