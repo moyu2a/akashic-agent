@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import io
 import subprocess
+import time
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -190,6 +192,129 @@ def test_docker_podman_runner_surfaces_launch_failure_without_consuming_output(
 
     assert result.ok is False
     assert result.reason == "shell_sandbox_launch_failed"
+
+
+@pytest.mark.parametrize(
+    ("policy_field", "unsafe_value"),
+    [("network_mode", "bridge"), ("workspace_mount_mode", "rw")],
+)
+def test_docker_podman_runner_rejects_unsafe_preview_policy(
+    monkeypatch, tmp_path: Path, policy_field: str, unsafe_value: str
+) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    preview = prepare_shell_sandbox_preview(
+        workspace_root=workspace,
+        artifact_root=tmp_path / "artifacts",
+        arguments={"command": "echo hi", "description": "say hi"},
+    )
+    unsafe_preview = replace(preview, **{policy_field: unsafe_value})
+    runner = DockerPodmanSandboxRunner(binary="podman")
+    popen_calls = []
+    monkeypatch.setattr(runner, "image_available", lambda preview: True)
+    monkeypatch.setattr(
+        "subprocess.Popen", lambda *args, **kwargs: popen_calls.append(args)
+    )
+
+    with pytest.raises(ValueError, match="unsupported shell sandbox policy"):
+        runner.build_argv(unsafe_preview)
+
+    result = runner.run(unsafe_preview, "echo hi")
+
+    assert result.ok is False
+    assert result.reason == "shell_sandbox_policy_invalid"
+    assert popen_calls == []
+
+
+def test_docker_podman_runner_cleans_up_named_container_after_timeout(
+    monkeypatch, tmp_path: Path
+) -> None:
+    class TimeoutProc:
+        def __init__(self) -> None:
+            self.args = ["podman", "run"]
+            self.stdin = io.BytesIO()
+            self.stdout = io.BytesIO(b"partial stdout")
+            self.stderr = io.BytesIO(b"partial stderr")
+            self.returncode = 137
+            self.killed = False
+
+        def wait(self, timeout=None) -> int:
+            if timeout is not None:
+                raise subprocess.TimeoutExpired(self.args, timeout)
+            return self.returncode
+
+        def kill(self) -> None:
+            self.killed = True
+
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    preview = prepare_shell_sandbox_preview(
+        workspace_root=workspace,
+        artifact_root=tmp_path / "artifacts",
+        arguments={"command": "echo hi", "description": "say hi"},
+    )
+    runner = DockerPodmanSandboxRunner(binary="podman")
+    proc = TimeoutProc()
+    cleaned_containers = []
+    monkeypatch.setattr(runner, "image_available", lambda preview: True)
+    monkeypatch.setattr("subprocess.Popen", lambda *args, **kwargs: proc)
+    monkeypatch.setattr(runner, "_cleanup_container", cleaned_containers.append)
+
+    result = runner.run(preview, "echo hi")
+
+    assert result.reason == "sandbox_timeout"
+    assert proc.killed is True
+    assert cleaned_containers == [runner.container_name(preview)]
+
+
+def test_docker_podman_runner_times_out_when_stdin_write_blocks(
+    monkeypatch, tmp_path: Path
+) -> None:
+    class BlockingStdin:
+        def write(self, data: bytes) -> int:
+            time.sleep(0.05)
+            return len(data)
+
+        def close(self) -> None:
+            return None
+
+    class ExitedProc:
+        def __init__(self) -> None:
+            self.args = ["podman", "run"]
+            self.stdin = BlockingStdin()
+            self.stdout = io.BytesIO()
+            self.stderr = io.BytesIO()
+            self.returncode = 0
+            self.killed = False
+
+        def wait(self, timeout=None) -> int:
+            return self.returncode
+
+        def kill(self) -> None:
+            self.killed = True
+
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    preview = replace(
+        prepare_shell_sandbox_preview(
+            workspace_root=workspace,
+            artifact_root=tmp_path / "artifacts",
+            arguments={"command": "echo hi", "description": "say hi"},
+        ),
+        timeout_seconds=0.01,
+    )
+    runner = DockerPodmanSandboxRunner(binary="podman")
+    proc = ExitedProc()
+    cleaned_containers = []
+    monkeypatch.setattr(runner, "image_available", lambda preview: True)
+    monkeypatch.setattr("subprocess.Popen", lambda *args, **kwargs: proc)
+    monkeypatch.setattr(runner, "_cleanup_container", cleaned_containers.append)
+
+    result = runner.run(preview, "echo hi")
+
+    assert result.reason == "sandbox_timeout"
+    assert proc.killed is True
+    assert cleaned_containers == [runner.container_name(preview)]
 
 
 def test_stream_output_preserves_partial_streams_on_timeout() -> None:

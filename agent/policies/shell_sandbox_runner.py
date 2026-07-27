@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import re
 import shutil
 import subprocess
 import threading
@@ -90,15 +91,30 @@ class DockerPodmanSandboxRunner:
     def backend_name(self) -> str:
         return Path(self.binary).name
 
+    def container_name(self, preview: ShellSandboxPreview) -> str:
+        normalized_preview_id = re.sub(
+            r"[^a-z0-9_.-]+", "-", preview.preview_id.lower()
+        )
+        normalized_preview_id = normalized_preview_id.strip(".-") or "preview"
+        preview_hash = hashlib.sha256(preview.preview_id.encode("utf-8")).hexdigest()[
+            :12
+        ]
+        return f"shell-sandbox-{normalized_preview_id[:36]}-{preview_hash}"
+
     def build_argv(self, preview: ShellSandboxPreview) -> list[str]:
+        if preview.network_mode != "none" or preview.workspace_mount_mode != "ro":
+            raise ValueError("unsupported shell sandbox policy")
+
         return [
             self.binary,
             "run",
             "--rm",
+            "--name",
+            self.container_name(preview),
             "--pull",
             "never",
             "--network",
-            preview.network_mode,
+            "none",
             "--read-only",
             "--cap-drop",
             "ALL",
@@ -119,13 +135,35 @@ class DockerPodmanSandboxRunner:
             "--entrypoint",
             "sh",
             "-v",
-            f"{preview.workspace_root}:/workspace:{preview.workspace_mount_mode}",
+            f"{preview.workspace_root}:/workspace:ro",
             preview.image,
             "-s",
         ]
 
+    def _cleanup_container(self, container_name: str) -> None:
+        try:
+            subprocess.run(
+                [self.binary, "rm", "-f", container_name],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                check=False,
+            )
+        except Exception:
+            pass
+
     def run(self, preview: ShellSandboxPreview, command: str) -> SandboxRunResult:
         started = time.monotonic()
+        try:
+            argv = self.build_argv(preview)
+        except ValueError:
+            return _write_output(
+                preview,
+                _empty_stream_output(),
+                None,
+                "shell_sandbox_policy_invalid",
+                started,
+            )
+
         try:
             image_ready = self.image_available(preview)
         except Exception:
@@ -147,7 +185,7 @@ class DockerPodmanSandboxRunner:
 
         try:
             proc = subprocess.Popen(
-                self.build_argv(preview),
+                argv,
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
@@ -169,6 +207,7 @@ class DockerPodmanSandboxRunner:
             )
         except subprocess.TimeoutExpired as exc:
             output = getattr(exc, "stream_output", _empty_stream_output())
+            self._cleanup_container(self.container_name(preview))
             return _write_output(preview, output, None, "sandbox_timeout", started)
         except Exception:
             return _write_output(
@@ -186,7 +225,7 @@ class DockerPodmanSandboxRunner:
 
 
 def _stream_output(
-    proc: subprocess.Popen[bytes], command_bytes: bytes, *, timeout_seconds: int
+    proc: subprocess.Popen[bytes], command_bytes: bytes, *, timeout_seconds: float
 ) -> _StreamOutput:
     if proc.stdin is None or proc.stdout is None or proc.stderr is None:
         raise RuntimeError("sandbox process pipes are unavailable")
@@ -201,23 +240,60 @@ def _stream_output(
     )
     stdout_thread.start()
     stderr_thread.start()
+    writer_done = threading.Event()
+    writer_errors: list[BaseException] = []
+
+    def write_stdin() -> None:
+        try:
+            proc.stdin.write(command_bytes)
+            proc.stdin.close()
+        except BaseException as exc:
+            writer_errors.append(exc)
+        finally:
+            writer_done.set()
+
+    writer_thread = threading.Thread(target=write_stdin, daemon=True)
+    writer_thread.start()
+    deadline = time.monotonic() + timeout_seconds
 
     try:
-        proc.stdin.write(command_bytes)
-        proc.stdin.close()
-        returncode = proc.wait(timeout=timeout_seconds)
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise subprocess.TimeoutExpired(proc.args, timeout_seconds)
+
+            if writer_done.is_set():
+                if writer_errors:
+                    raise writer_errors[0]
+                returncode = proc.wait(timeout=remaining)
+                break
+
+            try:
+                returncode = proc.wait(timeout=min(remaining, 0.01))
+            except subprocess.TimeoutExpired:
+                continue
+
+            if not writer_done.wait(remaining):
+                raise subprocess.TimeoutExpired(proc.args, timeout_seconds)
+            if writer_errors:
+                raise writer_errors[0]
+            break
     except subprocess.TimeoutExpired as exc:
         try:
             proc.kill()
         except Exception:
             pass
         try:
-            proc.wait()
+            proc.wait(timeout=1)
         except Exception:
             pass
-        stdout_thread.join()
-        stderr_thread.join()
-        output = _captured_output(stdout_capture, stderr_capture, proc.returncode or -1)
+        stdout_thread.join(timeout=1)
+        stderr_thread.join(timeout=1)
+        output = _captured_output(
+            stdout_capture,
+            stderr_capture,
+            proc.returncode if proc.returncode is not None else -1,
+        )
         timeout = subprocess.TimeoutExpired(
             proc.args, exc.timeout, output=output.stdout, stderr=output.stderr
         )
