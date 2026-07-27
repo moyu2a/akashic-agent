@@ -365,6 +365,24 @@ class ApprovedSideEffectStore:
             },
         )
 
+    def mark_shell_execution_outcome(
+        self,
+        *,
+        approval_request_id: str,
+        execution_status: str,
+        succeeded: bool,
+        actor: str,
+        now: datetime,
+    ) -> ApprovedSideEffectRecord:
+        return self._update(
+            approval_request_id=approval_request_id,
+            status="executed" if succeeded else "execution_failed",
+            event_type="shell_execution_state_persistence_failed",
+            actor=actor,
+            now=now,
+            assignments={"execution_status": execution_status},
+        )
+
     def mark_rolled_back(
         self,
         *,

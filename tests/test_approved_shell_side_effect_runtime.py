@@ -1,8 +1,10 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from types import SimpleNamespace
+
+import pytest
 
 from agent.policies.approved_shell_side_effect_runtime import (
     ApprovedShellSideEffectRuntime,
@@ -17,12 +19,14 @@ from agent.policies.tool_approval_store import ToolApprovalStore
 @dataclass
 class RecordingSandboxRunner:
     called: bool = False
+    commands: list[str] = field(default_factory=list)
 
     def backend_name(self) -> str:
         return "podman"
 
     def run(self, preview, command: str) -> SandboxRunResult:
         self.called = True
+        self.commands.append(command)
         return SandboxRunResult(
             ok=True,
             reason="sandbox_executed",
@@ -166,6 +170,69 @@ def test_approved_shell_runtime_denies_destructive_command_before_runner(tmp_pat
     assert runner.called is False
     assert approval_runtime.store.get_request(approval_id).status == "approved"
     assert "rm -rf" not in str(result.metadata)
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "sh -c 'rm -rf /tmp/x'",
+        "dash -c 'rm -rf /tmp/x'",
+        "sudo -u nobody sh -c 'rm -rf /tmp/x'",
+        "env -u HOME sh -c 'rm -rf /tmp/x'",
+        "echo $(rm -rf /tmp/x)",
+        "if true; then rm -rf /tmp/x; fi",
+        "cat <<'EOF'\nsecret\nEOF",
+        "(echo hi)",
+        "cat <(echo hi)",
+    ],
+)
+def test_approved_shell_runtime_denies_unsupported_nested_syntax_without_consuming(
+    tmp_path: Path, command: str
+) -> None:
+    workspace = tmp_path
+    approval_runtime = _approval_runtime(workspace)
+    approval_id = _approved_shell(approval_runtime, {"command": command})
+    runner = RecordingSandboxRunner()
+    runtime = ApprovedShellSideEffectRuntime(
+        approval_runtime=approval_runtime,
+        side_effect_store=ApprovedSideEffectStore(
+            ApprovedSideEffectStore.db_path_from_workspace(workspace)
+        ),
+        sandbox_runner=runner,
+    )
+
+    result = runtime.apply(
+        approval_id, "cli:test", "status_command", workspace, (str(workspace),)
+    )
+
+    assert result.ok is False
+    assert result.reason.startswith("resource_policy_shell_")
+    assert runner.called is False
+    assert approval_runtime.store.get_request(approval_id).status == "approved"
+
+
+def test_approved_shell_runtime_executes_exact_command_with_surrounding_whitespace(
+    tmp_path: Path,
+) -> None:
+    workspace = tmp_path
+    command = "  printf exact-command\n"
+    approval_runtime = _approval_runtime(workspace)
+    approval_id = _approved_shell(approval_runtime, {"command": command})
+    runner = RecordingSandboxRunner()
+    runtime = ApprovedShellSideEffectRuntime(
+        approval_runtime=approval_runtime,
+        side_effect_store=ApprovedSideEffectStore(
+            ApprovedSideEffectStore.db_path_from_workspace(workspace)
+        ),
+        sandbox_runner=runner,
+    )
+
+    result = runtime.apply(
+        approval_id, "cli:test", "status_command", workspace, (str(workspace),)
+    )
+
+    assert result.ok is True
+    assert runner.commands == [command]
 
 
 def test_approved_shell_runtime_denies_protected_arguments_before_runner(tmp_path: Path) -> None:
@@ -362,11 +429,12 @@ def test_approved_shell_runtime_rejects_out_of_tree_artifact_refs_before_store_u
     result = runtime.apply(approval_id, "cli:test", "status_command", workspace, (str(workspace),))
 
     assert result.ok is False
-    assert result.reason == "shell_artifact_path_invalid"
-    assert approval_runtime.store.get_request(approval_id).status == "execution_failed"
+    assert result.reason == "shell_execution_state_persistence_failed"
+    assert approval_runtime.store.get_request(approval_id).status == "consumed"
     stored = runtime.side_effect_store.get_by_approval_id(approval_id)
     assert stored is not None
-    assert stored.status == "execution_failed"
+    assert stored.status == "executed"
+    assert stored.execution_status == "sandbox_executed"
     assert stored.stdout_ref == ""
     assert stored.stderr_ref == ""
 
@@ -407,11 +475,12 @@ def test_approved_shell_runtime_rejects_absolute_artifact_refs_before_store_upda
     result = runtime.apply(approval_id, "cli:test", "status_command", workspace, (str(workspace),))
 
     assert result.ok is False
-    assert result.reason == "shell_artifact_path_invalid"
-    assert approval_runtime.store.get_request(approval_id).status == "execution_failed"
+    assert result.reason == "shell_execution_state_persistence_failed"
+    assert approval_runtime.store.get_request(approval_id).status == "consumed"
     stored = runtime.side_effect_store.get_by_approval_id(approval_id)
     assert stored is not None
-    assert stored.status == "execution_failed"
+    assert stored.status == "executed"
+    assert stored.execution_status == "sandbox_executed"
 
 
 def test_approved_shell_runtime_compensates_when_approval_finalize_fails(
@@ -439,8 +508,43 @@ def test_approved_shell_runtime_compensates_when_approval_finalize_fails(
     assert approval_runtime.store.get_request(approval_id).status == "consumed"
     stored = store.get_by_approval_id(approval_id)
     assert stored is not None
-    assert stored.status == "execution_failed"
-    assert stored.execution_status == "shell_execution_state_persistence_failed"
+    assert stored.status == "executed"
+    assert stored.execution_status == "sandbox_executed"
+
+
+def test_approved_shell_runtime_preserves_success_when_result_store_fails(
+    tmp_path: Path,
+) -> None:
+    workspace = tmp_path
+    approval_runtime = _approval_runtime(workspace)
+    approval_id = _approved_shell(approval_runtime, {"command": "echo hi"})
+
+    class ResultStoreFailure(ApprovedSideEffectStore):
+        def mark_shell_executed(self, **kwargs):
+            raise RuntimeError("result persistence unavailable")
+
+    store = ResultStoreFailure(
+        ApprovedSideEffectStore.db_path_from_workspace(workspace)
+    )
+    runner = RecordingSandboxRunner()
+    runtime = ApprovedShellSideEffectRuntime(
+        approval_runtime=approval_runtime,
+        side_effect_store=store,
+        sandbox_runner=runner,
+    )
+
+    result = runtime.apply(
+        approval_id, "cli:test", "status_command", workspace, (str(workspace),)
+    )
+
+    assert runner.called is True
+    assert result.ok is False
+    assert result.reason == "shell_execution_state_persistence_failed"
+    assert approval_runtime.store.get_request(approval_id).status == "consumed"
+    stored = store.get_by_approval_id(approval_id)
+    assert stored is not None
+    assert stored.status == "executed"
+    assert stored.execution_status == "sandbox_executed"
 
 
 def test_approved_shell_runtime_compensates_when_approval_finalize_returns_mismatch(
@@ -468,8 +572,8 @@ def test_approved_shell_runtime_compensates_when_approval_finalize_returns_misma
     assert approval_runtime.store.get_request(approval_id).status == "consumed"
     stored = store.get_by_approval_id(approval_id)
     assert stored is not None
-    assert stored.status == "execution_failed"
-    assert stored.execution_status == "shell_execution_state_persistence_failed"
+    assert stored.status == "executed"
+    assert stored.execution_status == "sandbox_executed"
 
 
 def test_approved_shell_runtime_compensates_failure_path_finalize_failure(
@@ -506,7 +610,7 @@ def test_approved_shell_runtime_compensates_failure_path_finalize_failure(
     stored = store.get_by_approval_id(approval_id)
     assert stored is not None
     assert stored.status == "execution_failed"
-    assert stored.execution_status == "shell_execution_state_persistence_failed"
+    assert stored.execution_status == "shell_sandbox_unavailable"
 
 
 def test_approved_shell_runtime_compensates_failure_path_finalize_mismatch(
@@ -543,7 +647,7 @@ def test_approved_shell_runtime_compensates_failure_path_finalize_mismatch(
     stored = store.get_by_approval_id(approval_id)
     assert stored is not None
     assert stored.status == "execution_failed"
-    assert stored.execution_status == "shell_execution_state_persistence_failed"
+    assert stored.execution_status == "shell_sandbox_unavailable"
 
 
 def test_approved_shell_runtime_does_not_support_rollback(tmp_path: Path) -> None:

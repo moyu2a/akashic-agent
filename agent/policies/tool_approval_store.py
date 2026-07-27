@@ -112,7 +112,9 @@ class ToolApprovalStore:
     ) -> ToolApprovalRequestRecord:
         self.expire_pending_requests(now=now)
         args_hash = canonical_args_hash(arguments)
-        args_summary_json = _json_dumps(summarize_arguments(arguments))
+        args_summary_json = _json_dumps(
+            summarize_arguments(arguments, tool_name=tool_name)
+        )
         created_at = _to_iso(now)
         expires_at = _to_iso(now + ttl)
         approval_request_id = uuid.uuid4().hex

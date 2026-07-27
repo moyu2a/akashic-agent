@@ -16,7 +16,10 @@ from agent.policies.shell_sandbox_plan import (
     prepare_shell_sandbox_preview,
     shell_command_hash,
 )
-from agent.policies.shell_sandbox_runner import SandboxRunner
+from agent.policies.shell_sandbox_runner import (
+    SandboxRunner,
+    SandboxStatePersistenceError,
+)
 from agent.policies.side_effect_payload_vault import (
     MANAGED_SHELL_SIDE_EFFECT_TOOLS,
     SideEffectPayload,
@@ -204,6 +207,14 @@ class ApprovedShellSideEffectRuntime:
         command = str(payload.arguments["command"])
         try:
             result = self.sandbox_runner.run(preview, command)
+        except SandboxStatePersistenceError as exc:
+            return self._mark_state_persistence_failed(
+                record,
+                actor,
+                side_effect.preview_id,
+                execution_succeeded=exc.execution_succeeded,
+                execution_status=exc.execution_status,
+            )
         except (FileNotFoundError, PermissionError):
             return self._finalize_failure(
                 record, payload.arguments, actor, "shell_sandbox_unavailable", side_effect.preview_id
@@ -217,10 +228,10 @@ class ApprovedShellSideEffectRuntime:
                 record, payload.arguments, actor, "sandbox_execution_failed", side_effect.preview_id
             )
 
+        result_reason = _safe_runner_reason(result.reason, result.ok)
         try:
             stdout_ref = _artifact_ref(preview, result.stdout_path)
             stderr_ref = _artifact_ref(preview, result.stderr_path)
-            result_reason = _safe_runner_reason(result.reason, result.ok)
             self.side_effect_store.mark_shell_executed(
                 approval_request_id=approval_request_id,
                 execution_status=result_reason,
@@ -238,12 +249,12 @@ class ApprovedShellSideEffectRuntime:
                 now=self.now(),
             )
         except Exception:
-            return self._finalize_failure(
+            return self._mark_state_persistence_failed(
                 record,
-                payload.arguments,
                 actor,
-                "shell_artifact_path_invalid",
                 side_effect.preview_id,
+                execution_succeeded=result.ok,
+                execution_status=result_reason,
             )
 
         execution_status = "executed" if result.ok else "execution_failed"
@@ -457,16 +468,28 @@ class ApprovedShellSideEffectRuntime:
         record: ToolApprovalRequestRecord,
         actor: str,
         preview_id: str,
+        *,
+        execution_succeeded: bool | None = None,
+        execution_status: str = "",
     ) -> ApprovedShellSideEffectResult:
-        try:
-            self.side_effect_store.mark_execution_failed(
-                approval_request_id=record.approval_request_id,
-                execution_status="shell_execution_state_persistence_failed",
-                actor=actor,
-                now=self.now(),
-            )
-        except Exception:
-            pass
+        if execution_succeeded is not None:
+            try:
+                self.side_effect_store.mark_shell_execution_outcome(
+                    approval_request_id=record.approval_request_id,
+                    execution_status=(
+                        execution_status
+                        or (
+                            "sandbox_executed"
+                            if execution_succeeded
+                            else "sandbox_execution_failed"
+                        )
+                    ),
+                    succeeded=execution_succeeded,
+                    actor=actor,
+                    now=self.now(),
+                )
+            except Exception:
+                pass
         return self._error(
             record.approval_request_id,
             "shell_execution_state_persistence_failed",
@@ -494,9 +517,7 @@ class ApprovedShellSideEffectRuntime:
 
 
 def _artifact_root(workspace: Path) -> Path:
-    path = workspace / "tool_side_effects" / "artifacts"
-    path.mkdir(parents=True, exist_ok=True)
-    return path
+    return workspace / "tool_side_effects" / "artifacts"
 
 
 def _workspace_ref(workspace: Path, path: Path) -> str:

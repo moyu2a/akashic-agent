@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import hashlib
+import os
+import stat
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -66,14 +68,19 @@ def prepare_shell_sandbox_preview(
     policy: ShellSandboxPolicy | None = None,
 ) -> ShellSandboxPreview:
     resolved_policy = policy or ShellSandboxPolicy()
-    command = str(arguments.get("command") or "").strip()
-    if not command:
+    command_value = arguments.get("command")
+    if not isinstance(command_value, str) or not command_value.strip():
         raise ValueError("shell command is required")
+    command = command_value
 
-    workspace = workspace_root.expanduser().resolve()
+    workspace = workspace_root.expanduser().resolve(strict=True)
+    artifact_base = _managed_artifact_root(workspace, artifact_root)
     preview_id = f"shell_preview_{uuid4().hex}"
-    artifact_dir = artifact_root.expanduser().resolve() / preview_id
-    artifact_dir.mkdir(parents=True, exist_ok=False)
+    artifact_dir = artifact_base / preview_id
+    os.mkdir(artifact_dir, 0o700)
+    artifact_stat = artifact_dir.lstat()
+    if not stat.S_ISDIR(artifact_stat.st_mode) or stat.S_ISLNK(artifact_stat.st_mode):
+        raise ValueError("shell artifact preview directory is invalid")
 
     requested_timeout = int(
         arguments.get("timeout") or resolved_policy.max_timeout_seconds
@@ -103,3 +110,27 @@ def prepare_shell_sandbox_preview(
 
 def shell_command_hash(command: str) -> str:
     return hashlib.sha256(command.encode("utf-8")).hexdigest()
+
+
+def _managed_artifact_root(workspace: Path, artifact_root: Path) -> Path:
+    expected = workspace / "tool_side_effects" / "artifacts"
+    requested = artifact_root.expanduser()
+    requested_absolute = Path(os.path.abspath(requested))
+    if requested_absolute != expected and requested.resolve(strict=False) != expected:
+        raise ValueError("shell artifact root must be under resolved workspace")
+    current = workspace
+    for name in ("tool_side_effects", "artifacts"):
+        current = current / name
+        try:
+            current_stat = current.lstat()
+        except FileNotFoundError:
+            os.mkdir(current, 0o700)
+            current_stat = current.lstat()
+        if stat.S_ISLNK(current_stat.st_mode):
+            raise ValueError("shell artifact root contains symlink")
+        if not stat.S_ISDIR(current_stat.st_mode):
+            raise ValueError("shell artifact root contains non-directory")
+    resolved = current.resolve(strict=True)
+    if resolved != expected or workspace not in resolved.parents:
+        raise ValueError("shell artifact root escapes resolved workspace")
+    return resolved

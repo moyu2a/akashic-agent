@@ -99,6 +99,7 @@ def _shell_request(
     workspace: Path,
     *,
     command: str = "echo hi",
+    extra_arguments: dict[str, Any] | None = None,
     trusted_approval_id: str | None = None,
 ) -> ToolExecutionRequest:
     trusted = None
@@ -108,10 +109,12 @@ def _shell_request(
             actor="status_command",
             source="status_command",
         )
+    arguments: dict[str, Any] = {"command": command, "description": "say hi"}
+    arguments.update(extra_arguments or {})
     return ToolExecutionRequest(
         call_id="call-shell",
         tool_name="shell",
-        arguments={"command": command, "description": "say hi"},
+        arguments=arguments,
         source="passive",
         session_key="cli:test",
         channel="cli",
@@ -322,11 +325,25 @@ def test_p4b_destructive_trusted_shell_is_denied_before_managed_runtime(
 def test_p4b_shell_lifecycle_redacts_raw_command_everywhere(tmp_path: Path) -> None:
     workspace = tmp_path
     raw_command = "echo secret-token-value"
+    duplicated_arguments = {
+        "description": raw_command,
+        "nested": {
+            "arbitrary": raw_command,
+            "deeper": {"label": raw_command},
+        },
+        "unknown_sequence": [raw_command, {"note": raw_command}],
+        "timeout": 30,
+        "run_in_background": False,
+    }
     approval_runtime = _runtime(workspace)
     invoker = RecordingInvoker()
     deferred = _run(
         ToolExecutor(approval_runtime=approval_runtime).execute(
-            _shell_request(workspace, command=raw_command),
+            _shell_request(
+                workspace,
+                command=raw_command,
+                extra_arguments=duplicated_arguments,
+            ),
             invoker,
         )
     )
@@ -350,6 +367,9 @@ def test_p4b_shell_lifecycle_redacts_raw_command_everywhere(tmp_path: Path) -> N
     )
     stored = side_effect_store.get_by_approval_id(approval_id)
     assert stored is not None
+    assert approval_runtime.side_effect_vault is not None
+    private_payload = approval_runtime.side_effect_vault.get_payload(approval_id)
+    assert private_payload is not None
     slim_event = _slim_tool_chain(
         [
             {
@@ -367,6 +387,20 @@ def test_p4b_shell_lifecycle_redacts_raw_command_everywhere(tmp_path: Path) -> N
             }
         ]
     )[0]["calls"][0]["approved_side_effect_lifecycle"][0]
+    slim_shell_call = _slim_tool_chain(
+        [
+            {
+                "text": "",
+                "calls": [
+                    {
+                        "name": "shell",
+                        "arguments": private_payload.arguments,
+                        "result": "deferred",
+                    }
+                ],
+            }
+        ]
+    )[0]["calls"][0]
 
     assert prepared.ok
     assert applied.ok
@@ -381,10 +415,11 @@ def test_p4b_shell_lifecycle_redacts_raw_command_everywhere(tmp_path: Path) -> N
     assert raw_command.encode() not in side_effect_store.db_path.read_bytes()
     assert all(raw_command not in path.name for path in (workspace / "tool_side_effects").rglob("*"))
     assert raw_command not in json.dumps(slim_event, ensure_ascii=False)
-    assert approval_runtime.side_effect_vault is not None
-    assert raw_command in approval_runtime.side_effect_vault.get_payload(
-        approval_id
-    ).arguments["command"]
+    assert raw_command not in json.dumps(slim_shell_call, ensure_ascii=False)
+    assert private_payload.arguments == {
+        "command": raw_command,
+        **duplicated_arguments,
+    }
     assert runner.commands == [raw_command]
     artifact_dir = workspace / "tool_side_effects" / "artifacts" / prepared.preview_id
     stdout_path = artifact_dir / "stdout.txt"

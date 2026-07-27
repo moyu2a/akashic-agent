@@ -231,7 +231,11 @@ def _slim_call(
 ) -> dict[str, object]:
     out = {
         "name": str(call.get("name", "")),
-        "args": _slim_arguments(call.get("arguments"), limit=args_limit),
+        "args": _slim_arguments(
+            call.get("arguments"),
+            tool_name=str(call.get("name") or ""),
+            limit=args_limit,
+        ),
         "result": str(call.get("result", ""))[:result_limit],
     }
     for key in ("status", "boundary_reason", "boundary_action"):
@@ -283,14 +287,15 @@ def _slim_call(
     return out
 
 
-def _slim_arguments(arguments: object, *, limit: int) -> str:
+def _slim_arguments(arguments: object, *, tool_name: str, limit: int) -> str:
     if isinstance(arguments, Mapping):
         safe_args = summarize_arguments(
             {
                 str(key): value
                 for key, value in arguments.items()
                 if isinstance(key, str)
-            }
+            },
+            tool_name=tool_name,
         )
         return json.dumps(safe_args, ensure_ascii=False, sort_keys=True)[:limit]
     if arguments is None or arguments == "":

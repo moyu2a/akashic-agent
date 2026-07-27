@@ -413,7 +413,7 @@ def test_observe_slim_call_redacts_sensitive_tool_arguments() -> None:
     assert "secret-token-value" not in encoded_args
     assert "raw secret body" not in encoded_args
     assert "sha256" in encoded_args
-    assert "notes.md" in encoded_args
+    assert "notes.md" not in encoded_args
 
 
 def test_write_turn_persists_raw_output_and_meme_fields(tmp_path):

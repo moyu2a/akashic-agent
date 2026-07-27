@@ -4,18 +4,29 @@ import hashlib
 import os
 import re
 import shutil
+import stat
 import subprocess
 import threading
 import time
 from dataclasses import dataclass
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import BinaryIO, Protocol
 
-from agent.policies.shell_sandbox_plan import ShellSandboxPreview
+from agent.policies.shell_sandbox_plan import ShellSandboxPolicy, ShellSandboxPreview
 
 _MAX_OUTPUT_BYTES = 30_000
 _STREAM_CHUNK_BYTES = 8_192
 _CLEANUP_TIMEOUT_SECONDS = 5
+_IMAGE_INSPECT_TIMEOUT_SECONDS = 5
+_MAX_MEMORY_BYTES = 512 * 1024 * 1024
+_MEMORY_LIMIT_PATTERN = re.compile(r"^([1-9][0-9]*)([bkmg])$", re.IGNORECASE)
+_MEMORY_MULTIPLIERS = {
+    "b": 1,
+    "k": 1024,
+    "m": 1024 * 1024,
+    "g": 1024 * 1024 * 1024,
+}
 
 
 @dataclass(frozen=True)
@@ -36,6 +47,15 @@ class SandboxRunResult:
 
 class SandboxRunner(Protocol):
     def run(self, preview: ShellSandboxPreview, command: str) -> SandboxRunResult: ...
+
+
+class SandboxStatePersistenceError(RuntimeError):
+    def __init__(
+        self, *, execution_succeeded: bool, execution_status: str
+    ) -> None:
+        super().__init__("shell sandbox output state could not be persisted")
+        self.execution_succeeded = execution_succeeded
+        self.execution_status = execution_status
 
 
 @dataclass(frozen=True)
@@ -86,6 +106,7 @@ class DockerPodmanSandboxRunner:
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
             check=False,
+            timeout=_IMAGE_INSPECT_TIMEOUT_SECONDS,
         )
         return completed.returncode == 0
 
@@ -103,7 +124,7 @@ class DockerPodmanSandboxRunner:
         return f"shell-sandbox-{normalized_preview_id[:36]}-{preview_hash}"
 
     def build_argv(self, preview: ShellSandboxPreview) -> list[str]:
-        if preview.network_mode != "none" or preview.workspace_mount_mode != "ro":
+        if not _sandbox_policy_valid(preview):
             raise ValueError("unsupported shell sandbox policy")
 
         return [
@@ -214,6 +235,8 @@ class DockerPodmanSandboxRunner:
             self._cleanup_container(self.container_name(preview))
             return _write_output(preview, output, None, "sandbox_timeout", started)
         except Exception:
+            _terminate_process(proc)
+            self._cleanup_container(self.container_name(preview))
             return _write_output(
                 preview,
                 _empty_stream_output(),
@@ -335,6 +358,73 @@ def _empty_stream_output() -> _StreamOutput:
     return _StreamOutput(b"", b"", 0, 0, digest, digest, False, False, 0)
 
 
+def _terminate_process(proc: subprocess.Popen[bytes]) -> None:
+    try:
+        proc.kill()
+    except Exception:
+        pass
+    try:
+        proc.wait(timeout=1)
+    except Exception:
+        pass
+
+
+def _sandbox_policy_valid(preview: ShellSandboxPreview) -> bool:
+    policy = ShellSandboxPolicy()
+    if (
+        preview.image != policy.image
+        or preview.network_mode != policy.network_mode
+        or preview.workspace_mount_mode != policy.workspace_mount_mode
+        or preview.background_requested
+        or preview.background_allowed
+    ):
+        return False
+    if not _non_root_user(preview.user):
+        return False
+    memory_bytes = _memory_limit_bytes(preview.memory_limit)
+    if memory_bytes is None or memory_bytes > _MAX_MEMORY_BYTES:
+        return False
+    try:
+        cpus = Decimal(preview.cpus)
+    except (InvalidOperation, TypeError, ValueError):
+        return False
+    if not cpus.is_finite() or cpus <= 0 or cpus > Decimal(policy.cpus):
+        return False
+    if (
+        isinstance(preview.pids_limit, bool)
+        or not isinstance(preview.pids_limit, int)
+        or not 1 <= preview.pids_limit <= policy.pids_limit
+    ):
+        return False
+    if (
+        isinstance(preview.timeout_seconds, bool)
+        or not isinstance(preview.timeout_seconds, int)
+        or not 1 <= preview.timeout_seconds <= policy.max_timeout_seconds
+    ):
+        return False
+    try:
+        workspace = preview.workspace_root.resolve(strict=True)
+    except (OSError, RuntimeError):
+        return False
+    return workspace == preview.workspace_root and workspace.is_dir()
+
+
+def _non_root_user(value: str) -> bool:
+    match = re.fullmatch(r"([0-9]+)(?::([0-9]+))?", value)
+    if match is None:
+        return False
+    uid = int(match.group(1))
+    gid = int(match.group(2) or match.group(1))
+    return uid > 0 and gid > 0
+
+
+def _memory_limit_bytes(value: str) -> int | None:
+    match = _MEMORY_LIMIT_PATTERN.fullmatch(value)
+    if match is None:
+        return None
+    return int(match.group(1)) * _MEMORY_MULTIPLIERS[match.group(2).lower()]
+
+
 def _write_output(
     preview: ShellSandboxPreview,
     output: _StreamOutput,
@@ -344,8 +434,15 @@ def _write_output(
 ) -> SandboxRunResult:
     stdout_path = preview.artifact_dir / "stdout.txt"
     stderr_path = preview.artifact_dir / "stderr.txt"
-    _write_private_file(stdout_path, output.stdout)
-    _write_private_file(stderr_path, output.stderr)
+    try:
+        _validate_artifact_directory(preview)
+        _write_private_file(stdout_path, output.stdout)
+        _write_private_file(stderr_path, output.stderr)
+    except Exception as exc:
+        raise SandboxStatePersistenceError(
+            execution_succeeded=reason == "sandbox_executed",
+            execution_status=reason,
+        ) from exc
     return SandboxRunResult(
         ok=reason == "sandbox_executed",
         reason=reason,
@@ -363,7 +460,44 @@ def _write_output(
 
 
 def _write_private_file(path: Path, content: bytes) -> None:
-    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-    with os.fdopen(fd, "wb") as file:
-        file.write(content)
-    os.chmod(path, 0o600)
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    fd = os.open(path, flags, 0o600)
+    try:
+        file_stat = os.fstat(fd)
+        if not stat.S_ISREG(file_stat.st_mode) or file_stat.st_nlink != 1:
+            raise OSError("shell artifact must be a singly-linked regular file")
+        os.fchmod(fd, 0o600)
+        with os.fdopen(fd, "wb", closefd=False) as file:
+            file.write(content)
+            file.flush()
+    except Exception:
+        try:
+            path.unlink()
+        except OSError:
+            pass
+        raise
+    finally:
+        os.close(fd)
+
+
+def _validate_artifact_directory(preview: ShellSandboxPreview) -> None:
+    expected = (
+        preview.workspace_root
+        / "tool_side_effects"
+        / "artifacts"
+        / preview.preview_id
+    )
+    if preview.artifact_dir != expected:
+        raise ValueError("shell artifact directory is outside managed workspace")
+    current = preview.workspace_root
+    for name in ("tool_side_effects", "artifacts", preview.preview_id):
+        current = current / name
+        current_stat = current.lstat()
+        if stat.S_ISLNK(current_stat.st_mode) or not stat.S_ISDIR(
+            current_stat.st_mode
+        ):
+            raise ValueError("shell artifact directory contains symlink")
+    if current.resolve(strict=True) != expected:
+        raise ValueError("shell artifact directory escapes managed workspace")

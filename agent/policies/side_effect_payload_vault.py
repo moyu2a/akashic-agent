@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import json
 import os
+import stat
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
 from agent.policies.tool_approval import canonical_args_hash
 
@@ -37,12 +39,26 @@ class SideEffectPayload:
 
 class SideEffectPayloadVault:
     def __init__(self, root: str | Path) -> None:
-        self.root = Path(root).expanduser().resolve()
+        self.root = Path(root).expanduser().absolute()
         self._ensure_private_dir(self.root)
+        if self.root.resolve(strict=True) != self.root:
+            raise ValueError("side-effect payload vault root contains symlink")
 
     @staticmethod
     def root_for_workspace(workspace: str | Path) -> Path:
-        return Path(workspace).expanduser().resolve() / "tool_side_effects" / "payloads"
+        resolved_workspace = Path(workspace).expanduser().resolve(strict=True)
+        current = resolved_workspace
+        for name in ("tool_side_effects", "payloads"):
+            current = current / name
+            try:
+                current_stat = current.lstat()
+            except FileNotFoundError:
+                continue
+            if stat.S_ISLNK(current_stat.st_mode):
+                raise ValueError("side-effect payload vault root contains symlink")
+            if not stat.S_ISDIR(current_stat.st_mode):
+                raise ValueError("side-effect payload vault root contains non-directory")
+        return resolved_workspace / "tool_side_effects" / "payloads"
 
     def put_payload(
         self,
@@ -84,16 +100,14 @@ class SideEffectPayloadVault:
             "expires_at": record.expires_at,
             "arguments": dict(arguments),
         }
-        payload_path.write_text(json.dumps(raw, ensure_ascii=False), encoding="utf-8")
-        os.chmod(payload_path, 0o600)
+        encoded = json.dumps(raw, ensure_ascii=False).encode("utf-8")
+        self._atomic_write(payload_path, encoded)
         return record
 
     def get_payload(self, approval_request_id: str) -> SideEffectPayload | None:
         path = self._payload_path(approval_request_id)
-        if not path.exists():
-            return None
         try:
-            raw = json.loads(path.read_text(encoding="utf-8"))
+            raw = json.loads(self._read_private_file(path).decode("utf-8"))
         except (OSError, ValueError):
             return None
         if not isinstance(raw, dict):
@@ -124,10 +138,17 @@ class SideEffectPayloadVault:
 
     def delete_payload(self, approval_request_id: str) -> bool:
         path = self._payload_path(approval_request_id)
-        if not path.exists():
+        try:
+            root_fd = self._open_root()
+        except OSError:
             return False
-        path.unlink()
-        return True
+        try:
+            os.unlink(path.name, dir_fd=root_fd)
+            return True
+        except FileNotFoundError:
+            return False
+        finally:
+            os.close(root_fd)
 
     def _payload_path(self, approval_request_id: str) -> Path:
         clean = "".join(
@@ -139,5 +160,106 @@ class SideEffectPayloadVault:
 
     @staticmethod
     def _ensure_private_dir(path: Path) -> None:
-        path.mkdir(parents=True, exist_ok=True)
+        missing: list[Path] = []
+        cursor = path
+        while True:
+            try:
+                cursor_stat = cursor.lstat()
+            except FileNotFoundError:
+                missing.append(cursor)
+                parent = cursor.parent
+                if parent == cursor:
+                    raise ValueError("side-effect payload vault root is invalid")
+                cursor = parent
+                continue
+            if stat.S_ISLNK(cursor_stat.st_mode):
+                raise ValueError("side-effect payload vault root contains symlink")
+            if not stat.S_ISDIR(cursor_stat.st_mode):
+                raise ValueError("side-effect payload vault root contains non-directory")
+            break
+        for directory in reversed(missing):
+            os.mkdir(directory, 0o700)
+            directory_stat = directory.lstat()
+            if stat.S_ISLNK(directory_stat.st_mode) or not stat.S_ISDIR(
+                directory_stat.st_mode
+            ):
+                raise ValueError("side-effect payload vault root contains symlink")
         os.chmod(path, 0o700)
+
+    def _atomic_write(self, payload_path: Path, content: bytes) -> None:
+        root_fd = self._open_root()
+        temp_name = f".{payload_path.name}.{uuid4().hex}.tmp"
+        file_flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
+        if hasattr(os, "O_NOFOLLOW"):
+            file_flags |= os.O_NOFOLLOW
+        temp_created = False
+        try:
+            fd = os.open(temp_name, file_flags, 0o600, dir_fd=root_fd)
+            temp_created = True
+            try:
+                file_stat = os.fstat(fd)
+                if not stat.S_ISREG(file_stat.st_mode) or file_stat.st_nlink != 1:
+                    raise OSError("payload must be a singly-linked regular file")
+                os.fchmod(fd, 0o600)
+                with os.fdopen(fd, "wb", closefd=False) as file:
+                    file.write(content)
+                    file.flush()
+                    os.fsync(fd)
+            finally:
+                os.close(fd)
+            os.replace(
+                temp_name,
+                payload_path.name,
+                src_dir_fd=root_fd,
+                dst_dir_fd=root_fd,
+            )
+            temp_created = False
+            final_fd = os.open(
+                payload_path.name,
+                os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0),
+                dir_fd=root_fd,
+            )
+            try:
+                final_stat = os.fstat(final_fd)
+                if not stat.S_ISREG(final_stat.st_mode) or final_stat.st_nlink != 1:
+                    raise OSError("published payload must be a regular file")
+                if stat.S_IMODE(final_stat.st_mode) != 0o600:
+                    raise OSError("published payload mode is not private")
+            finally:
+                os.close(final_fd)
+        finally:
+            if temp_created:
+                try:
+                    os.unlink(temp_name, dir_fd=root_fd)
+                except OSError:
+                    pass
+            os.close(root_fd)
+
+    def _read_private_file(self, path: Path) -> bytes:
+        flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+        root_fd = self._open_root()
+        try:
+            fd = os.open(path.name, flags, dir_fd=root_fd)
+            try:
+                file_stat = os.fstat(fd)
+                if not stat.S_ISREG(file_stat.st_mode) or file_stat.st_nlink != 1:
+                    raise OSError("payload is not a singly-linked regular file")
+                with os.fdopen(fd, "rb", closefd=False) as file:
+                    return file.read()
+            finally:
+                os.close(fd)
+        finally:
+            os.close(root_fd)
+
+    def _open_root(self) -> int:
+        flags = os.O_RDONLY
+        if hasattr(os, "O_DIRECTORY"):
+            flags |= os.O_DIRECTORY
+        if hasattr(os, "O_NOFOLLOW"):
+            flags |= os.O_NOFOLLOW
+        root_fd = os.open(self.root, flags)
+        root_stat = os.fstat(root_fd)
+        if not stat.S_ISDIR(root_stat.st_mode):
+            os.close(root_fd)
+            raise OSError("side-effect payload vault root is not a directory")
+        return root_fd
