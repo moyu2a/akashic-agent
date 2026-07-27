@@ -10,6 +10,10 @@ from typing import Any
 from agent.policies.tool_approval import canonical_args_hash
 
 MANAGED_FILE_SIDE_EFFECT_TOOLS = frozenset({"write_file", "edit_file"})
+MANAGED_SHELL_SIDE_EFFECT_TOOLS = frozenset({"shell"})
+MANAGED_SIDE_EFFECT_TOOLS = (
+    MANAGED_FILE_SIDE_EFFECT_TOOLS | MANAGED_SHELL_SIDE_EFFECT_TOOLS
+)
 
 
 @dataclass(frozen=True)
@@ -34,7 +38,8 @@ class SideEffectPayload:
 class SideEffectPayloadVault:
     def __init__(self, root: str | Path) -> None:
         self.root = Path(root).expanduser().resolve()
-        self.root.mkdir(parents=True, exist_ok=True)
+        self._ensure_private_dir(self.root.parent)
+        self._ensure_private_dir(self.root)
 
     @staticmethod
     def root_for_workspace(workspace: str | Path) -> Path:
@@ -53,7 +58,7 @@ class SideEffectPayloadVault:
         created_at: datetime,
         expires_at: str,
     ) -> SideEffectPayloadRecord:
-        if tool_name not in MANAGED_FILE_SIDE_EFFECT_TOOLS:
+        if tool_name not in MANAGED_SIDE_EFFECT_TOOLS:
             raise ValueError(f"unsupported managed side-effect tool: {tool_name}")
         if canonical_args_hash(arguments) != args_hash:
             raise ValueError("side-effect payload args hash mismatch")
@@ -101,7 +106,7 @@ class SideEffectPayloadVault:
         if canonical_args_hash(arguments) != args_hash:
             return None
         tool_name = str(raw.get("tool_name") or "")
-        if tool_name not in MANAGED_FILE_SIDE_EFFECT_TOOLS:
+        if tool_name not in MANAGED_SIDE_EFFECT_TOOLS:
             return None
         record = SideEffectPayloadRecord(
             approval_request_id=str(raw.get("approval_request_id") or ""),
@@ -132,3 +137,8 @@ class SideEffectPayloadVault:
         if not clean:
             raise ValueError("approval_request_id is required")
         return self.root / f"{clean}.json"
+
+    @staticmethod
+    def _ensure_private_dir(path: Path) -> None:
+        path.mkdir(parents=True, exist_ok=True)
+        os.chmod(path, 0o700)

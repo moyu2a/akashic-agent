@@ -45,6 +45,8 @@ from agent.policies.resource_policy import (
 )
 from agent.policies.side_effect_payload_vault import (
     MANAGED_FILE_SIDE_EFFECT_TOOLS,
+    MANAGED_SHELL_SIDE_EFFECT_TOOLS,
+    MANAGED_SIDE_EFFECT_TOOLS,
     SideEffectPayload,
     SideEffectPayloadRecord,
     SideEffectPayloadVault,
@@ -101,6 +103,8 @@ __all__ = [
     "DefaultToolRiskStrategy",
     "HistoryRoutePolicy",
     "MANAGED_FILE_SIDE_EFFECT_TOOLS",
+    "MANAGED_SHELL_SIDE_EFFECT_TOOLS",
+    "MANAGED_SIDE_EFFECT_TOOLS",
     "RouteDecision",
     "RouteDecisionConfidence",
     "RouteDecisionReasonCode",
