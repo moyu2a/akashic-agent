@@ -248,7 +248,7 @@ class ApprovedShellSideEffectRuntime:
 
         execution_status = "executed" if result.ok else "execution_failed"
         try:
-            self.approval_runtime.finalize_execution(
+            finalize = self.approval_runtime.finalize_execution(
                 approval_request_id=approval_request_id,
                 request_id=record.request_id,
                 session_key=record.session_key,
@@ -258,6 +258,10 @@ class ApprovedShellSideEffectRuntime:
                 execution_status=execution_status,
             )
         except Exception:
+            return self._mark_state_persistence_failed(
+                record, actor, side_effect.preview_id
+            )
+        if not _finalized_as(finalize, execution_status):
             return self._mark_state_persistence_failed(
                 record, actor, side_effect.preview_id
             )
@@ -428,7 +432,7 @@ class ApprovedShellSideEffectRuntime:
                 preview_id=preview_id,
             )
         try:
-            self.approval_runtime.finalize_execution(
+            finalize = self.approval_runtime.finalize_execution(
                 approval_request_id=record.approval_request_id,
                 request_id=record.request_id,
                 session_key=record.session_key,
@@ -438,6 +442,8 @@ class ApprovedShellSideEffectRuntime:
                 execution_status="execution_failed",
             )
         except Exception:
+            return self._mark_state_persistence_failed(record, actor, preview_id)
+        if not _finalized_as(finalize, "execution_failed"):
             return self._mark_state_persistence_failed(record, actor, preview_id)
         return self._error(
             record.approval_request_id,
@@ -542,3 +548,7 @@ def _safe_runner_reason(reason: str, ok: bool) -> str:
     }:
         return safe_reason
     return "sandbox_execution_failed"
+
+
+def _finalized_as(decision: Any, expected_action: str) -> bool:
+    return str(getattr(decision, "action", "")) == expected_action
