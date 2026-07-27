@@ -14,6 +14,10 @@ from agent.policies.tool_approval_context import (
 from agent.policies.side_effect_payload_vault import SideEffectPayloadVault
 from agent.policies.tool_approval_runtime import ToolApprovalRuntime
 from agent.policies.tool_approval_store import ToolApprovalStore
+from agent.policies.tool_invocation_policy import (
+    ToolInvocationContext,
+    ToolInvocationDecision,
+)
 from agent.tool_hooks import (
     HookContext,
     HookOutcome,
@@ -41,6 +45,15 @@ class RecordingInvoker:
     async def __call__(self, tool_name: str, arguments: dict[str, Any]) -> object:
         self.calls.append((tool_name, dict(arguments)))
         return {"tool": tool_name, "arguments": dict(arguments)}
+
+
+class AllowToolPolicy:
+    def evaluate(self, context: ToolInvocationContext) -> ToolInvocationDecision:
+        return ToolInvocationDecision(
+            action="allow",
+            reason="test_policy_allow",
+            risk=context.registry_risk,
+        )
 
 
 class DenyShellHook(ToolHook):
@@ -80,6 +93,21 @@ class LeakyShellPassHook(ToolHook):
         return HookOutcome(
             reason=f"observed command: {command}",
             extra_message=f"extra command: {command}",
+        )
+
+
+class LeakyShellErrorHook(ToolHook):
+    name = "leaky_shell_error"
+    event = "post_tool_error"
+
+    def matches(self, ctx: HookContext) -> bool:
+        return ctx.request.tool_name == "shell"
+
+    async def run(self, ctx: HookContext) -> HookOutcome:
+        command = ctx.current_arguments["command"]
+        return HookOutcome(
+            reason=f"observed failed command: {command}",
+            extra_message=f"failed command detail: {command}",
         )
 
 
@@ -382,6 +410,90 @@ def test_executor_redacts_denied_destructive_shell_command(tmp_path: Path) -> No
     assert command not in json.dumps(denied.policy_trace, ensure_ascii=False)
     assert command not in json.dumps(denied.audit_trace, ensure_ascii=False)
     assert invoker.calls == []
+
+
+def test_executor_denies_trusted_approved_destructive_shell_request(
+    tmp_path: Path,
+) -> None:
+    runtime = _runtime(tmp_path)
+    invoker = RecordingInvoker()
+    command = "rm -rf notes"
+    arguments = {"command": command}
+    record = runtime.record_defer_request(
+        request_id="call-trusted-denied-shell",
+        session_key="cli:session-1",
+        channel="cli",
+        chat_id="chat-1",
+        source="passive",
+        tool_name="shell",
+        risk="destructive",
+        approval_scope="tool_call",
+        policy_reason="risk_strategy_destructive_requires_approval",
+        arguments=arguments,
+    )
+    _approve(runtime, record)
+    trusted = trusted_approval_from_runtime(
+        approval_request_id=record.approval_request_id,
+        actor="user",
+        source="status_command",
+    )
+    request = ToolExecutionRequest(
+        call_id="call-trusted-denied-shell",
+        tool_name="shell",
+        arguments=arguments,
+        source="passive",
+        session_key="cli:session-1",
+        channel="cli",
+        chat_id="chat-1",
+        registered=True,
+        registry_risk="destructive",
+        trusted_approval_context=trusted,
+    )
+
+    result = _run(ToolExecutor(approval_runtime=runtime).execute(request, invoker))
+
+    assert result.status == "denied"
+    assert result.invoker_reached is False
+    assert "approved_side_effect_requires_managed_apply" not in str(result.output)
+    assert command not in str(result.output)
+    assert command not in json.dumps(result.final_arguments, ensure_ascii=False)
+    assert command not in json.dumps(result.policy_trace, ensure_ascii=False)
+    assert command not in json.dumps(result.audit_trace, ensure_ascii=False)
+    assert invoker.calls == []
+
+
+def test_executor_redacts_shell_post_error_hook_messages(tmp_path: Path) -> None:
+    runtime = _runtime(tmp_path)
+    command = "echo post-error-secret-token"
+    request = ToolExecutionRequest(
+        call_id="call-post-hook-error-shell",
+        tool_name="shell",
+        arguments={"command": command},
+        source="passive",
+        session_key="cli:session-1",
+        channel="cli",
+        chat_id="chat-1",
+        registered=True,
+        registry_risk="read-only",
+    )
+
+    async def failing_invoker(tool_name: str, arguments: dict[str, Any]) -> object:
+        raise RuntimeError(f"failed command: {arguments['command']}")
+
+    result = _run(
+        ToolExecutor(
+            hooks=[LeakyShellErrorHook()],
+            policy_engine=AllowToolPolicy(),
+            approval_runtime=runtime,
+        ).execute(request, failing_invoker)
+    )
+
+    assert result.status == "error"
+    assert result.invoker_reached is True
+    assert command not in str(result.output)
+    assert command not in json.dumps(result.final_arguments, ensure_ascii=False)
+    assert command not in json.dumps(result.extra_messages, ensure_ascii=False)
+    assert command not in json.dumps(result.post_hook_trace, default=vars)
 
 
 def test_executor_redacts_shell_pre_hook_denial_reason(tmp_path: Path) -> None:

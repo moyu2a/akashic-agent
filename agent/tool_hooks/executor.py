@@ -128,6 +128,25 @@ class ToolExecutor:
             _build_policy_context(request, final_arguments)
         )
         policy_trace = _policy_trace(request, policy_decision)
+        if policy_decision.action == "deny":
+            return ToolExecutionResult(
+                status="denied",
+                output=_policy_block_output(policy_decision, policy_trace),
+                final_arguments=public_final_arguments,
+                invoker_reached=False,
+                invoker_succeeded=False,
+                extra_messages=extra_messages,
+                pre_hook_trace=pre_trace,
+                post_hook_trace=post_trace,
+                policy_trace=policy_trace,
+                audit_trace=_audit_trace(
+                    request,
+                    final_arguments,
+                    policy_decision,
+                    invoker_reached=False,
+                    invoker_succeeded=False,
+                ),
+            )
         if (
             request.tool_name == "shell"
             and request.trusted_approval_context is not None
@@ -144,25 +163,6 @@ class ToolExecutor:
                     ),
                     policy_trace=policy_trace,
                 ),
-                final_arguments=public_final_arguments,
-                invoker_reached=False,
-                invoker_succeeded=False,
-                extra_messages=extra_messages,
-                pre_hook_trace=pre_trace,
-                post_hook_trace=post_trace,
-                policy_trace=policy_trace,
-                audit_trace=_audit_trace(
-                    request,
-                    final_arguments,
-                    policy_decision,
-                    invoker_reached=False,
-                    invoker_succeeded=False,
-                ),
-            )
-        if policy_decision.action == "deny":
-            return ToolExecutionResult(
-                status="denied",
-                output=_policy_block_output(policy_decision, policy_trace),
                 final_arguments=public_final_arguments,
                 invoker_reached=False,
                 invoker_succeeded=False,
@@ -361,6 +361,9 @@ class ToolExecutor:
                     extra_messages=extra_messages,
                     traces=post_trace,
                 )
+                if request.tool_name == "shell":
+                    post_trace = _redact_shell_hook_traces(post_trace)
+                    extra_messages = _redact_shell_hook_messages(extra_messages)
             except HookExecutionError as hook_exc:
                 if request.tool_name == "shell":
                     post_trace = _redact_shell_hook_traces(post_trace)
