@@ -7,7 +7,7 @@ from typing import Any, Awaitable, Callable, Protocol
 from agent.policies.tool_approval import build_approval_payload
 from agent.policies.tool_approval_decision import ToolApprovalDecision
 from agent.policies.tool_approval_runtime import ToolApprovalRuntime
-from agent.policies.side_effect_payload_vault import MANAGED_FILE_SIDE_EFFECT_TOOLS
+from agent.policies.side_effect_payload_vault import MANAGED_SIDE_EFFECT_TOOLS
 from agent.policies.tool_audit import build_tool_audit_event
 from agent.policies.tool_invocation_policy import (
     ToolInvocationContext,
@@ -114,11 +114,42 @@ class ToolExecutor:
         policy_decision = self._policy_engine.evaluate(
             _build_policy_context(request, final_arguments)
         )
-        policy_trace = policy_decision.to_trace_metadata()
+        policy_trace = _policy_trace(request, policy_decision)
+        if (
+            request.tool_name == "shell"
+            and request.trusted_approval_context is not None
+        ):
+            return ToolExecutionResult(
+                status="deferred",
+                output=_managed_side_effect_required_output(
+                    policy_decision,
+                    tool_name=request.tool_name,
+                    arguments=final_arguments,
+                    approval_scope=_approval_scope_from_trace(policy_trace),
+                    approval_request_id=(
+                        request.trusted_approval_context.approval_request_id
+                    ),
+                    policy_trace=policy_trace,
+                ),
+                final_arguments=final_arguments,
+                invoker_reached=False,
+                invoker_succeeded=False,
+                extra_messages=extra_messages,
+                pre_hook_trace=pre_trace,
+                post_hook_trace=post_trace,
+                policy_trace=policy_trace,
+                audit_trace=_audit_trace(
+                    request,
+                    final_arguments,
+                    policy_decision,
+                    invoker_reached=False,
+                    invoker_succeeded=False,
+                ),
+            )
         if policy_decision.action == "deny":
             return ToolExecutionResult(
                 status="denied",
-                output=_policy_block_output(policy_decision),
+                output=_policy_block_output(policy_decision, policy_trace),
                 final_arguments=final_arguments,
                 invoker_reached=False,
                 invoker_succeeded=False,
@@ -139,7 +170,7 @@ class ToolExecutor:
             approval_decision: ToolApprovalDecision | None = None
             approval_lifecycle: list[dict[str, object]] = []
             if (
-                request.tool_name in MANAGED_FILE_SIDE_EFFECT_TOOLS
+                request.tool_name in MANAGED_SIDE_EFFECT_TOOLS
                 and request.trusted_approval_context is not None
                 and request.trusted_approval_context.source
                 != "approved_side_effect_runtime"
@@ -154,6 +185,7 @@ class ToolExecutor:
                         approval_request_id=(
                             request.trusted_approval_context.approval_request_id
                         ),
+                        policy_trace=policy_trace,
                     ),
                     final_arguments=final_arguments,
                     invoker_reached=False,
@@ -243,6 +275,7 @@ class ToolExecutor:
                     arguments=final_arguments,
                     approval_request_id=approval_request_id,
                     expires_at=expires_at,
+                    policy_trace=policy_trace,
                 ),
                 final_arguments=final_arguments,
                 invoker_reached=False,
@@ -659,7 +692,7 @@ def _audit_trace(
     invoker_reached: bool,
     invoker_succeeded: bool,
 ) -> dict[str, object]:
-    return build_tool_audit_event(
+    trace = build_tool_audit_event(
         request_id=request.call_id,
         session_key=request.session_key,
         channel=request.channel,
@@ -673,10 +706,21 @@ def _audit_trace(
         invoker_reached=invoker_reached,
         invoker_succeeded=invoker_succeeded,
     ).to_trace_metadata()
+    return _redact_shell_trace(trace) if request.tool_name == "shell" else trace
 
 
-def _policy_block_output(decision: ToolInvocationDecision) -> str:
+def _policy_trace(
+    request: ToolExecutionRequest,
+    decision: ToolInvocationDecision,
+) -> dict[str, object]:
     trace = decision.to_trace_metadata()
+    return _redact_shell_trace(trace) if request.tool_name == "shell" else trace
+
+
+def _policy_block_output(
+    decision: ToolInvocationDecision,
+    trace: dict[str, object],
+) -> str:
     return json.dumps(
         {
             "ok": False,
@@ -697,22 +741,22 @@ def _managed_side_effect_required_output(
     arguments: dict[str, Any],
     approval_scope: str,
     approval_request_id: str,
+    policy_trace: dict[str, object],
 ) -> str:
-    trace = decision.to_trace_metadata()
     payload = build_approval_payload(
         tool_name=tool_name,
         arguments=arguments,
         action="defer",
         reason="approved_side_effect_requires_managed_apply",
-        risk=str(trace["risk"]),
+        risk=str(policy_trace["risk"]),
         approval_scope=approval_scope,
         approval_request_id=approval_request_id,
     )
     payload["message"] = (
-        "Approved file side effects must be prepared and applied through "
-        "the managed P4 runtime."
+        "Approved side effects must be prepared and applied through "
+        "the managed runtime."
     )
-    payload["policy"] = trace
+    payload["policy"] = policy_trace
     return json.dumps(
         payload,
         ensure_ascii=False,
@@ -741,8 +785,9 @@ def _policy_defer_output(
     arguments: dict[str, Any],
     approval_request_id: str = "",
     expires_at: str = "",
+    policy_trace: dict[str, object] | None = None,
 ) -> str:
-    trace = decision.to_trace_metadata()
+    trace = policy_trace or decision.to_trace_metadata()
     payload = build_approval_payload(
         tool_name=tool_name,
         arguments=arguments,
@@ -758,3 +803,20 @@ def _policy_defer_output(
         payload,
         ensure_ascii=False,
     )
+
+
+def _redact_shell_trace(value: object) -> object:
+    if isinstance(value, dict):
+        return {
+            key: (
+                "[redacted_shell_command]"
+                if key in {"command", "target"}
+                else _redact_shell_trace(child)
+            )
+            for key, child in value.items()
+        }
+    if isinstance(value, list):
+        return [_redact_shell_trace(item) for item in value]
+    if isinstance(value, tuple):
+        return tuple(_redact_shell_trace(item) for item in value)
+    return value

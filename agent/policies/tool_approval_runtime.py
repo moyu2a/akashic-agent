@@ -8,7 +8,7 @@ from agent.policies.tool_approval import canonical_args_hash
 from agent.policies.tool_approval_context import TrustedApprovalContext
 from agent.policies.tool_approval_decision import ToolApprovalDecision
 from agent.policies.side_effect_payload_vault import (
-    MANAGED_FILE_SIDE_EFFECT_TOOLS,
+    MANAGED_SIDE_EFFECT_TOOLS,
     SideEffectPayloadVault,
 )
 from agent.policies.tool_audit import build_tool_approval_audit_event
@@ -87,7 +87,7 @@ class ToolApprovalRuntime:
     ) -> None:
         if self.side_effect_vault is None:
             return
-        if record.tool_name not in MANAGED_FILE_SIDE_EFFECT_TOOLS:
+        if record.tool_name not in MANAGED_SIDE_EFFECT_TOOLS:
             return
         self.side_effect_vault.put_payload(
             approval_request_id=record.approval_request_id,

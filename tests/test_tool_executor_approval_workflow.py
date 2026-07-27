@@ -48,7 +48,7 @@ def _runtime(
     ttl: timedelta = timedelta(minutes=5),
 ) -> ToolApprovalRuntime:
     return ToolApprovalRuntime(
-        ToolApprovalStore(tmp_path / "approvals.db"),
+        ToolApprovalStore(ToolApprovalRuntime.approval_db_path_from_workspace(tmp_path)),
         side_effect_vault=SideEffectPayloadVault(
             SideEffectPayloadVault.root_for_workspace(tmp_path)
         ),
@@ -251,6 +251,89 @@ def test_executor_does_not_directly_execute_approved_managed_file_tool(
     assert "hello" not in str(payload["approval_request"]["args_summary"])
     assert invoker.calls == []
     assert runtime.store.get_request(record.approval_request_id).status == "approved"
+
+
+def test_executor_records_shell_payload_and_blocks_direct_approved_shell(
+    tmp_path: Path,
+) -> None:
+    runtime = _runtime(tmp_path)
+    invoker = RecordingInvoker()
+    request = ToolExecutionRequest(
+        call_id="call-shell",
+        tool_name="shell",
+        arguments={"command": "echo hi", "description": "say hi"},
+        source="passive",
+        session_key="cli:session-1",
+        channel="cli",
+        chat_id="chat-1",
+        registered=True,
+        registry_risk="external-side-effect",
+    )
+
+    deferred = _run(ToolExecutor(approval_runtime=runtime).execute(request, invoker))
+    payload = json.loads(deferred.output)
+    approval_id = payload["approval_request"]["approval_request_id"]
+    record = runtime.store.get_request(approval_id)
+    assert record is not None
+    _approve(runtime, record)
+    trusted = trusted_approval_from_runtime(
+        approval_request_id=approval_id,
+        actor="user",
+        source="status_command",
+    )
+    direct_request = ToolExecutionRequest(
+        call_id="call-shell",
+        tool_name="shell",
+        arguments={"command": "echo hi", "description": "say hi"},
+        source="passive",
+        session_key="cli:session-1",
+        channel="cli",
+        chat_id="chat-1",
+        registered=True,
+        registry_risk="external-side-effect",
+        trusted_approval_context=trusted,
+    )
+
+    direct = _run(ToolExecutor(approval_runtime=runtime).execute(direct_request, invoker))
+
+    assert runtime.side_effect_vault.get_payload(approval_id) is not None
+    assert "echo hi" not in deferred.output
+    assert "echo hi" not in json.dumps(payload, ensure_ascii=False)
+    assert "echo hi" not in json.dumps(deferred.policy_trace, ensure_ascii=False)
+    assert "echo hi" not in json.dumps(deferred.audit_trace, ensure_ascii=False)
+    raw_approval_db = ToolApprovalRuntime.approval_db_path_from_workspace(
+        tmp_path
+    ).read_bytes()
+    assert b"echo hi" not in raw_approval_db
+    assert direct.status == "deferred"
+    assert direct.invoker_reached is False
+    assert "approved_side_effect_requires_managed_apply" in direct.output
+    assert invoker.calls == []
+
+
+def test_executor_redacts_denied_destructive_shell_command(tmp_path: Path) -> None:
+    runtime = _runtime(tmp_path)
+    invoker = RecordingInvoker()
+    command = "rm -rf notes"
+    request = ToolExecutionRequest(
+        call_id="call-denied-shell",
+        tool_name="shell",
+        arguments={"command": command},
+        source="passive",
+        session_key="cli:session-1",
+        channel="cli",
+        chat_id="chat-1",
+        registered=True,
+        registry_risk="external-side-effect",
+    )
+
+    denied = _run(ToolExecutor(approval_runtime=runtime).execute(request, invoker))
+
+    assert denied.status == "denied"
+    assert command not in denied.output
+    assert command not in json.dumps(denied.policy_trace, ensure_ascii=False)
+    assert command not in json.dumps(denied.audit_trace, ensure_ascii=False)
+    assert invoker.calls == []
 
 
 def test_executor_approved_execution_trace_includes_consumed_and_executed_events(

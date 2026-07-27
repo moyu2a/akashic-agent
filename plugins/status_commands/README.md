@@ -41,6 +41,8 @@
 - `/approvals`: 查看当前 session 待审批工具调用。
 - `/approve_tool <approval_id>`: 批准一个待审批工具调用；该命令只记录决策，不执行 side effect。
 - `/deny_tool <approval_id>`: 拒绝一个待审批工具调用。
-- `/prepare_tool <approval_id>`: generate a bounded diff preview for an approved file side effect.
-- `/run_approved_tool <approval_id>`: apply a prepared approved file side effect through the managed P4 runtime.
-- `/rollback_tool <approval_id>`: restore the snapshot for an executed P4 file side effect.
+- `/prepare_tool <approval_id>`: generate a bounded diff preview for an approved file side effect, or prepare an approved shell sandbox preview.
+- `/run_approved_tool <approval_id>`: apply a prepared approved file side effect through the managed P4 runtime, or execute an approved shell command in its sandbox.
+- `/rollback_tool <approval_id>`: restore the snapshot for an executed P4 file side effect. Shell rollback is not supported.
+
+Approved shell execution requires Docker or Podman. Shell command text is held in the private payload vault and is not printed or stored in observe metadata; status replies expose only safe lifecycle and sandbox result metadata.
