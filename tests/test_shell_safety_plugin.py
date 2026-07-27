@@ -93,9 +93,9 @@ def test_shell_safety_passes_non_interactive_package_write_to_policy(
 ) -> None:
     result = _run_shell(_make_plugin_root(tmp_path), "sudo -n pacman -Syu --noconfirm")
 
-    assert result.status == "deferred"
+    assert result.status == "denied"
     assert result.final_arguments == {}
-    assert result.policy_trace["reason"] == "risk_strategy_shell_requires_approval"
+    assert result.policy_trace["reason"] == "resource_policy_shell_wrapper_denied"
 
 
 def test_shell_safety_passes_package_query_to_policy(tmp_path: Path) -> None:

@@ -34,6 +34,9 @@ _SHELL_TOP_LEVEL_OPERATORS = frozenset({"|", ";", "&&", "||", ">", ">>", "<"})
 _SHELL_UNSUPPORTED_COMPOUND_OPERATORS = frozenset(
     {";", "&&", "||", "&", "(", ")", "{", "}"}
 )
+_SHELL_DANGEROUS_BUILTINS = frozenset({"eval", "exec", ".", "source"})
+_SHELL_COMMAND_DISPATCHERS = frozenset({"busybox", "toybox"})
+_SHELL_FIND_EXEC_FLAGS = frozenset({"-exec", "-execdir", "-ok"})
 _SHELL_HEREDOC_OPERATORS = frozenset({"<<", "<<<"})
 _SHELL_CONTROL_KEYWORDS = frozenset(
     {
@@ -289,6 +292,22 @@ def _evaluate_shell_command(context: ResourcePolicyContext) -> ResourcePolicyDec
                 "invoker_reached": False,
             },
         )
+    if _contains_embedded_line_break(command):
+        return _shell_syntax_denial(
+            context, command, "resource_policy_shell_control_syntax_denied"
+        )
+    if any(executable in _SHELL_DANGEROUS_BUILTINS for executable in executables):
+        return _shell_syntax_denial(
+            context, command, "resource_policy_shell_nested_interpreter_denied"
+        )
+    if any(executable in _SHELL_COMMAND_DISPATCHERS for executable in executables):
+        return _shell_syntax_denial(
+            context, command, "resource_policy_shell_nested_interpreter_denied"
+        )
+    if "find" in executables and any(flag in tokens for flag in _SHELL_FIND_EXEC_FLAGS):
+        return _shell_syntax_denial(
+            context, command, "resource_policy_shell_nested_interpreter_denied"
+        )
     if _uses_shell_wrapper(tokens):
         return _shell_syntax_denial(
             context, command, "resource_policy_shell_wrapper_denied"
@@ -305,6 +324,10 @@ def _evaluate_shell_command(context: ResourcePolicyContext) -> ResourcePolicyDec
                 context, command, "resource_policy_shell_inline_interpreter_denied"
             )
     if _contains_command_substitution(command):
+        return _shell_syntax_denial(
+            context, command, "resource_policy_shell_command_substitution_denied"
+        )
+    if _contains_shell_expansion(command):
         return _shell_syntax_denial(
             context, command, "resource_policy_shell_command_substitution_denied"
         )
@@ -333,6 +356,10 @@ def _shell_tokens(command: str) -> list[str]:
     lexer = shlex.shlex(command, posix=True, punctuation_chars=True)
     lexer.whitespace_split = True
     return list(lexer)
+
+
+def _contains_embedded_line_break(command: str) -> bool:
+    return "\n" in command.strip() or "\r" in command.strip()
 
 
 def _shell_syntax_denial(
@@ -381,6 +408,40 @@ def _contains_command_substitution(command: str) -> bool:
         if quote != "'" and (
             char == "`" or (char == "$" and command[index : index + 2] == "$(")
         ):
+            return True
+        index += 1
+    return False
+
+
+def _contains_shell_expansion(command: str) -> bool:
+    quote = ""
+    escaped = False
+    index = 0
+    while index < len(command):
+        char = command[index]
+        if escaped:
+            escaped = False
+            index += 1
+            continue
+        if char == "\\" and quote != "'":
+            escaped = True
+            index += 1
+            continue
+        if char == "'":
+            if not quote:
+                quote = "'"
+            elif quote == "'":
+                quote = ""
+            index += 1
+            continue
+        if char == '"':
+            if not quote:
+                quote = '"'
+            elif quote == '"':
+                quote = ""
+            index += 1
+            continue
+        if quote != "'" and char == "$":
             return True
         index += 1
     return False

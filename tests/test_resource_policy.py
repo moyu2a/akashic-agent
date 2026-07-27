@@ -342,6 +342,31 @@ def test_shell_quoted_semicolon_is_not_treated_as_compound(tmp_path: Path) -> No
 @pytest.mark.parametrize(
     "command",
     [
+        'eval "rm -rf /tmp/x"',
+        "find . -exec rm -rf {} +",
+        "busybox rm -rf /tmp/x",
+        "printf safe\nrm -rf /tmp/x",
+        "$cmd -rf /tmp/x",
+    ],
+)
+def test_shell_rejects_dangerous_indirection_patterns(
+    tmp_path: Path, command: str
+) -> None:
+    decision = ResourcePolicyEngine().evaluate(
+        ResourcePolicyContext(
+            tool_name="shell",
+            arguments={"command": command},
+            resource_roots=(str(tmp_path),),
+        )
+    )
+
+    assert decision.action == "deny"
+    assert decision.reason.startswith("resource_policy_shell_")
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
         "sh -c 'rm -rf /tmp/x'",
         "dash -c 'rm -rf /tmp/x'",
         "sudo -u nobody sh -c 'rm -rf /tmp/x'",

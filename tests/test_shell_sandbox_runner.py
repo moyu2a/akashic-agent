@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import io
 import hashlib
+import os
 import subprocess
 import time
 from dataclasses import replace
@@ -12,8 +13,10 @@ import pytest
 from agent.policies.shell_sandbox_plan import prepare_shell_sandbox_preview
 from agent.policies.shell_sandbox_runner import (
     DockerPodmanSandboxRunner,
+    _open_managed_artifact_directory,
     _stream_output,
     _write_private_file,
+    _write_private_file_at_directory_fd,
 )
 
 
@@ -570,3 +573,34 @@ def test_private_artifact_creation_rejects_existing_regular_leaf(
         _write_private_file(artifact, b"secret output")
 
     assert artifact.read_bytes() == b"must remain unchanged"
+
+
+def test_private_artifact_write_is_anchored_to_open_directory_fd(
+    tmp_path: Path,
+) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    preview = prepare_shell_sandbox_preview(
+        workspace_root=workspace,
+        artifact_root=workspace / "tool_side_effects" / "artifacts",
+        arguments={"command": "echo hi"},
+    )
+    dir_fd = _open_managed_artifact_directory(preview)
+    try:
+        original_dir = preview.artifact_dir.parent / "artifact-dir"
+        preview.artifact_dir.rename(original_dir)
+        outside = tmp_path / "outside"
+        outside.mkdir()
+        if preview.artifact_dir.exists() or preview.artifact_dir.is_symlink():
+            preview.artifact_dir.unlink()
+        preview.artifact_dir.symlink_to(outside, target_is_directory=True)
+
+        _write_private_file_at_directory_fd(dir_fd, "stdout.txt", b"secret output")
+
+        assert (original_dir / "stdout.txt").read_bytes() == b"secret output"
+        assert not (outside / "stdout.txt").exists()
+    finally:
+        try:
+            os.close(dir_fd)
+        except OSError:
+            pass

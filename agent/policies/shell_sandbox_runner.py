@@ -434,15 +434,24 @@ def _write_output(
 ) -> SandboxRunResult:
     stdout_path = preview.artifact_dir / "stdout.txt"
     stderr_path = preview.artifact_dir / "stderr.txt"
+    artifact_dir_fd: int | None = None
     try:
         _validate_artifact_directory(preview)
-        _write_private_file(stdout_path, output.stdout)
-        _write_private_file(stderr_path, output.stderr)
+        artifact_dir_fd = _open_managed_artifact_directory(preview)
+        _write_private_file_at_directory_fd(
+            artifact_dir_fd, "stdout.txt", output.stdout
+        )
+        _write_private_file_at_directory_fd(
+            artifact_dir_fd, "stderr.txt", output.stderr
+        )
     except Exception as exc:
         raise SandboxStatePersistenceError(
             execution_succeeded=reason == "sandbox_executed",
             execution_status=reason,
         ) from exc
+    finally:
+        if artifact_dir_fd is not None:
+            os.close(artifact_dir_fd)
     return SandboxRunResult(
         ok=reason == "sandbox_executed",
         reason=reason,
@@ -480,6 +489,71 @@ def _write_private_file(path: Path, content: bytes) -> None:
         raise
     finally:
         os.close(fd)
+
+
+def _write_private_file_at_directory_fd(
+    dir_fd: int, leaf_name: str, content: bytes
+) -> None:
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    fd = os.open(leaf_name, flags, 0o600, dir_fd=dir_fd)
+    try:
+        file_stat = os.fstat(fd)
+        if not stat.S_ISREG(file_stat.st_mode) or file_stat.st_nlink != 1:
+            raise OSError("shell artifact must be a singly-linked regular file")
+        os.fchmod(fd, 0o600)
+        with os.fdopen(fd, "wb", closefd=False) as file:
+            file.write(content)
+            file.flush()
+    except Exception:
+        try:
+            os.unlink(leaf_name, dir_fd=dir_fd)
+        except OSError:
+            pass
+        raise
+    finally:
+        os.close(fd)
+
+
+def _open_managed_artifact_directory(preview: ShellSandboxPreview) -> int:
+    expected = (
+        preview.workspace_root
+        / "tool_side_effects"
+        / "artifacts"
+        / preview.preview_id
+    )
+    if preview.artifact_dir != expected:
+        raise ValueError("shell artifact directory is outside managed workspace")
+    root_fd = os.open(
+        preview.workspace_root,
+        os.O_RDONLY | os.O_DIRECTORY | getattr(os, "O_NOFOLLOW", 0),
+    )
+    try:
+        tool_side_effects_fd = os.open(
+            "tool_side_effects",
+            os.O_RDONLY | os.O_DIRECTORY | getattr(os, "O_NOFOLLOW", 0),
+            dir_fd=root_fd,
+        )
+        try:
+            artifacts_fd = os.open(
+                "artifacts",
+                os.O_RDONLY | os.O_DIRECTORY | getattr(os, "O_NOFOLLOW", 0),
+                dir_fd=tool_side_effects_fd,
+            )
+            try:
+                preview_fd = os.open(
+                    preview.preview_id,
+                    os.O_RDONLY | os.O_DIRECTORY | getattr(os, "O_NOFOLLOW", 0),
+                    dir_fd=artifacts_fd,
+                )
+            finally:
+                os.close(artifacts_fd)
+        finally:
+            os.close(tool_side_effects_fd)
+    finally:
+        os.close(root_fd)
+    return preview_fd
 
 
 def _validate_artifact_directory(preview: ShellSandboxPreview) -> None:
