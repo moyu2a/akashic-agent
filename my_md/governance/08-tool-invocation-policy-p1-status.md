@@ -195,6 +195,30 @@ P4 已完成第一版 approved file side-effect execution safety loop：`write_f
 - P4a 不是 Docker/Podman/chroot/seccomp sandbox，不提供 non-root user、read-only rootfs 或 resource limits。
 - P4a 不是完整可查询 `ToolAuditLedger`；完整 ledger、retention、dashboard/admin 审计检索仍属 P5。
 
+## P4b Sandboxed Approved Shell Execution 接入结果
+
+日期：2026-07-27
+
+P4b 已完成第一版 sandboxed approved shell execution：approved `shell` request 不再能由普通 ToolExecutor 直接执行，而是进入 approved shell side-effect runtime。该 runtime 从 workspace 私有 payload vault 读取原始 shell 参数，重新执行 P1/P2 resource policy，生成 sandbox preview，并只通过 Docker/Podman sandbox runner 执行。第一版 fail closed：Docker/Podman 不可用时不回退宿主 shell；workspace 只读挂载；network off；non-root user；read-only rootfs；cap drop；no-new-privileges；pids/memory/cpu/timeout limits。P4b 不支持 shell rollback，不开放 TaskExecution shell resume，不开放 external API side-effect replay。
+
+范围与非范围：
+
+- approved `shell` 只通过 approved shell side-effect runtime 和 Docker/Podman sandbox runner 执行；普通 ToolExecutor 不直接执行 approved shell request。
+- Docker/Podman 不可用时 fail closed，不回退宿主 shell。
+- workspace 只读挂载，network off，使用 non-root user、read-only rootfs、cap drop、no-new-privileges 和 pids/memory/cpu/timeout limits。
+- 不开放 external API side-effect replay、destructive execution、TaskExecution shell resume、shell rollback 或 network-enabled shell sandbox。
+- 完整可查询 `ToolAuditLedger`、retention、dashboard/admin 审计检索仍属于 P5。
+
+P4b 验证结果：
+
+```text
+P4b focused suite: 61 passed in 3.36s
+P1/P2/P3/P4/P4b focused baseline: 86 passed in 3.52s
+Compatibility suite: 275 passed in 9.07s
+Compileall: exit 0
+git diff --check: no output
+```
+
 ## 验证结果
 
 P1.1 目标测试：
@@ -430,10 +454,9 @@ git diff --check
 
 ## 后续步骤
 
-P4a 已完成文件工具的批准后受控执行闭环，但不应直接声称生产级通用安全。下一步应把 sandbox、shell/external 副作用和可查询审计账本补齐：
+P4a/P4b 已完成文件工具受控执行和 sandboxed approved shell execution 的 first-version scope，但不应直接声称生产级通用安全。下一步顺序如下：
 
-1. P4b/P5 设计 sandbox：Docker/Podman、non-root user、read-only rootfs、resource limits，并明确 shell approved execution 的隔离边界。
-2. P5 设计可查询持久 `ToolAuditLedger`：timestamp、actor、request id、policy decision、args hash、脱敏摘要、执行结果预览和 retention 策略。
+1. P5 设计可查询持久 `ToolAuditLedger`：timestamp、actor、request id、policy decision、args hash、脱敏摘要、执行结果预览和 retention 策略。
+2. 设计 external API side-effect replay/admin 执行入口：在不把 raw args 写入 approval/audit store 的前提下，明确如何由可信 runtime 取回原始调用、展示风险预览、执行或取消。
 3. 继续收敛 no-root 兼容 allow，只让明确无法提供 workspace 的直接调用方走兼容路径。
-4. 设计 external API side-effect replay/admin 执行入口：在不把 raw args 写入 approval/audit store 的前提下，明确如何由可信 runtime 取回原始调用、展示风险预览、执行或取消。
-5. 评估 TaskExecution shell/external side-effect resume 的开放条件；当前只允许 P4 managed `write_file/edit_file`。
+4. 评估 TaskExecution shell/external side-effect resume、shell rollback 和 network-enabled shell sandbox 的开放条件；当前不开放。

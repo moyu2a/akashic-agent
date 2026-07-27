@@ -702,7 +702,10 @@ Task 10 证据：
   - P1/P2/P3/P4 focused suite：`72 passed in 2.86s`。
   - compatibility plus P4 coverage：`270 passed in 8.68s`。
   - compileall 退出码 `0`；`git diff --check` 无输出。
-- 仍开放的后续边界：shell sandbox、external API side-effect replay、destructive 操作执行、完整可查询 `ToolAuditLedger`、retention 和 dashboard/admin 审计检索。
+- P4b 已完成第一版 sandboxed approved shell execution：approved `shell` request 不再能由普通 ToolExecutor 直接执行，而是进入 approved shell side-effect runtime。该 runtime 从 workspace 私有 payload vault 读取原始 shell 参数，重新执行 P1/P2 resource policy，生成 sandbox preview，并只通过 Docker/Podman sandbox runner 执行。第一版 fail closed：Docker/Podman 不可用时不回退宿主 shell；workspace 只读挂载；network off；non-root user；read-only rootfs；cap drop；no-new-privileges；pids/memory/cpu/timeout limits。P4b 不支持 shell rollback，不开放 TaskExecution shell resume，不开放 external API side-effect replay。
+- P4b 验证证据：P4b focused suite `61 passed in 3.36s`；P1/P2/P3/P4/P4b focused baseline `86 passed in 3.52s`；compatibility suite `275 passed in 9.07s`；compileall 退出码 `0`；`git diff --check` 无输出。
+- 已从开放边界收束到 P4b first-version scope：sandboxed approved shell execution。
+- 仍开放的后续边界：external API side-effect replay、destructive 操作执行、TaskExecution shell resume、shell rollback、network-enabled shell sandbox、完整可查询 `ToolAuditLedger`、retention 和 dashboard/admin 审计检索。
 
 ### LA-004 final-only provider tool syntax normalization（open）
 

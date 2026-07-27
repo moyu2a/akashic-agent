@@ -353,6 +353,7 @@ Task 10 最终复审结果：focused `195 passed`，compatibility `278 passed`�
    - P3 已完成 TaskExecution metadata bridge：`waiting_authorization` 持久化 approval id、expires_at、scope、args_hash、args_summary、policy_reason；P3 本身不开放 write/edit/shell side-effect resume。
    - P4a 已完成 approved file side-effect execution safety loop：`write_file/edit_file` approved request 只能通过 managed side-effect runtime 执行；runtime 从 workspace 私有 payload vault 读取原始参数，重新执行 P1 resource policy，生成 snapshot/diff preview，通过 trusted `/prepare_tool`、`/run_approved_tool`、`/rollback_tool` apply/rollback，并在成功后 finalize approval。
    - P4a 已开放 TaskExecution `waiting_authorization` 的文件工具恢复：仅限 P4 managed `write_file/edit_file` 成功 apply 后原子完成等待 attempt；shell、external-side-effect、destructive 操作仍不恢复。
+   - P4b 已完成第一版 sandboxed approved shell execution：approved `shell` request 不再能由普通 ToolExecutor 直接执行，而是进入 approved shell side-effect runtime。该 runtime 从 workspace 私有 payload vault 读取原始 shell 参数，重新执行 P1/P2 resource policy，生成 sandbox preview，并只通过 Docker/Podman sandbox runner 执行。第一版 fail closed：Docker/Podman 不可用时不回退宿主 shell；workspace 只读挂载；network off；non-root user；read-only rootfs；cap drop；no-new-privileges；pids/memory/cpu/timeout limits。P4b 不支持 shell rollback，不开放 TaskExecution shell resume，不开放 external API side-effect replay。
 4. 统一 `ToolAuditLedger`
    - 将普通工具调用的审计提升到接近 TaskExecution attempt/event 的结构化程度。
    - 记录 request/turn/session/tool/policy/argument hash/result preview/hook trace/invoker 状态。
@@ -377,12 +378,14 @@ Task 10 最终复审结果：focused `195 passed`，compatibility `278 passed`�
 - P3 contract 验证已补齐短测试集 `tests/test_tool_governance_p3_contract.py`，覆盖 defer/approve/resume 单次执行、变参/拒绝/过期/复用不执行、P1 deny 优先、TaskExecution 不恢复副作用、lifecycle audit bounded；结果 `5 passed in 0.59s`。
 - P4 focused 回归已覆盖 payload vault、file snapshot/diff/apply/rollback、side-effect store/runtime、status commands、TaskExecution file resume 和 P4 contract；结果 `21 passed in 1.74s`。
 - P1/P2/P3/P4 focused baseline 结果 `72 passed in 2.86s`；compatibility plus P4 coverage 结果 `270 passed in 8.68s`；compileall 退出码 `0`，`git diff --check` 无输出。
+- P4b focused suite 结果 `61 passed in 3.36s`；P1/P2/P3/P4/P4b focused baseline 结果 `86 passed in 3.52s`；compatibility suite 结果 `275 passed in 9.07s`；compileall 退出码 `0`，`git diff --check` 无输出。
 - 回归测试确认 Document RAG、TaskPlan、TaskExecution 现有工具边界不被破坏。
 
 边界：
 
 - P1/P2/P3/P4a 不承诺完整 Docker/chroot/seccomp 隔离；它们先建立统一裁决、资源判断、默认 workspace scope、结构化授权请求、trusted approval workflow、文件 snapshot/diff/rollback 和 bounded lifecycle audit。
-- 后续 P4b/P5 再引入 Docker/Podman sandbox、non-root user、read-only rootfs、resource limits、shell/external side-effect approved execution，以及持久可查询 `ToolAuditLedger`。
+- P4b 已将 approved shell execution 收束为 Docker/Podman sandbox first-version scope；后续顺序为 P5 持久可查询 `ToolAuditLedger`，然后 external API side-effect replay。
+- P4b 后仍不开放 external API side-effect replay、destructive execution、TaskExecution shell resume、shell rollback 或 network-enabled shell sandbox。
 - shell 黑名单只能作为辅助 preflight，不作为最终生产安全边界。
 
 ## 暂不处理

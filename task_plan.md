@@ -1,5 +1,21 @@
 # Document RAG P10a Intent Preload Plan
 
+## 2026-07-27 Tool Governance P4b Documentation and Final Verification
+
+Goal: record the completed first-version sandboxed approved shell workflow and final measured verification without modifying production code or tests.
+
+1. Run P4b focused suite - complete (`61 passed in 3.36s`)
+2. Run P1/P2/P3/P4/P4b focused baseline - complete (`86 passed in 3.52s`)
+3. Run compatibility suite - complete (`275 passed in 9.07s`)
+4. Run compileall and whitespace checks - complete (compileall exit `0`; `git diff --check` no output)
+5. Record governance boundary and follow-up order - complete
+6. Commit Task 8 documentation - complete (`0a9635a docs: record p4b sandboxed approved shell workflow`)
+
+Current result:
+
+- P4b 已完成第一版 sandboxed approved shell execution：approved `shell` request 不再能由普通 ToolExecutor 直接执行，而是进入 approved shell side-effect runtime。该 runtime 从 workspace 私有 payload vault 读取原始 shell 参数，重新执行 P1/P2 resource policy，生成 sandbox preview，并只通过 Docker/Podman sandbox runner 执行。第一版 fail closed：Docker/Podman 不可用时不回退宿主 shell；workspace 只读挂载；network off；non-root user；read-only rootfs；cap drop；no-new-privileges；pids/memory/cpu/timeout limits。P4b 不支持 shell rollback，不开放 TaskExecution shell resume，不开放 external API side-effect replay。
+- Remaining follow-ups: P5 queryable `ToolAuditLedger`, then external API side-effect replay; destructive execution, TaskExecution shell resume, shell rollback, and network-enabled shell sandbox remain unavailable.
+
 ## 2026-07-26 Tool Governance P4 Approved File Side Effects
 
 Goal: implement the first approved side-effect execution safety loop for file writes while preserving P1/P2/P3 guarantees.
