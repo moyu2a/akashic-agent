@@ -442,6 +442,43 @@ def test_approved_shell_runtime_compensates_when_approval_finalize_fails(
     assert stored.execution_status == "shell_execution_state_persistence_failed"
 
 
+def test_approved_shell_runtime_compensates_failure_path_finalize_failure(
+    tmp_path: Path, monkeypatch
+) -> None:
+    workspace = tmp_path
+    approval_runtime = _approval_runtime(workspace)
+    approval_id = _approved_shell(approval_runtime, {"command": "echo hi", "description": "say hi"})
+    store = ApprovedSideEffectStore(ApprovedSideEffectStore.db_path_from_workspace(workspace))
+
+    class FailingSandboxRunner:
+        def backend_name(self) -> str:
+            return "podman"
+
+        def run(self, preview, command: str) -> SandboxRunResult:
+            raise FileNotFoundError("podman not available")
+
+    runtime = ApprovedShellSideEffectRuntime(
+        approval_runtime=approval_runtime,
+        side_effect_store=store,
+        sandbox_runner=FailingSandboxRunner(),
+    )
+
+    def fail_finalize(**kwargs):
+        raise RuntimeError("approval db unavailable")
+
+    monkeypatch.setattr(approval_runtime, "finalize_execution", fail_finalize)
+
+    result = runtime.apply(approval_id, "cli:test", "status_command", workspace, (str(workspace),))
+
+    assert result.ok is False
+    assert result.reason == "shell_execution_state_persistence_failed"
+    assert approval_runtime.store.get_request(approval_id).status == "consumed"
+    stored = store.get_by_approval_id(approval_id)
+    assert stored is not None
+    assert stored.status == "execution_failed"
+    assert stored.execution_status == "shell_execution_state_persistence_failed"
+
+
 def test_approved_shell_runtime_does_not_support_rollback(tmp_path: Path) -> None:
     runtime = _runtime(tmp_path, RecordingSandboxRunner())
 

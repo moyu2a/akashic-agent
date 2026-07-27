@@ -4,6 +4,7 @@ import subprocess
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 from agent.policies.approved_side_effect_store import (
     ApprovedSideEffectRecord,
@@ -437,12 +438,7 @@ class ApprovedShellSideEffectRuntime:
                 execution_status="execution_failed",
             )
         except Exception:
-            return self._error(
-                record.approval_request_id,
-                "shell_execution_state_persistence_failed",
-                "Approved shell execution state could not be persisted.",
-                preview_id=preview_id,
-            )
+            return self._mark_state_persistence_failed(record, actor, preview_id)
         return self._error(
             record.approval_request_id,
             reason,
