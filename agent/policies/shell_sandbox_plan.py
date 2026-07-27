@@ -26,6 +26,7 @@ class ShellSandboxPreview:
     command_hash: str
     command_preview: str
     workspace_root: Path
+    cwd_display: str
     artifact_dir: Path
     image: str
     network_mode: str
@@ -43,6 +44,7 @@ class ShellSandboxPreview:
             "preview_id": self.preview_id,
             "command_hash": self.command_hash,
             "command_preview": self.command_preview,
+            "cwd_display": self.cwd_display,
             "image": self.image,
             "network_mode": self.network_mode,
             "user": self.user,
@@ -84,6 +86,7 @@ def prepare_shell_sandbox_preview(
         command_hash=shell_command_hash(command),
         command_preview="[redacted_shell_command]",
         workspace_root=workspace,
+        cwd_display=workspace.name or ".",
         artifact_dir=artifact_dir,
         image=resolved_policy.image,
         network_mode=resolved_policy.network_mode,

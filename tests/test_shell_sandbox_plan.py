@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from agent import policies
 from agent.policies.shell_sandbox_plan import (
     ShellSandboxPolicy,
     prepare_shell_sandbox_preview,
@@ -32,9 +33,13 @@ def test_prepare_shell_sandbox_preview_redacts_raw_command_and_creates_no_comman
     assert preview.workspace_mount_mode == "ro"
     assert preview.network_mode == "none"
     assert preview.user == "65532:65532"
+    assert preview.cwd_display == workspace.name
     assert preview.timeout_seconds == 30
     assert not any(preview.artifact_dir.iterdir())
-    assert command not in str(preview.to_metadata())
+    metadata = preview.to_metadata()
+    assert metadata["cwd_display"] == workspace.name
+    assert str(workspace) not in str(metadata)
+    assert command not in str(metadata)
     assert not hasattr(preview, "command_ref")
 
 
@@ -59,3 +64,9 @@ def test_prepare_shell_sandbox_preview_caps_timeout_and_records_background_reque
     assert preview.timeout_seconds == 120
     assert preview.background_requested is True
     assert preview.background_allowed is False
+
+
+def test_shell_sandbox_plan_exports_public_policy_api() -> None:
+    assert policies.ShellSandboxPolicy is ShellSandboxPolicy
+    assert policies.prepare_shell_sandbox_preview is prepare_shell_sandbox_preview
+    assert policies.shell_command_hash is shell_command_hash
