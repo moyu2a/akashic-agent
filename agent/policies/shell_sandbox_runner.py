@@ -15,6 +15,7 @@ from agent.policies.shell_sandbox_plan import ShellSandboxPreview
 
 _MAX_OUTPUT_BYTES = 30_000
 _STREAM_CHUNK_BYTES = 8_192
+_CLEANUP_TIMEOUT_SECONDS = 5
 
 
 @dataclass(frozen=True)
@@ -147,7 +148,10 @@ class DockerPodmanSandboxRunner:
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
                 check=False,
+                timeout=_CLEANUP_TIMEOUT_SECONDS,
             )
+        except subprocess.TimeoutExpired:
+            pass
         except Exception:
             pass
 

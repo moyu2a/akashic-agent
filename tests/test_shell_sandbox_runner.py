@@ -267,6 +267,59 @@ def test_docker_podman_runner_cleans_up_named_container_after_timeout(
     assert cleaned_containers == [runner.container_name(preview)]
 
 
+def test_docker_podman_runner_returns_timeout_when_cleanup_times_out(
+    monkeypatch, tmp_path: Path
+) -> None:
+    class TimeoutProc:
+        def __init__(self) -> None:
+            self.args = ["podman", "run"]
+            self.stdin = io.BytesIO()
+            self.stdout = io.BytesIO()
+            self.stderr = io.BytesIO()
+            self.returncode = 137
+
+        def wait(self, timeout=None) -> int:
+            if timeout is not None:
+                raise subprocess.TimeoutExpired(self.args, timeout)
+            return self.returncode
+
+        def kill(self) -> None:
+            return None
+
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    preview = prepare_shell_sandbox_preview(
+        workspace_root=workspace,
+        artifact_root=tmp_path / "artifacts",
+        arguments={"command": "echo hi", "description": "say hi"},
+    )
+    runner = DockerPodmanSandboxRunner(binary="podman")
+    cleanup_calls = []
+
+    def cleanup_timeout(argv, **kwargs):
+        cleanup_calls.append((argv, kwargs))
+        raise subprocess.TimeoutExpired(argv, kwargs["timeout"])
+
+    monkeypatch.setattr(runner, "image_available", lambda preview: True)
+    monkeypatch.setattr("subprocess.Popen", lambda *args, **kwargs: TimeoutProc())
+    monkeypatch.setattr("subprocess.run", cleanup_timeout)
+
+    result = runner.run(preview, "echo hi")
+
+    assert result.reason == "sandbox_timeout"
+    assert cleanup_calls == [
+        (
+            ["podman", "rm", "-f", runner.container_name(preview)],
+            {
+                "stdout": subprocess.DEVNULL,
+                "stderr": subprocess.DEVNULL,
+                "check": False,
+                "timeout": 5,
+            },
+        )
+    ]
+
+
 def test_docker_podman_runner_times_out_when_stdin_write_blocks(
     monkeypatch, tmp_path: Path
 ) -> None:
