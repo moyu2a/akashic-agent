@@ -148,6 +148,91 @@ def test_side_effect_store_tracks_shell_preview_and_execution_without_raw_comman
     ]
 
 
+def test_side_effect_store_persists_shell_backend_basename(
+    tmp_path: Path,
+) -> None:
+    store = ApprovedSideEffectStore(tmp_path / "side_effects.db")
+    store.record_payload(
+        approval_request_id="approval-shell-1",
+        request_id="call-shell-1",
+        session_key="cli:test",
+        tool_name="shell",
+        approval_scope="tool_call",
+        args_hash="args-hash",
+        payload_ref="payloads/approval-shell-1.json",
+        actor="model",
+        now=datetime(2026, 7, 26, 9, 0, tzinfo=UTC),
+    )
+
+    record = store.record_shell_preview(
+        approval_request_id="approval-shell-1",
+        preview_id="shell-preview-1",
+        command_hash="command-hash",
+        sandbox_backend="/usr/bin/podman",
+        sandbox_image="python:3.14-slim",
+        sandbox_user="65532:65532",
+        sandbox_memory_limit="512m",
+        sandbox_cpus="1.0",
+        sandbox_pids_limit=128,
+        network_mode="none",
+        workspace_mount_mode="ro",
+        timeout_seconds=30,
+        background_requested=False,
+        background_allowed=False,
+        actor="status_command",
+        now=datetime(2026, 7, 26, 9, 1, tzinfo=UTC),
+    )
+
+    assert record.sandbox_backend == "podman"
+    assert store.get_by_approval_id("approval-shell-1").sandbox_backend == "podman"
+
+
+@pytest.mark.parametrize("sandbox_backend", ["/tmp/custom-runtime", "nerdctl"])
+def test_side_effect_store_rejects_unsupported_shell_backend_before_update(
+    tmp_path: Path, sandbox_backend: str
+) -> None:
+    store = ApprovedSideEffectStore(tmp_path / "side_effects.db")
+    store.record_payload(
+        approval_request_id="approval-shell-1",
+        request_id="call-shell-1",
+        session_key="cli:test",
+        tool_name="shell",
+        approval_scope="tool_call",
+        args_hash="args-hash",
+        payload_ref="payloads/approval-shell-1.json",
+        actor="model",
+        now=datetime(2026, 7, 26, 9, 0, tzinfo=UTC),
+    )
+
+    with pytest.raises(ValueError, match="sandbox backend"):
+        store.record_shell_preview(
+            approval_request_id="approval-shell-1",
+            preview_id="shell-preview-1",
+            command_hash="command-hash",
+            sandbox_backend=sandbox_backend,
+            sandbox_image="python:3.14-slim",
+            sandbox_user="65532:65532",
+            sandbox_memory_limit="512m",
+            sandbox_cpus="1.0",
+            sandbox_pids_limit=128,
+            network_mode="none",
+            workspace_mount_mode="ro",
+            timeout_seconds=30,
+            background_requested=False,
+            background_allowed=False,
+            actor="status_command",
+            now=datetime(2026, 7, 26, 9, 1, tzinfo=UTC),
+        )
+
+    record = store.get_by_approval_id("approval-shell-1")
+    assert record is not None
+    assert record.status == "payload_recorded"
+    assert record.sandbox_backend == ""
+    assert [event.event_type for event in store.list_audit_events("approval-shell-1")] == [
+        "payload_recorded"
+    ]
+
+
 def test_side_effect_store_migrates_p4a_database_for_shell_metadata(
     tmp_path: Path,
 ) -> None:

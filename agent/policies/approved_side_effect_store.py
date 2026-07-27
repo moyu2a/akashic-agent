@@ -297,6 +297,7 @@ class ApprovedSideEffectStore:
         actor: str,
         now: datetime,
     ) -> ApprovedSideEffectRecord:
+        sandbox_backend = _normalize_shell_backend(sandbox_backend)
         return self._update(
             approval_request_id=approval_request_id,
             status="preview_ready",
@@ -593,3 +594,10 @@ def _validate_shell_artifact_ref(ref: str) -> None:
         raise ValueError(
             "shell artifact refs must be relative to tool_side_effects/artifacts"
         )
+
+
+def _normalize_shell_backend(sandbox_backend: str) -> str:
+    backend = Path(sandbox_backend).name
+    if backend not in {"podman", "docker"}:
+        raise ValueError("sandbox backend must be podman or docker")
+    return backend
