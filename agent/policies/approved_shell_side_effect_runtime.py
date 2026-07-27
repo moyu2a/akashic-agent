@@ -415,7 +415,12 @@ class ApprovedShellSideEffectRuntime:
                 now=self.now(),
             )
         except Exception:
-            pass
+            return self._error(
+                record.approval_request_id,
+                "shell_execution_state_persistence_failed",
+                "Approved shell execution failure could not be persisted.",
+                preview_id=preview_id,
+            )
         self.approval_runtime.finalize_execution(
             approval_request_id=record.approval_request_id,
             request_id=record.request_id,

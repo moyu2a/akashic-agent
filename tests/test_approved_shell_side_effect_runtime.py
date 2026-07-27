@@ -292,6 +292,41 @@ def test_approved_shell_runtime_finalizes_failed_execution_on_runner_exception(t
     assert stored.status == "execution_failed"
 
 
+def test_approved_shell_runtime_preserves_approval_when_failure_state_persistence_raises(
+    tmp_path: Path,
+) -> None:
+    workspace = tmp_path
+    approval_runtime = _approval_runtime(workspace)
+    approval_id = _approved_shell(approval_runtime, {"command": "echo hi", "description": "say hi"})
+
+    class FailingSideEffectStore(ApprovedSideEffectStore):
+        def mark_execution_failed(self, **kwargs):
+            raise RuntimeError("side-effect store unavailable")
+
+    class FailingSandboxRunner:
+        def backend_name(self) -> str:
+            return "podman"
+
+        def run(self, preview, command: str) -> SandboxRunResult:
+            raise RuntimeError("runner failed after approval consumption")
+
+    store = FailingSideEffectStore(ApprovedSideEffectStore.db_path_from_workspace(workspace))
+    runtime = ApprovedShellSideEffectRuntime(
+        approval_runtime=approval_runtime,
+        side_effect_store=store,
+        sandbox_runner=FailingSandboxRunner(),
+    )
+
+    result = runtime.apply(approval_id, "cli:test", "status_command", workspace, (str(workspace),))
+
+    assert result.ok is False
+    assert result.reason == "shell_execution_state_persistence_failed"
+    assert approval_runtime.store.get_request(approval_id).status == "consumed"
+    stored = store.get_by_approval_id(approval_id)
+    assert stored is not None
+    assert stored.status == "preview_ready"
+
+
 def test_approved_shell_runtime_rejects_out_of_tree_artifact_refs_before_store_update(tmp_path: Path) -> None:
     workspace = tmp_path
     approval_runtime = _approval_runtime(workspace)
