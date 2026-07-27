@@ -75,6 +75,7 @@ class ToolExecutor:
         4. post hooks：记录成功或错误后的附加信息与 trace
         """
         current_arguments = dict(request.arguments)
+        public_final_arguments = _public_final_arguments(request, current_arguments)
         extra_messages: list[str] = []
         pre_trace: list[HookTraceItem] = []
         post_trace: list[HookTraceItem] = []
@@ -88,10 +89,13 @@ class ToolExecutor:
                 traces=pre_trace,
             )
         except HookExecutionError as exc:
+            if request.tool_name == "shell":
+                pre_trace = _redact_shell_hook_traces(pre_trace)
+                extra_messages = _redact_shell_hook_messages(extra_messages)
             return ToolExecutionResult(
                 status="error",
-                output=f"工具执行出错: {exc}",
-                final_arguments=dict(current_arguments),
+                output=_hook_execution_error_output(request, exc),
+                final_arguments=public_final_arguments,
                 invoker_reached=False,
                 invoker_succeeded=False,
                 extra_messages=extra_messages,
@@ -99,6 +103,10 @@ class ToolExecutor:
                 post_hook_trace=post_trace,
             )
         final_arguments = dict(current_arguments)
+        public_final_arguments = _public_final_arguments(request, final_arguments)
+        if request.tool_name == "shell":
+            pre_trace = _redact_shell_hook_traces(pre_trace)
+            extra_messages = _redact_shell_hook_messages(extra_messages)
         if denied_reason:
             output = denied_reason
             if request.tool_name == "shell":
@@ -108,7 +116,7 @@ class ToolExecutor:
             return ToolExecutionResult(
                 status="denied",
                 output=output,
-                final_arguments=final_arguments,
+                final_arguments=public_final_arguments,
                 invoker_reached=False,
                 invoker_succeeded=False,
                 extra_messages=extra_messages,
@@ -136,7 +144,7 @@ class ToolExecutor:
                     ),
                     policy_trace=policy_trace,
                 ),
-                final_arguments=final_arguments,
+                final_arguments=public_final_arguments,
                 invoker_reached=False,
                 invoker_succeeded=False,
                 extra_messages=extra_messages,
@@ -155,7 +163,7 @@ class ToolExecutor:
             return ToolExecutionResult(
                 status="denied",
                 output=_policy_block_output(policy_decision, policy_trace),
-                final_arguments=final_arguments,
+                final_arguments=public_final_arguments,
                 invoker_reached=False,
                 invoker_succeeded=False,
                 extra_messages=extra_messages,
@@ -192,7 +200,7 @@ class ToolExecutor:
                         ),
                         policy_trace=policy_trace,
                     ),
-                    final_arguments=final_arguments,
+                    final_arguments=public_final_arguments,
                     invoker_reached=False,
                     invoker_succeeded=False,
                     extra_messages=extra_messages,
@@ -282,7 +290,7 @@ class ToolExecutor:
                     expires_at=expires_at,
                     policy_trace=policy_trace,
                 ),
-                final_arguments=final_arguments,
+                final_arguments=public_final_arguments,
                 invoker_reached=False,
                 invoker_succeeded=False,
                 extra_messages=extra_messages,
@@ -326,6 +334,7 @@ class ToolExecutor:
         approval_lifecycle: list[dict[str, object]] | None = None,
     ) -> ToolExecutionResult:
         lifecycle_events = list(approval_lifecycle or [])
+        public_final_arguments = _public_final_arguments(request, final_arguments)
         try:
             # 这里才进入真实工具执行；hook 本身不直接替代工具实现。
             output = await invoker(request.tool_name, final_arguments)
@@ -353,10 +362,13 @@ class ToolExecutor:
                     traces=post_trace,
                 )
             except HookExecutionError as hook_exc:
+                if request.tool_name == "shell":
+                    post_trace = _redact_shell_hook_traces(post_trace)
+                    extra_messages = _redact_shell_hook_messages(extra_messages)
                 return ToolExecutionResult(
                     status="error",
-                    output=f"工具执行出错: {hook_exc}",
-                    final_arguments=final_arguments,
+                    output=_hook_execution_error_output(request, hook_exc),
+                    final_arguments=public_final_arguments,
                     invoker_reached=True,
                     invoker_succeeded=False,
                     extra_messages=extra_messages,
@@ -374,8 +386,8 @@ class ToolExecutor:
                 )
             return ToolExecutionResult(
                 status="error",
-                output=f"工具执行出错: {error_text}",
-                final_arguments=final_arguments,
+                output=_tool_execution_error_output(request, error_text),
+                final_arguments=public_final_arguments,
                 invoker_reached=True,
                 invoker_succeeded=False,
                 extra_messages=extra_messages,
@@ -414,11 +426,17 @@ class ToolExecutor:
                 traces=post_trace,
                 fail_open=True,
             )
+            if request.tool_name == "shell":
+                post_trace = _redact_shell_hook_traces(post_trace)
+                extra_messages = _redact_shell_hook_messages(extra_messages)
         except HookExecutionError as exc:
+            if request.tool_name == "shell":
+                post_trace = _redact_shell_hook_traces(post_trace)
+                extra_messages = _redact_shell_hook_messages(extra_messages)
             return ToolExecutionResult(
                 status="error",
-                output=f"工具执行出错: {exc}",
-                final_arguments=final_arguments,
+                output=_hook_execution_error_output(request, exc),
+                final_arguments=public_final_arguments,
                 invoker_reached=True,
                 invoker_succeeded=True,
                 extra_messages=extra_messages,
@@ -437,7 +455,7 @@ class ToolExecutor:
         return ToolExecutionResult(
             status="success",
             output=output,
-            final_arguments=final_arguments,
+            final_arguments=public_final_arguments,
             invoker_reached=True,
             invoker_succeeded=True,
             extra_messages=extra_messages,
@@ -490,6 +508,7 @@ class ToolExecutor:
         request: ToolExecutionRequest,
     ) -> ToolExecutionResult:
         current_arguments = dict(request.arguments)
+        public_final_arguments = _public_final_arguments(request, current_arguments)
         extra_messages: list[str] = []
         pre_trace: list[HookTraceItem] = []
         try:
@@ -500,15 +519,21 @@ class ToolExecutor:
                 traces=pre_trace,
             )
         except HookExecutionError as exc:
+            if request.tool_name == "shell":
+                pre_trace = _redact_shell_hook_traces(pre_trace)
+                extra_messages = _redact_shell_hook_messages(extra_messages)
             return ToolExecutionResult(
                 status="error",
-                output=f"工具执行出错: {exc}",
-                final_arguments=dict(current_arguments),
+                output=_hook_execution_error_output(request, exc),
+                final_arguments=public_final_arguments,
                 invoker_reached=False,
                 invoker_succeeded=False,
                 extra_messages=extra_messages,
                 pre_hook_trace=pre_trace,
             )
+        if request.tool_name == "shell":
+            pre_trace = _redact_shell_hook_traces(pre_trace)
+            extra_messages = _redact_shell_hook_messages(extra_messages)
         if denied_reason:
             output = denied_reason
             if request.tool_name == "shell":
@@ -518,7 +543,7 @@ class ToolExecutor:
             return ToolExecutionResult(
                 status="denied",
                 output=output,
-                final_arguments=dict(current_arguments),
+                final_arguments=_public_final_arguments(request, current_arguments),
                 invoker_reached=False,
                 invoker_succeeded=False,
                 extra_messages=extra_messages,
@@ -527,7 +552,7 @@ class ToolExecutor:
         return ToolExecutionResult(
             status="success",
             output="",
-            final_arguments=dict(current_arguments),
+            final_arguments=_public_final_arguments(request, current_arguments),
             invoker_reached=False,
             invoker_succeeded=False,
             extra_messages=extra_messages,
@@ -654,6 +679,33 @@ def _policy_source(request: ToolExecutionRequest) -> ToolInvocationSource:
     if request.source in {"passive", "proactive", "subagent"}:
         return request.source
     return "passive"
+
+
+def _public_final_arguments(
+    request: ToolExecutionRequest,
+    arguments: dict[str, Any],
+) -> dict[str, Any]:
+    if request.tool_name == "shell":
+        return {}
+    return dict(arguments)
+
+
+def _hook_execution_error_output(
+    request: ToolExecutionRequest,
+    exc: HookExecutionError,
+) -> str:
+    if request.tool_name == "shell":
+        return "工具执行出错: shell hook failed"
+    return f"工具执行出错: {exc}"
+
+
+def _tool_execution_error_output(
+    request: ToolExecutionRequest,
+    error_text: str,
+) -> str:
+    if request.tool_name == "shell":
+        return "工具执行出错: shell execution failed"
+    return f"工具执行出错: {error_text}"
 
 
 def _policy_task_execution_phase(value: str) -> ToolInvocationTaskExecutionPhase:

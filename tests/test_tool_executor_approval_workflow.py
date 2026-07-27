@@ -57,6 +57,32 @@ class DenyShellHook(ToolHook):
         )
 
 
+class FailingShellHook(ToolHook):
+    name = "failing_shell"
+    event = "pre_tool_use"
+
+    def matches(self, ctx: HookContext) -> bool:
+        return ctx.request.tool_name == "shell"
+
+    async def run(self, ctx: HookContext) -> HookOutcome:
+        raise RuntimeError(f"failed command: {ctx.current_arguments['command']}")
+
+
+class LeakyShellPassHook(ToolHook):
+    name = "leaky_shell_pass"
+    event = "pre_tool_use"
+
+    def matches(self, ctx: HookContext) -> bool:
+        return ctx.request.tool_name == "shell"
+
+    async def run(self, ctx: HookContext) -> HookOutcome:
+        command = ctx.current_arguments["command"]
+        return HookOutcome(
+            reason=f"observed command: {command}",
+            extra_message=f"extra command: {command}",
+        )
+
+
 def _run(coro: Any) -> Any:
     return asyncio.run(coro)
 
@@ -318,6 +344,7 @@ def test_executor_records_shell_payload_and_blocks_direct_approved_shell(
 
     assert runtime.side_effect_vault.get_payload(approval_id) is not None
     assert "echo hi" not in deferred.output
+    assert "echo hi" not in json.dumps(deferred.final_arguments, ensure_ascii=False)
     assert "echo hi" not in json.dumps(payload, ensure_ascii=False)
     assert "echo hi" not in json.dumps(deferred.policy_trace, ensure_ascii=False)
     assert "echo hi" not in json.dumps(deferred.audit_trace, ensure_ascii=False)
@@ -351,6 +378,7 @@ def test_executor_redacts_denied_destructive_shell_command(tmp_path: Path) -> No
 
     assert denied.status == "denied"
     assert command not in denied.output
+    assert command not in json.dumps(denied.final_arguments, ensure_ascii=False)
     assert command not in json.dumps(denied.policy_trace, ensure_ascii=False)
     assert command not in json.dumps(denied.audit_trace, ensure_ascii=False)
     assert invoker.calls == []
@@ -381,10 +409,72 @@ def test_executor_redacts_shell_pre_hook_denial_reason(tmp_path: Path) -> None:
     assert denied.status == "denied"
     assert denied.invoker_reached is False
     assert command not in denied.output
+    assert command not in json.dumps(denied.final_arguments, ensure_ascii=False)
     assert command not in json.dumps(denied.pre_hook_trace, default=vars)
     assert command not in json.dumps(denied.policy_trace, ensure_ascii=False)
     assert command not in json.dumps(denied.audit_trace, ensure_ascii=False)
     assert invoker.calls == []
+
+
+def test_executor_redacts_shell_pre_hook_exception(tmp_path: Path) -> None:
+    runtime = _runtime(tmp_path)
+    invoker = RecordingInvoker()
+    command = "echo exception-secret-token"
+    request = ToolExecutionRequest(
+        call_id="call-pre-hook-error-shell",
+        tool_name="shell",
+        arguments={"command": command},
+        source="passive",
+        session_key="cli:session-1",
+        channel="cli",
+        chat_id="chat-1",
+        registered=True,
+        registry_risk="external-side-effect",
+    )
+
+    result = _run(
+        ToolExecutor(
+            hooks=[LeakyShellPassHook(), FailingShellHook()],
+            approval_runtime=runtime,
+        ).execute(request, invoker)
+    )
+
+    assert result.status == "error"
+    assert result.invoker_reached is False
+    serialized_result = json.dumps(result, default=vars, ensure_ascii=False)
+    assert command not in result.output
+    assert command not in json.dumps(result.final_arguments, ensure_ascii=False)
+    assert command not in serialized_result
+    assert invoker.calls == []
+
+
+def test_preflight_redacts_shell_pre_hook_exception(tmp_path: Path) -> None:
+    runtime = _runtime(tmp_path)
+    command = "echo preflight-exception-secret-token"
+    request = ToolExecutionRequest(
+        call_id="call-preflight-hook-error-shell",
+        tool_name="shell",
+        arguments={"command": command},
+        source="passive",
+        session_key="cli:session-1",
+        channel="cli",
+        chat_id="chat-1",
+        registered=True,
+        registry_risk="external-side-effect",
+    )
+
+    result = _run(
+        ToolExecutor(
+            hooks=[LeakyShellPassHook(), FailingShellHook()],
+            approval_runtime=runtime,
+        ).preflight(request)
+    )
+
+    assert result.status == "error"
+    serialized_result = json.dumps(result, default=vars, ensure_ascii=False)
+    assert command not in result.output
+    assert command not in json.dumps(result.final_arguments, ensure_ascii=False)
+    assert command not in serialized_result
 
 
 def test_executor_approved_execution_trace_includes_consumed_and_executed_events(

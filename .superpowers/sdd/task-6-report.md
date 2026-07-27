@@ -83,3 +83,38 @@ Covering result: `33 passed in 2.12s`.
 `git diff --check` result: PASS (no whitespace errors).
 
 The shell pre-hook denial path now returns a generic denial output and redacts hook reasons and extra messages. Non-shell pre-hook denial behavior remains unchanged. Added shell rollback coverage confirms `rollback_not_supported_for_shell` is returned without command leakage in the reply or lifecycle metadata.
+
+## Re-review RED Evidence
+
+RED command:
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 uv run --with pytest --with pytest-asyncio --with json-repair --with docstring-parser pytest tests/test_tool_executor_approval_workflow.py::test_executor_records_shell_payload_and_blocks_direct_approved_shell tests/test_tool_executor_approval_workflow.py::test_executor_redacts_denied_destructive_shell_command tests/test_tool_executor_approval_workflow.py::test_executor_redacts_shell_pre_hook_exception tests/test_tool_executor_approval_workflow.py::test_preflight_redacts_shell_pre_hook_exception tests/test_status_commands_approved_side_effects.py::test_prepare_tool_shell_routes_to_sandbox_runtime_without_raw_command tests/test_status_commands_approved_side_effects.py::test_run_approved_shell_fails_closed_without_runner_without_raw_command -q -p no:cacheprovider
+```
+
+RED result: `4 failed, 2 passed in 0.41s`.
+
+- Deferred and destructive-deny shell results exposed the raw command through `final_arguments`.
+- `execute()` and `preflight()` exposed raw shell commands through interpolated pre-hook exception messages.
+
+## Re-review GREEN Evidence
+
+Focused GREEN command:
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 uv run --with pytest --with pytest-asyncio --with json-repair --with docstring-parser pytest tests/test_tool_executor_approval_workflow.py::test_executor_records_shell_payload_and_blocks_direct_approved_shell tests/test_tool_executor_approval_workflow.py::test_executor_redacts_denied_destructive_shell_command tests/test_tool_executor_approval_workflow.py::test_executor_redacts_shell_pre_hook_exception tests/test_tool_executor_approval_workflow.py::test_preflight_redacts_shell_pre_hook_exception tests/test_status_commands_approved_side_effects.py::test_prepare_tool_shell_routes_to_sandbox_runtime_without_raw_command tests/test_status_commands_approved_side_effects.py::test_run_approved_shell_fails_closed_without_runner_without_raw_command -q -p no:cacheprovider
+```
+
+Focused GREEN result: `6 passed in 0.36s`.
+
+Covering GREEN command:
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 uv run --with pytest --with pytest-asyncio --with json-repair --with docstring-parser pytest tests/test_tool_executor_approval_workflow.py tests/test_status_commands_approved_side_effects.py tests/test_approved_shell_side_effect_runtime.py -q -p no:cacheprovider
+```
+
+Covering GREEN result: `37 passed in 2.18s`.
+
+The executor now exposes an empty `final_arguments` mapping for shell results while retaining raw shell arguments internally through policy evaluation and private vault capture. Shell pre-hook exceptions produce generic output and redact accumulated hook traces and messages. Status-command coverage confirms shell prepare routing and unavailable-runner fail-closed behavior without raw command leakage; unavailable execution leaves the approval approved for retry.
+
+`git diff --check` result: PASS (no whitespace errors).

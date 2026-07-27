@@ -251,6 +251,67 @@ async def test_run_approved_tool_shell_uses_sandbox_runtime_without_raw_command(
 
 
 @pytest.mark.asyncio
+async def test_prepare_tool_shell_routes_to_sandbox_runtime_without_raw_command(
+    tmp_path: Path,
+) -> None:
+    workspace = tmp_path
+    runtime = _approval_runtime(workspace)
+    command = "echo prepare-secret-token"
+    approval_id = _approved_file(
+        runtime,
+        tool_name="shell",
+        arguments={"command": command, "description": "say hi"},
+    )
+    module = ToolApprovalCommandModule(
+        "status_commands",
+        runtime.store,
+        workspace=workspace,
+        side_effect_store=ApprovedSideEffectStore(
+            ApprovedSideEffectStore.db_path_from_workspace(workspace)
+        ),
+        side_effect_vault=runtime.side_effect_vault,
+        shell_sandbox_runner=RecordingSandboxRunner(),
+    )
+
+    prepared = await _run_command(module, f"/prepare_tool {approval_id}")
+
+    assert "shell_sandbox_preview_ready" in prepared.abort_reply
+    assert command not in prepared.abort_reply
+    assert command not in json.dumps(prepared.extra_metadata, ensure_ascii=False)
+
+
+@pytest.mark.asyncio
+async def test_run_approved_shell_fails_closed_without_runner_without_raw_command(
+    tmp_path: Path,
+) -> None:
+    workspace = tmp_path
+    runtime = _approval_runtime(workspace)
+    command = "echo unavailable-secret-token"
+    approval_id = _approved_file(
+        runtime,
+        tool_name="shell",
+        arguments={"command": command, "description": "say hi"},
+    )
+    module = ToolApprovalCommandModule(
+        "status_commands",
+        runtime.store,
+        workspace=workspace,
+        side_effect_store=ApprovedSideEffectStore(
+            ApprovedSideEffectStore.db_path_from_workspace(workspace)
+        ),
+        side_effect_vault=runtime.side_effect_vault,
+        shell_sandbox_runner=None,
+    )
+
+    ran = await _run_command(module, f"/run_approved_tool {approval_id}")
+
+    assert "shell_sandbox_unavailable" in ran.abort_reply
+    assert command not in ran.abort_reply
+    assert command not in json.dumps(ran.extra_metadata, ensure_ascii=False)
+    assert runtime.store.get_request(approval_id).status == "approved"
+
+
+@pytest.mark.asyncio
 async def test_rollback_tool_shell_is_unsupported_without_raw_command_leakage(
     tmp_path: Path,
 ) -> None:
