@@ -124,6 +124,7 @@
 - 各场景路由后 `expected_route_hit_rate = 100%`，候选丢弃率约 `63.3933%` 到 `77.085%`。
 - 真实引擎 route smoke 覆盖 `9` case，证明 `DefaultMemoryEngine.retrieve()` 可以输出路由 trace。
 - 当前结果只证明候选边界治理和 trace 接线可用，不代表真实 LLM 回答质量已经提升。
+- 2026-07-27 补做短线上 fresh rerun：`40` 个唯一样本，common `20`、hard `20`，4 个 profile，真实 LLM 调用 `160` 次，无 provider error / timeout。结果显示 `chain_tri_retrieval` 回答命中 `32.5% -> 42.5%`，相对基线提升 `30.7692%`；`chain_rerank_injection` 回答命中 `32.5% -> 45%`，相对基线提升 `38.4615%`，forbidden 从 `15%` 降到 `10%`；`chain_graph_retrieval` 本轮与基线持平。
 
 证据：
 
@@ -132,17 +133,22 @@
 - `scripts/run_memory_route_governance_eval.py`
 - `my_md/memory_optimization/eval_reports/memory_route_governance_eval.json`
 - `my_md/memory_optimization/eval_reports/memory_route_governance_eval.md`
+- `my_md/memory_optimization/eval_reports/route_governance_small_online_v1/memory_comprehensive_online_eval.json`
+- `my_md/memory_optimization/eval_reports/route_governance_small_online_v1/memory_comprehensive_online_eval.md`
 
 影响：
 
 - Memory 召回增强从“全局打开更多通道”转为“按场景治理候选”。
 - 后续 active 化时，三路召回和图谱召回应先经过路由层，再进入重排、注入治理和回答约束。
-- 真实 LLM 评测需要重新聚焦到三路/图谱/重排链路的 fresh rerun，而不是继续盲目增召回。
+- 短线上 fresh rerun 初步支持继续扩测三路召回和重排注入治理；图谱召回仍需要更细的触发条件、候选去噪和证据注入约束。
+- 同时发现当前 answer-quality fixture 中 `chain_graph_retrieval` 和 `chain_tri_retrieval` 的 evidence ids 没有充分隔离，所以图谱行不能被解释为“图谱能力无效”，只能解释为当前 profile 口径下没有超过基线。
+- 这轮是小样本受控结论，不能替代 `320 case / 1920 call` 的完整矩阵，也不能作为生产自然流量收益。
 
 下一步：
 
 - 补更真实的 live fixture，让真实引擎 route smoke 不只覆盖模糊指代和未知场景。
-- 对三路召回、图谱召回和重排注入治理做有界 fresh answer-quality rerun，验证回答命中、证据命中、forbidden、噪声控制和上下文成本是否改善。
+- 扩展 fresh answer-quality rerun，优先验证 `route + rerank/injection`，同时补图谱专用 case 或让 graph profile 输出可区分证据，再对图谱召回增加场景路由和噪声控制。
+- 继续补回答正确性、证据命中、forbidden、噪声控制和上下文成本的分场景分析。
 
 关联文档：
 

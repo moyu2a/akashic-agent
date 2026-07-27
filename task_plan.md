@@ -1491,3 +1491,50 @@ Verification so far:
 
 - `.venv/bin/python -m pytest tests/test_memory_comprehensive_online_eval.py -q -p no:cacheprovider` -> `14 passed in 7.74s`.
 - `.venv/bin/python -m pytest tests/test_memory_comprehensive_online_cli.py -q -p no:cacheprovider` -> `8 passed in 9.35s`.
+
+## 2026-07-27 Memory Route Governance Small Online Eval
+
+Goal: after adding route governance, run a short real LLM fresh rerun for answer/retrieval profiles and record whether the routed path is worth expanding.
+
+Plan status:
+
+1. Revise plan after independent review - complete.
+2. Run fake-provider balanced smoke - complete.
+3. Run real LLM common 20 + hard 20 balanced matrix - complete.
+4. Rebuild checkpoint-only report and validate data integrity - complete.
+5. Update docs and reports - complete.
+6. Final verification and commit - pending.
+
+Report:
+
+- `my_md/memory_optimization/eval_reports/route_governance_small_online_v1/memory_comprehensive_online_eval.json`
+- `my_md/memory_optimization/eval_reports/route_governance_small_online_v1/memory_comprehensive_online_eval.md`
+
+Run shape:
+
+- `unique_case_count = 40`
+- common `20`, hard `20`
+- `profile_count = 4`
+- profiles: `chain_memory_base`, `chain_tri_retrieval`, `chain_graph_retrieval`, `chain_rerank_injection`
+- `completed_call_count = 160`
+- `real_llm_enabled = True`
+- `provider_error_count = 0`
+- `timeout_count = 0`
+- `excluded_infra_failure_count = 0`
+- `partial_due_to_infra_failure = False`
+
+Key results:
+
+| profile | answer_success | answer_rate | relative answer lift vs base | grounding_rate | forbidden_rate |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `chain_memory_base` | `13/40` | `32.5%` | `0%` | `100%` | `15%` |
+| `chain_tri_retrieval` | `17/40` | `42.5%` | `+30.7692%` | `100%` | `12.5%` |
+| `chain_graph_retrieval` | `13/40` | `32.5%` | `0%` | `100%` | `15%` |
+| `chain_rerank_injection` | `18/40` | `45%` | `+38.4615%` | `100%` | `10%` |
+
+Conclusion:
+
+- This is a short controlled online result, not a production/full-matrix claim.
+- Tri retrieval is positive after route governance on this slice.
+- Graph retrieval is still not better than the original memory baseline on this slice, but current answer-quality fixtures do not isolate graph evidence from tri evidence well enough to treat this as a standalone graph-capability verdict.
+- Rerank/injection is the strongest routed answer path and should be prioritized for the next expanded fresh rerun.

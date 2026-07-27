@@ -49,6 +49,44 @@
   - the live route smoke is intentionally small and should not be used as a full online conclusion;
   - next answer-quality step should be a bounded fresh rerun for tri/graph/rerank after route governance.
 
+## 2026-07-27 Memory Route Governance Small Online Eval
+
+- User asked to continue with the reviewed plan: run a short real LLM online evaluation for route-governed answer/retrieval profiles, update docs/reports, and record data.
+- Independent plan review found important issues:
+  - final online report needed hard assertions, not just printed metrics;
+  - `--exclude-infra-failures` could hide partial matrices;
+  - profile table needed sample counts;
+  - commands should explicitly run from the `memory-next` worktree;
+  - report artifacts should be checked, not only unit tests.
+- Plan revised:
+  - enforce `40` unique cases as common `20` + hard `20`;
+  - enforce `160` checkpoint rows, `4` profiles, `1` prompt variant, `1` repeat;
+  - require zero provider errors, timeouts, excluded infra failures, and `partial_due_to_infra_failure = False` for a complete result;
+  - add artifact integrity checks and partial-report documentation boundary.
+- Fake-provider smoke:
+  - common `20` + hard `20`, same checkpoint;
+  - rebuilt checkpoint-only report;
+  - `case_count = 160`, `unique_case_count = 40`, `profile_count = 4`, `real_llm_enabled = False`, `infra_passed = True`, `answer_quality_partial_matrix = True`, `checkpoint_report_only = True`, `checkpoint_input_count = 160`.
+- Real LLM run:
+  - report path: `my_md/memory_optimization/eval_reports/route_governance_small_online_v1/memory_comprehensive_online_eval.json`;
+  - markdown path: `my_md/memory_optimization/eval_reports/route_governance_small_online_v1/memory_comprehensive_online_eval.md`;
+  - `case_count = 160`, `unique_case_count = 40`, common `20`, hard `20`;
+  - profiles: `chain_memory_base`, `chain_tri_retrieval`, `chain_graph_retrieval`, `chain_rerank_injection`;
+  - `real_llm_enabled = True`, `provider_error_count = 0`, `timeout_count = 0`, `excluded_infra_failure_count = 0`, `partial_due_to_infra_failure = False`;
+  - `answer_rule_pass_rate = 38.125%`, `memory_grounding_pass_rate = 100.0%`, `forbidden_violation_rate = 13.125%`;
+  - `total_token_count = 877048`, `avg_latency_ms = 4390.7375`.
+- Per-profile results:
+  - `chain_memory_base`: `13/40` answer, `32.5%`; grounding `100%`; forbidden `15%`;
+  - `chain_tri_retrieval`: `17/40` answer, `42.5%`; relative answer lift vs base `+30.7692%`; grounding `100%`; forbidden `12.5%`;
+  - `chain_graph_retrieval`: `13/40` answer, `32.5%`; relative answer lift vs base `0%`; grounding `100%`; forbidden `15%`;
+  - `chain_rerank_injection`: `18/40` answer, `45%`; relative answer lift vs base `+38.4615%`; grounding `100%`; forbidden `10%`.
+- Current conclusion:
+  - this short controlled online run does not replace the complete `320 case / 1920 call` matrix and is not a production natural-traffic claim;
+  - route governance appears to make tri retrieval worth expanding because tri is positive on this slice;
+  - graph retrieval remains unresolved; current answer-quality fixtures do not isolate graph evidence from tri evidence well enough to treat this as a standalone graph-capability verdict;
+  - next graph work should add graph-specific cases or make graph profile evidence visibly distinct before judging graph answer uplift;
+  - rerank/injection is the strongest current routed answer path and should be prioritized in the next expanded fresh rerun.
+
 ## 2026-07-26 Memory Online Attribution And Version Grounding Plan
 
 - User asked to call the plan skill and create a plan for the next two memory-next mainline steps:

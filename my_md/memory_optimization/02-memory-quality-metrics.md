@@ -1590,6 +1590,44 @@ Phase 6m 之后，三路召回和图谱召回增加了“场景路由 + 候选�
 
 这组指标的正确解释是：路由治理改善的是召回候选边界和可解释性。要证明最终回答收益，还需要继续看回答命中、证据命中、forbidden 违规率、噪声控制和上下文成本。
 
+### Phase 6m 路由治理后的短线上回答指标
+
+2026-07-27 的小型真实 LLM 评测把“候选治理是否带来回答收益”单独拿出来验证。它使用 `40` 个唯一样本、`160` 次真实调用，common 和 hard 各 `20` 个样本，且没有 provider error、timeout 或被排除的基础设施失败。
+
+报告路径：
+
+- `my_md/memory_optimization/eval_reports/route_governance_small_online_v1/memory_comprehensive_online_eval.json`
+- `my_md/memory_optimization/eval_reports/route_governance_small_online_v1/memory_comprehensive_online_eval.md`
+
+指标解释：
+
+| 指标 | 计算方式 | 含义 |
+| --- | --- | --- |
+| `answer_rate` | `answer_success / cases` | 模型回答是否满足该 case 的答案规则 |
+| `grounding_rate` | `grounding_success / cases` | 回答是否使用了期望记忆证据 |
+| `forbidden_rate` | `forbidden_cases / cases` | 回答是否包含不该出现的内容，越低越好 |
+| 相对基线回答提升 | `(当前 answer_rate - 基线 answer_rate) / 基线 answer_rate` | 用百分比表达相对原始记忆基线的回答命中改善 |
+| forbidden 降低 | `(基线 forbidden_rate - 当前 forbidden_rate) / 基线 forbidden_rate` | 用百分比表达违规风险下降 |
+| `avg_tokens` | 当前 profile 的平均 token 数 | 粗看上下文成本 |
+| `avg_latency_ms` | 当前 profile 的平均延迟 | 粗看调用耗时 |
+
+本轮结果：
+
+| profile | cases | answer_success | answer_rate | 相对基线回答提升 | grounding_rate | forbidden_rate | forbidden 降低 | avg_tokens | avg_latency_ms |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| `chain_memory_base` | 40 | 13 | `32.5%` | `0%` | `100%` | `15%` | `0%` | `5503.7` | `4678.825` |
+| `chain_tri_retrieval` | 40 | 17 | `42.5%` | `+30.7692%` | `100%` | `12.5%` | `+16.6667%` | `5481.2` | `4082.825` |
+| `chain_graph_retrieval` | 40 | 13 | `32.5%` | `0%` | `100%` | `15%` | `0%` | `5514.75` | `4465.575` |
+| `chain_rerank_injection` | 40 | 18 | `45%` | `+38.4615%` | `100%` | `10%` | `+33.3333%` | `5426.55` | `4335.725` |
+
+结论：
+
+- 三路召回在经过场景路由后，小样本上从旧完整矩阵的负向表现转为正向表现。
+- 图谱召回本轮持平，但当前 answer-quality fixture 中 `chain_graph_retrieval` 和 `chain_tri_retrieval` 的 evidence ids 没有充分隔离，所以这行只能说明当前 profile 口径下没有超过基线，不能单独证明图谱能力无效。
+- 重排与注入治理本轮同时提高回答命中并降低 forbidden，是后续扩测优先级最高的增强路径。
+- 后续要让图谱指标更可信，需要补图谱专用 case 或让 graph profile 输出可区分证据，再看回答命中、证据命中、噪声和上下文成本。
+- 这轮不能替代完整矩阵，也不能作为生产自然流量结论；它只说明路由治理后的链路值得继续做更大规模 fresh rerun。
+
 ## Phase 3 可输出的指标
 
 ### 召回重排

@@ -565,6 +565,32 @@ my_md/memory_optimization/eval_reports/memory_route_governance_eval.md
 - 离线表证明 deterministic trace 能按策略过滤候选；真实引擎 smoke 只证明接线可用。
 - 还不能把这一步解释为真实 LLM 回答质量已经提升。下一步要补更真实的 live fixture，并对三路/图谱/重排链路做 fresh answer-quality rerun。
 
+#### 小型真实 LLM fresh rerun
+
+2026-07-27 已补做一轮短线上评测，目标是验证路由治理后是否值得继续扩测，而不是替代完整大矩阵。
+
+运行配置：
+
+- 报告：`my_md/memory_optimization/eval_reports/route_governance_small_online_v1/memory_comprehensive_online_eval.json` 和 `.md`。
+- 样本：`40` 个唯一样本，common `20`、hard `20`。
+- profile：`chain_memory_base`、`chain_tri_retrieval`、`chain_graph_retrieval`、`chain_rerank_injection`。
+- 真实调用：`160` 次，`prompt_variant = baseline`，`repeat = 1`。
+- 基础设施：`provider_error_count = 0`，`timeout_count = 0`，`excluded_infra_failure_count = 0`，`partial_due_to_infra_failure = False`。
+
+| profile | cases | answer_success | answer_rate | 相对基线回答提升 | grounding_rate | forbidden_rate | avg_tokens | avg_latency_ms | 结论 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| `chain_memory_base` | 40 | 13 | `32.5%` | `0%` | `100%` | `15%` | `5503.7` | `4678.825` | 原始记忆基线 |
+| `chain_tri_retrieval` | 40 | 17 | `42.5%` | `+30.7692%` | `100%` | `12.5%` | `5481.2` | `4082.825` | 路由治理后小样本转正，值得扩测 |
+| `chain_graph_retrieval` | 40 | 13 | `32.5%` | `0%` | `100%` | `15%` | `5514.75` | `4465.575` | 本轮持平，仍需更细场景路由和去噪 |
+| `chain_rerank_injection` | 40 | 18 | `45%` | `+38.4615%` | `100%` | `10%` | `5426.55` | `4335.725` | 本轮最稳，回答和 forbidden 都优于基线 |
+
+结论边界：
+
+- 这轮只覆盖 `40` case，不能替代 `320 case / 1920 call` 完整矩阵。
+- 三路召回本轮转正，说明此前“全局打开三路导致噪声”的问题可以通过场景路由缓解。
+- 图谱召回本轮没有提升，但当前 answer-quality fixture 中 `chain_graph_retrieval` 和 `chain_tri_retrieval` 的 evidence ids 没有充分隔离，所以不能把这行解释为“图谱能力无效”；后续需要补图谱专用 case 或让 graph profile 输出可区分证据，再优化图谱触发条件、图谱候选去噪和证据注入约束。
+- 重排与注入治理是本轮最稳的增强路径，后续扩测应优先验证 `route + rerank/injection` 的组合。
+
 ### 写入价值与睡眠巩固的专项评测
 
 本轮 Phase 6e 是 answer-level 评测，它天然更偏向检索、图谱、重排和注入治理。写入价值和睡眠巩固不应该只用这张表判断强弱。
