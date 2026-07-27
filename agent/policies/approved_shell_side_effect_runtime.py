@@ -246,15 +246,20 @@ class ApprovedShellSideEffectRuntime:
             )
 
         execution_status = "executed" if result.ok else "execution_failed"
-        self.approval_runtime.finalize_execution(
-            approval_request_id=approval_request_id,
-            request_id=record.request_id,
-            session_key=record.session_key,
-            tool_name=record.tool_name,
-            approval_scope=record.approval_scope,
-            arguments=payload.arguments,
-            execution_status=execution_status,
-        )
+        try:
+            self.approval_runtime.finalize_execution(
+                approval_request_id=approval_request_id,
+                request_id=record.request_id,
+                session_key=record.session_key,
+                tool_name=record.tool_name,
+                approval_scope=record.approval_scope,
+                arguments=payload.arguments,
+                execution_status=execution_status,
+            )
+        except Exception:
+            return self._mark_state_persistence_failed(
+                record, actor, side_effect.preview_id
+            )
         if not result.ok:
             return self._error(
                 approval_request_id,
@@ -421,19 +426,49 @@ class ApprovedShellSideEffectRuntime:
                 "Approved shell execution failure could not be persisted.",
                 preview_id=preview_id,
             )
-        self.approval_runtime.finalize_execution(
-            approval_request_id=record.approval_request_id,
-            request_id=record.request_id,
-            session_key=record.session_key,
-            tool_name=record.tool_name,
-            approval_scope=record.approval_scope,
-            arguments=arguments,
-            execution_status="execution_failed",
-        )
+        try:
+            self.approval_runtime.finalize_execution(
+                approval_request_id=record.approval_request_id,
+                request_id=record.request_id,
+                session_key=record.session_key,
+                tool_name=record.tool_name,
+                approval_scope=record.approval_scope,
+                arguments=arguments,
+                execution_status="execution_failed",
+            )
+        except Exception:
+            return self._error(
+                record.approval_request_id,
+                "shell_execution_state_persistence_failed",
+                "Approved shell execution state could not be persisted.",
+                preview_id=preview_id,
+            )
         return self._error(
             record.approval_request_id,
             reason,
             "Approved shell execution failed.",
+            preview_id=preview_id,
+        )
+
+    def _mark_state_persistence_failed(
+        self,
+        record: ToolApprovalRequestRecord,
+        actor: str,
+        preview_id: str,
+    ) -> ApprovedShellSideEffectResult:
+        try:
+            self.side_effect_store.mark_execution_failed(
+                approval_request_id=record.approval_request_id,
+                execution_status="shell_execution_state_persistence_failed",
+                actor=actor,
+                now=self.now(),
+            )
+        except Exception:
+            pass
+        return self._error(
+            record.approval_request_id,
+            "shell_execution_state_persistence_failed",
+            "Approved shell execution state could not be persisted.",
             preview_id=preview_id,
         )
 
