@@ -211,6 +211,14 @@ P4b 已完成第一版 sandboxed approved shell execution：approved `shell` req
 
 P4b 验证结果：
 
+```bash
+PYTHONDONTWRITEBYTECODE=1 uv run --with pytest --with pytest-asyncio --with json-repair --with docstring-parser pytest tests/test_side_effect_payload_vault.py tests/test_shell_sandbox_plan.py tests/test_shell_sandbox_runner.py tests/test_approved_side_effect_store.py tests/test_approved_shell_side_effect_runtime.py tests/test_status_commands_approved_side_effects.py tests/test_task_execution_file_side_effect_resume.py tests/test_tool_governance_p4b_contract.py -q -p no:cacheprovider
+PYTHONDONTWRITEBYTECODE=1 uv run --with pytest --with pytest-asyncio --with json-repair --with docstring-parser pytest tests/test_tool_approval.py tests/test_tool_approval_store.py tests/test_tool_approval_runtime.py tests/test_tool_executor_approval_workflow.py tests/test_tool_approval_wiring.py tests/test_task_execution_approval_bridge.py tests/test_tool_audit.py tests/test_observe_writer.py tests/test_tool_governance_p1_p2_contract.py tests/test_tool_governance_p3_contract.py tests/test_tool_governance_p4_contract.py tests/test_tool_governance_p4b_contract.py -q -p no:cacheprovider
+PYTHONDONTWRITEBYTECODE=1 uv run --with pytest --with pytest-asyncio --with json-repair --with docstring-parser pytest tests/test_tool_invocation_policy.py tests/test_tool_invocation_policy_gate.py tests/test_tool_invocation_resource_policy.py tests/test_resource_policy.py tests/test_tool_executor.py tests/test_tool_boundary_manager.py tests/test_task_execution_access.py tests/test_task_execution_reasoner.py tests/test_task_execution_store.py tests/test_task_execution_contract.py tests/test_shell_safety_plugin.py tests/test_tool_access_gateway.py tests/test_observe_writer.py tests/test_lifecycle_phases.py tests/test_status_commands_approved_side_effects.py tests/test_task_execution_file_side_effect_resume.py -q -p no:cacheprovider
+PYTHONDONTWRITEBYTECODE=1 uv run python -m compileall agent/policies agent/tool_hooks plugins/status_commands plugins/observe tests/test_shell_sandbox_plan.py tests/test_shell_sandbox_runner.py tests/test_approved_shell_side_effect_runtime.py tests/test_tool_governance_p4b_contract.py
+git diff --check
+```
+
 ```text
 P4b focused suite: 61 passed in 3.36s
 P1/P2/P3/P4/P4b focused baseline: 86 passed in 3.52s
