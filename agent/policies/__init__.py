@@ -43,6 +43,12 @@ from agent.policies.resource_policy import (
     ResourcePolicyDecision,
     ResourcePolicyEngine,
 )
+from agent.policies.shell_sandbox_plan import (
+    ShellSandboxPolicy,
+    ShellSandboxPreview,
+    prepare_shell_sandbox_preview,
+    shell_command_hash,
+)
 from agent.policies.side_effect_payload_vault import (
     MANAGED_FILE_SIDE_EFFECT_TOOLS,
     MANAGED_SHELL_SIDE_EFFECT_TOOLS,
@@ -114,6 +120,8 @@ __all__ = [
     "ResourcePolicyEngine",
     "RiskStrategyContext",
     "RiskStrategyDecision",
+    "ShellSandboxPolicy",
+    "ShellSandboxPreview",
     "SideEffectPayload",
     "SideEffectPayloadRecord",
     "SideEffectPayloadVault",
@@ -146,6 +154,8 @@ __all__ = [
     "canonical_args_hash",
     "decide_doc_rag_preload",
     "infer_task_execution_contract",
+    "prepare_shell_sandbox_preview",
+    "shell_command_hash",
     "summarize_arguments",
     "trusted_approval_from_runtime",
 ]
