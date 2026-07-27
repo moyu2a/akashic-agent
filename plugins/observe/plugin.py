@@ -347,6 +347,20 @@ def _slim_approved_side_effect_lifecycle_event(
             "execution_status",
             "rollback_status",
             "created_at",
+            "command_hash",
+            "sandbox_backend",
+            "sandbox_image",
+            "network_mode",
+            "workspace_mount_mode",
+            "timeout_seconds",
+            "exit_code",
+            "stdout_hash",
+            "stderr_hash",
+            "stdout_bytes",
+            "stderr_bytes",
+            "stdout_truncated",
+            "stderr_truncated",
+            "duration_ms",
         )
         if key in event
     }

@@ -248,6 +248,80 @@ def test_observe_slim_trace_preserves_approved_side_effect_lifecycle_without_sen
     assert flat_event["tool_name"] == "write_file"
 
 
+def test_observe_slim_trace_preserves_shell_sandbox_lifecycle_without_raw_command() -> None:
+    raw_command = "echo secret-token-value"
+    tool_chain = [
+        {
+            "text": "",
+            "calls": [
+                {
+                    "name": "approved_side_effect_lifecycle",
+                    "arguments": {},
+                    "result": "",
+                    "approved_side_effect_lifecycle": [
+                        {
+                            "event_type": "approved_side_effect_lifecycle",
+                            "approval_request_id": "approval-shell-1",
+                            "request_id": "call-shell-1",
+                            "session_key": "cli:1",
+                            "actor": "status_command",
+                            "tool_name": "shell",
+                            "approval_scope": "tool_call",
+                            "args_hash": "args-hash",
+                            "status": "executed",
+                            "preview_id": "shell-preview-1",
+                            "command_hash": "command-hash",
+                            "sandbox_backend": "podman",
+                            "sandbox_image": "python:3.14-slim",
+                            "network_mode": "none",
+                            "workspace_mount_mode": "ro",
+                            "timeout_seconds": 30,
+                            "exit_code": 0,
+                            "stdout_hash": "stdout-hash",
+                            "stderr_hash": "stderr-hash",
+                            "stdout_bytes": 5,
+                            "stderr_bytes": 0,
+                            "stdout_truncated": False,
+                            "stderr_truncated": False,
+                            "duration_ms": 120,
+                            "command": raw_command,
+                            "stdout_text": "secret-token-value",
+                            "stderr_text": "secret-token-value",
+                            "command_ref": "tool_side_effects/payloads/a.json",
+                            "stdout_ref": "tool_side_effects/artifacts/stdout.txt",
+                            "stderr_ref": "tool_side_effects/artifacts/stderr.txt",
+                            "payload_path": "/tmp/workspace/tool_side_effects/payloads/a.json",
+                        }
+                    ],
+                }
+            ],
+        }
+    ]
+
+    event = _slim_tool_chain(tool_chain)[0]["calls"][0][
+        "approved_side_effect_lifecycle"
+    ][0]
+    encoded = json.dumps(event, ensure_ascii=False)
+
+    assert event["tool_name"] == "shell"
+    assert event["command_hash"] == "command-hash"
+    assert event["network_mode"] == "none"
+    assert event["workspace_mount_mode"] == "ro"
+    assert event["exit_code"] == 0
+    assert raw_command not in encoded
+    assert "secret-token-value" not in encoded
+    for key in (
+        "command",
+        "stdout_text",
+        "stderr_text",
+        "command_ref",
+        "stdout_ref",
+        "stderr_ref",
+        "payload_path",
+    ):
+        assert key not in event
+
+
 def test_observe_turn_trace_includes_status_command_side_effect_lifecycle_without_sensitive_fields() -> None:
     writer = _RecordingObserveWriter()
     raw_secret = "raw-secret-content"
