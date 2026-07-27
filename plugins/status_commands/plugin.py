@@ -708,7 +708,7 @@ def _approval_lifecycle_from_decisions(
 def _side_effect_lifecycle_event(
     record: ApprovedSideEffectRecord,
 ) -> dict[str, object]:
-    return {
+    event: dict[str, object] = {
         "event_type": "approved_side_effect_lifecycle",
         "approval_request_id": record.approval_request_id,
         "request_id": record.request_id,
@@ -726,21 +726,27 @@ def _side_effect_lifecycle_event(
         "rollback_id": record.rollback_id,
         "execution_status": record.execution_status,
         "rollback_status": record.rollback_status,
-        "command_hash": record.command_hash,
         "sandbox_backend": record.sandbox_backend,
-        "sandbox_image": record.sandbox_image,
-        "network_mode": record.network_mode,
-        "workspace_mount_mode": record.workspace_mount_mode,
-        "timeout_seconds": record.timeout_seconds,
-        "exit_code": record.exit_code,
-        "stdout_hash": record.stdout_hash,
-        "stderr_hash": record.stderr_hash,
-        "stdout_bytes": record.stdout_bytes,
-        "stderr_bytes": record.stderr_bytes,
-        "stdout_truncated": record.stdout_truncated,
-        "stderr_truncated": record.stderr_truncated,
-        "duration_ms": record.duration_ms,
     }
+    if record.tool_name == "shell":
+        event.update(
+            {
+                "command_hash": record.command_hash,
+                "sandbox_image": record.sandbox_image,
+                "network_mode": record.network_mode,
+                "workspace_mount_mode": record.workspace_mount_mode,
+                "timeout_seconds": record.timeout_seconds,
+                "exit_code": record.exit_code,
+                "stdout_hash": record.stdout_hash,
+                "stderr_hash": record.stderr_hash,
+                "stdout_bytes": record.stdout_bytes,
+                "stderr_bytes": record.stderr_bytes,
+                "stdout_truncated": record.stdout_truncated,
+                "stderr_truncated": record.stderr_truncated,
+                "duration_ms": record.duration_ms,
+            }
+        )
+    return event
 
 
 def _format_ts(ts: str) -> str:
