@@ -29,6 +29,10 @@ from agent.policies.approved_side_effect_runtime import (
     ApprovedSideEffectResult,
     ApprovedSideEffectRuntime,
 )
+from agent.policies.approved_shell_side_effect_runtime import (
+    ApprovedShellSideEffectResult,
+    ApprovedShellSideEffectRuntime,
+)
 from agent.policies.task_control_arbiter import (
     TaskControlIntentArbiter,
     TaskControlIntentDecision,
@@ -106,6 +110,8 @@ __all__ = [
     "ApprovedSideEffectResult",
     "ApprovedSideEffectRuntime",
     "ApprovedSideEffectStore",
+    "ApprovedShellSideEffectResult",
+    "ApprovedShellSideEffectRuntime",
     "DecisionMeta",
     "DelegationPolicy",
     "DOC_RAG_TOOL_NAMES",
