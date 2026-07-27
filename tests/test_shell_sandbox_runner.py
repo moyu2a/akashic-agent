@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import hashlib
 import subprocess
 import time
 from dataclasses import replace
@@ -168,6 +169,44 @@ def test_docker_podman_runner_streams_large_output_incrementally(
     assert result.stdout_truncated is True
     assert result.stderr_bytes == 5
     assert result.stderr_truncated is False
+
+
+def test_docker_podman_runner_writes_private_output_artifacts(
+    monkeypatch, tmp_path: Path
+) -> None:
+    class FakeProc:
+        def __init__(self) -> None:
+            self.stdin = io.BytesIO()
+            self.stdout = io.BytesIO(b"real runner stdout\n")
+            self.stderr = io.BytesIO(b"real runner stderr\n")
+            self.returncode = 0
+
+        def wait(self, timeout=None) -> int:
+            return self.returncode
+
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    preview = prepare_shell_sandbox_preview(
+        workspace_root=workspace,
+        artifact_root=tmp_path / "artifacts",
+        arguments={"command": "echo hi", "description": "say hi"},
+    )
+    runner = DockerPodmanSandboxRunner(binary="podman")
+    monkeypatch.setattr(runner, "image_available", lambda preview: True)
+    monkeypatch.setattr("subprocess.Popen", lambda *args, **kwargs: FakeProc())
+
+    result = runner.run(preview, "echo hi")
+
+    stdout_path = preview.artifact_dir / result.stdout_path
+    stderr_path = preview.artifact_dir / result.stderr_path
+    assert stdout_path.read_bytes() == b"real runner stdout\n"
+    assert stderr_path.read_bytes() == b"real runner stderr\n"
+    assert stdout_path.stat().st_mode & 0o777 == 0o600
+    assert stderr_path.stat().st_mode & 0o777 == 0o600
+    assert result.stdout_hash == hashlib.sha256(stdout_path.read_bytes()).hexdigest()
+    assert result.stderr_hash == hashlib.sha256(stderr_path.read_bytes()).hexdigest()
+    assert result.stdout_bytes == stdout_path.stat().st_size
+    assert result.stderr_bytes == stderr_path.stat().st_size
 
 
 def test_docker_podman_runner_surfaces_launch_failure_without_consuming_output(

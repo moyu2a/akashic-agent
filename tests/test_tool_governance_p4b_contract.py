@@ -16,7 +16,10 @@ from agent.lifecycle.types import TurnState
 from agent.policies.approved_shell_side_effect_runtime import (
     ApprovedShellSideEffectRuntime,
 )
-from agent.policies.approved_side_effect_store import ApprovedSideEffectStore
+from agent.policies.approved_side_effect_store import (
+    ApprovedSideEffectRecord,
+    ApprovedSideEffectStore,
+)
 from agent.policies.shell_sandbox_runner import SandboxRunResult
 from agent.policies.side_effect_payload_vault import SideEffectPayloadVault
 from agent.policies.tool_approval_context import trusted_approval_from_runtime
@@ -133,6 +136,52 @@ def _approve(approval_runtime: ToolApprovalRuntime, approval_id: str) -> None:
         actor="status_command",
         now=approval_runtime._now(),
     )
+
+
+def test_p4b_file_lifecycle_event_excludes_shell_only_metadata() -> None:
+    event = _side_effect_lifecycle_event(
+        ApprovedSideEffectRecord(
+            approval_request_id="approval-file",
+            request_id="request-file",
+            session_key="cli:test",
+            tool_name="write_file",
+            approval_scope="tool_call",
+            args_hash="args-hash",
+            status="executed",
+            payload_ref="payload-file",
+            sandbox_backend="podman",
+            command_hash="command-hash",
+            sandbox_image="python:3.14-slim",
+            network_mode="none",
+            workspace_mount_mode="ro",
+            timeout_seconds=120,
+            exit_code=0,
+            stdout_hash="stdout-hash",
+            stderr_hash="stderr-hash",
+            stdout_bytes=1,
+            stderr_bytes=1,
+            stdout_truncated=False,
+            stderr_truncated=False,
+            duration_ms=1,
+        )
+    )
+
+    assert not {
+        "sandbox_backend",
+        "command_hash",
+        "sandbox_image",
+        "network_mode",
+        "workspace_mount_mode",
+        "timeout_seconds",
+        "exit_code",
+        "stdout_hash",
+        "stderr_hash",
+        "stdout_bytes",
+        "stderr_bytes",
+        "stdout_truncated",
+        "stderr_truncated",
+        "duration_ms",
+    } & event.keys()
 
 
 async def _run_status_command(

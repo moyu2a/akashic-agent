@@ -726,12 +726,12 @@ def _side_effect_lifecycle_event(
         "rollback_id": record.rollback_id,
         "execution_status": record.execution_status,
         "rollback_status": record.rollback_status,
-        "sandbox_backend": record.sandbox_backend,
     }
     if record.tool_name == "shell":
         event.update(
             {
                 "command_hash": record.command_hash,
+                "sandbox_backend": record.sandbox_backend,
                 "sandbox_image": record.sandbox_image,
                 "network_mode": record.network_mode,
                 "workspace_mount_mode": record.workspace_mount_mode,
