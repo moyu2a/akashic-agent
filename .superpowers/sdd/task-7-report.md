@@ -82,3 +82,53 @@ Final required Task 7 suite:
 ```
 
 Both runs were followed by a clean `git diff --check`.
+
+## P4b Contract TDD Evidence
+
+### RED
+
+Before the observe allowlist change, the required focused command failed with
+the expected missing shell lifecycle field:
+
+```text
+tests/test_observe_writer.py::test_observe_slim_trace_preserves_shell_sandbox_lifecycle_without_raw_command
+KeyError: 'command_hash'
+```
+
+The first draft also exposed two stale test assumptions against the completed
+Task 6 APIs: resource-policy reason placement and treating SQLite files as UTF-8
+text. Those assertions were narrowed to the public denial contract and raw DB
+bytes before implementation.
+
+### P4b Contract Review RED
+
+The strengthened P4b contract suite failed before the status-command metadata
+pass-through update:
+
+```text
+tests/test_tool_governance_p4b_contract.py::test_p4b_shell_status_commands_expose_safe_lifecycle_without_private_data
+KeyError: 'command_hash'
+```
+
+This showed that `/prepare_tool` and `/run_approved_tool` lifecycle metadata
+omitted safe shell lifecycle fields even though the managed shell runtime had
+recorded them.
+
+### P4b Contract Review GREEN
+
+Required focused verification after the safe lifecycle metadata update:
+
+```text
+22 passed in 0.76s
+```
+
+Wider related verification:
+
+```text
+61 passed in 2.97s
+```
+
+The strengthened contract records a real private sandbox artifact pair with
+`0600` permissions, verifies the runner received the raw command from the
+payload vault, and verifies public executor/status/observe-facing data retains
+only safe lifecycle metadata.
