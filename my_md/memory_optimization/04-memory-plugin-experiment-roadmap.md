@@ -525,6 +525,46 @@ my_md/memory_optimization/eval_reports/online_failure_attribution/online_failure
   - 图谱召回在 `tri_rrf`、`version_chain`、`graph_bridge`、`source_ref_missing`、`session_boundary`、`entity_alias` 等场景更容易救活基线，但在 `tool_preference`、`temporal_preference`、`conflict_resolution`、`style_preference` 上也会回退；
   - 所以下一步应把三路和图谱纳入场景路由层，而不是继续把它们当成全局默认增强。
 
+### Phase 6m 三路召回路由治理
+
+在失败归因之后，本轮已把三路召回治理从“继续加召回”调整为“先做场景路由和候选准入”。核心实现是 `memory2/retrieval_governance.py`：
+
+- `classify_retrieval_scene()`：把查询分成模糊指代、工具偏好、部分冲突、精确召回、来源查询和未知场景。
+- `build_retrieval_routing_decision()`：为每类场景生成允许通道、每路上限、是否要求来源、是否要求同作用域、是否启用图谱和是否丢弃低置信候选。
+- `apply_retrieval_route()`：对语义、关键词、溯源、图谱候选做准入过滤，输出保留候选和 route trace。
+- `Retriever.retrieve_with_trace()` / `DefaultMemoryEngine.retrieve()`：把 route trace 透出到评测和默认 memory engine，不改变旧 `retrieve()` 的列表返回合同。
+
+当前报告：
+
+```text
+my_md/memory_optimization/eval_reports/memory_route_governance_eval.json
+my_md/memory_optimization/eval_reports/memory_route_governance_eval.md
+```
+
+离线路由表基于 comprehensive `320` case，覆盖 `5` 类场景：
+
+| 场景 | case | baseline_success | gated_success | candidate_drop_rate | expected_route_hit_rate | candidate_accept_rate |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| 模糊指代 | 16 | 30 | 32 | 68.27% | 100.0% | 31.73% |
+| 部分冲突 | 24 | 48 | 48 | 63.3933% | 100.0% | 36.6067% |
+| 来源查询 | 16 | 32 | 32 | 77.085% | 100.0% | 22.915% |
+| 工具偏好 | 16 | 30 | 32 | 76.73% | 100.0% | 23.27% |
+| 未知场景 | 248 | 488 | 496 | 73.7155% | 100.0% | 26.2845% |
+
+真实引擎 route smoke 基于 `9` case，只验证 `DefaultMemoryEngine.retrieve()` 可以输出路由 trace：
+
+| 场景 | case | candidate_accept_rate | candidate_drop_rate | graph_used_rate |
+| --- | ---: | ---: | ---: | ---: |
+| 模糊指代 | 2 | 25.0% | 75.0% | 100.0% |
+| 未知场景 | 7 | 34.2843% | 51.43% | 0.0% |
+
+结论：
+
+- 三路召回和图谱召回不再作为全局默认开关，而是受场景路由控制。
+- 当前路由治理能输出候选丢弃率、路由命中率、通道使用率和丢弃原因，用于解释“为什么保留或丢弃某条记忆”。
+- 离线表证明 deterministic trace 能按策略过滤候选；真实引擎 smoke 只证明接线可用。
+- 还不能把这一步解释为真实 LLM 回答质量已经提升。下一步要补更真实的 live fixture，并对三路/图谱/重排链路做 fresh answer-quality rerun。
+
 ### 写入价值与睡眠巩固的专项评测
 
 本轮 Phase 6e 是 answer-level 评测，它天然更偏向检索、图谱、重排和注入治理。写入价值和睡眠巩固不应该只用这张表判断强弱。
@@ -680,6 +720,7 @@ Phase 6d   已完成第一版：80 case 量化 uplift 总表，输出 common/har
 Phase 6d-chain 已完成第一版：链路量化评测，输出累计开关链路、相邻增益和总增益 JSON + Markdown
 Phase 6d-balanced 已完成第一版：分层 balanced 链路评测，输出回答、召回代理、证据、治理、效率和综合代理分 JSON + Markdown
 Phase 6d-layered 已完成第一版：三层评分评测，输出即时回答、写入治理和记忆库卫生 JSON + Markdown
+Phase 6m-retrieval-route-governance 已完成第一版：三路召回场景路由和候选治理，输出离线路由表和真实引擎 route smoke
 Phase 6   待做：Dashboard、连续评测和 active 化决策
 ```
 
@@ -1091,7 +1132,7 @@ Phase 6c-1 已完成第一版：离线 uplift report。
 后续建议拆分：
 
 1. Phase 6c：把 eval report 接入 Dashboard 或 observe 查询界面。
-2. Phase 6d：已经完成 80 case 量化 uplift 总表，输出 common/hard 双集和单项 / 总增益 JSON + Markdown，当前结果为 `baseline_main_score = 94.375`、`all_on_main_score = 69.3043`、`total_uplift_points = -25.0707`。这里的 `memory_base` 是原始记忆基线，`off` 只是关闭增强控制组。本轮修正后，token 输出使用 `token_signal_kind/value/delta`，混合成本与节省的组合态标记为 `mixed`；溯源 forbidden rate 只按实际 `cross_scope_risk_count` 计算。当前写入治理口径中 `review` 不等同于 `reject`，因此 `tool_preference` case 的 `all_on` 数值低于旧报表。报表路径见 `my_md/memory_optimization/eval_reports/memory_quantitative_uplift_eval.json`。
+2. Phase 6d：已经完成 80 case 量化 uplift 总表，输出 common/hard 双集和单项 / 总增益 JSON + Markdown，当前结果为 `baseline_main_score = 94.375`、`all_on_main_score = 68.8579`、`total_uplift_points = -25.5171`。这里的 `memory_base` 是原始记忆基线，`off` 只是关闭增强控制组。本轮修正后，token 输出使用 `token_signal_kind/value/delta`，混合成本与节省的组合态标记为 `mixed`；溯源 forbidden rate 只按实际 `cross_scope_risk_count` 计算。当前写入治理口径中 `review` 不等同于 `reject`，因此 `tool_preference` case 的 `all_on` 数值低于旧报表。报表路径见 `my_md/memory_optimization/eval_reports/memory_quantitative_uplift_eval.json`。
 3. Phase 6d-chain：已经完成链路量化评测，输出 `memory_quantitative_chain_eval.json` 和 `memory_quantitative_chain_eval.md`。当前链路为 `chain_memory_base -> chain_write_value -> chain_tri_retrieval -> chain_graph_retrieval -> chain_rerank_injection -> chain_version_provenance -> chain_sleep_consolidation -> chain_all_on`，`chain_off` 仅作为关闭增强控制组。结果显示最终总提升 `-25.0707` 分；相邻增益最高是写入价值 `-40.4156` 的基线切换，随后三路召回带来 `+18.2433`，图谱召回 `-0.1093`；后续治理和睡眠步骤在当前平均评分公式下继续下降，说明下一步应优化组合权重、场景路由和 active 化策略。
 4. Phase 6d-balanced：已经完成分层 balanced 链路评测，输出 `memory_quantitative_balanced_eval.json` 和 `memory_quantitative_balanced_eval.md`。当前结果为 `baseline_balanced_score = 12.6923`、`final_balanced_score = 67.2022`、`total_balanced_uplift_points = 54.5099`，common 最终分 `66.6972`，hard 最终分 `67.7072`。Balanced report 借鉴 RAG/Agent 分层评测共识，把回答、召回代理、证据、治理和效率分开；本项目的改进是把 memory 生命周期治理纳入评分，包括 forbidden、source_ref、版本链、scope 隔离和 token/sleep 信号。它仍然是离线代理评测，不是生产回答准确率。
 5. Phase 6d-layered：已经完成三层评分评测，输出 `memory_layered_scoring_eval.json` 和 `memory_layered_scoring_eval.md`。当前结果为 `baseline_total_layered_score = 94.375`、`final_total_layered_score = 54.9521`、`total_layered_uplift_points = -39.4229`，common 最终分 `54.773`，hard 最终分 `55.1312`，`chain_all_on` 的写入治理分 `49.3334`，记忆库卫生分 `35.4107`。这一步的意义是把即时回答、写入治理、记忆库卫生拆开，避免后两者被单一回答分误伤。

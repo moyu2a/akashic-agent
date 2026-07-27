@@ -13,6 +13,11 @@ from memory2.injection_governance_experiments import (
 )
 from memory2.provenance_experiments import build_provenance_shadow_result
 from memory2.rerank_experiments import build_rerank_shadow_result
+from memory2.retrieval_governance import (
+    RetrievalRoutingDecision,
+    apply_retrieval_route,
+    build_retrieval_routing_decision,
+)
 from memory2.retrieval_experiments import (
     build_provenance_lane,
     build_tri_retrieval_shadow_result,
@@ -40,6 +45,16 @@ class EvalTrace:
     baseline_result: dict[str, Any]
     experimental_result: dict[str, Any]
     metrics: dict[str, Any]
+
+
+@dataclass(frozen=True)
+class _CandidateLanes:
+    semantic_items: list[dict[str, object]]
+    keyword_items: list[dict[str, object]]
+    provenance_items: list[dict[str, object]]
+    graph_items: list[dict[str, object]]
+    decision: RetrievalRoutingDecision
+    route_trace: dict[str, object]
 
 
 @dataclass(frozen=True)
@@ -207,13 +222,13 @@ def _build_trace(case: EvalCase, feature_name: str) -> EvalTrace | None:
     if feature_name == "write_value_score":
         return _build_write_value_trace(case)
     if feature_name == "tri_retrieval":
-        semantic_items, keyword_items, provenance_items, _ = _candidate_lanes(case)
+        lanes = _candidate_lanes(case)
         result = build_tri_retrieval_shadow_result(
             query=_query(case),
             baseline_items=_baseline_recalled_items(case),
-            semantic_items=semantic_items,
-            keyword_items=keyword_items,
-            provenance_items=provenance_items,
+            semantic_items=lanes.semantic_items,
+            keyword_items=lanes.keyword_items,
+            provenance_items=lanes.provenance_items,
             latency_ms=0.0,
             top_n=max(8, len(_active_memory_items(case))),
         )
@@ -224,17 +239,18 @@ def _build_trace(case: EvalCase, feature_name: str) -> EvalTrace | None:
             "provenance_hit_count",
             "fused_hit_count",
         )))
+        metrics.update(_route_metrics(case, lanes, graph_lane_used=False))
         return EvalTrace(feature_name, result.baseline_result, result.experimental_result, metrics)
     if feature_name == "graph_retrieval":
-        semantic_items, keyword_items, provenance_items, graph_items = _candidate_lanes(case)
+        lanes = _candidate_lanes(case)
         baseline_miss = _baseline_miss_ids(case)
         result = build_graph_retrieval_shadow_result(
             query=_query(case),
             baseline_items=_baseline_recalled_items(case),
-            semantic_items=_without_ids(semantic_items, baseline_miss),
-            keyword_items=_without_ids(keyword_items, baseline_miss),
-            provenance_items=_without_ids(provenance_items, baseline_miss),
-            graph_items=graph_items,
+            semantic_items=_without_ids(lanes.semantic_items, baseline_miss),
+            keyword_items=_without_ids(lanes.keyword_items, baseline_miss),
+            provenance_items=_without_ids(lanes.provenance_items, baseline_miss),
+            graph_items=lanes.graph_items,
             latency_ms=0.0,
             top_n=max(8, len(_active_memory_items(case))),
         )
@@ -243,22 +259,29 @@ def _build_trace(case: EvalCase, feature_name: str) -> EvalTrace | None:
             "graph_hit_count",
             "graph_fused_hit_count",
         )))
+        metrics.update(
+            _route_metrics(case, lanes, graph_lane_used=bool(lanes.graph_items))
+        )
         return EvalTrace(feature_name, result.baseline_result, result.experimental_result, metrics)
     if feature_name == "rerank_shadow":
-        semantic_items, keyword_items, provenance_items, graph_items = _candidate_lanes(case)
+        lanes = _candidate_lanes(case)
         scope = _scope(case)
         result = build_rerank_shadow_result(
             query=_query(case),
             baseline_items=_baseline_recalled_items(case),
-            semantic_items=semantic_items,
-            keyword_items=keyword_items,
-            provenance_items=provenance_items,
-            graph_items=graph_items,
+            semantic_items=lanes.semantic_items,
+            keyword_items=lanes.keyword_items,
+            provenance_items=lanes.provenance_items,
+            graph_items=lanes.graph_items,
             scope_channel=scope["channel"],
             scope_chat_id=scope["chat_id"],
             top_n=max(8, len(_active_memory_items(case))),
         )
-        return EvalTrace(feature_name, result.baseline_result, result.experimental_result, dict(result.metrics))
+        metrics = dict(result.metrics)
+        metrics.update(
+            _route_metrics(case, lanes, graph_lane_used=bool(lanes.graph_items))
+        )
+        return EvalTrace(feature_name, result.baseline_result, result.experimental_result, metrics)
     if feature_name == "injection_governance_shadow":
         candidates = _injection_candidates(case)
         baseline_items = _baseline_recalled_items(case)
@@ -594,12 +617,7 @@ def _without_ids(
 
 def _candidate_lanes(
     case: EvalCase,
-) -> tuple[
-    list[dict[str, object]],
-    list[dict[str, object]],
-    list[dict[str, object]],
-    list[dict[str, object]],
-]:
+) -> _CandidateLanes:
     scope = _scope(case)
     active = [item for item in _active_memory_items(case) if _same_scope(item, scope)]
     should_recall = {str(item) for item in _expectations(case).get("should_recall_ids", [])}
@@ -629,19 +647,64 @@ def _candidate_lanes(
         scope_chat_id=scope["chat_id"],
         limit=max(20, len(active)),
     ).items
-    return semantic_items, keyword_items, provenance_items, graph_items
+    decision = build_retrieval_routing_decision(_query(case))
+    raw_lanes = {
+        "semantic": semantic_items,
+        "keyword": keyword_items,
+        "provenance": provenance_items,
+        "graph": graph_items,
+    }
+    input_counts = {lane: len(items) for lane, items in raw_lanes.items()}
+    _routed_items, raw_route_trace = apply_retrieval_route(
+        decision,
+        {
+            lane: _tag_lane_items(lane, items)
+            for lane, items in raw_lanes.items()
+        },
+    )
+    accepted_items_by_lane = dict(raw_route_trace.get("accepted_items_by_lane", {}))
+    lanes = {
+        lane: [
+            {key: value for key, value in dict(item).items() if key != "_eval_route_lane"}
+            for item in accepted_items_by_lane.get(lane, [])
+        ]
+        for lane in raw_lanes
+    }
+    output_count = sum(len(items) for items in lanes.values())
+    input_count = sum(input_counts.values())
+    candidate_drop_rate = (
+        round(max(0, input_count - output_count) / input_count, 4)
+        if input_count
+        else 0.0
+    )
+    route_trace = {
+        "input_counts": input_counts,
+        "accepted_by_lane": {lane: len(items) for lane, items in lanes.items()},
+        "dropped_by_reason": dict(raw_route_trace.get("dropped_by_reason", {})),
+        "output_count": output_count,
+        "candidate_drop_rate": candidate_drop_rate,
+        "candidate_accept_rate": raw_route_trace.get("route_hit_rate", 0.0),
+    }
+    return _CandidateLanes(
+        semantic_items=lanes["semantic"],
+        keyword_items=lanes["keyword"],
+        provenance_items=lanes["provenance"],
+        graph_items=lanes["graph"],
+        decision=decision,
+        route_trace=route_trace,
+    )
 
 
 def _injection_candidates(case: EvalCase) -> list[dict[str, object]]:
-    semantic_items, keyword_items, provenance_items, graph_items = _candidate_lanes(case)
+    lanes = _candidate_lanes(case)
     scope = _scope(case)
     result = build_rerank_shadow_result(
         query=_query(case),
         baseline_items=_baseline_recalled_items(case),
-        semantic_items=semantic_items,
-        keyword_items=keyword_items,
-        provenance_items=provenance_items,
-        graph_items=graph_items,
+        semantic_items=lanes.semantic_items,
+        keyword_items=lanes.keyword_items,
+        provenance_items=lanes.provenance_items,
+        graph_items=lanes.graph_items,
         scope_channel=scope["channel"],
         scope_chat_id=scope["chat_id"],
         top_n=max(8, len(_active_memory_items(case))),
@@ -711,6 +774,53 @@ def _with_default_score(item: dict[str, object], score: float) -> dict[str, obje
     copy = dict(item)
     copy.setdefault("score", round(score, 4))
     return copy
+
+
+def _tag_lane_items(
+    lane: str,
+    items: list[dict[str, object]],
+) -> list[dict[str, object]]:
+    return [{**item, "_eval_route_lane": lane} for item in items]
+
+
+def _route_metrics(
+    case: EvalCase,
+    lanes: _CandidateLanes,
+    *,
+    graph_lane_used: bool,
+) -> dict[str, object]:
+    should_recall = {
+        str(item_id) for item_id in _expectations(case).get("should_recall_ids", [])
+    }
+    routed_ids = {
+        str(item.get("id") or "").strip()
+        for lane in (
+            lanes.semantic_items,
+            lanes.keyword_items,
+            lanes.provenance_items,
+            lanes.graph_items,
+        )
+        for item in lane
+        if str(item.get("id") or "").strip()
+    }
+    expected_route_hit_rate = (
+        round(len(should_recall & routed_ids) / len(should_recall), 4)
+        if should_recall
+        else 0.0
+    )
+    return {
+        "retrieval_scene": lanes.decision.scene,
+        "route_decision": lanes.decision.to_dict(),
+        "candidate_drop_counts": dict(
+            lanes.route_trace.get("dropped_by_reason", {})
+        ),
+        "route_input_counts": dict(lanes.route_trace.get("input_counts", {})),
+        "candidate_drop_rate": lanes.route_trace.get("candidate_drop_rate", 0.0),
+        "candidate_accept_rate": lanes.route_trace.get("candidate_accept_rate", 0.0),
+        "expected_route_hit_rate": expected_route_hit_rate,
+        "route_hit_rate": expected_route_hit_rate,
+        "graph_lane_used": graph_lane_used,
+    }
 
 
 def _terms(text: str) -> set[str]:

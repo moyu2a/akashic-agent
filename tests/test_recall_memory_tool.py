@@ -165,9 +165,7 @@ class _TimedSemanticStore:
         self.vector_batch_vec_count = 0
         self.keyword_kwargs: list[dict[str, object]] = []
 
-    def vector_search(
-        self, *_args: object, **kwargs: object
-    ) -> list[_MemoryHit]:
+    def vector_search(self, *_args: object, **kwargs: object) -> list[_MemoryHit]:
         self.vector_kwargs.append(kwargs)
         raise AssertionError("带 time_filter 的 semantic 模式应复用 batch 候选")
 
@@ -228,6 +226,31 @@ class _FusionStore:
     ) -> list[_MemoryHit]:
         self.keyword_kwargs.append(kwargs)
         return self.keyword_hits
+
+    def list_items_for_dashboard(
+        self, **_kwargs: object
+    ) -> tuple[list[_MemoryHit], int]:
+        items = [
+            {
+                "id": "prov1",
+                "memory_type": "event",
+                "summary": "上次支付方案保留来源记录",
+                "source_ref": "cli:local:3",
+                "scope_channel": "cli",
+                "scope_chat_id": "local",
+                "extra_json": {"active_topics": ["支付方案"]},
+            },
+            {
+                "id": "graph1",
+                "memory_type": "event",
+                "summary": "支付方案的图谱关联记录",
+                "source_ref": "cli:local:4",
+                "scope_channel": "cli",
+                "scope_chat_id": "local",
+                "extra_json": {"active_topics": ["支付方案"]},
+            },
+        ]
+        return items, len(items)
 
 
 def test_parse_time_filter_supports_presets_and_ranges(
@@ -425,6 +448,50 @@ async def test_retriever_retrieve_with_lanes_does_not_add_extra_embed_calls() ->
 
 
 @pytest.mark.asyncio
+async def test_retriever_retrieve_with_trace_governs_all_lanes_before_rrf() -> None:
+    store = _FusionStore(
+        vector_groups=[
+            [
+                {
+                    "id": "semantic1",
+                    "memory_type": "event",
+                    "summary": "上次支付方案的语义命中",
+                    "score": 0.9,
+                    "source_ref": "cli:local:1",
+                    "scope_channel": "cli",
+                    "scope_chat_id": "local",
+                }
+            ]
+        ],
+        keyword_hits=[
+            {
+                "id": "keyword1",
+                "memory_type": "event",
+                "summary": "上次支付方案的关键词命中",
+                "keyword_score": 1.0,
+                "source_ref": "cli:local:2",
+                "scope_channel": "cli",
+                "scope_chat_id": "local",
+            }
+        ],
+    )
+    retriever = Retriever(cast(MemoryStore2, store), cast(Embedder, _StaticEmbedder()))
+
+    items, trace = await retriever.retrieve_with_trace(
+        "上次支付方案是什么？",
+        top_k=4,
+        scope_channel="cli",
+        scope_chat_id="local",
+    )
+
+    assert trace["scene"] == "fuzzy_reference"
+    assert trace["graph_used"] is True
+    assert trace["candidate_drop_counts"] == trace["dropped_by_reason"]
+    assert set(trace["input_counts"]) == {"semantic", "keyword", "provenance", "graph"}
+    assert set(item["id"] for item in items) >= {"semantic1", "keyword1", "prov1"}
+
+
+@pytest.mark.asyncio
 async def test_retriever_returns_keyword_hits_when_vector_empty() -> None:
     store = _FusionStore(
         vector_groups=[[]],
@@ -446,7 +513,9 @@ async def test_retriever_returns_keyword_hits_when_vector_empty() -> None:
 
 
 @pytest.mark.asyncio
-async def test_retriever_keeps_strong_vector_order_when_keyword_hits_are_low_rank() -> None:
+async def test_retriever_keeps_strong_vector_order_when_keyword_hits_are_low_rank() -> (
+    None
+):
     vector_hits: list[_MemoryHit] = [
         {
             "id": "vec1",
@@ -666,4 +735,7 @@ async def test_recall_memory_falls_back_to_keyword_when_query_embed_hangs(
 
 def test_recall_memory_description_emphasizes_mandatory_citation() -> None:
     assert "只要最终回复使用了本工具返回的任何记忆条目" in RecallMemoryTool.description
-    assert "cited_item_ids / citation_required / citation_format" in RecallMemoryTool.description
+    assert (
+        "cited_item_ids / citation_required / citation_format"
+        in RecallMemoryTool.description
+    )

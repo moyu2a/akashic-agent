@@ -123,13 +123,11 @@ def _undo_store_by_message_sources(
         return {"affected_ids": [], "restored_ids": [], "rollback_source_ids": []}
     target_ids = set(clean_ids)
     with store._lock:
-        rows = store._db.execute(
-            """
+        rows = store._db.execute("""
             SELECT id, source_ref
             FROM memory_items
             WHERE COALESCE(source_ref, '') != ''
-            """
-        ).fetchall()
+            """).fetchall()
         affected_ids: set[str] = set()
         rollback_source_ids: set[str] = set()
         for item_id, source_ref in rows:
@@ -223,7 +221,7 @@ def _coerce_emotional_weight(value: object) -> int:
         return 0
     try:
         return max(0, min(10, int(value)))
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return 0
 
 
@@ -447,6 +445,7 @@ USER: 那就直接写个脚本绕过去吧
   ]
 }}"""
 
+
 class DefaultMemoryEngine:
     DESCRIPTOR = MemoryEngineDescriptor(
         name="default",
@@ -505,9 +504,7 @@ class DefaultMemoryEngine:
             or config.light_base_url
             or config.base_url
             or "",
-            api_key=embedding.api_key
-            or config.light_api_key
-            or config.api_key,
+            api_key=embedding.api_key or config.light_api_key or config.api_key,
             model=embedding.model,
             requester=http_resources.external_default,
         )
@@ -548,7 +545,9 @@ class DefaultMemoryEngine:
                 existing_memory_provider=lambda store=self._v2_store: store.list_items_for_dashboard(
                     status="active",
                     page_size=200,
-                )[0],
+                )[
+                    0
+                ],
             )
         self._experiment_runner = experiment_runner
         self._graph_retrieval_enabled = (
@@ -709,14 +708,18 @@ class DefaultMemoryEngine:
         queries = self._resolve_queries(request)
         memory_types = self._resolve_memory_types(request)
         started_at = time.perf_counter()
-        items, semantic_items, keyword_items = await self._retrieve_related_with_lanes(
-            request.query,
-            memory_types=memory_types,
-            top_k=request.top_k,
-            scope_channel=scope.channel or None,
-            scope_chat_id=scope.chat_id or None,
-            require_scope_match=bool(request.hints.get("require_scope_match", False)),
-            aux_queries=queries[1:],
+        items, route_trace, semantic_items, keyword_items = (
+            await self._retrieve_related_with_trace(
+                request.query,
+                memory_types=memory_types,
+                top_k=request.top_k,
+                scope_channel=scope.channel or None,
+                scope_chat_id=scope.chat_id or None,
+                require_scope_match=bool(
+                    request.hints.get("require_scope_match", False)
+                ),
+                aux_queries=queries[1:],
+            )
         )
         await self._record_tri_retrieval_shadow(
             request=request,
@@ -766,8 +769,9 @@ class DefaultMemoryEngine:
                 "engine": self.DESCRIPTOR.name,
                 "profile": self.DESCRIPTOR.profile.value,
                 "mode": request.mode,
+                **route_trace,
             },
-            raw={"items": items},
+            raw={"items": items, "route_trace": route_trace},
         )
 
     # post-response 摄入入口：外部只提交对话内容，失效判断仍在 engine 内部完成。
@@ -819,7 +823,9 @@ class DefaultMemoryEngine:
             raise RuntimeError("memorizer unavailable")
 
         raw_steps = request.raw_extra.get("steps")
-        steps = [str(step) for step in raw_steps] if isinstance(raw_steps, list) else None
+        steps = (
+            [str(step) for step in raw_steps] if isinstance(raw_steps, list) else None
+        )
         memory_type = _coerce_memory_type(
             request.memory_type,
             str(request.raw_extra.get("tool_requirement") or ""),
@@ -832,7 +838,8 @@ class DefaultMemoryEngine:
         if memory_type == "procedure":
             extra["rule_schema"] = build_procedure_rule_schema(
                 summary=request.summary,
-                tool_requirement=str(request.raw_extra.get("tool_requirement") or "") or None,
+                tool_requirement=str(request.raw_extra.get("tool_requirement") or "")
+                or None,
                 steps=list(steps or []),
             )
             await self._attach_trigger_tags(extra=extra, summary=request.summary)
@@ -865,7 +872,9 @@ class DefaultMemoryEngine:
             store.mark_superseded_batch(found_ids)
         return ForgetResult(
             superseded_ids=found_ids,
-            missing_ids=[item_id for item_id in clean_ids if item_id not in set(found_ids)],
+            missing_ids=[
+                item_id for item_id in clean_ids if item_id not in set(found_ids)
+            ],
             items=[
                 {
                     "id": item.get("id"),
@@ -919,7 +928,9 @@ class DefaultMemoryEngine:
         action_tokens: list[str],
     ) -> list[dict[str, object]]:
         store = self._v2_store
-        return store.keyword_match_procedures(action_tokens) if store is not None else []
+        return (
+            store.keyword_match_procedures(action_tokens) if store is not None else []
+        )
 
     def list_events_by_time_range(
         self,
@@ -1096,9 +1107,7 @@ class DefaultMemoryEngine:
                 },
                 source_ref=f"{source_ref}#profile",
                 happened_at=item.get("happened_at") or None,
-                emotional_weight=_coerce_emotional_weight(
-                    item.get("emotional_weight")
-                ),
+                emotional_weight=_coerce_emotional_weight(item.get("emotional_weight")),
             )
             saved_counts["profile"] += 1
             logger.info("consolidation long_term saved: type=profile %r", summary[:60])
@@ -1142,8 +1151,12 @@ class DefaultMemoryEngine:
         self,
         request: ExplicitRetrievalRequest,
     ) -> ExplicitRetrievalResult:
-        hyp1_task = asyncio.create_task(self._gen_hypothesis(request.query, style="event"))
-        hyp2_task = asyncio.create_task(self._gen_hypothesis(request.query, style="general"))
+        hyp1_task = asyncio.create_task(
+            self._gen_hypothesis(request.query, style="event")
+        )
+        hyp2_task = asyncio.create_task(
+            self._gen_hypothesis(request.query, style="general")
+        )
         hyp1, hyp2 = await asyncio.gather(hyp1_task, hyp2_task)
         aux_queries = [text for text in (hyp1, hyp2) if text]
         types = [request.memory_type] if request.memory_type else None
@@ -1187,7 +1200,11 @@ class DefaultMemoryEngine:
         )
         return ExplicitRetrievalResult(
             hits=list(hits),
-            trace={"source": self.DESCRIPTOR.name, "mode": "grep", "hit_count": len(hits)},
+            trace={
+                "source": self.DESCRIPTOR.name,
+                "mode": "grep",
+                "hit_count": len(hits),
+            },
             raw={"hits": list(hits)},
         )
 
@@ -1268,6 +1285,35 @@ class DefaultMemoryEngine:
             keyword_enabled=keyword_enabled,
         )
         return items, [], []
+
+    async def _retrieve_related_with_trace(
+        self,
+        query: str,
+        **kwargs: object,
+    ) -> tuple[list[dict], dict[str, object], list[dict], list[dict]]:
+        if self._retriever is None:
+            return [], {}, [], []
+        retrieve_with_trace = getattr(self._retriever, "retrieve_with_trace", None)
+        if not callable(retrieve_with_trace):
+            items, semantic_items, keyword_items = (
+                await self._retrieve_related_with_lanes(
+                    query,
+                    **kwargs,
+                )
+            )
+            return items, {}, semantic_items, keyword_items
+        items, route_trace = await retrieve_with_trace(query, **kwargs)
+        trace = route_trace if isinstance(route_trace, dict) else {}
+        candidates = trace.get("candidates_by_lane")
+        candidates_by_lane = candidates if isinstance(candidates, dict) else {}
+        semantic_items = candidates_by_lane.get("semantic", [])
+        keyword_items = candidates_by_lane.get("keyword", [])
+        return (
+            [item for item in items if isinstance(item, dict)],
+            trace,
+            [item for item in semantic_items if isinstance(item, dict)],
+            [item for item in keyword_items if isinstance(item, dict)],
+        )
 
     async def _record_tri_retrieval_shadow(
         self,
@@ -1460,7 +1506,9 @@ class DefaultMemoryEngine:
         scope: MemoryScope,
     ) -> RerankShadowResult | None:
         experiment_runner = getattr(self, "_experiment_runner", None)
-        if experiment_runner is None or not getattr(experiment_runner, "enabled", False):
+        if experiment_runner is None or not getattr(
+            experiment_runner, "enabled", False
+        ):
             return None
         if not bool(getattr(self, "_rerank_shadow_enabled", False)):
             return None
@@ -1497,7 +1545,9 @@ class DefaultMemoryEngine:
         rerank_shadow: RerankShadowResult | None,
     ) -> None:
         experiment_runner = getattr(self, "_experiment_runner", None)
-        if experiment_runner is None or not getattr(experiment_runner, "enabled", False):
+        if experiment_runner is None or not getattr(
+            experiment_runner, "enabled", False
+        ):
             return
         if not bool(getattr(self, "_injection_governance_shadow_enabled", False)):
             return
@@ -1510,7 +1560,9 @@ class DefaultMemoryEngine:
             if rerank_shadow is not None:
                 ranked = rerank_shadow.experimental_result.get("ranked_items")
                 if isinstance(ranked, list):
-                    candidate_items = [item for item in ranked if isinstance(item, dict)]
+                    candidate_items = [
+                        item for item in ranked if isinstance(item, dict)
+                    ]
             shadow = build_injection_governance_shadow_result(
                 baseline_items=baseline_items,
                 baseline_injected_ids=baseline_injected_ids,
@@ -1671,7 +1723,10 @@ class DefaultMemoryEngine:
         allowed_types = {str(item) for item in memory_types or [] if str(item).strip()}
         filtered: list[dict[str, object]] = []
         for item in items:
-            if allowed_types and str(item.get("memory_type") or "") not in allowed_types:
+            if (
+                allowed_types
+                and str(item.get("memory_type") or "") not in allowed_types
+            ):
                 continue
             if require_scope_match and (
                 str(item.get("scope_channel") or "") != str(scope.channel or "")

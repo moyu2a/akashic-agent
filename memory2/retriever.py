@@ -13,6 +13,10 @@ from typing import cast
 
 from memory2.store import MemoryStore2
 from memory2.embedder import Embedder
+from memory2.retrieval_governance import (
+    apply_retrieval_route,
+    build_retrieval_routing_decision,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -94,7 +98,7 @@ class Retriever:
         time_end: datetime | None = None,
         keyword_enabled: bool = True,
     ) -> list[dict]:
-        items, _vector_items, _keyword_items = await self.retrieve_with_lanes(
+        items, _trace = await self.retrieve_with_trace(
             query,
             memory_types=memory_types,
             top_k=top_k,
@@ -108,6 +112,73 @@ class Retriever:
             keyword_enabled=keyword_enabled,
         )
         return items
+
+    async def retrieve_with_trace(
+        self,
+        query: str,
+        memory_types: list[str] | None = None,
+        top_k: int | None = None,
+        scope_channel: str | None = None,
+        scope_chat_id: str | None = None,
+        require_scope_match: bool = False,
+        aux_queries: list[str] | None = None,
+        score_threshold: float | None = None,
+        time_start: datetime | None = None,
+        time_end: datetime | None = None,
+        keyword_enabled: bool = True,
+    ) -> tuple[list[dict], dict[str, object]]:
+        """返回治理后的召回结果及其路由 trace；不改变 ``retrieve`` 的旧契约。"""
+        actual_top_k = self._top_k if top_k is None else max(1, int(top_k))
+        semantic_items, keyword_items = await self._retrieve_semantic_keyword_lanes(
+            query,
+            memory_types=memory_types,
+            top_k=actual_top_k,
+            scope_channel=scope_channel,
+            scope_chat_id=scope_chat_id,
+            require_scope_match=require_scope_match,
+            aux_queries=aux_queries,
+            score_threshold=score_threshold,
+            time_start=time_start,
+            time_end=time_end,
+            keyword_enabled=keyword_enabled,
+        )
+        decision = build_retrieval_routing_decision(query)
+        provenance_items, graph_items = self._retrieve_evidence_lanes(
+            query,
+            decision_graph_enabled=decision.graph_enabled,
+            memory_types=memory_types,
+            scope_channel=scope_channel,
+            scope_chat_id=scope_chat_id,
+            require_scope_match=require_scope_match,
+            top_k=actual_top_k,
+        )
+        candidates_by_lane = {
+            "semantic": _mark_scope_matches(
+                semantic_items, scope_channel=scope_channel, scope_chat_id=scope_chat_id
+            ),
+            "keyword": _mark_scope_matches(
+                keyword_items, scope_channel=scope_channel, scope_chat_id=scope_chat_id
+            ),
+            "provenance": provenance_items,
+            "graph": graph_items,
+        }
+        _accepted, trace = apply_retrieval_route(decision, candidates_by_lane)
+        accepted_by_lane = cast(dict[str, list[dict]], trace["accepted_items_by_lane"])
+        items = _rrf_merge_lanes(accepted_by_lane, top_n=actual_top_k)
+        trace["candidate_drop_counts"] = dict(
+            cast(dict[str, int], trace["dropped_by_reason"])
+        )
+        trace["graph_used"] = bool(graph_items)
+        trace["candidates_by_lane"] = candidates_by_lane
+        trace["final_count"] = len(items)
+        logger.debug(
+            "memory2 governed retrieve: query=%r scene=%s fused=%d graph=%d",
+            query[:60],
+            decision.scene,
+            len(items),
+            len(graph_items),
+        )
+        return items, trace
 
     async def retrieve_with_lanes(
         self,
@@ -123,6 +194,38 @@ class Retriever:
         time_end: datetime | None = None,
         keyword_enabled: bool = True,
     ) -> tuple[list[dict], list[dict], list[dict]]:
+        vector_items, keyword_items = await self._retrieve_semantic_keyword_lanes(
+            query,
+            memory_types=memory_types,
+            top_k=top_k,
+            scope_channel=scope_channel,
+            scope_chat_id=scope_chat_id,
+            require_scope_match=require_scope_match,
+            aux_queries=aux_queries,
+            score_threshold=score_threshold,
+            time_start=time_start,
+            time_end=time_end,
+            keyword_enabled=keyword_enabled,
+        )
+        actual_top_k = self._top_k if top_k is None else max(1, int(top_k))
+        items = _rrf_merge(vector_items, keyword_items, top_n=actual_top_k)
+        return items, vector_items, keyword_items
+
+    async def _retrieve_semantic_keyword_lanes(
+        self,
+        query: str,
+        *,
+        memory_types: list[str] | None,
+        top_k: int | None,
+        scope_channel: str | None,
+        scope_chat_id: str | None,
+        require_scope_match: bool,
+        aux_queries: list[str] | None,
+        score_threshold: float | None,
+        time_start: datetime | None,
+        time_end: datetime | None,
+        keyword_enabled: bool,
+    ) -> tuple[list[dict], list[dict]]:
         # 1. query 与辅助 query 一起进入向量 lane，避免多入口语义漂移。
         actual_top_k = self._top_k if top_k is None else max(1, int(top_k))
         actual_threshold = (
@@ -155,16 +258,69 @@ class Retriever:
                 time_end=time_end,
             )
 
-        # 3. 最终只在这里做 RRF 融合，调用方不再各自拼召回列表。
-        items = _rrf_merge(vector_items, keyword_items, top_n=actual_top_k)
-        logger.debug(
-            "memory2 retrieve: query=%r vector=%d keyword=%d fused=%d",
-            query[:60],
-            len(vector_items),
-            len(keyword_items),
-            len(items),
+        return vector_items, keyword_items
+
+    def _retrieve_evidence_lanes(
+        self,
+        query: str,
+        *,
+        decision_graph_enabled: bool,
+        memory_types: list[str] | None,
+        scope_channel: str | None,
+        scope_chat_id: str | None,
+        require_scope_match: bool,
+        top_k: int,
+    ) -> tuple[list[dict], list[dict]]:
+        try:
+            active_items, _total = self._store.list_items_for_dashboard(
+                status="active",
+                page_size=max(200, top_k * 20),
+            )
+        except Exception as exc:
+            logger.debug("memory2 retrieve: evidence lanes unavailable: %s", exc)
+            return [], []
+
+        filtered_items = [
+            dict(item)
+            for item in active_items
+            if isinstance(item, dict)
+            and (not memory_types or item.get("memory_type") in memory_types)
+            and (
+                not require_scope_match
+                or _scope_matches(
+                    item, scope_channel=scope_channel, scope_chat_id=scope_chat_id
+                )
+            )
+        ]
+        from memory2.retrieval_experiments import build_provenance_lane
+
+        provenance_items = _mark_scope_matches(
+            build_provenance_lane(
+                query,
+                filtered_items,
+                scope_channel=scope_channel or "",
+                scope_chat_id=scope_chat_id or "",
+                limit=max(20, top_k * 2),
+            ).items,
+            scope_channel=scope_channel,
+            scope_chat_id=scope_chat_id,
         )
-        return items, vector_items, keyword_items
+        graph_items: list[dict] = []
+        if decision_graph_enabled:
+            from memory2.retrieval_graph_experiments import build_graph_lane
+
+            graph_items = _mark_scope_matches(
+                build_graph_lane(
+                    query,
+                    filtered_items,
+                    scope_channel=scope_channel or "",
+                    scope_chat_id=scope_chat_id or "",
+                    limit=max(20, top_k * 2),
+                ).items,
+                scope_channel=scope_channel,
+                scope_chat_id=scope_chat_id,
+            )
+        return provenance_items, graph_items
 
     async def _retrieve_vector_lanes(
         self,
@@ -245,7 +401,9 @@ class Retriever:
         vectors: list[list[float]] = []
         for result in results:
             if isinstance(result, BaseException):
-                logger.warning("memory2 retrieve: embed failed, fallback lane skipped: %s", result)
+                logger.warning(
+                    "memory2 retrieve: embed failed, fallback lane skipped: %s", result
+                )
                 continue
             vectors.append(cast(list[float], result))
         return vectors
@@ -321,7 +479,9 @@ class Retriever:
     def _select_injection_sections(
         self,
         items: list[dict],
-    ) -> tuple[list[dict], list[tuple[str, str]], list[tuple[str, str]], list[tuple[str, str]]]:
+    ) -> tuple[
+        list[dict], list[tuple[str, str]], list[tuple[str, str]], list[tuple[str, str]]
+    ]:
         """1. 筛选条目 2. 按段落准备格式化文本。"""
         if not items:
             return [], [], [], []
@@ -360,7 +520,12 @@ class Retriever:
                 selected.append(item)
                 if summary:
                     tool_req = extra.get("tool_requirement")
-                    forced.append((item_id, f"- [{item_id}] {summary}（必须调用工具：{tool_req}）"))
+                    forced.append(
+                        (
+                            item_id,
+                            f"- [{item_id}] {summary}（必须调用工具：{tool_req}）",
+                        )
+                    )
                 continue
             type_th = self._score_thresholds.get(mtype, self._score_threshold)
             if score < type_th:
@@ -512,11 +677,46 @@ def _hit_score(item: dict, fallback_key: str = "score") -> float:
 
 
 _CJK_STOPWORDS = {
-    "用户", "助手", "我们", "他们", "这个", "那个", "什么", "如何", "是否",
-    "有没", "没有", "有过", "做过", "进行", "完成", "包括", "通过", "实现",
-    "行为", "内容", "相关", "情况", "问题", "方式", "时候", "时间", "目前",
-    "当前", "最近", "之前", "以前", "后来", "然后", "因为", "所以", "但是",
-    "用户在", "用户对", "的行为吗", "进行了",
+    "用户",
+    "助手",
+    "我们",
+    "他们",
+    "这个",
+    "那个",
+    "什么",
+    "如何",
+    "是否",
+    "有没",
+    "没有",
+    "有过",
+    "做过",
+    "进行",
+    "完成",
+    "包括",
+    "通过",
+    "实现",
+    "行为",
+    "内容",
+    "相关",
+    "情况",
+    "问题",
+    "方式",
+    "时候",
+    "时间",
+    "目前",
+    "当前",
+    "最近",
+    "之前",
+    "以前",
+    "后来",
+    "然后",
+    "因为",
+    "所以",
+    "但是",
+    "用户在",
+    "用户对",
+    "的行为吗",
+    "进行了",
 }
 
 
@@ -532,7 +732,7 @@ def _extract_terms(query: str) -> list[str]:
                 terms.append(chunk)
             continue
         for i in range(len(chunk) - 1):
-            bigram = chunk[i:i + 2]
+            bigram = chunk[i : i + 2]
             if bigram not in _CJK_STOPWORDS:
                 terms.append(bigram)
 
@@ -544,6 +744,37 @@ def _extract_terms(query: str) -> list[str]:
         seen.add(term)
         result.append(term)
     return result[:20]
+
+
+def _scope_matches(
+    item: dict,
+    *,
+    scope_channel: str | None,
+    scope_chat_id: str | None,
+) -> bool:
+    if not scope_channel and not scope_chat_id:
+        return True
+    return str(item.get("scope_channel") or "") == str(scope_channel or "") and str(
+        item.get("scope_chat_id") or ""
+    ) == str(scope_chat_id or "")
+
+
+def _mark_scope_matches(
+    items: list[dict],
+    *,
+    scope_channel: str | None,
+    scope_chat_id: str | None,
+) -> list[dict]:
+    marked: list[dict] = []
+    for item in items:
+        candidate = dict(item)
+        candidate["scope_match"] = _scope_matches(
+            candidate,
+            scope_channel=scope_channel,
+            scope_chat_id=scope_chat_id,
+        )
+        marked.append(candidate)
+    return marked
 
 
 def _rrf_merge(
@@ -571,7 +802,9 @@ def _rrf_merge(
         if item_id:
             merged_item = dict(item)
             if "score" not in merged_item:
-                merged_item["score"] = _hit_score(merged_item, fallback_key="keyword_score")
+                merged_item["score"] = _hit_score(
+                    merged_item, fallback_key="keyword_score"
+                )
             id_to_item[item_id] = merged_item
     for item in vector_items:
         item_id = _hit_id(item)
@@ -596,6 +829,57 @@ def _rrf_merge(
     return result
 
 
+def _rrf_merge_lanes(
+    items_by_lane: dict[str, list[dict]],
+    *,
+    top_n: int,
+    k: int = _RRF_K,
+) -> list[dict]:
+    weights = {"keyword": _KEYWORD_RRF_WEIGHT}
+    id_to_item: dict[str, dict] = {}
+    id_to_rrf: dict[str, float] = {}
+    id_to_best_score: dict[str, float] = {}
+    id_to_lane_hits: dict[str, list[str]] = {}
+
+    for lane, items in items_by_lane.items():
+        weight = weights.get(lane, 1.0)
+        seen_in_lane: set[str] = set()
+        for index, item in enumerate(items):
+            item_id = _hit_id(item)
+            if not item_id or item_id in seen_in_lane:
+                continue
+            seen_in_lane.add(item_id)
+            fused_item = dict(item)
+            if lane == "keyword" and "score" not in fused_item:
+                fused_item["score"] = _hit_score(
+                    fused_item, fallback_key="keyword_score"
+                )
+            id_to_item.setdefault(item_id, fused_item)
+            id_to_rrf[item_id] = id_to_rrf.get(item_id, 0.0) + weight / (k + index + 1)
+            id_to_best_score[item_id] = max(
+                id_to_best_score.get(item_id, 0.0), _hit_score(item)
+            )
+            id_to_lane_hits.setdefault(item_id, []).append(lane)
+
+    ordered_ids = sorted(
+        id_to_rrf,
+        key=lambda item_id: (
+            id_to_rrf[item_id],
+            len(id_to_lane_hits[item_id]),
+            id_to_best_score[item_id],
+            item_id,
+        ),
+        reverse=True,
+    )
+    result: list[dict] = []
+    for item_id in ordered_ids[:top_n]:
+        item = dict(id_to_item[item_id])
+        item["rrf_score"] = id_to_rrf[item_id]
+        item["lane_hits"] = id_to_lane_hits[item_id]
+        result.append(item)
+    return result
+
+
 def _format_source_tag(source_ref: str | None) -> str:
     """从 source_ref（格式如 '["id1","id2"]#h:abc' 或 'channel@seq1-seq2#tag'）中提取消息 ID，
     返回供注入块附加的短标记，如 ' (src: telegram:<chat_id>:<message_id>)'。
@@ -609,7 +893,7 @@ def _format_source_tag(source_ref: str | None) -> str:
         parsed = json.loads(raw)
         if isinstance(parsed, list):
             ids = [str(i) for i in parsed if i]
-    except (json.JSONDecodeError, ValueError):
+    except json.JSONDecodeError, ValueError:
         if raw:
             ids = [raw]
     if not ids:
@@ -642,7 +926,9 @@ def _format_memory_meta(
         parts.append(src_tag.strip())
     else:
         parts.append("证据: 记忆摘要")
-    if memory_type == "preference" and _looks_low_confidence_memory(item.get("summary", "")):
+    if memory_type == "preference" and _looks_low_confidence_memory(
+        item.get("summary", "")
+    ):
         parts.append("低置信线索: 不能单独证明历史细节")
     if not parts:
         return ""

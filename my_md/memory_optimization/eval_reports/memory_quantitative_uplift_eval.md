@@ -22,12 +22,12 @@
 | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
 | memory_base | overall | 160 | 150 | 10 | 93.75 | 150 | 93.75 | 0 | 0 |
 | write_value_only | overall | 160 | 88 | 72 | 55 | 48 | 19.998 | 120 | 66.67 |
-| tri_retrieval_only | overall | 160 | 160 | 0 | 100 | 160 | 94.9985 | 28 | 14.9995 |
-| graph_only | overall | 160 | 158 | 2 | 98.75 | 0 | 0 | 28 | 14.9995 |
+| tri_retrieval_only | overall | 160 | 160 | 0 | 100 | 160 | 94.6415 | 28 | 14.9995 |
+| graph_only | overall | 160 | 150 | 10 | 93.75 | 0 | 0 | 28 | 14.9995 |
 | rerank_only | overall | 160 | 104 | 56 | 65 | 80 | 50 | 0 | 7.4998 |
 | version_provenance_only | overall | 160 | 80 | 80 | 50 | 80 | 47.0487 | 1 | 0.3125 |
 | sleep_only | overall | 160 | 40 | 120 | 25 | 160 | 86.6072 | 0 | 0 |
-| all_on | overall | 160 | 84 | 76 | 52.5 | 80 | 49.4626 | 28 | 14.0367 |
+| all_on | overall | 160 | 84 | 76 | 52.5 | 80 | 49.418 | 28 | 14.0367 |
 
 ## common / hard 对比
 
@@ -35,20 +35,20 @@
 | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
 | memory_base | common | 80 | 80 | 0 | 100 | 80 | 100 | 0 | 0 |
 | write_value_only | common | 80 | 44 | 36 | 55 | 24 | 19.998 | 40 | 66.67 |
-| tri_retrieval_only | common | 80 | 80 | 0 | 100 | 80 | 94.284 | 16 | 20 |
+| tri_retrieval_only | common | 80 | 80 | 0 | 100 | 80 | 93.808 | 16 | 20 |
 | graph_only | common | 80 | 80 | 0 | 100 | 0 | 0 | 16 | 20 |
 | rerank_only | common | 80 | 48 | 32 | 60 | 40 | 50 | 0 | 10 |
 | version_provenance_only | common | 80 | 40 | 40 | 50 | 40 | 46.875 | 0 | 0 |
 | sleep_only | common | 80 | 20 | 60 | 25 | 80 | 85.7143 | 0 | 0 |
-| all_on | common | 80 | 40 | 40 | 50 | 40 | 49.2183 | 16 | 15.8338 |
+| all_on | common | 80 | 40 | 40 | 50 | 40 | 49.1588 | 16 | 15.8338 |
 | memory_base | hard | 80 | 70 | 10 | 87.5 | 70 | 87.5 | 0 | 0 |
 | write_value_only | hard | 80 | 44 | 36 | 55 | 24 | 19.998 | 80 | 66.67 |
-| tri_retrieval_only | hard | 80 | 80 | 0 | 100 | 80 | 95.713 | 12 | 9.999 |
-| graph_only | hard | 80 | 78 | 2 | 97.5 | 0 | 0 | 12 | 9.999 |
+| tri_retrieval_only | hard | 80 | 80 | 0 | 100 | 80 | 95.475 | 12 | 9.999 |
+| graph_only | hard | 80 | 70 | 10 | 87.5 | 0 | 0 | 12 | 9.999 |
 | rerank_only | hard | 80 | 56 | 24 | 70 | 40 | 50 | 0 | 4.9995 |
 | version_provenance_only | hard | 80 | 40 | 40 | 50 | 40 | 47.2225 | 1 | 0.625 |
 | sleep_only | hard | 80 | 20 | 60 | 25 | 80 | 87.5 | 0 | 0 |
-| all_on | hard | 80 | 44 | 36 | 55 | 40 | 49.707 | 12 | 12.2397 |
+| all_on | hard | 80 | 44 | 36 | 55 | 40 | 49.6773 | 12 | 12.2397 |
 
 ## 关闭增强控制组
 
@@ -59,6 +59,15 @@
 ## 原始评分字段
 
 - `main_score`、`uplift_points` 和 `uplift_pct` 保留在 JSON 输出中以兼容既有消费者，不作为本报告主表的解释口径。
+
+## 三路召回路由表
+
+| scene | cases | baseline_success | gated_success | graph_success | candidate_drop_rate | expected_route_hit_rate | candidate_accept_rate | graph_used_rate | note |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| fuzzy_reference | 4 | 6 | 8 | 6 | 75.0% | 100.0% | 25.0% | 0.0% | 模糊指代需要语义扩展，允许少量图谱邻接候选补全上下文。 |
+| partial_conflict | 8 | 16 | 16 | 16 | 60.715% | 100.0% | 39.285% | 0.0% | 冲突判断优先保留同作用域、可追溯的来源证据。 |
+| tool_preference | 8 | 14 | 16 | 14 | 76.73% | 100.0% | 23.27% | 0.0% | 工具偏好以规则语义和字面工具名为主，避免引入图谱或来源噪声。 |
+| unknown | 60 | 114 | 120 | 114 | 73.2133% | 100.0% | 26.7867% | 0.0% | 未识别场景采用保守的语义和关键词双 lane。 |
 
 ## 说明
 
@@ -132,13 +141,13 @@
 
 | scope | main_score | uplift_points | uplift_pct | answer | grounding | forbidden | token_signal_kind | token_signal_value | token_signal_delta | latency_ms |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- | --- | --- | --- |
-| overall | 97.4997 | 3.1247 | 3.3109 | 100 | 94.9985 | 14.9995 | unavailable | unavailable | unavailable | 0 |
-| common | 96.8568 | -3.1432 | -3.1432 | 100 | 94.284 | 20 | unavailable | unavailable | unavailable | 0 |
-| hard | 98.1427 | 9.3927 | 10.5833 | 100 | 95.713 | 9.999 | unavailable | unavailable | unavailable | 0 |
+| overall | 97.4283 | 3.0533 | 3.2353 | 100 | 94.6415 | 14.9995 | unavailable | unavailable | unavailable | 0 |
+| common | 96.7616 | -3.2384 | -3.2384 | 100 | 93.808 | 20 | unavailable | unavailable | unavailable | 0 |
+| hard | 98.0951 | 9.3451 | 10.5297 | 100 | 95.475 | 9.999 | unavailable | unavailable | unavailable | 0 |
 
 - 关闭时做得好：关闭时没有额外检索路径和融合排序成本。
 - 关闭时做得不好：单一路径或无增强召回容易漏掉模糊指代、关键词不完全匹配和 source_ref 相关记忆。
-- 开启后做得好：main_score 为 97.4997，answer 为 100，grounding 为 94.9985；hard 集为 98.1427。
+- 开启后做得好：main_score 为 97.4283，answer 为 100，grounding 为 94.6415；hard 集为 98.0951。
 - 开启后做得不好：forbidden 为 14.9995，说明仍可能带入旧记忆、噪声记忆或跨 scope 候选。
 - 结论：当前最强直接提分项，优先级最高，但需要后接重排和注入治理。
 
@@ -146,13 +155,13 @@
 
 | scope | main_score | uplift_points | uplift_pct | answer | grounding | forbidden | token_signal_kind | token_signal_value | token_signal_delta | latency_ms |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- | --- | --- | --- |
-| overall | 77.6251 | -16.7499 | -17.7482 | 98.75 | 0 | 14.9995 | unavailable | unavailable | unavailable | 0 |
+| overall | 74.1251 | -20.2499 | -21.4568 | 93.75 | 0 | 14.9995 | unavailable | unavailable | unavailable | 0 |
 | common | 78 | -22 | -22 | 100 | 0 | 20 | unavailable | unavailable | unavailable | 0 |
-| hard | 77.2501 | -11.4999 | -12.9576 | 97.5 | 0 | 9.999 | unavailable | unavailable | unavailable | 0 |
+| hard | 70.2501 | -18.4999 | -20.845 | 87.5 | 0 | 9.999 | unavailable | unavailable | unavailable | 0 |
 
 - 关闭时做得好：关闭时不会引入图谱构建、实体桥接和图路径解释成本。
 - 关闭时做得不好：模糊实体关系、跨概念关联和第三路补充召回能力不足。
-- 开启后做得好：answer 为 98.75，hard 集为 77.2501，说明图谱对模糊关联和难例补召回有效。
+- 开启后做得好：answer 为 93.75，hard 集为 70.2501，说明图谱对模糊关联和难例补召回有效。
 - 开启后做得不好：grounding 为 0，forbidden 为 14.9995，说明当前图谱结果还没有充分转成可解释 source_ref 证据。
 - 结论：适合作为第三路增强，但必须和溯源、重排、注入治理一起使用。
 
@@ -202,19 +211,19 @@
 
 | scope | main_score | uplift_points | uplift_pct | answer | grounding | forbidden | token_signal_kind | token_signal_value | token_signal_delta | latency_ms |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- | --- | --- | --- |
-| overall | 69.3043 | -25.0707 | -26.565 | 72.5935 | 49.4626 | 14.0367 | mixed | unavailable | unavailable | 0 |
-| common | 68.817 | -31.183 | -31.183 | 72.2239 | 49.2183 | 15.8338 | mixed | unavailable | unavailable | 0 |
-| hard | 69.7916 | -18.9584 | -21.3616 | 72.9631 | 49.707 | 12.2397 | mixed | unavailable | unavailable | 0 |
+| overall | 68.8579 | -25.5171 | -27.038 | 71.9685 | 49.418 | 14.0367 | mixed | unavailable | unavailable | 0 |
+| common | 68.8051 | -31.1949 | -31.1949 | 72.2239 | 49.1588 | 15.8338 | mixed | unavailable | unavailable | 0 |
+| hard | 68.9107 | -19.8393 | -22.3541 | 71.7131 | 49.6773 | 12.2397 | mixed | unavailable | unavailable | 0 |
 
 - 关闭时做得好：关闭时最简单、最安全、没有组合复杂度。
 - 关闭时做得不好：没有召回增强、图谱、重排治理、版本链、溯源和睡眠巩固，记忆能力不足。
-- 开启后做得好：overall 主分达到 69.3043，common 集为 68.817，hard 集为 69.7916，说明组合能力可以覆盖当前已评测样本。
+- 开启后做得好：overall 主分达到 68.8579，common 集为 68.8051，hard 集为 68.9107，说明组合能力可以覆盖当前已评测样本。
 - 开启后做得不好：分数低于单独三路召回，因为组合态混入写入、睡眠等非即时问答能力；token_signal_kind 为 mixed，不能合并成一个 token 数。
 - 结论：全开证明整体方向有效，但后续要优化组合权重，不能简单把所有模块平均计算。
 
 ### 总结
 
-- 全开组合 `all_on` 的主分为 `69.3043`，相比原始记忆基线提高 `-25.0707` 分。
+- 全开组合 `all_on` 的主分为 `68.8579`，相比原始记忆基线提高 `-25.5171` 分。
 - 单项直接提分最强的是 `tri_retrieval_only`，它是当前样本集上的最高 uplift profile。
 - `graph_only` 对模糊关联命中有效，但需要继续和 source_ref / provenance 联动提升证据支撑。
 - `rerank_only` 和 `version_provenance_only` 更偏治理，价值在降低错误注入、旧版本误用和跨 scope 风险。

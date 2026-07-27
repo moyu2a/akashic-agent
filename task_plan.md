@@ -1,5 +1,42 @@
 # Document RAG P10a Intent Preload Plan
 
+## 2026-07-27 Memory Tri Retrieval Route Governance
+
+Goal: turn tri retrieval / graph retrieval from global always-on enhancements into scene-routed candidate governance, while preserving the existing AgentLoop, Reasoner, ToolExecutor, production write path, and old `retrieve()` return contract.
+
+1. Add retrieval governance pure functions for scene classification, route policy, lane caps, source/scope/low-confidence filtering, and trace output - complete
+2. Reuse the same governance helper in offline eval, quantitative uplift, retriever trace, and default memory engine trace - complete
+3. Add route governance CLI/report and focused tests - complete
+4. Generate route governance reports and update memory/governance docs - complete
+5. Run focused regression, compile, and diff checks - complete
+6. Commit when verification is complete - pending
+
+Results so far:
+
+- New route governance module: `memory2/retrieval_governance.py`.
+- New report path:
+  - `my_md/memory_optimization/eval_reports/memory_route_governance_eval.json`
+  - `my_md/memory_optimization/eval_reports/memory_route_governance_eval.md`
+- Offline route report:
+  - `offline_case_count = 320`
+  - `offline_scene_count = 5`
+  - all offline scenes currently show `expected_route_hit_rate = 100%`
+  - candidate drop rate ranges from `63.3933%` to `77.085%`
+- Live engine route smoke:
+  - `live_case_count = 9`
+  - only validates real `DefaultMemoryEngine.retrieve()` route trace wiring
+  - does not prove real LLM answer-quality uplift
+- Review follow-up:
+  - offline eval now applies route governance once across all lanes, matching real retriever duplicate and lane precedence behavior;
+  - reports split `expected_route_hit_rate` from `candidate_accept_rate`;
+  - focused verification after fixes: `88 passed`, `compileall` exit `0`, `git diff --check` exit `0`.
+
+Current conclusion:
+
+- Tri retrieval and graph retrieval should not be interpreted as global default-on modules.
+- The current implementation improves candidate boundaries and traceability.
+- The next trustworthy answer-quality conclusion requires more realistic live fixtures and a fresh bounded LLM rerun for tri/graph/rerank paths.
+
 ## 2026-07-26 Memory Online Attribution And Version Grounding Plan
 
 Goal: create a reproducible online answer-quality failure attribution report and fix the `chain_version_provenance` grounding metric before spending more real LLM calls.

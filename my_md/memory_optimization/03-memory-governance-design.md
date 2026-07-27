@@ -13,6 +13,19 @@ Phase 6h 之后，治理设计的当前口径可以分成两类：
 
 因此，这份治理设计下一步要继续补的不是回答层本身，而是更真实的 write-governance evidence 和 memory-hygiene evidence。
 
+Phase 6m 真实 LLM answer-quality 矩阵和失败归因又补充了一个新的结论：三路召回和图谱召回不能再按“默认全开”理解。它们能把证据召回进上下文，但在部分场景会提高噪声和 forbidden 风险，导致回答质量下降。因此当前回答侧治理新增一层“场景路由 + 候选治理”：
+
+```text
+用户问题
+  -> 识别召回场景
+  -> 选择允许的召回通道
+  -> 限制每路候选数量
+  -> 按 source_ref、scope、低置信和重复规则丢弃候选
+  -> 再交给后续重排、注入治理和回答约束
+```
+
+当前已经落地的实现是 `memory2/retrieval_governance.py`。它把查询分成模糊指代、工具偏好、部分冲突、精确召回、来源查询和未知场景，并为每类场景配置召回通道、每路上限、是否要求来源、是否要求同作用域、是否启用图谱和是否丢弃低置信候选。`DefaultMemoryEngine.retrieve()` 透出 route trace，但不修改主循环、真实写入或工具执行边界。
+
 目标是把记忆链路拆成五个治理点：
 
 ```text
@@ -148,6 +161,8 @@ reason
 - source_ref。
 - low confidence label。
 
+Phase 6m 之后，检索重排前新增了 `RetrievalRoutingDecision`。它不是新的排序算法，而是排序前的候选准入层：先判断当前问题适合哪些召回通道，再限制每个通道最多进入多少候选。比如模糊指代允许少量图谱候选，工具偏好只走语义和关键词，部分冲突和来源查询优先要求同 scope 且可追溯的来源证据。
+
 ### 后续重排信号
 
 ```text
@@ -171,6 +186,12 @@ raw_hits
 reranked_hits
 injected_hits
 drop_reasons
+route_decision
+allowed_lanes
+accepted_by_lane
+dropped_by_reason
+expected_route_hit_rate
+candidate_accept_rate
 ```
 
 ### drop reason
@@ -182,6 +203,12 @@ drop_reasons
 - `conflict_candidate`
 - `too_many_same_type`
 - `missing_source_ref_for_fact_question`
+- `lane_not_allowed`
+- `lane_cap`
+- `missing_source_ref`
+- `scope_mismatch`
+- `low_confidence`
+- `duplicate`
 
 ## 5. MemoryLifecycleManager：生命周期维护
 

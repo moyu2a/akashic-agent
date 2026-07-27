@@ -1,5 +1,54 @@
 # Document RAG P10a Progress
 
+## 2026-07-27 Memory Tri Retrieval Route Governance
+
+- User asked to execute the reviewed plan for tri retrieval governance after the real online answer-quality matrix showed that tri/graph retrieval are not safe global defaults.
+- Worktree: `/home/jjh/git_work/akashic-agent/.worktrees/memory-next`, branch `memory-next`.
+- Implemented `memory2/retrieval_governance.py`:
+  - `classify_retrieval_scene()` classifies queries into fuzzy reference, tool preference, partial conflict, exact recall, source lookup, and unknown scenes.
+  - `build_retrieval_routing_decision()` maps each scene to allowed lanes, lane caps, source requirement, scope requirement, graph usage, and low-confidence filtering.
+  - `apply_retrieval_route()` filters candidates and emits trace fields such as accepted lanes, dropped reasons, input counts, output count, and route hit rate.
+- Integrated route governance into offline and engine paths without changing production AgentLoop / Reasoner / ToolExecutor or memory writes:
+  - `memory2/eval_runner.py`
+  - `memory2/eval_quantitative_uplift.py`
+  - `memory2/retriever.py`
+  - `plugins/default_memory/engine.py`
+- Kept `retrieve()` returning the old `list[dict]` contract and added / used trace-returning paths for evaluation and observability.
+- Added route governance evaluation:
+  - `memory2/eval_route_governance.py`
+  - `scripts/run_memory_route_governance_eval.py`
+  - reports under `my_md/memory_optimization/eval_reports/memory_route_governance_eval.{json,md}`.
+- Offline route report:
+  - `offline_case_count = 320`
+  - `offline_scene_count = 5`
+  - fuzzy reference: `16` cases, baseline `30`, gated `32`, candidate drop `68.27%`, expected route hit `100%`, candidate accept `31.73%`
+  - partial conflict: `24` cases, baseline `48`, gated `48`, candidate drop `63.3933%`, expected route hit `100%`, candidate accept `36.6067%`
+  - source lookup: `16` cases, baseline `32`, gated `32`, candidate drop `77.085%`, expected route hit `100%`, candidate accept `22.915%`
+  - tool preference: `16` cases, baseline `30`, gated `32`, candidate drop `76.73%`, expected route hit `100%`, candidate accept `23.27%`
+  - unknown: `248` cases, baseline `488`, gated `496`, candidate drop `73.7155%`, expected route hit `100%`, candidate accept `26.2845%`
+- Live engine route smoke:
+  - `live_case_count = 9`
+  - fuzzy reference: `2` cases, route hit `25%`, candidate drop `75%`, graph used `100%`
+  - unknown: `7` cases, route hit `34.2843%`, candidate drop `51.43%`, graph used `0%`
+- Updated documentation:
+  - `my_md/memory_optimization/README.md`
+  - `my_md/memory_optimization/02-memory-quality-metrics.md`
+  - `my_md/memory_optimization/03-memory-governance-design.md`
+  - `my_md/memory_optimization/04-memory-plugin-experiment-roadmap.md`
+  - `my_md/governance/03-domain-evolution.md`
+- Independent review found three eval/report issues and they were fixed:
+  - offline eval now calls route governance once with all lanes, so cross-lane duplicate filtering matches the real retriever path;
+  - offline graph usage is derived from the graph profile rather than the tri profile;
+  - route reports now split `expected_route_hit_rate` from `candidate_accept_rate`, avoiding mixed meanings between offline target recall and live candidate acceptance.
+- Focused verification after the review fix:
+  - `tests/test_memory_retrieval_governance.py tests/test_memory_eval_runner.py tests/test_memory_engine_contract.py tests/test_recall_memory_tool.py tests/test_memory_quantitative_uplift.py tests/test_memory_route_governance_eval.py` -> `88 passed in 8.71s`;
+  - `compileall` over `memory2 plugins/default_memory scripts tests` -> exit `0`;
+  - `git diff --check` -> exit `0`.
+- Current conclusion:
+  - route governance addresses candidate control and observability, not final answer quality by itself;
+  - the live route smoke is intentionally small and should not be used as a full online conclusion;
+  - next answer-quality step should be a bounded fresh rerun for tri/graph/rerank after route governance.
+
 ## 2026-07-26 Memory Online Attribution And Version Grounding Plan
 
 - User asked to call the plan skill and create a plan for the next two memory-next mainline steps:

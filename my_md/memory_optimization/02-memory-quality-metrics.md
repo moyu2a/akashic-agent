@@ -300,9 +300,9 @@ main_score = 0.7 * answer_rule_pass_rate
 - `common_case_count = 40`
 - `hard_case_count = 40`
 - `baseline_main_score = 94.375`
-- `all_on_main_score = 69.3043`
-- `total_uplift_points = -25.0707`
-- `total_uplift_pct = 596.017`
+- `all_on_main_score = 68.8579`
+- `total_uplift_points = -25.5171`
+- `total_uplift_pct = -27.038`
 
 单项 uplift：
 
@@ -1552,6 +1552,43 @@ Phase 2b 的测试结论：
 - broader memory experiment suite：`77 passed`。
 - `compileall`：通过。
 - `git diff --check`：通过。
+
+## Phase 6m 路由治理可输出的指标
+
+Phase 6m 之后，三路召回和图谱召回增加了“场景路由 + 候选准入”指标。它们解决的不是模型最终回答是否正确，而是召回后的候选是否被按场景控制。
+
+新增数据来源：
+
+- `memory2/retrieval_governance.py`
+- `Retriever.retrieve_with_trace()`
+- `DefaultMemoryEngine.retrieve()` 返回结果中的 `trace/raw.route_trace`
+- `my_md/memory_optimization/eval_reports/memory_route_governance_eval.json`
+
+可测指标：
+
+| 指标 | 含义 | 用途 |
+| --- | --- | --- |
+| `scene` | 当前查询识别出的召回场景 | 判断是否命中正确治理策略 |
+| `allowed_lanes` | 当前场景允许使用哪些召回通道 | 避免图谱、溯源等高噪声通道无条件打开 |
+| `max_per_lane` | 每个通道最多保留多少候选 | 控制上下文噪声和 token 成本 |
+| `require_source_ref` | 是否要求候选有来源引用 | 来源查询、冲突判断必须更可追溯 |
+| `require_scope_match` | 是否要求同作用域 | 降低跨会话或跨入口污染 |
+| `graph_enabled` | 当前场景是否允许图谱候选 | 只让图谱在模糊指代等合适场景参与 |
+| `drop_low_confidence` | 是否丢弃低置信候选 | 降低不确定记忆进入上下文的概率 |
+| `accepted_by_lane` | 每个通道最终保留的候选数 | 分析各通道真实贡献 |
+| `dropped_by_reason` | 候选被丢弃的原因分布 | 解释过滤行为和后续调参 |
+| `candidate_drop_rate` | 候选被治理层过滤掉的比例 | 衡量候选去噪强度 |
+| `expected_route_hit_rate` | 治理后候选仍覆盖目标记忆的比例 | 衡量过滤后是否保留了关键证据 |
+| `candidate_accept_rate` | 治理后实际保留候选占输入候选的比例 | 衡量过滤强度，不能当作答案命中率 |
+| `graph_used_rate` | 图谱通道实际被使用比例 | 判断图谱是否被限制在需要的场景 |
+
+当前正式报告基于 comprehensive `320` case 和 `9` case 真实引擎 route smoke：
+
+- 离线表：`offline_case_count = 320`，`offline_scene_count = 5`。
+- 离线各场景 `expected_route_hit_rate = 100%`，候选丢弃率约 `63.3933%` 到 `77.085%`。
+- 真实引擎 smoke：`live_case_count = 9`，只覆盖模糊指代和未知场景；它证明 route trace 接线可用，但不能替代真实 LLM answer-quality 复测。
+
+这组指标的正确解释是：路由治理改善的是召回候选边界和可解释性。要证明最终回答收益，还需要继续看回答命中、证据命中、forbidden 违规率、噪声控制和上下文成本。
 
 ## Phase 3 可输出的指标
 

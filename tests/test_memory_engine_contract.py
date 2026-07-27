@@ -148,6 +148,41 @@ async def test_default_memory_engine_retrieve_keeps_raw_items_and_mode_trace():
     assert result.hits[0].injected is True
 
 
+async def test_default_memory_engine_retrieve_exposes_retrieval_route_trace() -> None:
+    route_trace = {
+        "scene": "fuzzy_reference",
+        "route_decision": {"allowed_lanes": ["semantic", "keyword", "graph"]},
+        "candidate_drop_counts": {"duplicate": 1},
+        "graph_used": True,
+        "candidates_by_lane": {
+            "semantic": [{"id": "m1", "summary": "上次方案"}],
+            "keyword": [],
+        },
+    }
+    retriever = SimpleNamespace(
+        retrieve_with_trace=AsyncMock(
+            return_value=(
+                [{"id": "m1", "summary": "上次方案", "score": 0.9}],
+                route_trace,
+            )
+        ),
+        build_injection_block=lambda items: ("历史块", ["m1"]),
+    )
+    engine = _make_default_engine(retriever=cast(Any, retriever))
+
+    result = await engine.retrieve(
+        MemoryEngineRetrieveRequest(
+            query="上次方案是什么？",
+            scope=MemoryScope(session_key="cli:1"),
+        )
+    )
+
+    assert result.trace["scene"] == "fuzzy_reference"
+    assert result.trace["route_decision"] == route_trace["route_decision"]
+    raw = cast(dict[str, object], result.raw)
+    assert raw["route_trace"] == route_trace
+
+
 async def test_default_memory_engine_retrieve_falls_back_to_session_scope():
     retriever = SimpleNamespace(
         retrieve=AsyncMock(return_value=[]),
