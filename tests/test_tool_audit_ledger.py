@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import json
+import logging
 from datetime import UTC, datetime, timedelta
 
 from agent.policies.tool_audit_ledger import (
     ToolAuditLedgerEvent,
     ToolAuditLedgerQuery,
     ToolAuditLedgerStore,
+    record_tool_audit_event_fail_open,
     sanitize_tool_audit_metadata,
 )
 
@@ -91,6 +93,8 @@ def test_ledger_rejects_sensitive_values_even_under_allowlisted_keys(tmp_path) -
             "command_hash": "echo raw-secret",
             "stdout_hash": "Bearer token-secret",
             "resource_decision": "https://example.test/path?token=secret",
+            "resource_type": "credentials/token.txt",
+            "error_code": "ls -la /private",
             "sandbox_image": "python:3.11",
             "timeout_seconds": 30,
         }
@@ -99,6 +103,24 @@ def test_ledger_rejects_sensitive_values_even_under_allowlisted_keys(tmp_path) -
         "sandbox_image": "python:3.11",
         "timeout_seconds": 30,
     }
+
+
+class _FailingLedger:
+    def record_event(self, _event: ToolAuditLedgerEvent) -> ToolAuditLedgerEvent:
+        raise RuntimeError("ledger down")
+
+
+def test_record_event_fail_open_logs_and_returns_none(caplog) -> None:
+    caplog.set_level(logging.WARNING)
+
+    recorded = record_tool_audit_event_fail_open(
+        _FailingLedger(),
+        _event(),
+        logging.getLogger("tests.tool_audit_ledger"),
+    )
+
+    assert recorded is None
+    assert "failed to record tool audit event" in caplog.text
 
 
 def test_ledger_enforces_limit_and_prunes(tmp_path) -> None:

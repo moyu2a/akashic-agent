@@ -119,7 +119,29 @@ _SENSITIVE_VALUE_MARKERS = (
 )
 _REF_RE = re.compile(r"^[A-Za-z0-9._/-]{1,160}$")
 _HEX_RE = re.compile(r"^[0-9a-fA-F]+$")
-_COMMAND_PREFIXES = ("echo ", "rm ", "python ", "bash ", "sh ")
+_COMMAND_PREFIXES = (
+    "awk ",
+    "bash ",
+    "cat ",
+    "chmod ",
+    "chown ",
+    "cp ",
+    "curl ",
+    "echo ",
+    "find ",
+    "grep ",
+    "head ",
+    "ls ",
+    "mkdir ",
+    "mv ",
+    "python ",
+    "python3 ",
+    "rm ",
+    "sed ",
+    "sh ",
+    "tail ",
+    "uv ",
+)
 
 
 @dataclass(frozen=True)
@@ -368,6 +390,7 @@ def _is_safe_string(value: str) -> bool:
         len(value) <= 240
         and not any(marker in lower for marker in _SENSITIVE_VALUE_MARKERS)
         and not value.startswith("/")
+        and not _looks_like_raw_path(value)
         and not any(segment in {".", ".."} for segment in value.replace("\\", "/").split("/"))
         and not lower.startswith(_COMMAND_PREFIXES)
     )
@@ -384,3 +407,22 @@ def _is_safe_hash(value: str) -> bool:
     return bool(_HEX_RE.fullmatch(value) or value.endswith("-hash")) and not lower.startswith(
         _COMMAND_PREFIXES
     )
+
+
+def _looks_like_raw_path(value: str) -> bool:
+    normalized = value.replace("\\", "/")
+    if "/" not in normalized:
+        return False
+    if normalized.startswith(("http://", "https://")):
+        return True
+    path = Path(normalized)
+    if path.is_absolute():
+        return True
+    segments = [segment for segment in normalized.split("/") if segment]
+    if not segments:
+        return False
+    if any(segment in {".", "..", "~"} for segment in segments):
+        return True
+    file_like = any("." in segment for segment in segments)
+    directory_like = len(segments) >= 2
+    return file_like or directory_like
