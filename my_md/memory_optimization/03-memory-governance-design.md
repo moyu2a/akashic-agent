@@ -429,6 +429,8 @@ AgentLoop 只继续通过生命周期、事件和工具抽象使用记忆。
 4. 将 answer contract 拆成生产可解释字段：allowed evidence、current facts、stale/conflict warnings、insufficient-evidence fallback 和 forbidden boundary。
 5. 先以 eval-only / shadow 方式验证回答后校验和 retry，不直接改变生产 `AgentLoop` 或默认 prompt。
 
+P6o-1 implementation boundary: `chain_tri_governed_answer_contract` is still oracle-assisted because candidate governance protects fixture expected ids and the answer contract uses fixture answer expectations. It is useful for testing whether the combined shape can be evaluated, not for production activation. The fake-provider smoke only verifies wiring and report metadata: `case_count = 200`, `unique_case_count = 40`, `profile_count = 5`, `provider_error_count = 0`, `timeout_count = 0`, and `combines_candidate_governance` visible in JSON / Markdown.
+
 ## 8. 最小可行版本
 
 ### MVP 1：写入门控 trace

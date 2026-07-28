@@ -335,6 +335,14 @@ Conclusion: `chain_tri_answer_contract` passes the P6n gate because answer rate 
 - forbidden_rate 低于 `12.5%`，目标是接近 candidate governance 的 `0.0%`；
 - avg_tokens 不出现明显膨胀。
 
+### Phase 6o1 Governed Answer Contract Profile
+
+P6o-1 adds only the eval profile and fake-provider smoke for `chain_tri_governed_answer_contract`. It does not produce real LLM quality evidence. The profile uses `chain_tri_candidate_governance` evidence ids as allowed evidence, then renders an Answer Contract over those ids. This isolates wiring and report correctness before spending real LLM calls.
+
+Fake-provider smoke result: common `20` + hard `20` produced `40` unique cases across `5` profiles, for `case_count = 200`. The report was generated with `real_llm_enabled = False`, `provider_error_count = 0`, and `timeout_count = 0`. The governed profile appears in `profile_summaries`, and JSON / Markdown metadata expose `combines_candidate_governance = True`.
+
+Next real A/B criteria remain: answer_rate close to or above `75.0%`, grounding_rate `100.0%`, forbidden_rate below `12.5%`, and no obvious token blow-up.
+
 ### Phase 6c-1 已建立的离线 uplift proxy report
 
 Phase 6c-1 不是答案质量评测，而是把现有 shadow trace 转成统一的对照指标。它输出：

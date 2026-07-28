@@ -268,6 +268,8 @@ MemoryValueScorer
 4. 增加回答后校验 shadow，记录是否使用 allowed evidence、是否遗漏关键事实、是否输出 forbidden terms。
 5. 用同一 40-case 小矩阵先跑 A/B，只有当 answer_rate 维持接近 `75.0%` 且 forbidden_rate 低于 `12.5%` 时，再考虑扩大真实 LLM run。
 
+P6o-1 complete criteria now cover the eval-only wiring step before that real A/B: profile registered, governed ids reused as allowed evidence, contract rendered with governed profile name, eval-only metadata visible in JSON and Markdown, and 200-row fake-provider smoke passes. Current fake-provider smoke result is `case_count = 200`, `unique_case_count = 40`, `profile_count = 5`, `real_llm_enabled = False`, `provider_error_count = 0`, and `timeout_count = 0`. Real LLM A/B is intentionally deferred.
+
 ## Phase 6t：source_ref 写入质量治理
 
 ### 目的

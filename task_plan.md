@@ -1720,3 +1720,45 @@ Goal: test whether structured answer-contract evidence injection fixes tri retri
 3. Run fake-provider smoke and focused regression - complete
 4. Run bounded real LLM comparison and document measured outcome - complete
 5. Commit locally without push - pending
+
+## 2026-07-28 Memory P6o1 Governed Answer Contract
+
+Goal: add eval-only `chain_tri_governed_answer_contract` wiring so the next real A/B can test candidate governance plus answer contract.
+
+Plan:
+
+- `docs/superpowers/plans/2026-07-28-memory-p6o1-governed-answer-contract.md`
+
+Current status:
+
+1. Extend pure answer contract helper for governed allowed ids - complete.
+2. Register governed answer contract profile in comprehensive online eval - complete.
+3. Run fake-provider smoke and metadata regression - complete.
+4. Update docs and commit locally without push - in progress.
+
+Fake-provider smoke:
+
+- output dir: `/tmp/akashic-memory-p6o1-governed-answer-contract-fake/reports`;
+- profiles: `chain_memory_base`, `chain_tri_retrieval`, `chain_tri_candidate_governance`, `chain_tri_answer_contract`, `chain_tri_governed_answer_contract`;
+- split: common `20` + hard `20`;
+- prompt variant: `baseline`;
+- repeats: `1`;
+- `case_count = 200`;
+- `unique_case_count = 40`;
+- `profile_count = 5`;
+- `real_llm_enabled = False`;
+- `provider_error_count = 0`;
+- `timeout_count = 0`.
+
+Boundary:
+
+- eval-only profile wiring, fake-provider smoke, metadata, docs;
+- no real LLM in P6o-1;
+- no production `AgentLoop`, `Reasoner`, `ToolExecutor`, memory write, production prompt, or old `Retriever.retrieve()` contract changes.
+
+Next real A/B criteria:
+
+- answer_rate close to or above `75.0%`;
+- grounding_rate remains `100.0%`;
+- forbidden_rate below `12.5%`;
+- no obvious token blow-up.

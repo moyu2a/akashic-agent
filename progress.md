@@ -1,5 +1,36 @@
 # Document RAG P10a Progress
 
+## 2026-07-28 Memory P6o1 Governed Answer Contract Plan
+
+- Plan path: `docs/superpowers/plans/2026-07-28-memory-p6o1-governed-answer-contract.md`
+- Scope: eval-only profile wiring, fake-provider smoke, docs, no real LLM.
+- Production boundary: no AgentLoop, Reasoner, ToolExecutor, memory write, production prompt, or old `Retriever.retrieve()` contract changes.
+- Task 0 preserved prior P6n/P6o documentation notes separately in commit `c6706e3 docs: record memory p6o follow-up direction`.
+- Task 1 added governed answer-contract pure helpers in commit `ae253f0 feat: add governed tri answer contract helper`.
+- Task 2 registered `chain_tri_governed_answer_contract` in comprehensive online eval in commit `14d36d0 feat: add governed tri answer contract eval profile`.
+- Task 3 added fake-provider / metadata coverage in commit `075d7be test: cover governed answer contract eval metadata`.
+- Fake-provider smoke output:
+  - `/tmp/akashic-memory-p6o1-governed-answer-contract-fake/reports/memory_comprehensive_online_eval.json`;
+  - `/tmp/akashic-memory-p6o1-governed-answer-contract-fake/reports/memory_comprehensive_online_eval.md`.
+- Fake-provider smoke facts:
+  - `case_count = 200`;
+  - `unique_case_count = 40`;
+  - `profile_count = 5`;
+  - `real_llm_enabled = False`;
+  - `provider_error_count = 0`;
+  - `timeout_count = 0`;
+  - `chain_tri_governed_answer_contract` appears in `profile_summaries`;
+  - JSON and Markdown metadata expose `combines_candidate_governance = True`.
+- Current conclusion:
+  - P6o-1 proves only that the combined governed-answer-contract shape is wired, renderable, reportable, and fake-provider smokeable;
+  - it does not prove real answer quality, cost, or production readiness;
+  - the next evidence step is a bounded real LLM A/B comparing `chain_tri_retrieval`, `chain_tri_candidate_governance`, `chain_tri_answer_contract`, and `chain_tri_governed_answer_contract`.
+- Next real A/B criteria:
+  - answer_rate close to or above `75.0%`;
+  - grounding_rate `100.0%`;
+  - forbidden_rate below `12.5%`;
+  - no obvious token blow-up.
+
 ## 2026-07-28 Memory Tri Retrieval Failure Attribution
 
 - User asked to execute the reviewed plan for tri retrieval failure attribution on `memory-next`, without syncing remote/main first.
