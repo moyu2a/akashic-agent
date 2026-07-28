@@ -368,6 +368,10 @@ P6o-3 removes fixture answer-term dependencies from the governed tri contract pa
 
 The key boundary is that `chain_tri_answer_contract` remains the oracle diagnostic profile, while `chain_tri_governed_answer_contract` becomes the production-safe eval/shadow profile. Real LLM A/B remains deferred until P6o-5.
 
+### Phase 6o4 Answer Post-Check Shadow
+
+P6o-4 adds report-only post-answer diagnostics for the production-safe governed contract. These metrics are not pass/fail gates yet: `needs_retry_count`, `forbidden_boundary_included_count`, `missing_likely_relevant_context_count`, `stale_evidence_included_count`, `conflict_evidence_included_count`, and `insufficient_fallback_missing_count` describe what a future production retry/fallback policy would have observed.
+
 ### Phase 6c-1 已建立的离线 uplift proxy report
 
 Phase 6c-1 不是答案质量评测，而是把现有 shadow trace 转成统一的对照指标。它输出：

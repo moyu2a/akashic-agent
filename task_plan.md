@@ -1781,3 +1781,12 @@ Goal: replace fixture answer expectations in the governed tri contract path with
 2. Switch governed eval profile to production-safe contract - complete
 3. Add fake-provider smoke and privacy coverage - complete
 4. Update docs and commit locally without push - complete
+
+## 2026-07-28 Memory P6o4 Answer Post-Check Shadow
+
+Goal: record answer post-check shadow diagnostics for the governed production-safe evidence contract without changing answer behavior.
+
+1. Add pure answer post-check shadow helper - complete
+2. Attach post-check shadow to comprehensive eval reports - complete
+3. Add fake-provider smoke and privacy coverage - complete
+4. Update docs and commit locally without push - complete

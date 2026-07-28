@@ -437,6 +437,8 @@ P6o-2 offline standard report facts: `case_count = 80`, `tiered_candidate_risk_t
 
 P6o-3 design boundary: the governed evidence contract no longer says what terms the answer must contain. Instead it exposes evidence state that production code could plausibly know: allowed ids, likely relevant ids, downgraded ids, requires-review ids, stale/superseded warnings, conflict warnings, active version ids, insufficient-evidence fallback, and forbidden boundary ids. This keeps the answer contract useful without depending on fixture answer expectations.
 
+P6o-4 design boundary: answer post-check is shadow-only. It does not rewrite, retry, or block answers; it records whether the eval context included allowed evidence, missed likely evidence, included forbidden boundaries, included stale/conflict evidence, or whether the answer text failed to acknowledge insufficient evidence. P6o-5 can use these fields to compare real LLM profiles before any active retry policy exists.
+
 ## 8. 最小可行版本
 
 ### MVP 1：写入门控 trace

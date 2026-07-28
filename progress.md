@@ -1966,4 +1966,15 @@
 - Focused verification: `tests/test_memory_answer_contract.py` plus governed profile integration tests passed with `14 passed`.
 - Comprehensive fake-provider regression: `tests/test_memory_comprehensive_online_eval.py` passed with `33 passed`.
 - Final verification: `tests/test_memory_answer_contract.py tests/test_memory_comprehensive_online_eval.py tests/test_memory_retrieval_governance.py tests/test_memory_tri_candidate_governance.py` passed with `68 passed`; `compileall -q memory2 scripts tests` and `git diff --check` passed.
-- Next handoff: P6o-4 answer post-check shadow should record allowed evidence usage, missed key evidence, forbidden terms, superseded/conflict evidence usage, and retry need.
+- Next handoff: P6o-4 answer post-check shadow should record allowed evidence inclusion, missed likely context evidence, forbidden boundary inclusion, stale/conflict evidence inclusion, insufficient fallback observation, and retry need.
+
+## 2026-07-28 Memory P6o4 Answer Post-Check Shadow
+
+- Plan path: `docs/superpowers/plans/2026-07-28-memory-p6o4-answer-post-check-shadow.md`.
+- Scope: eval/shadow-only post-answer diagnostics, no real LLM.
+- Production boundary: no retry, no answer rewrite, no production prompt change, no AgentLoop / Reasoner / ToolExecutor / memory write change.
+- Shadow fields: allowed evidence inclusion, missing likely relevant evidence from context, forbidden boundary inclusion, stale evidence inclusion, conflict evidence inclusion, insufficient-evidence fallback observation, retry need.
+- Markdown boundary: aggregate metrics only; no raw prompt, session text, full answer, or answer_debug.
+- Fake-provider smoke: `case_count = 12`, `enabled_case_count = 4`, `real_llm_enabled = False`, `provider_error_count = 0`, `timeout_count = 0`, `forbidden_boundary_included_count = 0`, `insufficient_fallback_missing_count = 0`.
+- Final verification: `tests/test_memory_answer_contract.py tests/test_memory_answer_post_check.py tests/test_memory_comprehensive_online_eval.py tests/test_memory_retrieval_governance.py tests/test_memory_tri_candidate_governance.py` passed with `78 passed`; `compileall -q memory2 scripts tests` and `git diff --check` passed.
+- Next handoff: P6o-5 small real LLM A/B should compare `chain_tri_retrieval`, `chain_tri_candidate_governance`, `chain_tri_answer_contract`, and `chain_tri_governed_answer_contract` with post-check shadow metrics enabled.

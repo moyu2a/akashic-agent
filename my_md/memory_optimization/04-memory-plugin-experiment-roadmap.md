@@ -276,6 +276,8 @@ P6o-2 comparison conclusion: strict candidate governance was too coarse because 
 
 P6o-3 complete criteria: governed tri contract uses production-safe evidence fields, JSON / Markdown metadata marks `production_safe_evidence_contract`, fixture answer expectations are absent from the governed contract raw output and rendered block, and fake-provider smoke passes. P6o-4 should add answer post-check shadow over these fields before any real LLM A/B.
 
+P6o-4 complete criteria: comprehensive eval case records include private `answer_post_check_shadow`, aggregate metrics expose retry and evidence-risk counts, Markdown shows only aggregate shadow metrics, fake-provider smoke passes, and no production answer behavior changes. P6o-5 should run the small real LLM A/B with these shadow metrics enabled.
+
 ## Phase 6t：source_ref 写入质量治理
 
 ### 目的
