@@ -502,3 +502,80 @@ def test_comprehensive_online_cli_p6o5_scaled_fake_provider_matrix_shape(
     assert "raw_prompt" not in markdown
     assert "full_answer" not in markdown
     assert "session_text" not in markdown
+
+
+def test_comprehensive_online_cli_p6o6_rerank_governed_fake_provider_matrix_shape(
+    tmp_path: Path,
+) -> None:
+    output_dir = tmp_path / "reports"
+    workspace = tmp_path / "workspace"
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "scripts/run_memory_comprehensive_online_eval.py",
+            "--workspace",
+            str(workspace),
+            "--out-dir",
+            str(output_dir),
+            "--fake-provider",
+            "--case-pack",
+            "standard",
+            "--balanced-small",
+            "--common-limit",
+            "2",
+            "--hard-limit",
+            "2",
+            "--profiles",
+            (
+                "chain_tri_governed_answer_contract,"
+                "chain_tri_rerank_governed_answer_contract"
+            ),
+            "--prompt-variants",
+            "baseline",
+            "--repeats",
+            "1",
+            "--checkpoint-jsonl",
+            str(tmp_path / "checkpoint.jsonl"),
+            "--real-memory-workspace",
+            str(tmp_path / "empty-real-workspace"),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    payload = json.loads(
+        (output_dir / "memory_comprehensive_online_eval.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    markdown = (output_dir / "memory_comprehensive_online_eval.md").read_text(
+        encoding="utf-8"
+    )
+
+    assert payload["metrics"]["case_count"] == 8
+    assert payload["metrics"]["unique_case_count"] == 4
+    assert payload["metrics"]["completed_call_count"] == 8
+    assert payload["metrics"]["profile_count"] == 2
+    assert payload["metrics"]["prompt_variant_count"] == 1
+    assert payload["metrics"]["repeat_count"] == 1
+    assert payload["metrics"]["provider_error_count"] == 0
+    assert payload["metrics"]["timeout_count"] == 0
+    assert payload["metrics"]["answer_post_check_shadow"]["case_count"] == 8
+    assert set(payload["metrics"]["profile_summaries"]) == {
+        "chain_tri_governed_answer_contract",
+        "chain_tri_rerank_governed_answer_contract",
+    }
+    metadata = payload["metrics"]["profile_metadata"][
+        "chain_tri_rerank_governed_answer_contract"
+    ]
+    assert metadata["production_safe_evidence_contract"] is True
+    assert metadata["combines_rerank_injection"] is True
+    assert metadata["does_not_expand_recall"] is True
+    assert "chain_tri_rerank_governed_answer_contract" in markdown
+    assert "combines_rerank_injection" in markdown
+    assert "raw_prompt" not in markdown
+    assert "full_answer" not in markdown
+    assert "session_text" not in markdown

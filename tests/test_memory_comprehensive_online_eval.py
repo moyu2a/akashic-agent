@@ -43,7 +43,7 @@ class ComprehensiveScriptedProvider:
         )
         if "memory_id=" not in text:
             answer = "没有可用记忆，无法确认。"
-        elif "Evidence Contract: chain_tri_governed_answer_contract" in text:
+        elif "Evidence Contract: chain_tri_" in text:
             answer = "根据 production-safe evidence contract，应使用 allowed_evidence，并在证据不足时说明无法确认。"
         elif "Answer Contract: chain_tri_governed_answer_contract" in text:
             answer = "根据 governed Answer Contract，应使用治理后的 allowed_evidence，并避免 forbidden_terms。"
@@ -1028,6 +1028,37 @@ def test_rerank_governed_profile_report_metadata_and_post_check_shadow(
     assert metadata["does_not_expand_recall"] is True
     assert report.metrics["answer_post_check_shadow"]["case_count"] == 1
     assert report.case_records[0]["answer_post_check_shadow"]["shadow_enabled"] is True
+
+
+def test_rerank_governed_profile_metadata_markdown_exposes_rerank_columns(
+    tmp_path: Path,
+) -> None:
+    case, _governed_ids, _rerank_ids, _expected_order = (
+        _case_with_rerank_governed_order_delta()
+    )
+    specs = build_comprehensive_run_specs(
+        [case],
+        profiles=("chain_tri_rerank_governed_answer_contract",),
+        prompt_variants=("baseline",),
+        repeats=1,
+    )
+    report = asyncio.run(
+        run_comprehensive_online_eval(
+            specs,
+            tmp_path / "workspace",
+            ComprehensiveScriptedProvider(),
+            model="scripted",
+            real_llm_enabled=False,
+        )
+    )
+
+    md_path = tmp_path / "report.md"
+    write_comprehensive_online_markdown(report, md_path)
+    markdown = md_path.read_text(encoding="utf-8")
+
+    assert "combines_rerank_injection" in markdown
+    assert "does_not_expand_recall" in markdown
+    assert "chain_tri_rerank_governed_answer_contract" in markdown
 
 
 def test_rerank_governed_answer_expectation_is_grounding_only_not_oracle_terms() -> None:
