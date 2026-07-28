@@ -884,6 +884,61 @@ def test_governed_answer_contract_report_metadata_marks_no_fixture_answer_expect
     assert "production_safe_evidence_contract" in markdown
 
 
+def test_p6o3_governed_contract_fake_provider_smoke_is_private(
+    tmp_path: Path,
+) -> None:
+    cases = (
+        build_quantitative_eval_cases(case_set="common", limit=2, case_pack="standard")
+        + build_quantitative_eval_cases(case_set="hard", limit=2, case_pack="standard")
+    )
+    specs = build_comprehensive_run_specs(
+        cases,
+        profiles=(
+            "chain_tri_retrieval",
+            "chain_tri_candidate_governance",
+            "chain_tri_governed_answer_contract",
+        ),
+        prompt_variants=("baseline",),
+        repeats=1,
+    )
+
+    report = asyncio.run(
+        run_comprehensive_online_eval(
+            specs,
+            tmp_path / "workspace",
+            ComprehensiveScriptedProvider(),
+            model="scripted",
+            timeout_s=5.0,
+            real_llm_enabled=False,
+        )
+    )
+    md_path = tmp_path / "report.md"
+    write_comprehensive_online_markdown(report, md_path)
+    markdown = md_path.read_text(encoding="utf-8")
+
+    assert report.metrics["case_count"] == 12
+    assert report.metrics["real_llm_enabled"] is False
+    assert report.metrics["provider_error_count"] == 0
+    assert report.metrics["timeout_count"] == 0
+    metadata = report.metrics["profile_metadata"][
+        "chain_tri_governed_answer_contract"
+    ]
+    assert metadata["production_safe_evidence_contract"] is True
+    assert metadata["uses_fixture_answer_expectations"] is False
+    governed_rows = [
+        row
+        for row in report.case_records
+        if row["profile_name"] == "chain_tri_governed_answer_contract"
+    ]
+    assert governed_rows
+    assert all(row["passed"] is True for row in governed_rows)
+    assert all(row["failures"] == [] for row in governed_rows)
+    assert "production_safe_evidence_contract" in markdown
+    assert "raw_prompt" not in markdown
+    assert "full_answer" not in markdown
+    assert "session_text" not in markdown
+
+
 def test_optional_tri_candidate_governance_profile_is_visible_in_markdown(
     tmp_path: Path,
 ) -> None:
