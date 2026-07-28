@@ -1,5 +1,16 @@
 # Document RAG P10a Findings
 
+## 2026-07-28 Tool Governance P4c/P5a Findings
+
+- P4b was merged into `origin/main` through PR #3; latest main is `7794819`.
+- Governance roadmap explicitly lists the next follow-up as P5 queryable persistent `ToolAuditLedger`, then external API side-effect replay.
+- The term P4c is best treated as a design-first bridge to that P5 ledger work, not as a new execution capability.
+- Existing `agent/policies/tool_audit.py` does not persist a ledger; it builds per-result `audit_trace` metadata for turn trace / observe.
+- Existing approval and approved side-effect stores should remain source-of-truth. A queryable ledger should be a sidecar audit projection, not a replacement transaction owner.
+- Ledger events must be allowlist-based. Raw shell command, raw tool args, raw file content, raw file path, raw output text, payload path, token, cookie and secret values must not enter ledger rows.
+- Ledger write failure should not relabel execution outcome, consume/unconsume approval, or change side-effect runtime status.
+- The design spec lives under ignored `docs/`, so force staging is required for this project if the spec should travel with the branch.
+
 ## 2026-07-20 Memory Phase 6k Findings
 
 - The comprehensive fake-provider core matrix can run end to end with the current scripts and produces a 1280-row report for the answer/retrieval slice.

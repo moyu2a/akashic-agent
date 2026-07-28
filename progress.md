@@ -1,5 +1,22 @@
 # Document RAG P10a Progress
 
+## 2026-07-28 Tool Governance P4c/P5a Queryable ToolAuditLedger Design
+
+- Created isolated worktree from merged `origin/main`: `/home/jjh/git_work/akashic-agent/.worktrees/tool-governance-p4c-audit-ledger`.
+- Branch: `tool-governance-p4c-audit-ledger`, tracking `origin/main`.
+- Starting commit: `7794819 Merge pull request #3 from moyu2a/tool-approval-next`.
+- Restored planning context from `task_plan.md`, `progress.md`, and `findings.md`.
+- Confirmed roadmap says P4b follow-up order is queryable persistent `ToolAuditLedger` first, then external API side-effect replay.
+- Inspected current audit surfaces:
+  - `agent/policies/tool_audit.py` builds bounded trace metadata only.
+  - `ToolApprovalStore` owns durable approval source-of-truth.
+  - `ApprovedSideEffectStore` owns durable approved side-effect source-of-truth and local lifecycle rows.
+  - status commands expose approval and managed side-effect trusted operations but no audit query command yet.
+- Wrote design spec: `docs/superpowers/specs/2026-07-28-tool-governance-p4c-audit-ledger-design.md`.
+- Self-reviewed the spec for placeholders, contradictions, ambiguity, and scope.
+- `docs/` is ignored by `.gitignore`, so the design spec must be staged with `git add -f`.
+- `git diff --check` emitted no output before committing the design/planning docs.
+
 ## 2026-07-27 Tool Governance P4b Documentation and Final Verification
 
 - P4b 已完成第一版 sandboxed approved shell execution：approved `shell` request 不再能由普通 ToolExecutor 直接执行，而是进入 approved shell side-effect runtime。该 runtime 从 workspace 私有 payload vault 读取原始 shell 参数，重新执行 P1/P2 resource policy，生成 sandbox preview，并只通过 Docker/Podman sandbox runner 执行。第一版 fail closed：Docker/Podman 不可用时不回退宿主 shell；workspace 只读挂载；network off；non-root user；read-only rootfs；cap drop；no-new-privileges；pids/memory/cpu/timeout limits。P4b 不支持 shell rollback，不开放 TaskExecution shell resume，不开放 external API side-effect replay。

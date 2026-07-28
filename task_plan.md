@@ -1,5 +1,23 @@
 # Document RAG P10a Intent Preload Plan
 
+## 2026-07-28 Tool Governance P4c/P5a Queryable ToolAuditLedger Design
+
+Goal: create a design-first specification for a workspace-scoped, queryable, persistent, redacted `ToolAuditLedger` before expanding any new tool execution capability.
+
+1. Create isolated branch/worktree from latest merged `origin/main` - complete (`tool-governance-p4c-audit-ledger` at `7794819`).
+2. Restore planning context and inspect P4b follow-up records - complete.
+3. Inspect current audit, approval, side-effect, status command, and observe surfaces - complete.
+4. Write design spec for P4c/P5a queryable ToolAuditLedger - complete (`docs/superpowers/specs/2026-07-28-tool-governance-p4c-audit-ledger-design.md`).
+5. Self-review and commit design/planning docs - complete.
+6. Write P4c implementation plan with `writing-plans` skill - in progress.
+
+Current design decision:
+
+- Treat P4c as the next governance design step, functionally aligned with the roadmap's P5 queryable `ToolAuditLedger`.
+- Do not start external API side-effect replay yet.
+- Do not open destructive execution, TaskExecution shell resume, shell rollback, or network-enabled shell sandbox.
+- Build a sidecar `tool_audit/tool_audit.db` projection store rather than merging audit rows into approval or side-effect stores.
+
 ## 2026-07-27 Tool Governance P4b Documentation and Final Verification
 
 Goal: record the completed first-version sandboxed approved shell workflow and final measured verification without modifying production code or tests.
