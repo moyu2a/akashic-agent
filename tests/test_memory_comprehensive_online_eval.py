@@ -1315,6 +1315,85 @@ def test_rerank_governed_answer_expectation_is_grounding_only_not_oracle_terms()
     assert expectation.grounding_required is True
 
 
+def _case_with_version_boundary_and_rerank_delta():
+    for case in (
+        build_quantitative_eval_cases(case_set="common", limit=20, case_pack="standard")
+        + build_quantitative_eval_cases(case_set="hard", limit=20, case_pack="standard")
+    ):
+        if not case.setup.get("memory_replacements"):
+            continue
+        governed_ids = evidence_ids_for_profile(
+            case,
+            "chain_tri_governed_answer_contract",
+        )
+        rerank_ids = evidence_ids_for_profile(
+            case,
+            "chain_tri_rerank_governed_answer_contract",
+        )
+        if rerank_ids != governed_ids and set(rerank_ids) == set(governed_ids):
+            return case
+    raise AssertionError("fixture must include version boundary case with rerank delta")
+
+
+def test_rerank_version_governed_profile_reorders_without_recall_expansion() -> None:
+    case = _case_with_version_boundary_and_rerank_delta()
+
+    combo_ids = evidence_ids_for_profile(
+        case,
+        "chain_tri_rerank_version_governed_answer_contract",
+    )
+    rerank_ids = evidence_ids_for_profile(
+        case,
+        "chain_tri_rerank_governed_answer_contract",
+    )
+    governed_ids = evidence_ids_for_profile(
+        case,
+        "chain_tri_governed_answer_contract",
+    )
+
+    assert combo_ids == rerank_ids
+    assert combo_ids != governed_ids
+    assert set(combo_ids) == set(governed_ids)
+    assert profile_evidence_source(
+        "chain_tri_rerank_version_governed_answer_contract"
+    ) == (
+        "tri_rerank_version_governed_answer_contract."
+        "reranked_version_boundaried_governed_allowed_evidence_ids"
+    )
+
+
+def test_rerank_version_governed_profile_injects_safe_combined_contract() -> None:
+    case = _case_with_version_boundary_and_rerank_delta()
+    engine = ComprehensiveOnlineMemoryEngine(
+        case,
+        profile_name="chain_tri_rerank_version_governed_answer_contract",
+        prompt_variant="baseline",
+    )
+
+    result = asyncio.run(
+        engine.retrieve(
+            MemoryEngineRetrieveRequest(
+                query=str(case.setup["query"]),
+                mode="explicit",
+                top_k=8,
+            )
+        )
+    )
+
+    assert (
+        "Evidence Contract: chain_tri_rerank_version_governed_answer_contract"
+        in result.text_block
+    )
+    assert "forbidden_boundary_ids:" not in result.text_block
+    assert "deleted_evidence_ids:" not in result.text_block
+    assert result.raw["answer_contract"]["combines_candidate_governance"] is True
+    assert result.raw["answer_contract"]["combines_rerank_injection"] is True
+    assert result.raw["answer_contract"]["combines_version_boundary"] is True
+    assert result.raw["answer_contract"]["does_not_expand_recall"] is True
+    assert result.raw["rerank_signal"]["recall_expanded"] is False
+    assert result.raw["version_boundary"]["recall_expanded"] is False
+
+
 def test_p6o3_governed_contract_fake_provider_smoke_is_private(
     tmp_path: Path,
 ) -> None:

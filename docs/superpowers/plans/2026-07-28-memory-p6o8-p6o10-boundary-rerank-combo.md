@@ -712,7 +712,7 @@ git commit -m "docs: record p6o9 governed rerank version comparison"
   - `rerank_version_governed_tri_trace_for_case(case: EvalCase) -> dict[str, object]`
   - optional profile accepted by CLI/eval harness.
 
-- [ ] **Step 1: Write failing combo tests**
+- [x] **Step 1: Write failing combo tests**
 
 Add to `tests/test_memory_comprehensive_online_eval.py`:
 
@@ -792,7 +792,7 @@ def test_rerank_version_governed_profile_injects_safe_combined_contract() -> Non
     assert result.raw["version_boundary"]["recall_expanded"] is False
 ```
 
-- [ ] **Step 2: Run RED combo tests**
+- [x] **Step 2: Run RED combo tests**
 
 Run:
 
@@ -805,7 +805,7 @@ PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -m pytest \
 
 Expected: fail because the profile/helper is unknown.
 
-- [ ] **Step 3: Implement combo profile**
+- [x] **Step 3: Implement combo profile**
 
 In `memory2/eval_comprehensive_online.py`:
 
@@ -890,7 +890,7 @@ and inside `raw["answer_contract"]`:
 "does_not_expand_recall": does_not_expand_recall,
 ```
 
-- [ ] **Step 4: Add CLI fake smoke for combo**
+- [x] **Step 4: Add CLI fake smoke for combo**
 
 Add to `tests/test_memory_comprehensive_online_cli.py`:
 
@@ -949,7 +949,7 @@ def test_comprehensive_online_cli_p6o10_combo_fake_provider_matrix_shape(
     assert metadata["does_not_expand_recall"] is True
 ```
 
-- [ ] **Step 5: Run GREEN combo tests**
+- [x] **Step 5: Run GREEN combo tests**
 
 Run:
 
@@ -962,7 +962,7 @@ PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -m pytest \
 
 Expected: both files pass.
 
-- [ ] **Step 6: Commit combo code**
+- [x] **Step 6: Commit combo code**
 
 Run:
 

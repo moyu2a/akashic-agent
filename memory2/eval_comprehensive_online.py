@@ -92,10 +92,14 @@ TRI_RERANK_GOVERNED_ANSWER_CONTRACT_PROFILE = (
 TRI_VERSION_GOVERNED_ANSWER_CONTRACT_PROFILE = (
     "chain_tri_version_governed_answer_contract"
 )
+TRI_RERANK_VERSION_GOVERNED_ANSWER_CONTRACT_PROFILE = (
+    "chain_tri_rerank_version_governed_answer_contract"
+)
 PRODUCTION_GOVERNED_ANSWER_CONTRACT_PROFILES: tuple[str, ...] = (
     TRI_GOVERNED_ANSWER_CONTRACT_PROFILE,
     TRI_RERANK_GOVERNED_ANSWER_CONTRACT_PROFILE,
     TRI_VERSION_GOVERNED_ANSWER_CONTRACT_PROFILE,
+    TRI_RERANK_VERSION_GOVERNED_ANSWER_CONTRACT_PROFILE,
 )
 OPTIONAL_ANSWER_QUALITY_PROFILES: tuple[str, ...] = (
     TRI_CANDIDATE_GOVERNANCE_PROFILE,
@@ -103,6 +107,7 @@ OPTIONAL_ANSWER_QUALITY_PROFILES: tuple[str, ...] = (
     TRI_GOVERNED_ANSWER_CONTRACT_PROFILE,
     TRI_RERANK_GOVERNED_ANSWER_CONTRACT_PROFILE,
     TRI_VERSION_GOVERNED_ANSWER_CONTRACT_PROFILE,
+    TRI_RERANK_VERSION_GOVERNED_ANSWER_CONTRACT_PROFILE,
 )
 PROFILE_METADATA: dict[str, dict[str, object]] = {
     TRI_CANDIDATE_GOVERNANCE_PROFILE: {
@@ -171,6 +176,23 @@ PROFILE_METADATA: dict[str, dict[str, object]] = {
             "Keeps candidate-governed tri allowed ids unchanged and adds "
             "version-boundary fields for active versions, stale/superseded "
             "warnings, conflict warnings, and forbidden boundaries."
+        ),
+    },
+    TRI_RERANK_VERSION_GOVERNED_ANSWER_CONTRACT_PROFILE: {
+        "eval_only": True,
+        "oracle_protected": True,
+        "uses_fixture_expected_ids": True,
+        "diagnostic_answer_contract": True,
+        "uses_fixture_answer_expectations": False,
+        "production_safe_evidence_contract": True,
+        "combines_candidate_governance": True,
+        "combines_rerank_injection": True,
+        "combines_version_boundary": True,
+        "does_not_expand_recall": True,
+        "candidate_governance_mode": "tiered",
+        "description": (
+            "Reorders candidate-governed tri evidence with rerank signal and "
+            "adds safe version-boundary metadata without recall expansion."
         ),
     },
 }
@@ -265,8 +287,13 @@ class ComprehensiveOnlineMemoryEngine:
             TRI_GOVERNED_ANSWER_CONTRACT_PROFILE,
             TRI_RERANK_GOVERNED_ANSWER_CONTRACT_PROFILE,
             TRI_VERSION_GOVERNED_ANSWER_CONTRACT_PROFILE,
+            TRI_RERANK_VERSION_GOVERNED_ANSWER_CONTRACT_PROFILE,
         }:
             governed_trace = (
+                rerank_version_governed_tri_trace_for_case(self.case)
+                if self.profile_name
+                == TRI_RERANK_VERSION_GOVERNED_ANSWER_CONTRACT_PROFILE
+                else
                 version_governed_tri_trace_for_case(self.case)
                 if self.profile_name == TRI_VERSION_GOVERNED_ANSWER_CONTRACT_PROFILE
                 else rerank_governed_tri_trace_for_case(self.case)
@@ -286,7 +313,10 @@ class ComprehensiveOnlineMemoryEngine:
                 version_boundary_info = (
                     build_version_boundary_info(self.case, governed_trace)
                     if self.profile_name
-                    == TRI_VERSION_GOVERNED_ANSWER_CONTRACT_PROFILE
+                    in {
+                        TRI_VERSION_GOVERNED_ANSWER_CONTRACT_PROFILE,
+                        TRI_RERANK_VERSION_GOVERNED_ANSWER_CONTRACT_PROFILE,
+                    }
                     else None
                 )
                 contract = build_production_governed_tri_evidence_contract(
@@ -297,11 +327,21 @@ class ComprehensiveOnlineMemoryEngine:
                 )
                 combines_candidate_governance = True
                 combines_rerank_injection = (
-                    self.profile_name == TRI_RERANK_GOVERNED_ANSWER_CONTRACT_PROFILE
+                    self.profile_name
+                    in {
+                        TRI_RERANK_GOVERNED_ANSWER_CONTRACT_PROFILE,
+                        TRI_RERANK_VERSION_GOVERNED_ANSWER_CONTRACT_PROFILE,
+                    }
                 )
                 combines_version_boundary = (
                     self.profile_name
-                    == TRI_VERSION_GOVERNED_ANSWER_CONTRACT_PROFILE
+                    in {
+                        TRI_VERSION_GOVERNED_ANSWER_CONTRACT_PROFILE,
+                        TRI_RERANK_VERSION_GOVERNED_ANSWER_CONTRACT_PROFILE,
+                    }
+                )
+                does_not_expand_recall = (
+                    self.profile_name in PRODUCTION_GOVERNED_ANSWER_CONTRACT_PROFILES
                 )
                 self.used_memory_ids = list(contract.allowed_evidence_ids)
                 hits = [
@@ -350,6 +390,7 @@ class ComprehensiveOnlineMemoryEngine:
                         "combines_candidate_governance": combines_candidate_governance,
                         "combines_rerank_injection": combines_rerank_injection,
                         "combines_version_boundary": combines_version_boundary,
+                        "does_not_expand_recall": does_not_expand_recall,
                         "candidate_governance_mode": contract.candidate_governance_mode,
                         "allowed_evidence": list(contract.allowed_evidence),
                         "likely_relevant_evidence": list(
@@ -565,6 +606,8 @@ def evidence_ids_for_profile(case: EvalCase, profile_name: str) -> tuple[str, ..
         return tuple(rerank_governed_tri_trace_for_case(case).get("ids", ()))
     if profile_name == TRI_VERSION_GOVERNED_ANSWER_CONTRACT_PROFILE:
         return tuple(version_governed_tri_trace_for_case(case).get("ids", ()))
+    if profile_name == TRI_RERANK_VERSION_GOVERNED_ANSWER_CONTRACT_PROFILE:
+        return tuple(rerank_version_governed_tri_trace_for_case(case).get("ids", ()))
     if profile_name not in COMPREHENSIVE_CHAIN_PROFILES:
         raise ValueError(f"unknown profile_name: {profile_name}")
     if profile_name == "chain_tri_retrieval":
@@ -688,6 +731,25 @@ def version_governed_tri_trace_for_case(case: EvalCase) -> dict[str, object]:
     return {"ids": governed_ids, "trace": trace}
 
 
+def rerank_version_governed_tri_trace_for_case(case: EvalCase) -> dict[str, object]:
+    trace_info = rerank_governed_tri_trace_for_case(case)
+    ids = tuple(str(item) for item in trace_info.get("ids", ()))
+    boundary = build_version_boundary_info(case, trace_info)
+    trace = dict(trace_info.get("trace", {}))
+    trace["version_boundary"] = {
+        "active_version_ids": list(boundary.active_version_ids),
+        "stale_warning_ids": list(boundary.stale_warning_ids),
+        "conflict_warning_ids": list(boundary.conflict_warning_ids),
+        "forbidden_boundary_ids": list(boundary.forbidden_boundary_ids),
+        "rollback_candidate_ids": list(boundary.rollback_candidate_ids),
+        "conflict_chain_count": boundary.conflict_chain_count,
+        "stale_recalled_count": boundary.stale_recalled_count,
+        "superseded_recalled_count": boundary.superseded_recalled_count,
+        "recall_expanded": False,
+    }
+    return {"ids": ids, "trace": trace}
+
+
 def _ordered_candidates_for_governed_tri(
     case: EvalCase,
     tri_ids: tuple[str, ...],
@@ -745,6 +807,10 @@ def profile_evidence_source(profile_name: str) -> str:
         TRI_VERSION_GOVERNED_ANSWER_CONTRACT_PROFILE: (
             "tri_version_governed_answer_contract."
             "version_boundaried_governed_allowed_evidence_ids"
+        ),
+        TRI_RERANK_VERSION_GOVERNED_ANSWER_CONTRACT_PROFILE: (
+            "tri_rerank_version_governed_answer_contract."
+            "reranked_version_boundaried_governed_allowed_evidence_ids"
         ),
     }
     if profile_name not in sources:
