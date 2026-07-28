@@ -19,6 +19,8 @@
 - Committed design and planning records: `9cdd0e8 docs: design queryable tool audit ledger`.
 - Wrote implementation plan: `docs/superpowers/plans/2026-07-28-tool-governance-p4c-audit-ledger.md`.
 - Self-reviewed the plan for placeholder text, scope creep, type-name consistency, and a bad limit assertion; fixed the assertion inline.
+- Requested independent plan review. Reviewer verdict: ready to execute with fixes.
+- Revised plan to add value-level metadata validation, runtime-wide fail-open tests, real status plugin/passive turn wiring coverage, session-scoped `/tool_audit` filters, side-effect failure lifecycle tests, and schema `user_version` coverage.
 
 ## 2026-07-27 Tool Governance P4b Documentation and Final Verification
 

@@ -10,7 +10,8 @@ Goal: create a design-first specification for a workspace-scoped, queryable, per
 4. Write design spec for P4c/P5a queryable ToolAuditLedger - complete (`docs/superpowers/specs/2026-07-28-tool-governance-p4c-audit-ledger-design.md`).
 5. Self-review and commit design/planning docs - complete.
 6. Write P4c implementation plan with `writing-plans` skill - complete (`docs/superpowers/plans/2026-07-28-tool-governance-p4c-audit-ledger.md`).
-7. Review/approve plan, then execute P4c tasks - pending.
+7. Review plan with `requesting-code-review` skill and revise issues - complete.
+8. Execute P4c implementation tasks - pending.
 
 Current design decision:
 

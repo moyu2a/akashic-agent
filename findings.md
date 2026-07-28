@@ -11,6 +11,9 @@
 - Ledger write failure should not relabel execution outcome, consume/unconsume approval, or change side-effect runtime status.
 - The design spec lives under ignored `docs/`, so force staging is required for this project if the spec should travel with the branch.
 - The implementation plan should start with the ledger store and only then wire runtimes; this keeps redaction/query/prune behavior testable before touching executor or side-effect execution paths.
+- Plan review found allowlisted metadata keys alone are insufficient; implementation must also reject unsafe values under allowed keys.
+- Plan review found fail-open must be tested for approval and side-effect runtime ledger writes, not just executor writes.
+- Plan review found `/tool_audit` must be tested through the real `StatusCommands.before_turn_modules()` plugin path and must keep request/approval/tool/event queries session-scoped by default.
 
 ## 2026-07-20 Memory Phase 6k Findings
 
