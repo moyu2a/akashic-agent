@@ -1093,6 +1093,68 @@ def test_p6o4_non_governed_rows_have_no_post_check_shadow(
     assert report.metrics["answer_post_check_shadow"]["case_count"] == 0
 
 
+def test_p6o4_answer_post_check_shadow_fake_provider_smoke(
+    tmp_path: Path,
+) -> None:
+    cases = (
+        build_quantitative_eval_cases(case_set="common", limit=2, case_pack="standard")
+        + build_quantitative_eval_cases(case_set="hard", limit=2, case_pack="standard")
+    )
+    specs = build_comprehensive_run_specs(
+        cases,
+        profiles=(
+            "chain_tri_retrieval",
+            "chain_tri_candidate_governance",
+            "chain_tri_governed_answer_contract",
+        ),
+        prompt_variants=("baseline",),
+        repeats=1,
+    )
+
+    report = asyncio.run(
+        run_comprehensive_online_eval(
+            specs,
+            tmp_path / "workspace",
+            ComprehensiveScriptedProvider(),
+            model="scripted",
+            timeout_s=5.0,
+            real_llm_enabled=False,
+        )
+    )
+    md_path = tmp_path / "report.md"
+    write_comprehensive_online_markdown(report, md_path)
+    markdown = md_path.read_text(encoding="utf-8")
+
+    assert report.metrics["case_count"] == 12
+    assert report.metrics["real_llm_enabled"] is False
+    assert report.metrics["provider_error_count"] == 0
+    assert report.metrics["timeout_count"] == 0
+    shadow_metrics = report.metrics["answer_post_check_shadow"]
+    assert shadow_metrics["case_count"] == 4
+    assert shadow_metrics["enabled_case_count"] == 4
+    assert shadow_metrics["forbidden_boundary_included_count"] == 0
+    assert shadow_metrics["insufficient_fallback_missing_count"] == 0
+    governed_rows = [
+        row
+        for row in report.case_records
+        if row["profile_name"] == "chain_tri_governed_answer_contract"
+    ]
+    assert len(governed_rows) == 4
+    assert all(isinstance(row["answer_post_check_shadow"], dict) for row in governed_rows)
+    assert all(
+        row["answer_post_check_shadow"]["shadow_enabled"] is True
+        for row in governed_rows
+    )
+    assert all(
+        row["answer_post_check_shadow"]["forbidden_boundary_included"] is False
+        for row in governed_rows
+    )
+    assert "## Answer Post-Check Shadow" in markdown
+    assert "raw_prompt" not in markdown
+    assert "full_answer" not in markdown
+    assert "session_text" not in markdown
+
+
 def test_optional_tri_candidate_governance_profile_is_visible_in_markdown(
     tmp_path: Path,
 ) -> None:
