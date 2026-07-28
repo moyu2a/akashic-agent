@@ -7,7 +7,11 @@ from typing import Any, cast
 
 import pytest
 
-from agent.core.passive_turn import _approval_runtime_from_context
+from agent.core.passive_turn import (
+    _approval_runtime_from_context,
+    _tool_audit_ledger_from_context,
+)
+from agent.policies.tool_audit_ledger import ToolAuditLedgerStore
 from agent.policies.tool_approval_runtime import ToolApprovalRuntime
 from agent.policies.tool_approval_store import ToolApprovalStore
 from agent.provider import LLMResponse, ToolCall
@@ -33,6 +37,18 @@ def test_default_reasoner_builds_workspace_approval_runtime(tmp_path: Path) -> N
     assert runtime.store.db_path == ToolApprovalRuntime.approval_db_path_from_workspace(
         tmp_path
     )
+
+
+def test_default_reasoner_builds_workspace_tool_audit_ledger(
+    tmp_path: Path,
+) -> None:
+    class Context:
+        workspace = tmp_path
+
+    store = _tool_audit_ledger_from_context(Context())
+
+    assert store is not None
+    assert store.db_path == ToolAuditLedgerStore.db_path_from_workspace(tmp_path)
 
 
 @pytest.mark.asyncio

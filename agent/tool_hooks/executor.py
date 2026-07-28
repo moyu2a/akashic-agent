@@ -1,14 +1,21 @@
 from __future__ import annotations
 
 import json
+import logging
 from collections.abc import Sequence
 from typing import Any, Awaitable, Callable, Protocol
 
+from agent.policies.tool_approval import canonical_args_hash
 from agent.policies.tool_approval import build_approval_payload
 from agent.policies.tool_approval_decision import ToolApprovalDecision
 from agent.policies.tool_approval_runtime import ToolApprovalRuntime
 from agent.policies.side_effect_payload_vault import MANAGED_SIDE_EFFECT_TOOLS
 from agent.policies.tool_audit import build_tool_audit_event
+from agent.policies.tool_audit_ledger import (
+    ToolAuditLedgerEvent,
+    ToolAuditLedgerStore,
+    record_tool_audit_event_fail_open,
+)
 from agent.policies.tool_invocation_policy import (
     ToolInvocationContext,
     ToolInvocationDecision,
@@ -25,6 +32,7 @@ from agent.tool_hooks.types import (
 )
 
 ToolInvoker = Callable[[str, dict[str, Any]], Awaitable[Any]]
+logger = logging.getLogger(__name__)
 
 
 class ToolInvocationPolicy(Protocol):
@@ -45,10 +53,12 @@ class ToolExecutor:
         hooks: Sequence[ToolHook] | None = None,
         policy_engine: ToolInvocationPolicy | None = None,
         approval_runtime: ToolApprovalRuntime | None = None,
+        audit_ledger_store: ToolAuditLedgerStore | None = None,
     ) -> None:
         self._hooks = list(hooks or [])
         self._policy_engine = policy_engine or ToolInvocationPolicyEngine()
         self._approval_runtime = approval_runtime
+        self._audit_ledger_store = audit_ledger_store
 
     def add_hooks(self, hooks: Sequence[ToolHook]) -> None:
         self._hooks.extend(hooks)
@@ -57,6 +67,11 @@ class ToolExecutor:
         self, approval_runtime: ToolApprovalRuntime | None
     ) -> None:
         self._approval_runtime = approval_runtime
+
+    def set_audit_ledger_store(
+        self, audit_ledger_store: ToolAuditLedgerStore | None
+    ) -> None:
+        self._audit_ledger_store = audit_ledger_store
 
     async def execute(
         self,
@@ -139,7 +154,7 @@ class ToolExecutor:
                 pre_hook_trace=pre_trace,
                 post_hook_trace=post_trace,
                 policy_trace=policy_trace,
-                audit_trace=_audit_trace(
+                audit_trace=self._audit_trace_and_record(
                     request,
                     final_arguments,
                     policy_decision,
@@ -170,7 +185,7 @@ class ToolExecutor:
                 pre_hook_trace=pre_trace,
                 post_hook_trace=post_trace,
                 policy_trace=policy_trace,
-                audit_trace=_audit_trace(
+                audit_trace=self._audit_trace_and_record(
                     request,
                     final_arguments,
                     policy_decision,
@@ -207,7 +222,7 @@ class ToolExecutor:
                     pre_hook_trace=pre_trace,
                     post_hook_trace=post_trace,
                     policy_trace=policy_trace,
-                    audit_trace=_audit_trace(
+                    audit_trace=self._audit_trace_and_record(
                         request,
                         final_arguments,
                         policy_decision,
@@ -297,7 +312,7 @@ class ToolExecutor:
                 pre_hook_trace=pre_trace,
                 post_hook_trace=post_trace,
                 policy_trace=policy_trace,
-                audit_trace=_audit_trace(
+                audit_trace=self._audit_trace_and_record(
                     request,
                     final_arguments,
                     policy_decision,
@@ -378,7 +393,7 @@ class ToolExecutor:
                     pre_hook_trace=pre_trace,
                     post_hook_trace=post_trace,
                     policy_trace=policy_trace,
-                    audit_trace=_audit_trace(
+                    audit_trace=self._audit_trace_and_record(
                         request,
                         final_arguments,
                         policy_decision,
@@ -397,7 +412,7 @@ class ToolExecutor:
                 pre_hook_trace=pre_trace,
                 post_hook_trace=post_trace,
                 policy_trace=policy_trace,
-                audit_trace=_audit_trace(
+                audit_trace=self._audit_trace_and_record(
                     request,
                     final_arguments,
                     policy_decision,
@@ -446,7 +461,7 @@ class ToolExecutor:
                 pre_hook_trace=pre_trace,
                 post_hook_trace=post_trace,
                 policy_trace=policy_trace,
-                audit_trace=_audit_trace(
+                audit_trace=self._audit_trace_and_record(
                     request,
                     final_arguments,
                     policy_decision,
@@ -465,7 +480,7 @@ class ToolExecutor:
             pre_hook_trace=pre_trace,
             post_hook_trace=post_trace,
             policy_trace=policy_trace,
-            audit_trace=_audit_trace(
+            audit_trace=self._audit_trace_and_record(
                 request,
                 final_arguments,
                 policy_decision,
@@ -505,6 +520,52 @@ class ToolExecutor:
                 else ""
             ),
         )
+
+    def _audit_trace_and_record(
+        self,
+        request: ToolExecutionRequest,
+        final_arguments: dict[str, Any],
+        policy_decision: ToolInvocationDecision,
+        *,
+        invoker_reached: bool,
+        invoker_succeeded: bool,
+    ) -> dict[str, object]:
+        trace = _audit_trace(
+            request,
+            final_arguments,
+            policy_decision,
+            invoker_reached=invoker_reached,
+            invoker_succeeded=invoker_succeeded,
+        )
+        if self._audit_ledger_store is not None:
+            record_tool_audit_event_fail_open(
+                self._audit_ledger_store,
+                ToolAuditLedgerEvent(
+                    event_type="tool_invocation_policy_decision",
+                    session_key=request.session_key,
+                    channel=request.channel,
+                    chat_id=request.chat_id,
+                    request_id=request.call_id,
+                    tool_name=request.tool_name,
+                    source=_policy_source(request),
+                    risk=policy_decision.risk,
+                    policy_action=policy_decision.action,
+                    policy_reason=policy_decision.reason,
+                    args_hash=canonical_args_hash(final_arguments),
+                    invoker_reached=invoker_reached,
+                    invoker_succeeded=invoker_succeeded,
+                    metadata={
+                        "resource_type": str(
+                            policy_decision.metadata.get("resource_type") or ""
+                        ),
+                        "resource_decision": str(
+                            policy_decision.metadata.get("resource_decision") or ""
+                        ),
+                    },
+                ),
+                logger,
+            )
+        return trace
 
     async def preflight(
         self,
