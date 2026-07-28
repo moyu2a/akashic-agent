@@ -508,14 +508,14 @@ deferred:
 `ToolHook` 解决的问题是：
 
 ```text
-工具真正执行前，能不能检查、阻止、改写或记录？
+工具真正执行前，能不能检查、阻止、归一化或记录？
 ```
 
 hook 可以做：
 
 - allow
 - deny
-- rewrite
+- normalize
 - audit
 - rate limit
 - loop guard
@@ -525,6 +525,11 @@ hook 可以做：
 
 - `shell_safety` 插件可以阻止危险 shell。
 - `tool_loop_guard` 可以防止模型重复调用同一个工具。
+
+当前治理边界下，hook 不再承担“副作用语义改写”职责。历史上的
+`shell_restore` 会把 `rm` 改写为 `mv`，这会让后续 policy 只看到改写后的
+命令，丢失原始 destructive 意图；因此该插件已降级为 legacy disabled，
+`rm` 由 `ResourcePolicy` 拒绝。
 
 设计价值：
 
@@ -592,7 +597,7 @@ agent/mcp/*
 
 - `tool_search` 的查询结果如何进入下一轮 LLM tool schemas。
 - MCP 工具如何注册到 `ToolRegistry`。
-- tool hook 的 deny / rewrite / allow 流程。
+- tool hook 的 deny / normalize / allow 流程，以及副作用语义改写为什么应避免。
 
 ## Plugin System
 
