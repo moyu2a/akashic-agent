@@ -369,6 +369,31 @@ AgentLoop 只继续通过生命周期、事件和工具抽象使用记忆。
 
 优化目标不是“召回更多”，而是“注入更准”。低置信、过期、冲突候选记忆应当被降权或提示需要回源。
 
+### Tri Candidate Governance 小型线上结论
+
+本轮新增的 `chain_tri_candidate_governance` 只存在于评测 harness 中，不进入生产链路。它的作用是把现有三路召回的 `fused_ids` 作为候选集合，再应用严格候选治理：
+
+- 过滤 forbidden / should-not 候选。
+- 保留原三路融合顺序。
+- 去重。
+- 用 fixture `should_recall_ids` 做目标保护。
+- 在报告中明确标记 `eval_only`、`oracle_protected` 和 `uses_fixture_expected_ids`。
+
+真实 LLM 小矩阵结果：
+
+| profile | answer_rate | grounding_rate | forbidden_rate |
+| --- | ---: | ---: | ---: |
+| `chain_memory_base` | `50.0%` | `100.0%` | `10.0%` |
+| `chain_tri_retrieval` | `55.0%` | `100.0%` | `15.0%` |
+| `chain_tri_candidate_governance` | `42.5%` | `100.0%` | `0.0%` |
+
+设计结论：
+
+- 候选治理对 forbidden 风险有效，证明边界治理不是只停留在离线 proxy。
+- answer 降低说明“过滤坏候选”还不等于“让模型更会回答”；证据集合变短、关键上下文丢失、候选置信度没有分层、回答约束不够强，都可能让答案命中下降。
+- 后续治理不应把所有候选一刀切删除，而应引入风险分级：高风险删除，中风险降权或放入 requires_review，低风险保留并通过重排控制注入位置。
+- 生产化前还需要去掉 oracle-protected 依赖，用真实 source_ref、scope、版本链、冲突状态和候选置信度做决策。
+
 ## 8. 最小可行版本
 
 ### MVP 1：写入门控 trace

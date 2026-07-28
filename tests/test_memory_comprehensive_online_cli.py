@@ -108,6 +108,85 @@ def test_comprehensive_online_cli_fake_provider_writes_report(
     assert "## Cost And Latency Observation" in markdown
 
 
+def test_comprehensive_online_cli_balanced_small_selects_common_and_hard(
+    tmp_path: Path,
+) -> None:
+    output_dir = tmp_path / "reports"
+    workspace = tmp_path / "workspace"
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "scripts/run_memory_comprehensive_online_eval.py",
+            "--workspace",
+            str(workspace),
+            "--out-dir",
+            str(output_dir),
+            "--fake-provider",
+            "--case-pack",
+            "standard",
+            "--balanced-small",
+            "--common-limit",
+            "2",
+            "--hard-limit",
+            "2",
+            "--profiles",
+            "chain_memory_base,chain_tri_retrieval,chain_tri_candidate_governance",
+            "--prompt-variants",
+            "baseline",
+            "--repeats",
+            "1",
+            "--real-memory-workspace",
+            str(tmp_path / "empty-real-workspace"),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    payload = json.loads(
+        (output_dir / "memory_comprehensive_online_eval.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert payload["metrics"]["unique_case_count"] == 4
+    assert payload["metrics"]["profile_count"] == 3
+    assert payload["metrics"]["case_count"] == 12
+    ids = {row["case_id"] for row in payload["case_records"]}
+    assert any(case_id.startswith("common_") for case_id in ids)
+    assert any(case_id.startswith("hard_") for case_id in ids)
+
+
+def test_comprehensive_online_cli_balanced_small_rejects_negative_limits(
+    tmp_path: Path,
+) -> None:
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "scripts/run_memory_comprehensive_online_eval.py",
+            "--workspace",
+            str(tmp_path / "workspace"),
+            "--out-dir",
+            str(tmp_path / "reports"),
+            "--fake-provider",
+            "--balanced-small",
+            "--common-limit",
+            "-1",
+            "--hard-limit",
+            "2",
+            "--real-memory-workspace",
+            str(tmp_path / "empty-real-workspace"),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode != 0
+    assert "common-limit and hard-limit must be non-negative" in completed.stderr
+
+
 def test_comprehensive_online_cli_accepts_comprehensive_case_pack_core_matrix(
     tmp_path: Path,
 ) -> None:

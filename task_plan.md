@@ -1630,3 +1630,68 @@ Interpretation:
 - This phase proves the candidate governance layer can be measured and can remove known bad candidates without losing protected target evidence.
 - It also proves a risky point: strict filtering without target protection is too aggressive on the current fixture because weak source_ref appears on many expected memories.
 - The next meaningful answer-quality check should be a small fresh real LLM rerun comparing current route-governed tri retrieval against candidate-governed tri retrieval, focused on forbidden rate and grounded-answer-rule misses.
+
+## 2026-07-28 Tri Candidate Governance Small Online Plan
+
+Goal: run a bounded real LLM small online comparison for the candidate-governed tri retrieval path.
+
+Plan:
+
+- `docs/superpowers/plans/2026-07-28-tri-candidate-governance-small-online.md`
+
+Current status:
+
+1. Record latest offline tri candidate governance data - complete.
+2. Create formal implementation plan using writing-plans skill - complete.
+3. Review plan with independent reviewer - complete.
+4. Revise plan after review - complete.
+5. Implement eval-only `chain_tri_candidate_governance` profile - complete.
+6. Add balanced common/hard small case selection to CLI - complete.
+7. Run fake-provider smoke and integrity check - complete.
+8. Run real LLM 40-case / 120-call small matrix - complete.
+9. Update docs and commit - in progress.
+
+Planned small test shape:
+
+| item | value |
+| --- | --- |
+| unique cases | `40` |
+| split | common `20` + hard `20` |
+| profiles | `chain_memory_base`, `chain_tri_retrieval`, `chain_tri_candidate_governance` |
+| prompt variants | `baseline` |
+| repeats | `1` |
+| expected real LLM calls | `120` |
+| output dir | `my_md/memory_optimization/eval_reports/tri_candidate_governance_small_online_v1` |
+
+Main decision criteria:
+
+- If governed tri forbidden rate drops and answer rate does not fall, expand to a larger rerun.
+- If forbidden drops but answer does not improve, prioritize evidence injection and answer constraints.
+- If grounding drops, tune candidate governance false positives before more online runs.
+- Because the governed tri profile is oracle-protected in eval, any positive result must be described as controlled test-set evidence, not production readiness.
+
+Plan review / revision notes:
+
+- Independent review found no Critical issues, but required fixes before execution.
+- The plan now requires explicit JSON and Markdown metadata for `chain_tri_candidate_governance`: `eval_only = true`, `oracle_protected = true`, `uses_fixture_expected_ids = true`.
+- The governed profile is no longer described as re-running tri lanes. It is now a strict, order-preserving filter over existing `tri_retrieval.fused_ids`.
+- Tests now cover the final 40-case selection, should-not removal, target preservation, duplicate prevention, and optional profile Markdown visibility.
+- Fake and real commands use a temp empty `--real-memory-workspace` to avoid accidental read-only sampling from the default workspace.
+
+Execution result:
+
+- Fake-provider smoke passed: `case_count = 120`, `unique_case_count = 40`, `profile_count = 3`, `provider_error_count = 0`, `timeout_count = 0`.
+- Real LLM small online run passed infrastructure gates: `case_count = 120`, `unique_case_count = 40`, `completed_call_count = 120`, `provider_error_count = 0`, `timeout_count = 0`.
+- Real LLM output dir: `my_md/memory_optimization/eval_reports/tri_candidate_governance_small_online_v1`.
+
+| profile | answer_success | answer_rate | grounding_rate | forbidden_rate | avg_tokens | avg_latency_ms |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `chain_memory_base` | `20/40` | `50.0%` | `100.0%` | `10.0%` | `5486.7` | `4785.5` |
+| `chain_tri_retrieval` | `22/40` | `55.0%` | `100.0%` | `15.0%` | `5529.875` | `4922.225` |
+| `chain_tri_candidate_governance` | `17/40` | `42.5%` | `100.0%` | `0.0%` | `5383.225` | `3988.775` |
+
+Conclusion:
+
+- The candidate governance layer succeeded on forbidden control: `chain_tri_candidate_governance` reduced forbidden violations from tri retrieval's `15.0%` to `0.0%`.
+- It did not satisfy the planned answer-quality success gate: answer rate dropped from tri retrieval's `55.0%` to `42.5%`.
+- Grounding stayed at `100.0%`, so the next bottleneck is not target recall but recall-after-answer quality: evidence injection, answer constraints, candidate confidence routing, and fallback behavior.

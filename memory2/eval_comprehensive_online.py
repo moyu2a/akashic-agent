@@ -52,6 +52,11 @@ from memory2.eval_quantitative_uplift import (
     calculate_balanced_scores,
     calculate_main_score,
 )
+from memory2.retrieval_governance import (
+    CandidateGovernancePolicy,
+    apply_retrieval_route,
+    build_retrieval_routing_decision,
+)
 from session.manager import SessionManager
 
 
@@ -66,6 +71,21 @@ ANSWER_QUALITY_PROFILES: tuple[str, ...] = (
     "chain_version_provenance",
     "chain_all_on",
 )
+TRI_CANDIDATE_GOVERNANCE_PROFILE = "chain_tri_candidate_governance"
+OPTIONAL_ANSWER_QUALITY_PROFILES: tuple[str, ...] = (
+    TRI_CANDIDATE_GOVERNANCE_PROFILE,
+)
+PROFILE_METADATA: dict[str, dict[str, object]] = {
+    TRI_CANDIDATE_GOVERNANCE_PROFILE: {
+        "eval_only": True,
+        "oracle_protected": True,
+        "uses_fixture_expected_ids": True,
+        "description": (
+            "Applies strict candidate governance to existing tri fused ids "
+            "while protecting fixture should_recall_ids."
+        ),
+    }
+}
 METRIC_SOURCES: dict[str, str] = {
     "online_answer_level": "real AgentLoop answer scoring",
     "online_balanced_proxy": "online answer-level fields converted into balanced proxy dimensions",
@@ -229,6 +249,8 @@ def evidence_ids_for_profile(case: EvalCase, profile_name: str) -> tuple[str, ..
         return tuple(str(item.get("id") or "") for item in _baseline_recalled_items(case))
     if profile_name == "chain_write_value":
         return ()
+    if profile_name == TRI_CANDIDATE_GOVERNANCE_PROFILE:
+        return governed_tri_evidence_ids_for_case(case)
     if profile_name not in COMPREHENSIVE_CHAIN_PROFILES:
         raise ValueError(f"unknown profile_name: {profile_name}")
     if profile_name == "chain_tri_retrieval":
@@ -248,6 +270,72 @@ def evidence_ids_for_profile(case: EvalCase, profile_name: str) -> tuple[str, ..
     return ()
 
 
+def governed_tri_evidence_ids_for_case(case: EvalCase) -> tuple[str, ...]:
+    tri_ids = tuple(_ids_from_trace(case, "tri_retrieval", "fused_ids"))
+    if not tri_ids:
+        return ()
+    expected_ids = tuple(
+        str(item) for item in case.expectations.get("should_recall_ids", ())
+    )
+    should_not_ids = {
+        str(item) for item in case.expectations.get("should_not_recall_ids", ())
+    }
+    candidates = _ordered_candidates_for_governed_tri(case, tri_ids, should_not_ids)
+    decision = build_retrieval_routing_decision(str(case.setup.get("query") or ""))
+    decision = replace(
+        decision,
+        allowed_lanes=("semantic",),
+        max_per_lane={"semantic": max(len(candidates), 1)},
+        require_source_ref=False,
+        require_scope_match=False,
+        graph_enabled=False,
+    )
+    decision = decision.with_candidate_governance(
+        CandidateGovernancePolicy(
+            enabled=True,
+            protected_expected_ids=expected_ids,
+        )
+    )
+    governed, _trace = apply_retrieval_route(decision, {"semantic": candidates})
+    return tuple(
+        str(candidate.get("id") or candidate.get("memory_id") or "")
+        for candidate in governed
+        if candidate.get("id") or candidate.get("memory_id")
+    )
+
+
+def _ordered_candidates_for_governed_tri(
+    case: EvalCase,
+    tri_ids: tuple[str, ...],
+    should_not_ids: set[str],
+) -> list[dict[str, object]]:
+    scope = dict(case.setup.get("scope") or {})
+    by_id = {
+        str(item.get("id") or item.get("memory_id") or ""): item
+        for item in case.setup.get("memory_items", [])
+        if isinstance(item, dict)
+    }
+    candidates: list[dict[str, object]] = []
+    seen: set[str] = set()
+    for item_id in tri_ids:
+        if item_id in seen:
+            continue
+        seen.add(item_id)
+        item = by_id.get(item_id)
+        if item is None:
+            continue
+        candidate = dict(item)
+        candidate["scope_match"] = (
+            str(candidate.get("scope_channel") or "")
+            == str(scope.get("channel") or "")
+            and str(candidate.get("scope_chat_id") or "")
+            == str(scope.get("chat_id") or "")
+        )
+        candidate["should_not_recall"] = item_id in should_not_ids
+        candidates.append(candidate)
+    return candidates
+
+
 def profile_evidence_source(profile_name: str) -> str:
     sources = {
         "chain_off": "none",
@@ -259,6 +347,9 @@ def profile_evidence_source(profile_name: str) -> str:
         "chain_version_provenance": "version_chain.active_leaf_ids",
         "chain_sleep_consolidation": "sleep_consolidation.filtered_active_ids",
         "chain_all_on": "sleep_consolidation.filtered_active_ids",
+        TRI_CANDIDATE_GOVERNANCE_PROFILE: (
+            "tri_candidate_governance.protected_strict_ids"
+        ),
     }
     if profile_name not in sources:
         raise ValueError(f"unknown profile_name: {profile_name}")
@@ -296,9 +387,10 @@ def build_comprehensive_run_specs(
     ]
     if invalid_variants:
         raise ValueError("unknown prompt_variant(s): " + ", ".join(invalid_variants))
-    invalid_profiles = [
-        profile for profile in profiles if profile not in COMPREHENSIVE_CHAIN_PROFILES
-    ]
+    allowed_profiles = set(COMPREHENSIVE_CHAIN_PROFILES) | set(
+        OPTIONAL_ANSWER_QUALITY_PROFILES
+    )
+    invalid_profiles = [profile for profile in profiles if profile not in allowed_profiles]
     if invalid_profiles:
         raise ValueError("unknown profile_name(s): " + ", ".join(invalid_profiles))
     answer_cases = [
@@ -543,7 +635,7 @@ def write_comprehensive_online_markdown(
                 "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
             ]
         )
-        for profile in COMPREHENSIVE_CHAIN_PROFILES:
+        for profile in _profiles_for_markdown(metrics):
             summary = profile_summaries.get(profile)
             if not isinstance(summary, dict):
                 continue
@@ -593,6 +685,7 @@ def write_comprehensive_online_markdown(
     lines.extend(
         _answer_quality_markdown_sections(metrics)
     )
+    lines.extend(_profile_metadata_markdown_section(metrics))
     lines.extend(
         [
             "",
@@ -780,11 +873,23 @@ def _metrics_from_results(
     profile_summaries = _profile_summaries(results, profiles)
     uplift = _profile_uplift_vs_memory_base(profile_summaries)
     adjacent = _chain_adjacent_uplift(profile_summaries)
-    answer_quality_rows = _build_profile_answer_quality_uplift_rows(profile_summaries)
-    answer_quality_chain_rows = _build_chain_answer_quality_rows(profile_summaries)
+    answer_quality_profiles = _answer_quality_profiles_for_report(profile_summaries)
+    answer_quality_rows = _build_profile_answer_quality_uplift_rows(
+        profile_summaries,
+        profiles=answer_quality_profiles,
+    )
+    answer_quality_chain_rows = _build_chain_answer_quality_rows(
+        profile_summaries,
+        ordered_profiles=answer_quality_profiles,
+    )
     answer_quality_missing_profiles = [
         profile for profile in ANSWER_QUALITY_PROFILES if profile not in profile_summaries
     ]
+    profile_metadata = {
+        profile: dict(PROFILE_METADATA[profile])
+        for profile in profiles
+        if profile in PROFILE_METADATA
+    }
     return {
         "evaluation_level": "comprehensive_online_agentloop",
         "real_llm_enabled": real_llm_enabled,
@@ -834,6 +939,7 @@ def _metrics_from_results(
         "answer_quality_required_profiles": list(ANSWER_QUALITY_PROFILES),
         "answer_quality_missing_profiles": answer_quality_missing_profiles,
         "answer_quality_partial_matrix": bool(answer_quality_missing_profiles),
+        "profile_metadata": profile_metadata,
         "profile_answer_quality_uplift_vs_memory_base": answer_quality_rows,
         "chain_answer_quality_uplift_rows": answer_quality_chain_rows,
         "profile_uplift_vs_memory_base": uplift,
@@ -883,6 +989,7 @@ def _empty_metrics(real_memory_sample_metrics: dict[str, object]) -> dict[str, o
         "answer_quality_required_profiles": list(ANSWER_QUALITY_PROFILES),
         "answer_quality_missing_profiles": list(ANSWER_QUALITY_PROFILES),
         "answer_quality_partial_matrix": True,
+        "profile_metadata": {},
         "profile_answer_quality_uplift_vs_memory_base": {},
         "chain_answer_quality_uplift_rows": (),
         "profile_uplift_vs_memory_base": {},
@@ -1410,7 +1517,48 @@ def _deterministic_run_id(results: Sequence[ComprehensiveCaseResult]) -> str:
 
 def _profiles_in_order(results: tuple[ComprehensiveCaseResult, ...]) -> tuple[str, ...]:
     seen = {result.profile_name for result in results}
-    return tuple(profile for profile in COMPREHENSIVE_CHAIN_PROFILES if profile in seen)
+    ordered = tuple(profile for profile in COMPREHENSIVE_CHAIN_PROFILES if profile in seen)
+    optional = tuple(
+        profile for profile in OPTIONAL_ANSWER_QUALITY_PROFILES if profile in seen
+    )
+    known = set(ordered) | set(optional)
+    unknown = tuple(profile for profile in sorted(seen) if profile not in known)
+    return (*ordered, *optional, *unknown)
+
+
+def _answer_quality_profiles_for_report(
+    profile_summaries: dict[str, dict[str, object]],
+) -> tuple[str, ...]:
+    optional = tuple(
+        profile
+        for profile in OPTIONAL_ANSWER_QUALITY_PROFILES
+        if profile in profile_summaries
+    )
+    return (*ANSWER_QUALITY_PROFILES, *optional)
+
+
+def _profiles_for_markdown(metrics: dict[str, object]) -> tuple[str, ...]:
+    summaries = metrics.get("profile_summaries", {})
+    if not isinstance(summaries, dict):
+        return ()
+    ordered = tuple(
+        profile for profile in COMPREHENSIVE_CHAIN_PROFILES if profile in summaries
+    )
+    optional = tuple(
+        profile for profile in OPTIONAL_ANSWER_QUALITY_PROFILES if profile in summaries
+    )
+    known = set(ordered) | set(optional)
+    unknown = tuple(profile for profile in sorted(summaries) if profile not in known)
+    return (*ordered, *optional, *unknown)
+
+
+def _answer_quality_profiles_for_markdown(
+    metrics: dict[str, object],
+) -> tuple[str, ...]:
+    summaries = metrics.get("profile_summaries", {})
+    if not isinstance(summaries, dict):
+        return ANSWER_QUALITY_PROFILES
+    return _answer_quality_profiles_for_report(summaries)
 
 
 def _first_summary_value(
@@ -1459,6 +1607,7 @@ def _answer_quality_markdown_sections(metrics: dict[str, object]) -> list[str]:
         "`combo/check` marks `chain_all_on`; it is a combined verification row, not a pure single-module answer/retrieval gain.",
     ]
     rows = metrics.get("profile_answer_quality_uplift_vs_memory_base", {})
+    answer_quality_profiles = _answer_quality_profiles_for_markdown(metrics)
     if isinstance(rows, dict) and rows:
         lines.extend(
             [
@@ -1466,7 +1615,7 @@ def _answer_quality_markdown_sections(metrics: dict[str, object]) -> list[str]:
                 "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
             ]
         )
-        for profile in ANSWER_QUALITY_PROFILES:
+        for profile in answer_quality_profiles:
             row = rows.get(profile)
             if not isinstance(row, dict):
                 continue
@@ -1548,7 +1697,7 @@ def _answer_quality_markdown_sections(metrics: dict[str, object]) -> list[str]:
         ]
     )
     if isinstance(rows, dict) and rows:
-        for profile in ANSWER_QUALITY_PROFILES:
+        for profile in answer_quality_profiles:
             row = rows.get(profile)
             if not isinstance(row, dict):
                 continue
@@ -1568,6 +1717,36 @@ def _answer_quality_markdown_sections(metrics: dict[str, object]) -> list[str]:
                 )
                 + " |"
             )
+    return lines
+
+
+def _profile_metadata_markdown_section(metrics: dict[str, object]) -> list[str]:
+    metadata = metrics.get("profile_metadata", {})
+    if not isinstance(metadata, dict) or not metadata:
+        return []
+    lines = [
+        "",
+        "## Eval-Only Profile Metadata",
+        "",
+        "| profile | eval_only | oracle_protected | uses_fixture_expected_ids |",
+        "| --- | ---: | ---: | ---: |",
+    ]
+    for profile in sorted(metadata):
+        row = metadata.get(profile)
+        if not isinstance(row, dict):
+            continue
+        lines.append(
+            "| "
+            + " | ".join(
+                [
+                    profile,
+                    _fmt(row.get("eval_only")),
+                    _fmt(row.get("oracle_protected")),
+                    _fmt(row.get("uses_fixture_expected_ids")),
+                ]
+            )
+            + " |"
+        )
     return lines
 
 

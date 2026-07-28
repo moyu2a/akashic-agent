@@ -67,6 +67,49 @@
 - Remaining:
   - next technical step should be a small targeted validation around candidate denoising / forbidden filtering / evidence injection for the tri route, not another blind recall expansion.
 
+## 2026-07-28 Tri Candidate Governance Small Online Planning
+
+- User asked to record the latest tri candidate governance data and create the next small online test plan using the plan skill.
+- Recorded the offline tri candidate governance recap in:
+  - `my_md/memory_optimization/eval_reports/tri_candidate_governance_v1/tri_candidate_governance.md`.
+- Current offline data recorded:
+  - `case_count = 320`;
+  - target evidence count `640`;
+  - baseline expected hits `640/640`;
+  - protected strict governance expected hits `640/640`;
+  - protected target loss `0`;
+  - should-not candidates `368`;
+  - strict should-not drops `368/368`;
+  - strict should-not kept `0`;
+  - unprotected strict target loss `640/640`;
+  - major drop reasons: `weak_source_ref = 3936`, `forbidden_candidate = 1800`, `superseded_candidate = 712`, `missing_source_ref = 712`, `scope_mismatch = 376`.
+- Execution conclusion recorded:
+  - candidate governance is effective as a trace-level candidate filter when target evidence is protected;
+  - unprotected strict filtering is too aggressive because many expected memories still have weak source_ref;
+  - the next useful validation is a bounded real LLM run, not another offline recall-only run.
+- New formal plan created:
+  - `docs/superpowers/plans/2026-07-28-tri-candidate-governance-small-online.md`.
+- Independent plan review result:
+  - verdict: `With fixes`;
+  - no Critical findings;
+  - Important fixes required: explicit eval-only/oracle metadata, faithful governed evidence semantics, stronger RED tests, Markdown optional-profile visibility, and temp `--real-memory-workspace` in fake/real run commands.
+- Plan revision applied:
+  - governed tri is now defined as an eval-only, oracle-protected strict filter over existing tri fused ids, preserving fused order;
+  - plan adds JSON/Markdown `profile_metadata` tests for `eval_only`, `oracle_protected`, and `uses_fixture_expected_ids`;
+  - plan tests the final common `20` + hard `20` selection and requires at least one case where tri contains should-not ids;
+  - plan includes optional profile visibility in JSON and Markdown;
+  - plan adds non-negative CLI limit validation;
+  - fake and real run commands now pass a temp empty `--real-memory-workspace`.
+- Planned small online shape:
+  - common `20` + hard `20` = `40` unique cases;
+  - profiles: `chain_memory_base`, `chain_tri_retrieval`, `chain_tri_candidate_governance`;
+  - prompt variant: `baseline`;
+  - repeats: `1`;
+  - expected completed real LLM calls: `120`;
+  - fake-provider smoke and report integrity checks must pass before real LLM calls.
+- Important boundary:
+  - `chain_tri_candidate_governance` is planned as eval-only and oracle-protected, so it is an upper-bound / mechanism validation profile, not production behavior.
+
 ## 2026-07-27 Memory Tri Retrieval Route Governance
 
 - User asked to execute the reviewed plan for tri retrieval governance after the real online answer-quality matrix showed that tri/graph retrieval are not safe global defaults.
@@ -1777,3 +1820,50 @@
   - no `memory_items.source_ref` rewrite;
   - no production `sessions.db` or memory DB writes;
   - no active cleanup.
+
+## 2026-07-28 Tri Candidate Governance Small Online
+
+- Goal: compare original memory baseline, existing tri retrieval, and eval-only candidate-governed tri retrieval on a bounded real LLM matrix.
+- Implementation:
+  - added optional eval-only profile `chain_tri_candidate_governance`;
+  - profile is a strict, order-preserving filter over existing `tri_retrieval.fused_ids`;
+  - profile metadata marks `eval_only = true`, `oracle_protected = true`, `uses_fixture_expected_ids = true`;
+  - added CLI selection `--balanced-small --common-limit --hard-limit`;
+  - production `AgentLoop`, `Reasoner`, `ToolExecutor`, memory writes, production prompt, and `retrieve()` contract were not changed.
+- Fake-provider smoke:
+  - output `/tmp/akashic-memory-tri-governance-small-fake/reports`;
+  - `case_count = 120`;
+  - `unique_case_count = 40`;
+  - `profile_count = 3`;
+  - `provider_error_count = 0`;
+  - `timeout_count = 0`.
+- Real LLM run:
+  - output `my_md/memory_optimization/eval_reports/tri_candidate_governance_small_online_v1`;
+  - checkpoint `/tmp/akashic-memory-tri-governance-small-online/reports/memory_comprehensive_online_eval.checkpoint.jsonl`;
+  - split common `20` + hard `20`;
+  - profiles `chain_memory_base`, `chain_tri_retrieval`, `chain_tri_candidate_governance`;
+  - prompt variant `baseline`;
+  - repeats `1`;
+  - `case_count = 120`;
+  - `unique_case_count = 40`;
+  - `completed_call_count = 120`;
+  - `profile_count = 3`;
+  - `real_llm_enabled = True`;
+  - `provider_error_count = 0`;
+  - `timeout_count = 0`;
+  - `total_token_count = 655992`;
+  - `avg_total_token_count = 5466.6`;
+  - `avg_latency_ms = 4565.5`.
+- Real LLM profile result:
+
+| profile | answer_success | answer_rate | grounding_rate | forbidden_rate | avg_tokens | avg_latency_ms |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `chain_memory_base` | `20/40` | `50.0%` | `100.0%` | `10.0%` | `5486.7` | `4785.5` |
+| `chain_tri_retrieval` | `22/40` | `55.0%` | `100.0%` | `15.0%` | `5529.875` | `4922.225` |
+| `chain_tri_candidate_governance` | `17/40` | `42.5%` | `100.0%` | `0.0%` | `5383.225` | `3988.775` |
+
+- Conclusion:
+  - infrastructure gate passed;
+  - candidate governance reduced forbidden from tri retrieval's `15.0%` to `0.0%`;
+  - answer rate dropped from tri retrieval's `55.0%` to `42.5%`, so the answer-quality success gate was not met;
+  - grounding stayed `100.0%`, so the next work should focus on evidence injection, answer constraints, candidate confidence routing, and fallback instead of simply expanding recall.

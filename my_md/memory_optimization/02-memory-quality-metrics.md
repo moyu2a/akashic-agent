@@ -1812,6 +1812,55 @@ Phase 6m 之后，三路召回和图谱召回增加了“场景路由 + 候选�
 
 这组数值的含义不是“生产准确率”，而是说明写入和巩固类能力应当独立评价，不能只靠回答分数判断好坏。
 
+## Tri Candidate Governance Small Online 指标
+
+本轮使用真实 LLM 跑受控小矩阵，目标是看“候选治理”是否能降低三路召回带来的 forbidden 风险，同时不牺牲 grounding 和答案命中。
+
+运行参数：
+
+| 参数 | 数值 |
+| --- | --- |
+| case pack | `standard` |
+| case split | common `20` + hard `20` |
+| unique cases | `40` |
+| profiles | `chain_memory_base`, `chain_tri_retrieval`, `chain_tri_candidate_governance` |
+| prompt variants | `baseline` |
+| repeats | `1` |
+| completed calls | `120` |
+| provider errors | `0` |
+| timeouts | `0` |
+| checkpoint | `/tmp/akashic-memory-tri-governance-small-online/reports/memory_comprehensive_online_eval.checkpoint.jsonl` |
+
+主结果：
+
+| profile | answer_success | answer_rate | grounding_success | grounding_rate | forbidden_cases | forbidden_rate | avg_tokens | avg_latency_ms |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| `chain_memory_base` | `20/40` | `50.0%` | `40/40` | `100.0%` | `4/40` | `10.0%` | `5486.7` | `4785.5` |
+| `chain_tri_retrieval` | `22/40` | `55.0%` | `40/40` | `100.0%` | `6/40` | `15.0%` | `5529.875` | `4922.225` |
+| `chain_tri_candidate_governance` | `17/40` | `42.5%` | `40/40` | `100.0%` | `0/40` | `0.0%` | `5383.225` | `3988.775` |
+
+相对变化：
+
+| 对比 | answer_rate 变化 | grounding_rate 变化 | forbidden_rate 变化 | token 变化 | latency 变化 |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 三路召回 vs 原始 memory | `+5.0` 个百分点 | `0.0` 个百分点 | `+5.0` 个百分点 | `+43.175` | `+136.725ms` |
+| 候选治理 vs 三路召回 | `-12.5` 个百分点 | `0.0` 个百分点 | `-15.0` 个百分点 | `-146.65` | `-933.45ms` |
+| 候选治理 vs 原始 memory | `-7.5` 个百分点 | `0.0` 个百分点 | `-10.0` 个百分点 | `-103.475` | `-796.725ms` |
+
+指标解释：
+
+- `answer_rate`：答案是否命中该 case 的答案规则，代表模型有没有把证据转成期望回答。
+- `grounding_rate`：回答链路是否使用到期望 memory id，代表目标证据是否进入回答侧。
+- `forbidden_rate`：答案是否出现该 case 明确禁止的内容，代表冲突、旧信息或错误候选是否污染回答。
+- `avg_tokens` 和 `avg_latency_ms`：成本与耗时观察指标，不能单独代表质量。
+
+结论：
+
+- 本轮候选治理的 forbidden 控制有效，但 answer 下降明显。
+- 因为 grounding 仍为 `100.0%`，主要问题不是“没召回到”，而是“治理后的证据集合或注入方式让模型更难答对”。
+- 这说明后续指标不能只看召回率，还要继续看答案命中、证据命中、错误注入、噪声控制和上下文成本。
+- `chain_tri_candidate_governance` 是 eval-only / oracle-protected profile，不能直接作为生产策略效果宣称。
+
 ## 面试表达
 
 ```text

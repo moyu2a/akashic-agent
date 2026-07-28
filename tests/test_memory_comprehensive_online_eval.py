@@ -164,6 +164,38 @@ def test_evidence_ids_for_profile_models_chain_visibility() -> None:
     )
 
 
+def test_governed_tri_profile_preserves_targets_and_drops_should_not_candidates() -> None:
+    cases = (
+        build_quantitative_eval_cases(case_set="common", limit=20, case_pack="standard")
+        + build_quantitative_eval_cases(case_set="hard", limit=20, case_pack="standard")
+    )
+    cases_with_should_not_in_tri = 0
+
+    for case in cases:
+        tri_ids = list(evidence_ids_for_profile(case, "chain_tri_retrieval"))
+        governed_ids = list(
+            evidence_ids_for_profile(case, "chain_tri_candidate_governance")
+        )
+        expected_ids = {str(item) for item in case.expectations["should_recall_ids"]}
+        should_not_ids = {
+            str(item) for item in case.expectations["should_not_recall_ids"]
+        }
+        governed_set = set(governed_ids)
+
+        assert expected_ids <= set(tri_ids)
+        assert expected_ids <= governed_set
+        assert not (governed_set & should_not_ids)
+        assert len(governed_ids) == len(governed_set)
+        assert governed_ids == [
+            item_id for item_id in tri_ids if item_id in governed_set
+        ]
+        if set(tri_ids) & should_not_ids:
+            cases_with_should_not_in_tri += 1
+
+    assert len(cases) == 40
+    assert cases_with_should_not_in_tri > 0
+
+
 def test_middle_profiles_keep_version_and_injection_boundaries() -> None:
     cases = build_quantitative_eval_cases()
     tri_vs_version = 0
@@ -363,6 +395,103 @@ def test_online_report_exposes_answer_quality_uplift_vs_memory_base(
     )
     assert report.metrics["answer_quality_missing_profiles"] == []
     assert report.metrics["answer_quality_partial_matrix"] is False
+
+
+def test_optional_tri_candidate_governance_profile_does_not_make_old_reports_partial(
+    tmp_path: Path,
+) -> None:
+    cases = build_quantitative_eval_cases(limit=2, case_pack="standard")
+    specs = build_comprehensive_run_specs(
+        cases,
+        repeats=1,
+        prompt_variants=("baseline",),
+        profiles=("chain_memory_base", "chain_tri_retrieval"),
+    )
+
+    report = asyncio.run(
+        run_comprehensive_online_eval(
+            specs,
+            tmp_path / "workspace",
+            ComprehensiveScriptedProvider(),
+            model="scripted",
+            timeout_s=5.0,
+            real_llm_enabled=False,
+        )
+    )
+
+    assert "chain_tri_candidate_governance" not in report.metrics[
+        "answer_quality_missing_profiles"
+    ]
+    assert "chain_tri_candidate_governance" not in report.metrics["profile_metadata"]
+
+
+def test_optional_tri_candidate_governance_profile_gets_answer_quality_row(
+    tmp_path: Path,
+) -> None:
+    cases = build_quantitative_eval_cases(limit=2, case_pack="standard")
+    specs = build_comprehensive_run_specs(
+        cases,
+        repeats=1,
+        prompt_variants=("baseline",),
+        profiles=(
+            "chain_memory_base",
+            "chain_tri_retrieval",
+            "chain_tri_candidate_governance",
+        ),
+    )
+
+    report = asyncio.run(
+        run_comprehensive_online_eval(
+            specs,
+            tmp_path / "workspace",
+            ComprehensiveScriptedProvider(),
+            model="scripted",
+            timeout_s=5.0,
+            real_llm_enabled=False,
+        )
+    )
+
+    rows = report.metrics["profile_answer_quality_uplift_vs_memory_base"]
+    assert "chain_tri_candidate_governance" in rows
+    assert rows["chain_tri_candidate_governance"]["case_count"] == 2
+    metadata = report.metrics["profile_metadata"]["chain_tri_candidate_governance"]
+    assert metadata["eval_only"] is True
+    assert metadata["oracle_protected"] is True
+    assert metadata["uses_fixture_expected_ids"] is True
+
+
+def test_optional_tri_candidate_governance_profile_is_visible_in_markdown(
+    tmp_path: Path,
+) -> None:
+    cases = build_quantitative_eval_cases(limit=2, case_pack="standard")
+    specs = build_comprehensive_run_specs(
+        cases,
+        repeats=1,
+        prompt_variants=("baseline",),
+        profiles=(
+            "chain_memory_base",
+            "chain_tri_retrieval",
+            "chain_tri_candidate_governance",
+        ),
+    )
+    report = asyncio.run(
+        run_comprehensive_online_eval(
+            specs,
+            tmp_path / "workspace",
+            ComprehensiveScriptedProvider(),
+            model="scripted",
+            timeout_s=5.0,
+            real_llm_enabled=False,
+        )
+    )
+    markdown_path = tmp_path / "report.md"
+
+    write_comprehensive_online_markdown(report, markdown_path)
+
+    markdown = markdown_path.read_text(encoding="utf-8")
+    assert "chain_tri_candidate_governance" in markdown
+    assert "eval_only" in markdown
+    assert "oracle_protected" in markdown
 
 
 def test_online_report_exposes_chain_answer_quality_rows(tmp_path: Path) -> None:

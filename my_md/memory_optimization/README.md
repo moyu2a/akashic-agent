@@ -75,6 +75,7 @@
 - Phase 6m-real-answer-quality-full：2026-07-24 已完成真实 LLM + 真实 `AgentLoop.process_direct()` 的完整回答质量矩阵，报告位于 `/tmp/akashic-memory-answer-quality-real-full-v1/reports/`，checkpoint 重建报告位于 `/tmp/akashic-memory-answer-quality-real-full-v1/checkpoint-report/`。运行规模为 `320` unique case、`6` profile、`1920` completed calls，`provider_error_count = 0`、`timeout_count = 0`、`excluded_infra_failure_count = 0`、`answer_quality_partial_matrix = False`。结果显示原始记忆基线回答命中率最高 `42.1875%`；三路召回 `28.4375%`、图谱召回 `26.25%`、重排与注入治理 `39.6875%`、版本链与溯源 `40.3125%`、全开组合 `23.4375%`。三路和图谱 grounding 均为 `100.0%`，但 forbidden 违规率约 `30%`，说明“召回到证据”不等于“回答用对证据”。重排与注入治理最接近基线且 forbidden 更低，版本链 forbidden 最低但 grounding 映射为 `0.0%`，需要修订 evidence 映射口径。`chain_all_on` 是兼容/校验行，当前使用 sleep-filtered ids，不能解释为纯召回单项增益；整体结论是当前不能简单全开，应优先做场景路由、候选去噪和提示注入优化。
 - Phase 6m-online-failure-attribution：新增线上回答质量失败归因报告，不重新评分历史结果，只解释 2026-07-24 的 1920 条真实 LLM 记录。报告路径是 `my_md/memory_optimization/eval_reports/online_failure_attribution/online_failure_attribution.json` 和 `.md`。结论是三路召回、图谱召回和全开组合的主要问题都是 `grounded_but_answer_failed`：证据已经进入上下文，但回答规则或 forbidden 控制没有跟上；三路召回有 `229` 个 answer failure、`96` 个 forbidden failure，图谱召回有 `236` 个 answer failure、`95` 个 forbidden failure。重排与注入治理仍有 `193` 个 answer failure，但 forbidden failure 降到 `31`。版本链与溯源出现 `320` 个 grounding failure，主要归因为 `missing_expected_memory_ids`，指向评测侧期望 ID 与 active version evidence 不一致。
 - Phase 6m-tri-candidate-governance：新增三路召回候选去噪和 forbidden / 冲突过滤的离线 trace 报告，不调用真实 LLM，不改变生产 `retrieve()` 返回契约。报告路径是 `my_md/memory_optimization/eval_reports/tri_candidate_governance_v1/tri_candidate_governance.json` 和 `.md`。320 case / 640 个目标证据下，原始路由命中 `640/640`，开启受保护严格候选治理后仍命中 `640/640`，目标证据损失 `0`；fixture 标注的 should-not 候选为 `368` 条，严格治理丢弃 `368/368`，保留 `0`。对照的不受保护严格模式命中 `0/640`，说明低置信、弱来源等规则如果直接全量启用会严重误删目标证据，必须保留目标保护或生产替代策略。风险 drop trace 主要包括 `weak_source_ref = 3936`、`forbidden_candidate = 1800`、`superseded_candidate = 712`、`missing_source_ref = 712`、`scope_mismatch = 376`，这些计数按多 lane 候选统计，不等同于唯一 memory 条数。
+- Phase 6m-tri-candidate-governance-small-online-plan：下一轮计划是小型真实 LLM 对照，不直接全量跑。计划文件为 `docs/superpowers/plans/2026-07-28-tri-candidate-governance-small-online.md`，目标是 common `20` + hard `20`，比较 `chain_memory_base`、`chain_tri_retrieval` 和 eval-only 的 `chain_tri_candidate_governance`，总计 `120` 次真实 LLM 调用；执行前必须先通过 fake-provider smoke 和报告完整性检查。
 - Phase 6m-version-grounding-fix：修复综合线上评测里的版本链 grounding 口径，不改生产 `AgentLoop`、真实召回、真实写入或 prompt。`chain_version_provenance` 现在使用 `expected_active_version_ids` 作为答案 grounding 期望，而不是继续使用包含 graph id 的通用期望。旧 checkpoint-only 报告仍会显示历史 `grounding = 0.0%`，因为 checkpoint 行已经保存旧的 `memory_grounding_passed` 布尔值，不能被事后重算。新的 fresh fake-provider 验证报告位于 `my_md/memory_optimization/eval_reports/version_grounding_fake_validation/`，20 case 切片显示 `chain_memory_base` 和 `chain_version_provenance` 都是 `20/20 grounding = 100.0%`，证明未来新跑 scorer 不再系统性误判版本链 grounding。
 - Phase 6m-version-grounding-smoke：补做一个很小的真实 LLM smoke，只跑 `chain_memory_base` 和 `chain_version_provenance` 两个 profile，`5` 个 case、`10` 次调用。报告路径是 `/tmp/akashic-memory-version-grounding-smoke/reports/memory_comprehensive_online_eval.{json,md}`。结果为 `chain_memory_base answer_rate = 60%`、`chain_version_provenance answer_rate = 80%`、两者 `grounding_rate = 100%`、`forbidden_rate = 0%`、`avg_total_token_count = 5397.4`、`avg_latency_ms = 5133.5`。这说明版本链 grounding 修复在小样本上是生效的，但样本太小，只能作为“先记录、后续再决定是否扩测”的证据，不能当最终线上结论。
 - Phase 6m-tri-graph-routing-analysis：基于完整真实 answer-quality 报告，把三路召回和图谱召回按场景拆开看，发现它们都不是全局默认最优开关，而是需要路由。三路召回对 `tool_preference`、`conflict_resolution`、`temporal_preference`、`preference_recall` 这类问题有明显救活作用，但会在 `style_preference`、`source_ref_missing`、`entropy_value`、`hard_tool_preference` 上显著回退；图谱召回对 `tri_rrf`、`version_chain`、`graph_bridge`、`source_ref_missing`、`session_boundary`、`entity_alias` 更有帮助，但在 `tool_preference`、`temporal_preference`、`conflict_resolution`、`style_preference` 上也会回退。结论是：三路与图谱应进入场景路由层，而不是简单“默认全开”。
@@ -251,6 +252,35 @@ Phase 6c-1 的验证结论：
 - 当前报告是离线 fixture proxy uplift，不是真实生产 uplift。
 - `llm_calls_enabled = false`、`embedding_calls_enabled = false`、`real_memory_db_enabled = false`、`production_uplift_claimed = false`。
 - 记录 Phase 2-5/all 的 `avg_baseline_score`、`avg_experimental_score`、`avg_uplift`、positive/negative signal、token delta 和 estimated token saving。
+
+Phase 6t / Tri Candidate Governance Small Online 的验证结论：
+
+- 新增 eval-only profile：`chain_tri_candidate_governance`。
+- 该 profile 不改变生产 `AgentLoop`、`Reasoner`、`ToolExecutor`、真实 memory 写入、生产 prompt 或 `retrieve()` 合约。
+- 该 profile 是对现有 `chain_tri_retrieval` 的 `fused_ids` 做严格候选治理过滤，并通过 fixture `should_recall_ids` 做目标保护；报告中标记 `eval_only = true`、`oracle_protected = true`、`uses_fixture_expected_ids = true`。
+- 新增 CLI 小矩阵选择：`--balanced-small --common-limit 20 --hard-limit 20`，用于一次选出 common `20` + hard `20`。
+- fake-provider smoke：`case_count = 120`、`unique_case_count = 40`、`profile_count = 3`、`provider_error_count = 0`、`timeout_count = 0`。
+- 真实 LLM 小矩阵：`case_count = 120`、`unique_case_count = 40`、`completed_call_count = 120`、`profile_count = 3`、`prompt_variant_count = 1`、`repeat_count = 1`、`provider_error_count = 0`、`timeout_count = 0`。
+- 真实 LLM 总体指标：`answer_rule_pass_rate = 49.1667%`、`memory_grounding_pass_rate = 100.0%`、`forbidden_violation_rate = 8.3333%`、`total_token_count = 655992`、`avg_total_token_count = 5466.6`、`avg_latency_ms = 4565.5`。
+
+| profile | answer_success | answer_rate | grounding_rate | forbidden_rate | avg_tokens | avg_latency_ms |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `chain_memory_base` | `20/40` | `50.0%` | `100.0%` | `10.0%` | `5486.7` | `4785.5` |
+| `chain_tri_retrieval` | `22/40` | `55.0%` | `100.0%` | `15.0%` | `5529.875` | `4922.225` |
+| `chain_tri_candidate_governance` | `17/40` | `42.5%` | `100.0%` | `0.0%` | `5383.225` | `3988.775` |
+
+本轮结论：
+
+- 候选治理能明显压低 forbidden：相对三路召回从 `15.0%` 降到 `0.0%`，下降 `15` 个百分点。
+- grounding 保持稳定：三组都是 `40/40 = 100.0%`。
+- 答案命中没有达标：候选治理相对三路召回答案率从 `55.0%` 降到 `42.5%`，下降 `12.5` 个百分点；因此本轮不能证明候选治理可以直接提升回答效果。
+- token 和延迟有下降：相对原始 memory，候选治理平均 token 下降 `103.475`，平均延迟下降 `796.725ms`；但 answer 下降说明不能只按成本判断成功。
+- 下一步不应继续盲目扩大召回，而应优先做证据注入模板、回答约束、候选置信度分层、低风险 fallback 和更细的失败归因。
+
+报告路径：
+
+- `my_md/memory_optimization/eval_reports/tri_candidate_governance_small_online_v1/memory_comprehensive_online_eval.json`
+- `my_md/memory_optimization/eval_reports/tri_candidate_governance_small_online_v1/memory_comprehensive_online_eval.md`
 
 ## 实验扩展原则
 

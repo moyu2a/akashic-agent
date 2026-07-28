@@ -1402,12 +1402,33 @@ Phase 6s 当前状态：
 - dry-run patch 已新增 `source_backed_action_safe` 和 `source_backed_block_reason`。当前 `200` 条 patch 记录中，只有 `12` 条满足真实 `session-store` 回源且原文支持；`24` 条进入 review，`73` 条因来源不可取回阻断，`11` 条因原文不支持摘要阻断。
 - 该阶段证明真实来源证据链路可审计，但仍是 fixture 数据，不是生产自然流量；source support 仍是轻量 expected-term 判断，不是完整语义蕴含。
 
+Phase 6t 当前状态：
+
+- 已完成 tri candidate governance 的小型真实 LLM 线上评测。
+- 新增 eval-only `chain_tri_candidate_governance` profile，作为现有 `chain_tri_retrieval.fused_ids` 的严格候选治理过滤层。
+- 新增综合线上评测 CLI 参数：`--balanced-small`、`--common-limit`、`--hard-limit`。
+- fake-provider smoke 跑通：`case_count = 120`、`unique_case_count = 40`、`profile_count = 3`、`provider_error_count = 0`、`timeout_count = 0`。
+- 真实 LLM 小矩阵跑通：`case_count = 120`、`unique_case_count = 40`、`completed_call_count = 120`、`provider_error_count = 0`、`timeout_count = 0`、`total_token_count = 655992`。
+- 结果表：
+
+| profile | answer_success | answer_rate | grounding_rate | forbidden_rate | avg_tokens | avg_latency_ms |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `chain_memory_base` | `20/40` | `50.0%` | `100.0%` | `10.0%` | `5486.7` | `4785.5` |
+| `chain_tri_retrieval` | `22/40` | `55.0%` | `100.0%` | `15.0%` | `5529.875` | `4922.225` |
+| `chain_tri_candidate_governance` | `17/40` | `42.5%` | `100.0%` | `0.0%` | `5383.225` | `3988.775` |
+
+- 当前结论：candidate governance 能把 forbidden 降到 `0.0%`，但 answer rate 相对三路召回下降 `12.5` 个百分点；因此它还不能作为“性能提升”的生产结论，只能作为“风险治理有效，但回答质量需要后续补强”的受控测试证据。
+- 后续应先解决召回后回答质量：候选去噪不应一刀切，应该结合场景路由、证据注入、回答约束、source_ref 回源和低置信 fallback。
+
 后续计划：
 
-1. 如果继续扩大真实模型测试，复用 Phase 6o runner 和 checkpoint 机制，把 `240` 条扩展样本推进到可选 `1200` 条全量；默认不继续消耗这部分 token。
-2. 继续把睡眠巩固从 source-backed fixture 推进到真实样本 evidence：真实 source_ref 覆盖、真实回源、真实 active 数、真实 prompt token 变化和清理后召回保持率。
-3. 扩展冲突链 fixture 类型，例如多层分叉、回滚分叉和跨 source_ref 分叉。
-4. 再从 Phase 6e checkpoint 重建真实 LLM 目标指标表；如果 checkpoint 不完整，再考虑 `--resume` 补跑。
+1. 针对 Phase 6t 的 answer 下降，做失败归因：区分关键证据被过滤、证据仍在但注入表达不足、模型回答没有遵守证据、评分规则过窄。
+2. 增加候选风险分层和低风险 fallback：高风险删除，中风险降权，低风险保留，避免 strict filter 过度削弱答案证据。
+3. 做证据注入和回答约束小型线上 A/B：同一 40-case 子集比较 baseline 注入、coached 注入和 forbidden-aware 注入。
+4. 如果继续扩大真实模型测试，复用 Phase 6o runner 和 checkpoint 机制，把 `240` 条扩展样本推进到可选 `1200` 条全量；默认不继续消耗这部分 token。
+5. 继续把睡眠巩固从 source-backed fixture 推进到真实样本 evidence：真实 source_ref 覆盖、真实回源、真实 active 数、真实 prompt token 变化和清理后召回保持率。
+6. 扩展冲突链 fixture 类型，例如多层分叉、回滚分叉和跨 source_ref 分叉。
+7. 再从 Phase 6e checkpoint 重建真实 LLM 目标指标表；如果 checkpoint 不完整，再考虑 `--resume` 补跑。
 
 ## 面试表达
 
