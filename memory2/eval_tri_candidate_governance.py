@@ -28,6 +28,9 @@ def build_tri_candidate_governance_report(
     dropped_by_reason: dict[str, int] = {}
     unprotected_dropped_by_reason: dict[str, int] = {}
     would_drop_protected_by_reason: dict[str, int] = {}
+    tiered_candidate_risk_tier_counts: dict[str, int] = {}
+    tiered_accepted_candidate_risk_tier_counts: dict[str, int] = {}
+    tiered_deleted_risks_by_reason: dict[str, int] = {}
     failure_bucket_counts: dict[str, int] = {}
     baseline_expected_hit_count = 0
     protected_expected_hit_count = 0
@@ -64,6 +67,13 @@ def build_tri_candidate_governance_report(
             CandidateGovernancePolicy(enabled=True)
         )
         candidates_by_lane = _fixture_candidates_by_lane(case, should_not_ids)
+        tiered_decision = baseline_decision.with_candidate_governance(
+            CandidateGovernancePolicy(
+                enabled=True,
+                mode="tiered",
+                protected_expected_ids=expected_ids,
+            )
+        )
         baseline_candidates, _baseline_trace = apply_retrieval_route(
             baseline_decision,
             candidates_by_lane,
@@ -76,9 +86,17 @@ def build_tri_candidate_governance_report(
             unprotected_decision,
             candidates_by_lane,
         )
+        tiered_candidates, tiered_trace = apply_retrieval_route(
+            tiered_decision,
+            candidates_by_lane,
+        )
         baseline_ids = _candidate_ids(baseline_candidates)
         protected_ids = _candidate_ids(protected_candidates)
         unprotected_ids = _candidate_ids(unprotected_candidates)
+        tiered_counts = _dict_counts(tiered_trace.get("candidate_risk_tier_counts", {}))
+        tiered_accepted_counts = _dict_counts(
+            tiered_trace.get("accepted_candidate_risk_tier_counts", {})
+        )
         expected_set = set(expected_ids)
         should_not_set = set(should_not_ids)
         baseline_hits = len(expected_set & baseline_ids)
@@ -109,6 +127,18 @@ def build_tri_candidate_governance_report(
             would_drop_protected_by_reason,
             protected_trace.get("would_drop_protected_by_reason", {}),
         )
+        _merge_counts(
+            tiered_candidate_risk_tier_counts,
+            tiered_counts,
+        )
+        _merge_counts(
+            tiered_accepted_candidate_risk_tier_counts,
+            tiered_accepted_counts,
+        )
+        _merge_counts(
+            tiered_deleted_risks_by_reason,
+            tiered_trace.get("tiered_deleted_risks_by_reason", {}),
+        )
         rows.append(
             {
                 "case_id": case.id,
@@ -130,6 +160,21 @@ def build_tri_candidate_governance_report(
                 "baseline_candidate_count": len(baseline_candidates),
                 "protected_candidate_count": len(protected_candidates),
                 "unprotected_candidate_count": len(unprotected_candidates),
+                "tiered_classified_candidate_count": sum(tiered_counts.values()),
+                "tiered_accepted_candidate_count": len(tiered_candidates),
+                "tiered_candidate_risk_tier_counts": tiered_counts,
+                "tiered_accepted_candidate_risk_tier_counts": tiered_accepted_counts,
+                "tiered_deleted_risks_by_reason": tiered_trace.get(
+                    "tiered_deleted_risks_by_reason",
+                    {},
+                ),
+                "tiered_delete_count": tiered_counts.get("delete", 0),
+                "tiered_downgrade_count": tiered_counts.get("downgrade", 0),
+                "tiered_requires_review_count": tiered_counts.get(
+                    "requires_review",
+                    0,
+                ),
+                "tiered_allow_count": tiered_counts.get("allow", 0),
                 "dropped_risks_by_reason": protected_trace.get(
                     "dropped_risks_by_reason",
                     {},
@@ -163,6 +208,11 @@ def build_tri_candidate_governance_report(
         "dropped_risks_by_reason": dropped_by_reason,
         "unprotected_dropped_risks_by_reason": unprotected_dropped_by_reason,
         "would_drop_protected_by_reason": would_drop_protected_by_reason,
+        "tiered_candidate_risk_tier_counts": tiered_candidate_risk_tier_counts,
+        "tiered_accepted_candidate_risk_tier_counts": (
+            tiered_accepted_candidate_risk_tier_counts
+        ),
+        "tiered_deleted_risks_by_reason": tiered_deleted_risks_by_reason,
         "failure_bucket_counts": failure_bucket_counts,
     }
     return {"metrics": metrics, "case_rows": rows}
@@ -192,15 +242,26 @@ def write_tri_candidate_governance_report(
     if isinstance(metrics, Mapping):
         for key, value in metrics.items():
             lines.append(f"- `{key}`: `{value}`")
+    lines.extend(["", "## Risk Tier Metrics", ""])
+    if isinstance(metrics, Mapping):
+        for key in (
+            "tiered_candidate_risk_tier_counts",
+            "tiered_accepted_candidate_risk_tier_counts",
+            "tiered_deleted_risks_by_reason",
+        ):
+            lines.append(f"- `{key}`: `{metrics.get(key)}`")
     lines.extend(["", "## Case Rows", ""])
     lines.append(
         "| case_id | category | bucket | scene | expected | baseline_hits | "
         "protected_hits | unprotected_hits | protected_loss | unprotected_loss | "
-        "baseline_candidates | protected_candidates |"
+        "baseline_candidates | protected_candidates | "
+        "tiered_classified_candidate_count | tiered_accepted_candidate_count | "
+        "tiered_delete_count | tiered_downgrade_count | "
+        "tiered_requires_review_count | tiered_allow_count |"
     )
     lines.append(
         "| --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | "
-        "---: | ---: |"
+        "---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |"
     )
     if isinstance(case_rows, list):
         for row in case_rows:
@@ -215,7 +276,13 @@ def write_tri_candidate_governance_report(
                 f"{row['protected_expected_hit_loss']} | "
                 f"{row['unprotected_expected_hit_loss']} | "
                 f"{row['baseline_candidate_count']} | "
-                f"{row['protected_candidate_count']} |"
+                f"{row['protected_candidate_count']} | "
+                f"{row['tiered_classified_candidate_count']} | "
+                f"{row['tiered_accepted_candidate_count']} | "
+                f"{row['tiered_delete_count']} | "
+                f"{row['tiered_downgrade_count']} | "
+                f"{row['tiered_requires_review_count']} | "
+                f"{row['tiered_allow_count']} |"
             )
     md_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return json_path, md_path
@@ -280,3 +347,9 @@ def _merge_counts(target: dict[str, int], source: object) -> None:
         return
     for reason, count in source.items():
         target[str(reason)] = target.get(str(reason), 0) + int(count or 0)
+
+
+def _dict_counts(source: object) -> dict[str, int]:
+    if not isinstance(source, Mapping):
+        return {}
+    return {str(reason): int(count or 0) for reason, count in source.items()}

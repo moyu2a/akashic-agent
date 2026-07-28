@@ -52,6 +52,33 @@ def test_tri_candidate_governance_report_writes_private_artifacts(tmp_path) -> N
     assert "session_text" not in markdown
 
 
+def test_tri_candidate_governance_report_records_tiered_metrics() -> None:
+    report = build_tri_candidate_governance_report(case_pack="standard")
+
+    metrics = report["metrics"]
+    assert metrics["tiered_candidate_risk_tier_counts"]
+    assert "delete" in metrics["tiered_candidate_risk_tier_counts"]
+    assert "accepted_candidate_risk_tier_counts" not in metrics
+    assert metrics["tiered_accepted_candidate_risk_tier_counts"]
+    assert metrics["tiered_deleted_risks_by_reason"]
+    rows = report["case_rows"]
+    assert rows
+    assert all("tiered_classified_candidate_count" in row for row in rows)
+    assert all("tiered_accepted_candidate_count" in row for row in rows)
+    assert any(row["tiered_downgrade_count"] > 0 for row in rows)
+
+
+def test_tri_candidate_governance_markdown_mentions_risk_tiers(tmp_path) -> None:
+    report = build_tri_candidate_governance_report(case_pack="standard")
+    _json_path, md_path = write_tri_candidate_governance_report(report, tmp_path)
+
+    markdown = md_path.read_text(encoding="utf-8")
+    assert "Risk Tier Metrics" in markdown
+    assert "tiered_candidate_risk_tier_counts" in markdown
+    assert "tiered_accepted_candidate_count" in markdown
+    assert "tiered_downgrade_count" in markdown
+
+
 def test_tri_candidate_governance_cli_writes_offline_report(tmp_path) -> None:
     env = {
         **os.environ,
