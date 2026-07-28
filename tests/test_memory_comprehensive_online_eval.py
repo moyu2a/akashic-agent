@@ -6,10 +6,12 @@ from pathlib import Path
 from typing import Any
 
 from agent.provider import LLMResponse
+from core.memory.engine import MemoryEngineRetrieveRequest
 from memory2.eval_comprehensive_online import (
     answer_expectation_for_profile,
     build_comprehensive_online_report_from_checkpoint,
     build_comprehensive_run_specs,
+    ComprehensiveOnlineMemoryEngine,
     evidence_ids_for_profile,
     profile_evidence_source,
     run_comprehensive_online_eval,
@@ -458,6 +460,56 @@ def test_optional_tri_candidate_governance_profile_gets_answer_quality_row(
     assert metadata["eval_only"] is True
     assert metadata["oracle_protected"] is True
     assert metadata["uses_fixture_expected_ids"] is True
+
+
+def test_tri_answer_contract_profile_is_optional_eval_only() -> None:
+    case = build_quantitative_eval_cases(
+        case_set="common",
+        limit=1,
+        case_pack="standard",
+    )[0]
+
+    specs = build_comprehensive_run_specs(
+        [case],
+        profiles=("chain_tri_answer_contract",),
+        prompt_variants=("baseline",),
+        repeats=1,
+    )
+
+    assert len(specs) == 1
+    assert evidence_ids_for_profile(case, "chain_tri_answer_contract")
+    assert (
+        profile_evidence_source("chain_tri_answer_contract")
+        == "tri_answer_contract.allowed_evidence_ids"
+    )
+
+
+def test_tri_answer_contract_profile_injects_contract_block(tmp_path: Path) -> None:
+    case = build_quantitative_eval_cases(
+        case_set="common",
+        limit=1,
+        case_pack="standard",
+    )[0]
+    engine = ComprehensiveOnlineMemoryEngine(
+        case,
+        profile_name="chain_tri_answer_contract",
+        prompt_variant="baseline",
+    )
+
+    result = asyncio.run(
+        engine.retrieve(
+            MemoryEngineRetrieveRequest(
+                query=str(case.setup["query"]),
+                mode="explicit",
+                top_k=8,
+            )
+        )
+    )
+
+    assert "Answer Contract: chain_tri_answer_contract" in result.text_block
+    assert "allowed_evidence:" in result.text_block
+    assert "forbidden_memory_ids:" in result.text_block
+    assert result.raw["evidence_source"] == "tri_answer_contract.allowed_evidence_ids"
 
 
 def test_optional_tri_candidate_governance_profile_is_visible_in_markdown(

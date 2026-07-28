@@ -42,6 +42,11 @@ from memory2.eval_llm_sample import (
     score_answer_text,
     write_llm_sample_answer_debug,
 )
+from memory2.eval_answer_contract import (
+    build_tri_answer_contract,
+    render_answer_contract_block,
+    tri_answer_contract_evidence_ids,
+)
 from memory2.eval_runner import _baseline_recalled_items
 from memory2.eval_quantitative_uplift import (
     BALANCED_SCORE_FORMULA,
@@ -72,8 +77,10 @@ ANSWER_QUALITY_PROFILES: tuple[str, ...] = (
     "chain_all_on",
 )
 TRI_CANDIDATE_GOVERNANCE_PROFILE = "chain_tri_candidate_governance"
+TRI_ANSWER_CONTRACT_PROFILE = "chain_tri_answer_contract"
 OPTIONAL_ANSWER_QUALITY_PROFILES: tuple[str, ...] = (
     TRI_CANDIDATE_GOVERNANCE_PROFILE,
+    TRI_ANSWER_CONTRACT_PROFILE,
 )
 PROFILE_METADATA: dict[str, dict[str, object]] = {
     TRI_CANDIDATE_GOVERNANCE_PROFILE: {
@@ -83,6 +90,15 @@ PROFILE_METADATA: dict[str, dict[str, object]] = {
         "description": (
             "Applies strict candidate governance to existing tri fused ids "
             "while protecting fixture should_recall_ids."
+        ),
+    },
+    TRI_ANSWER_CONTRACT_PROFILE: {
+        "eval_only": True,
+        "diagnostic_answer_contract": True,
+        "uses_fixture_answer_expectations": True,
+        "description": (
+            "Renders a structured answer contract over existing tri fused ids "
+            "to test whether answer constraints improve grounded tri retrieval."
         ),
     }
 }
@@ -170,6 +186,40 @@ class ComprehensiveOnlineMemoryEngine:
     ) -> MemoryEngineRetrieveResult:
         self.retrieve_requests.append(request)
         ids = list(evidence_ids_for_profile(self.case, self.profile_name))
+        if self.profile_name == TRI_ANSWER_CONTRACT_PROFILE:
+            contract = build_tri_answer_contract(self.case)
+            self.used_memory_ids = list(contract.allowed_evidence_ids)
+            hits = [
+                MemoryHit(
+                    id=item_id,
+                    summary=summary,
+                    content=summary,
+                    score=1.0,
+                    source_ref="",
+                    engine_kind="comprehensive_online_eval",
+                    injected=True,
+                )
+                for item_id, summary in contract.evidence_summaries
+            ]
+            self.last_text_block = render_answer_contract_block(contract)
+            return MemoryEngineRetrieveResult(
+                text_block=self.last_text_block,
+                hits=hits,
+                raw={
+                    "ids": list(contract.allowed_evidence_ids),
+                    "must_use_ids": list(contract.must_use_ids),
+                    "forbidden_ids": list(contract.forbidden_ids),
+                    "evidence_source": profile_evidence_source(self.profile_name),
+                    "answer_contract": {
+                        "diagnostic_eval_only": contract.diagnostic_eval_only,
+                        "required_terms": list(contract.required_terms),
+                        "required_term_groups": [
+                            list(group) for group in contract.required_term_groups
+                        ],
+                        "forbidden_terms": list(contract.forbidden_terms),
+                    },
+                },
+            )
         summaries = _memory_summaries_by_id(self.case)
         self.used_memory_ids = ids
         hits = [
@@ -251,6 +301,8 @@ def evidence_ids_for_profile(case: EvalCase, profile_name: str) -> tuple[str, ..
         return ()
     if profile_name == TRI_CANDIDATE_GOVERNANCE_PROFILE:
         return governed_tri_evidence_ids_for_case(case)
+    if profile_name == TRI_ANSWER_CONTRACT_PROFILE:
+        return tri_answer_contract_evidence_ids(case)
     if profile_name not in COMPREHENSIVE_CHAIN_PROFILES:
         raise ValueError(f"unknown profile_name: {profile_name}")
     if profile_name == "chain_tri_retrieval":
@@ -350,6 +402,7 @@ def profile_evidence_source(profile_name: str) -> str:
         TRI_CANDIDATE_GOVERNANCE_PROFILE: (
             "tri_candidate_governance.protected_strict_ids"
         ),
+        TRI_ANSWER_CONTRACT_PROFILE: "tri_answer_contract.allowed_evidence_ids",
     }
     if profile_name not in sources:
         raise ValueError(f"unknown profile_name: {profile_name}")
