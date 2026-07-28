@@ -25,6 +25,10 @@ from agent.policies.turn_completion import (
 )
 from agent.policies.tool_approval_runtime import ToolApprovalRuntime
 from agent.policies.tool_approval_store import ToolApprovalStore
+from agent.policies.tool_audit_ledger import (
+    ToolAuditLedgerStore,
+    open_tool_audit_ledger_fail_open,
+)
 from agent.core.runtime_support import ToolDiscoveryState
 from agent.core.types import (
     ContextBundle,
@@ -165,6 +169,7 @@ def _resource_roots_from_context(context: object | None) -> tuple[str, ...]:
 
 def _approval_runtime_from_context(
     context: object | None,
+    audit_ledger_store: ToolAuditLedgerStore | None = None,
 ) -> ToolApprovalRuntime | None:
     workspace = getattr(context, "workspace", None)
     if workspace is None:
@@ -175,7 +180,17 @@ def _approval_runtime_from_context(
         side_effect_vault=ToolApprovalRuntime.side_effect_vault_from_workspace(
             workspace
         ),
+        audit_ledger_store=audit_ledger_store,
     )
+
+
+def _tool_audit_ledger_from_context(
+    context: object | None,
+) -> ToolAuditLedgerStore | None:
+    workspace = getattr(context, "workspace", None)
+    if workspace is None:
+        return None
+    return open_tool_audit_ledger_fail_open(workspace, logger)
 
 
 def _completion_trace(
@@ -896,8 +911,13 @@ class DefaultReasoner(Reasoner):
             raise RuntimeError("DefaultReasoner.run_turn requires context and session_manager")
         if self._prompt_render is None:
             self._prompt_render = self._build_prompt_render_phase(self._context)
-        approval_runtime = _approval_runtime_from_context(self._context)
+        audit_ledger_store = _tool_audit_ledger_from_context(self._context)
+        approval_runtime = _approval_runtime_from_context(
+            self._context,
+            audit_ledger_store,
+        )
         self._tool_executor.set_approval_runtime(approval_runtime)
+        self._tool_executor.set_audit_ledger_store(audit_ledger_store)
         if self._task_execution_coordinator is not None:
             self._task_execution_coordinator.set_approval_runtime(approval_runtime)
 

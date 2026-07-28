@@ -1,5 +1,29 @@
 # Document RAG P10a Intent Preload Plan
 
+## 2026-07-28 Tool Governance P4c/P5a Queryable ToolAuditLedger Design
+
+Goal: create a design-first specification for a workspace-scoped, queryable, persistent, redacted `ToolAuditLedger` before expanding any new tool execution capability.
+
+1. Create isolated branch/worktree from latest merged `origin/main` - complete (`tool-governance-p4c-audit-ledger` at `7794819`).
+2. Restore planning context and inspect P4b follow-up records - complete.
+3. Inspect current audit, approval, side-effect, status command, and observe surfaces - complete.
+4. Write design spec for P4c/P5a queryable ToolAuditLedger - complete (`docs/superpowers/specs/2026-07-28-tool-governance-p4c-audit-ledger-design.md`).
+5. Self-review and commit design/planning docs - complete.
+6. Write P4c implementation plan with `writing-plans` skill - complete (`docs/superpowers/plans/2026-07-28-tool-governance-p4c-audit-ledger.md`).
+7. Review plan with `requesting-code-review` skill and revise issues - complete.
+8. Execute P4c implementation tasks - complete (`08f6e4d` through `8b2df28`; final verification documented).
+
+Current result:
+
+- P4c implements a first-version workspace-scoped, queryable, persistent, redacted `ToolAuditLedger` sidecar at `<workspace>/tool_audit/tool_audit.db`.
+- Tool policy decisions, approval lifecycle, approved file side-effect lifecycle, and approved shell sandbox lifecycle write bounded ledger events fail-open.
+- `/tool_audit` is a trusted read-only current-session status command for recent ledger events and request/approval/tool/event filters.
+- Approval and side-effect stores remain source-of-truth; the ledger is an audit projection.
+- External API side-effect replay remains the next closed follow-up.
+- Destructive execution, TaskExecution shell resume, shell rollback, and network-enabled shell sandbox remain unavailable.
+- Verification after final review fixes: focused regression suite `58 passed in 3.59s`; P4c focused governance suite `160 passed in 6.05s`; P1-P4c baseline `197 passed in 4.04s`; compileall exit `0`; `git diff --check` and `git diff --check 7794819..HEAD` no output.
+- Current capability/conclusion record added at `my_md/governance/09-tool-governance-current-state.md`: recommends P4c as the current mainline completion point, with only a small P4d operational/documentation follow-up before any optional P5 external API replay design.
+
 ## 2026-07-27 Tool Governance P4b Documentation and Final Verification
 
 Goal: record the completed first-version sandboxed approved shell workflow and final measured verification without modifying production code or tests.

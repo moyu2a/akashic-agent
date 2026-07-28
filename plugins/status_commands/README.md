@@ -44,5 +44,14 @@
 - `/prepare_tool <approval_id>`: generate a bounded diff preview for an approved file side effect, or prepare an approved shell sandbox preview.
 - `/run_approved_tool <approval_id>`: apply a prepared approved file side effect through the managed P4 runtime, or execute an approved shell command in its sandbox.
 - `/rollback_tool <approval_id>`: restore the snapshot for an executed P4 file side effect. Shell rollback is not supported.
+- `/tool_audit [limit]`: show recent redacted tool governance audit events for the current session.
+- `/tool_audit request <request_id>`: show current-session audit events for one tool request.
+- `/tool_audit approval <approval_id>`: show current-session audit events for one approval request.
+- `/tool_audit tool <tool_name> [limit]`: show current-session audit events for one tool.
+- `/tool_audit event <event_type> [limit]`: show current-session audit events of one event type.
 
 Approved shell execution requires Docker or Podman. Shell command text is held in the private payload vault and is not printed or stored in observe metadata; status replies expose only safe lifecycle and sandbox result metadata.
+
+`/tool_audit` reads the workspace `tool_audit/tool_audit.db` sidecar ledger only. It does not mutate approval state, side-effect state, `ToolDiscoveryState`, or LRU preload state. The V1 command intentionally does not expose `since` / `until`; time-range filtering remains an internal ledger API.
+
+Audit output includes event type, tool name, policy decision, lifecycle statuses, short request/approval ids, invoker result flags, and sanitized metadata key/value pairs. Raw tool arguments, shell commands, file paths, file content, diffs, payload paths, stdout/stderr text, tokens, cookies, authorization headers, secrets, and API keys must not appear in ledger rows or command output.

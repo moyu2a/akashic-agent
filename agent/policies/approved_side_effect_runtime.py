@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -19,11 +20,18 @@ from agent.policies.file_change_plan import (
 )
 from agent.policies.resource_policy import ResourcePolicyContext, ResourcePolicyEngine
 from agent.policies.side_effect_payload_vault import MANAGED_FILE_SIDE_EFFECT_TOOLS
+from agent.policies.tool_audit_ledger import (
+    ToolAuditLedgerEvent,
+    ToolAuditLedgerStore,
+    record_tool_audit_event_fail_open,
+)
 from agent.policies.tool_approval_context import trusted_approval_from_runtime
 from agent.policies.tool_approval_runtime import ToolApprovalRuntime
 
 if TYPE_CHECKING:
     from agent.task_plan.execution_service import TaskExecutionService
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -45,10 +53,12 @@ class ApprovedSideEffectRuntime:
         approval_runtime: ToolApprovalRuntime,
         side_effect_store: ApprovedSideEffectStore,
         task_execution_service: "TaskExecutionService | None" = None,
+        audit_ledger_store: ToolAuditLedgerStore | None = None,
     ) -> None:
         self.approval_runtime = approval_runtime
         self.side_effect_store = side_effect_store
         self.task_execution_service = task_execution_service
+        self._audit_ledger_store = audit_ledger_store
         self._resource_policy = ResourcePolicyEngine()
 
     def now(self) -> datetime:
@@ -132,12 +142,30 @@ class ApprovedSideEffectRuntime:
                 actor=actor,
                 now=self.now(),
             )
-        preview = prepare_file_change(
-            workspace_root=workspace,
-            artifact_root=artifact_root,
-            tool_name=record.tool_name,
-            arguments=payload.arguments,
-        )
+            self._record_ledger(
+                "approved_side_effect_payload_recorded",
+                record,
+                side_effect_status="payload_recorded",
+            )
+        try:
+            preview = prepare_file_change(
+                workspace_root=workspace,
+                artifact_root=artifact_root,
+                tool_name=record.tool_name,
+                arguments=payload.arguments,
+            )
+        except Exception:
+            logger.warning("approved side-effect preview failed", exc_info=True)
+            self._record_ledger(
+                "approved_side_effect_preview_failed",
+                record,
+                side_effect_status="preview_failed",
+            )
+            return self._error(
+                approval_request_id,
+                "preview_failed",
+                "Approved file side-effect preview failed.",
+            )
         self.side_effect_store.record_preview(
             approval_request_id=record.approval_request_id,
             preview_id=preview.preview_id,
@@ -148,6 +176,18 @@ class ApprovedSideEffectRuntime:
             diff_truncated=preview.diff_truncated,
             actor=actor,
             now=self.now(),
+        )
+        self._record_ledger(
+            "approved_side_effect_preview_ready",
+            record,
+            side_effect_status="preview_ready",
+            metadata={
+                "target_path_hash": _sha256_text(preview.display_path),
+                "before_hash": preview.before_hash,
+                "after_hash": preview.after_hash,
+                "diff_truncated": preview.diff_truncated,
+                "preview_id": preview.preview_id,
+            },
         )
         return ApprovedSideEffectResult(
             ok=True,
@@ -238,13 +278,54 @@ class ApprovedSideEffectRuntime:
                 consume.reason,
                 "Approved side-effect request could not be consumed.",
             )
-        preview = self._preview_from_record(
-            workspace_root.expanduser().resolve(),
-            side_effect,
-            record.tool_name,
-            payload.arguments,
-        )
-        applied = apply_file_change(preview)
+        try:
+            preview = self._preview_from_record(
+                workspace_root.expanduser().resolve(),
+                side_effect,
+                record.tool_name,
+                payload.arguments,
+            )
+            applied = apply_file_change(preview)
+        except Exception:
+            logger.warning("approved side-effect apply failed", exc_info=True)
+            try:
+                self.approval_runtime.finalize_execution(
+                    approval_request_id=approval_request_id,
+                    request_id=record.request_id,
+                    session_key=record.session_key,
+                    tool_name=record.tool_name,
+                    approval_scope=record.approval_scope,
+                    arguments=payload.arguments,
+                    execution_status="execution_failed",
+                )
+            except Exception:
+                logger.warning(
+                    "failed to finalize approved side-effect apply failure",
+                    exc_info=True,
+                )
+            try:
+                self.side_effect_store.mark_execution_failed(
+                    approval_request_id=approval_request_id,
+                    execution_status="execution_failed",
+                    actor=actor,
+                    now=self.now(),
+                )
+            except Exception:
+                logger.warning(
+                    "failed to mark approved side-effect apply failure",
+                    exc_info=True,
+                )
+            self._record_ledger(
+                "approved_side_effect_execution_failed",
+                record,
+                side_effect_status="execution_failed",
+                execution_status="execution_failed",
+            )
+            return self._error(
+                approval_request_id,
+                "execution_failed",
+                "Approved side-effect apply failed.",
+            )
         execution_status = "executed" if applied.ok else "execution_failed"
         self.approval_runtime.finalize_execution(
             approval_request_id=approval_request_id,
@@ -262,6 +343,12 @@ class ApprovedSideEffectRuntime:
                 actor=actor,
                 now=self.now(),
             )
+            self._record_ledger(
+                "approved_side_effect_execution_failed",
+                record,
+                side_effect_status="execution_failed",
+                execution_status=applied.reason,
+            )
             return self._error(
                 approval_request_id,
                 applied.reason,
@@ -274,6 +361,13 @@ class ApprovedSideEffectRuntime:
             execution_status=applied.reason,
             actor=actor,
             now=self.now(),
+        )
+        self._record_ledger(
+            "approved_side_effect_executed",
+            record,
+            side_effect_status="executed",
+            execution_status=applied.reason,
+            metadata={"rollback_id": rollback_id, "after_hash": applied.after_hash},
         )
         if record.approval_scope == "task_execution_step" and self.task_execution_service is not None:
             self.task_execution_service.complete_authorized_file_side_effect(
@@ -341,19 +435,51 @@ class ApprovedSideEffectRuntime:
                 "Resource policy denied approved side-effect rollback.",
                 metadata={"resource_policy": resource_decision.to_trace_metadata()},
             )
-        preview = self._preview_from_record(
-            workspace_root.expanduser().resolve(),
-            side_effect,
-            side_effect.tool_name,
-            payload.arguments,
-        )
-        rolled_back = rollback_file_change(preview)
+        try:
+            preview = self._preview_from_record(
+                workspace_root.expanduser().resolve(),
+                side_effect,
+                side_effect.tool_name,
+                payload.arguments,
+            )
+            rolled_back = rollback_file_change(preview)
+        except Exception:
+            logger.warning("approved side-effect rollback failed", exc_info=True)
+            try:
+                self.side_effect_store.mark_rollback_failed(
+                    approval_request_id=approval_request_id,
+                    rollback_status="rollback_failed",
+                    actor=actor,
+                    now=self.now(),
+                )
+            except Exception:
+                logger.warning(
+                    "failed to mark approved side-effect rollback failure",
+                    exc_info=True,
+                )
+            self._record_ledger(
+                "approved_side_effect_rollback_failed",
+                side_effect,
+                side_effect_status="rollback_failed",
+                rollback_status="rollback_failed",
+            )
+            return self._error(
+                approval_request_id,
+                "rollback_failed",
+                "Approved side-effect rollback failed.",
+            )
         if not rolled_back.ok:
             self.side_effect_store.mark_rollback_failed(
                 approval_request_id=approval_request_id,
                 rollback_status=rolled_back.reason,
                 actor=actor,
                 now=self.now(),
+            )
+            self._record_ledger(
+                "approved_side_effect_rollback_failed",
+                side_effect,
+                side_effect_status="rollback_failed",
+                rollback_status=rolled_back.reason,
             )
             return self._error(
                 approval_request_id,
@@ -365,6 +491,12 @@ class ApprovedSideEffectRuntime:
             rollback_status=rolled_back.reason,
             actor=actor,
             now=self.now(),
+        )
+        self._record_ledger(
+            "approved_side_effect_rolled_back",
+            side_effect,
+            side_effect_status="rolled_back",
+            rollback_status=rolled_back.reason,
         )
         return ApprovedSideEffectResult(
             ok=True,
@@ -429,6 +561,39 @@ class ApprovedSideEffectRuntime:
             approval_request_id=approval_request_id,
             message=message,
             metadata=dict(metadata or {}),
+        )
+
+    def _record_ledger(
+        self,
+        event_type: str,
+        record: object,
+        *,
+        side_effect_status: str = "",
+        execution_status: str = "",
+        rollback_status: str = "",
+        metadata: dict[str, object] | None = None,
+    ) -> None:
+        if self._audit_ledger_store is None:
+            return
+        record_tool_audit_event_fail_open(
+            self._audit_ledger_store,
+            ToolAuditLedgerEvent(
+                event_type=event_type,
+                session_key=str(getattr(record, "session_key", "") or ""),
+                request_id=str(getattr(record, "request_id", "") or ""),
+                tool_name=str(getattr(record, "tool_name", "") or ""),
+                approval_request_id=str(
+                    getattr(record, "approval_request_id", "") or ""
+                ),
+                approval_scope=str(getattr(record, "approval_scope", "") or ""),
+                side_effect_status=side_effect_status,
+                execution_status=execution_status,
+                rollback_status=rollback_status,
+                actor="approved_side_effect_runtime",
+                args_hash=str(getattr(record, "args_hash", "") or ""),
+                metadata=dict(metadata or {}),
+            ),
+            logger,
         )
 
 

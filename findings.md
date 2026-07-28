@@ -1,5 +1,26 @@
 # Document RAG P10a Findings
 
+## 2026-07-28 Tool Governance P4c/P5a Findings
+
+- P4b was merged into `origin/main` through PR #3; latest main is `7794819`.
+- Governance roadmap explicitly lists the next follow-up as P5 queryable persistent `ToolAuditLedger`, then external API side-effect replay.
+- The term P4c is best treated as a design-first bridge to that P5 ledger work, not as a new execution capability.
+- Existing `agent/policies/tool_audit.py` does not persist a ledger; it builds per-result `audit_trace` metadata for turn trace / observe.
+- Existing approval and approved side-effect stores should remain source-of-truth. A queryable ledger should be a sidecar audit projection, not a replacement transaction owner.
+- Ledger events must be allowlist-based. Raw shell command, raw tool args, raw file content, raw file path, raw output text, payload path, token, cookie and secret values must not enter ledger rows.
+- Ledger write failure should not relabel execution outcome, consume/unconsume approval, or change side-effect runtime status.
+- The design spec lives under ignored `docs/`, so force staging is required for this project if the spec should travel with the branch.
+- The implementation plan should start with the ledger store and only then wire runtimes; this keeps redaction/query/prune behavior testable before touching executor or side-effect execution paths.
+- Plan review found allowlisted metadata keys alone are insufficient; implementation must also reject unsafe values under allowed keys.
+- Plan review found fail-open must be tested for approval and side-effect runtime ledger writes, not just executor writes.
+- Plan review found `/tool_audit` must be tested through the real `StatusCommands.before_turn_modules()` plugin path and must keep request/approval/tool/event queries session-scoped by default.
+- P4c implementation confirms the ledger can stay a sidecar audit projection: executor, approval runtime, approved file side-effect runtime, and approved shell side-effect runtime all write bounded events fail-open without taking over source-of-truth state.
+- `/tool_audit` should remain current-session scoped in V1. Broad cross-session/admin search, dashboard views, and richer retention operations need separate authorization design instead of being hidden behind command arguments.
+- Final P4c verification required temporary test dependencies `pyyaml`, `html2text`, and `lxml` for existing plugin-manager import paths; with those supplied after final-review fixes, focused governance suite passed `151` tests and P1-P4c baseline passed `193` tests.
+- P4c does not make external API side-effect replay safe by itself. That remains the next design target, still requiring private payload retrieval, trusted preview/execution/cancel surfaces, and no raw args in approval/audit stores.
+- Final review confirmed that top-level ledger fields need structured sanitization too; metadata allowlists alone are insufficient because event/reason/status fields are also persisted and displayed.
+- Shell side-effect failure ledger events should describe source-of-truth state only after the source stores have committed that state; persistence failures need their own bounded audit outcome.
+
 ## 2026-07-20 Memory Phase 6k Findings
 
 - The comprehensive fake-provider core matrix can run end to end with the current scripts and produces a 1280-row report for the answer/retrieval slice.

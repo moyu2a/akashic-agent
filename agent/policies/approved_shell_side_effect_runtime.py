@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import subprocess
+import logging
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -24,9 +25,16 @@ from agent.policies.side_effect_payload_vault import (
     MANAGED_SHELL_SIDE_EFFECT_TOOLS,
     SideEffectPayload,
 )
+from agent.policies.tool_audit_ledger import (
+    ToolAuditLedgerEvent,
+    ToolAuditLedgerStore,
+    record_tool_audit_event_fail_open,
+)
 from agent.policies.tool_approval_context import trusted_approval_from_runtime
 from agent.policies.tool_approval_runtime import ToolApprovalRuntime
 from agent.policies.tool_approval_store import ToolApprovalRequestRecord
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -46,10 +54,12 @@ class ApprovedShellSideEffectRuntime:
         approval_runtime: ToolApprovalRuntime,
         side_effect_store: ApprovedSideEffectStore,
         sandbox_runner: SandboxRunner | None,
+        audit_ledger_store: ToolAuditLedgerStore | None = None,
     ) -> None:
         self.approval_runtime = approval_runtime
         self.side_effect_store = side_effect_store
         self.sandbox_runner = sandbox_runner
+        self._audit_ledger_store = audit_ledger_store
         self._resource_policy = ResourcePolicyEngine()
 
     def now(self) -> datetime:
@@ -70,6 +80,14 @@ class ApprovedShellSideEffectRuntime:
             return resolved
         record, payload = resolved
         if self.sandbox_runner is None:
+            record = self.approval_runtime.store.get_request(approval_request_id)
+            if record is not None:
+                self._record_ledger(
+                    "approved_shell_sandbox_unavailable",
+                    record,
+                    side_effect_status="sandbox_unavailable",
+                    execution_status="shell_sandbox_unavailable",
+                )
             return self._error(
                 approval_request_id,
                 "shell_sandbox_unavailable",
@@ -89,6 +107,11 @@ class ApprovedShellSideEffectRuntime:
                 payload_ref=_workspace_ref(workspace, payload.record.payload_path),
                 actor=actor,
                 now=self.now(),
+            )
+            self._record_ledger(
+                "approved_shell_payload_recorded",
+                record,
+                side_effect_status="payload_recorded",
             )
         try:
             preview = prepare_shell_sandbox_preview(
@@ -114,7 +137,29 @@ class ApprovedShellSideEffectRuntime:
                 actor=actor,
                 now=self.now(),
             )
+            self._record_ledger(
+                "approved_shell_sandbox_preview_ready",
+                record,
+                side_effect_status="sandbox_preview_ready",
+                metadata={
+                    "command_hash": preview.command_hash,
+                    "sandbox_backend": self.sandbox_runner.backend_name(),
+                    "sandbox_image": preview.image,
+                    "network_mode": preview.network_mode,
+                    "workspace_mount_mode": preview.workspace_mount_mode,
+                    "timeout_seconds": preview.timeout_seconds,
+                    "background_requested": preview.background_requested,
+                    "background_allowed": preview.background_allowed,
+                    "preview_id": preview.preview_id,
+                },
+            )
         except (FileNotFoundError, PermissionError):
+            self._record_ledger(
+                "approved_shell_sandbox_unavailable",
+                record,
+                side_effect_status="sandbox_unavailable",
+                execution_status="shell_sandbox_unavailable",
+            )
             return self._error(
                 approval_request_id,
                 "shell_sandbox_unavailable",
@@ -144,6 +189,14 @@ class ApprovedShellSideEffectRuntime:
         resource_roots: tuple[str, ...],
     ) -> ApprovedShellSideEffectResult:
         if self.sandbox_runner is None:
+            record = self.approval_runtime.store.get_request(approval_request_id)
+            if record is not None:
+                self._record_ledger(
+                    "approved_shell_sandbox_unavailable",
+                    record,
+                    side_effect_status="sandbox_unavailable",
+                    execution_status="shell_sandbox_unavailable",
+                )
             return self._error(
                 approval_request_id,
                 "shell_sandbox_unavailable",
@@ -216,16 +269,34 @@ class ApprovedShellSideEffectRuntime:
                 execution_status=exc.execution_status,
             )
         except (FileNotFoundError, PermissionError):
-            return self._finalize_failure(
-                record, payload.arguments, actor, "shell_sandbox_unavailable", side_effect.preview_id
+            return self._finalize_failure_and_record_ledger(
+                "approved_shell_sandbox_unavailable",
+                record,
+                payload.arguments,
+                actor,
+                "shell_sandbox_unavailable",
+                side_effect.preview_id,
+                side_effect_status="sandbox_unavailable",
             )
         except subprocess.TimeoutExpired:
-            return self._finalize_failure(
-                record, payload.arguments, actor, "sandbox_timeout", side_effect.preview_id
+            return self._finalize_failure_and_record_ledger(
+                "approved_shell_sandbox_timeout",
+                record,
+                payload.arguments,
+                actor,
+                "sandbox_timeout",
+                side_effect.preview_id,
+                side_effect_status="sandbox_timeout",
             )
         except Exception:
-            return self._finalize_failure(
-                record, payload.arguments, actor, "sandbox_execution_failed", side_effect.preview_id
+            return self._finalize_failure_and_record_ledger(
+                "approved_shell_sandbox_execution_failed",
+                record,
+                payload.arguments,
+                actor,
+                "sandbox_execution_failed",
+                side_effect.preview_id,
+                side_effect_status="sandbox_execution_failed",
             )
 
         result_reason = _safe_runner_reason(result.reason, result.ok)
@@ -270,19 +341,63 @@ class ApprovedShellSideEffectRuntime:
             )
         except Exception:
             return self._mark_state_persistence_failed(
-                record, actor, side_effect.preview_id
+                record,
+                actor,
+                side_effect.preview_id,
+                execution_succeeded=result.ok,
+                execution_status=result_reason,
             )
         if not _finalized_as(finalize, execution_status):
             return self._mark_state_persistence_failed(
-                record, actor, side_effect.preview_id
+                record,
+                actor,
+                side_effect.preview_id,
+                execution_succeeded=result.ok,
+                execution_status=result_reason,
             )
         if not result.ok:
+            self._record_ledger(
+                "approved_shell_sandbox_execution_failed",
+                record,
+                side_effect_status="sandbox_execution_failed",
+                execution_status=_safe_runner_reason(result.reason, result.ok),
+                metadata={
+                    "exit_code": result.exit_code,
+                    "stdout_ref": stdout_ref,
+                    "stderr_ref": stderr_ref,
+                    "stdout_hash": result.stdout_hash,
+                    "stderr_hash": result.stderr_hash,
+                    "stdout_bytes": result.stdout_bytes,
+                    "stderr_bytes": result.stderr_bytes,
+                    "stdout_truncated": result.stdout_truncated,
+                    "stderr_truncated": result.stderr_truncated,
+                    "duration_ms": result.duration_ms,
+                },
+            )
             return self._error(
                 approval_request_id,
                 _safe_runner_reason(result.reason, result.ok),
                 "Approved shell execution failed.",
                 preview_id=side_effect.preview_id,
             )
+        self._record_ledger(
+            "approved_shell_sandbox_executed",
+            record,
+            side_effect_status="sandbox_executed",
+            execution_status=_safe_runner_reason(result.reason, result.ok),
+            metadata={
+                "exit_code": result.exit_code,
+                "stdout_ref": stdout_ref,
+                "stderr_ref": stderr_ref,
+                "stdout_hash": result.stdout_hash,
+                "stderr_hash": result.stderr_hash,
+                "stdout_bytes": result.stdout_bytes,
+                "stderr_bytes": result.stderr_bytes,
+                "stdout_truncated": result.stdout_truncated,
+                "stderr_truncated": result.stderr_truncated,
+                "duration_ms": result.duration_ms,
+            },
+        )
         return ApprovedShellSideEffectResult(
             ok=True,
             reason=_safe_runner_reason(result.reason, result.ok),
@@ -436,6 +551,10 @@ class ApprovedShellSideEffectRuntime:
                 now=self.now(),
             )
         except Exception:
+            self._record_state_persistence_failure_ledger(
+                record,
+                "shell_execution_state_persistence_failed",
+            )
             return self._error(
                 record.approval_request_id,
                 "shell_execution_state_persistence_failed",
@@ -453,15 +572,48 @@ class ApprovedShellSideEffectRuntime:
                 execution_status="execution_failed",
             )
         except Exception:
-            return self._mark_state_persistence_failed(record, actor, preview_id)
+            return self._mark_state_persistence_failed(
+                record,
+                actor,
+                preview_id,
+                execution_succeeded=False,
+                execution_status=reason,
+            )
         if not _finalized_as(finalize, "execution_failed"):
-            return self._mark_state_persistence_failed(record, actor, preview_id)
+            return self._mark_state_persistence_failed(
+                record,
+                actor,
+                preview_id,
+                execution_succeeded=False,
+                execution_status=reason,
+            )
         return self._error(
             record.approval_request_id,
             reason,
             "Approved shell execution failed.",
             preview_id=preview_id,
         )
+
+    def _finalize_failure_and_record_ledger(
+        self,
+        event_type: str,
+        record: ToolApprovalRequestRecord,
+        arguments: dict[str, object],
+        actor: str,
+        reason: str,
+        preview_id: str,
+        *,
+        side_effect_status: str,
+    ) -> ApprovedShellSideEffectResult:
+        result = self._finalize_failure(record, arguments, actor, reason, preview_id)
+        if result.reason == reason:
+            self._record_ledger(
+                event_type,
+                record,
+                side_effect_status=side_effect_status,
+                execution_status=reason,
+            )
+        return result
 
     def _mark_state_persistence_failed(
         self,
@@ -489,12 +641,42 @@ class ApprovedShellSideEffectRuntime:
                     now=self.now(),
                 )
             except Exception:
-                pass
+                self._record_state_persistence_failure_ledger(
+                    record,
+                    execution_status
+                    or (
+                        "sandbox_executed"
+                        if execution_succeeded
+                        else "sandbox_execution_failed"
+                    ),
+                )
+            else:
+                self._record_state_persistence_failure_ledger(
+                    record,
+                    execution_status
+                    or (
+                        "sandbox_executed"
+                        if execution_succeeded
+                        else "sandbox_execution_failed"
+                    ),
+                )
         return self._error(
             record.approval_request_id,
             "shell_execution_state_persistence_failed",
             "Approved shell execution state could not be persisted.",
             preview_id=preview_id,
+        )
+
+    def _record_state_persistence_failure_ledger(
+        self,
+        record: ToolApprovalRequestRecord,
+        execution_status: str,
+    ) -> None:
+        self._record_ledger(
+            "approved_shell_state_persistence_failed",
+            record,
+            side_effect_status="shell_execution_state_persistence_failed",
+            execution_status=execution_status,
         )
 
     def _error(
@@ -513,6 +695,36 @@ class ApprovedShellSideEffectRuntime:
             message=message,
             preview_id=preview_id,
             metadata=dict(metadata or {}),
+        )
+
+    def _record_ledger(
+        self,
+        event_type: str,
+        record: ToolApprovalRequestRecord | ApprovedSideEffectRecord,
+        *,
+        side_effect_status: str = "",
+        execution_status: str = "",
+        metadata: dict[str, object] | None = None,
+    ) -> None:
+        if self._audit_ledger_store is None:
+            return
+        record_tool_audit_event_fail_open(
+            self._audit_ledger_store,
+            ToolAuditLedgerEvent(
+                event_type=event_type,
+                session_key=record.session_key,
+                request_id=record.request_id,
+                tool_name=record.tool_name,
+                risk=str(getattr(record, "risk", "") or ""),
+                approval_request_id=record.approval_request_id,
+                approval_scope=record.approval_scope,
+                side_effect_status=side_effect_status,
+                execution_status=execution_status,
+                actor="approved_shell_side_effect_runtime",
+                args_hash=record.args_hash,
+                metadata=dict(metadata or {}),
+            ),
+            logger,
         )
 
 

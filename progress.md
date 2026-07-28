@@ -1,5 +1,60 @@
 # Document RAG P10a Progress
 
+## 2026-07-28 Tool Governance P4c/P5a Queryable ToolAuditLedger Design
+
+- Created isolated worktree from merged `origin/main`: `/home/jjh/git_work/akashic-agent/.worktrees/tool-governance-p4c-audit-ledger`.
+- Branch: `tool-governance-p4c-audit-ledger`, tracking `origin/main`.
+- Starting commit: `7794819 Merge pull request #3 from moyu2a/tool-approval-next`.
+- Restored planning context from `task_plan.md`, `progress.md`, and `findings.md`.
+- Confirmed roadmap says P4b follow-up order is queryable persistent `ToolAuditLedger` first, then external API side-effect replay.
+- Inspected current audit surfaces:
+  - `agent/policies/tool_audit.py` builds bounded trace metadata only.
+  - `ToolApprovalStore` owns durable approval source-of-truth.
+  - `ApprovedSideEffectStore` owns durable approved side-effect source-of-truth and local lifecycle rows.
+  - status commands expose approval and managed side-effect trusted operations but no audit query command yet.
+- Wrote design spec: `docs/superpowers/specs/2026-07-28-tool-governance-p4c-audit-ledger-design.md`.
+- Self-reviewed the spec for placeholders, contradictions, ambiguity, and scope.
+- `docs/` is ignored by `.gitignore`, so the design spec must be staged with `git add -f`.
+- `git diff --check` emitted no output before committing the design/planning docs.
+- Committed design and planning records: `9cdd0e8 docs: design queryable tool audit ledger`.
+- Wrote implementation plan: `docs/superpowers/plans/2026-07-28-tool-governance-p4c-audit-ledger.md`.
+- Self-reviewed the plan for placeholder text, scope creep, type-name consistency, and a bad limit assertion; fixed the assertion inline.
+- Requested independent plan review. Reviewer verdict: ready to execute with fixes.
+- Revised plan to add value-level metadata validation, runtime-wide fail-open tests, real status plugin/passive turn wiring coverage, session-scoped `/tool_audit` filters, side-effect failure lifecycle tests, and schema `user_version` coverage.
+- Task 1 implemented `agent/policies/tool_audit_ledger.py` with schema/query/prune/redaction/fail-open helper and focused ledger coverage; initial review found allowlisted-value bypass risk, fixed by rejecting path/command/secret-like scalar values under allowed keys.
+- Task 2 wired `ToolExecutor` and `DefaultReasoner.run_turn()` to record policy decision ledger events fail-open.
+- Task 3 wired `ToolApprovalRuntime` and status-command approval paths to record requested/approved/denied/expired/consumed/executed/execution_failed lifecycle events.
+- Task 4 wired approved file and shell side-effect runtimes to record preview/apply/rollback/sandbox lifecycle events.
+- Task 5 added `/tool_audit` trusted read-only status command and README docs; RED failed with missing `session:ctx`, GREEN `tests/test_status_commands_approved_side_effects.py` -> `11 passed in 0.89s`; compileall for status command plugin/tests exited `0`; commit `8b2df28 feat: add tool audit status command`.
+- Task 6 verification:
+  - first focused governance run exposed missing temporary test imports `yaml`, `html2text`, then `lxml` from `tests/test_plugin_manager.py` import chain; this was environment/dependency setup, not a P4c behavior regression.
+  - focused governance suite with temporary `--with pyyaml --with html2text --with lxml` -> `144 passed in 4.87s`.
+  - P1-P4c baseline with the same temporary test dependencies -> `187 passed in 3.39s`.
+  - compileall for `agent/policies`, `agent/tool_hooks`, `agent/core/passive_turn.py`, `plugins/status_commands`, and `tests/test_tool_audit_ledger.py` exited `0`.
+  - `git diff --check` emitted no output.
+- Final whole-branch review found blocking gaps: top-level ledger fields were not sanitized, passive reasoner did not pass the ledger into `ToolApprovalRuntime`, ledger construction could fail closed, shell failure lifecycle events could be written before source-of-truth persistence, and the design spec had range-level trailing whitespace.
+- Final-review fixes added top-level structured field sanitization, key-specific metadata validation, artifact ref preservation, fail-open ledger construction, shared reasoner approval/executor ledger wiring, shell failure ledger ordering after persistence, and design spec whitespace cleanup.
+- Final-review fix verification:
+  - focused regression suite `tests/test_tool_audit_ledger.py tests/test_tool_approval_wiring.py tests/test_approved_shell_side_effect_runtime.py tests/test_status_commands_approved_side_effects.py` -> `52 passed in 3.13s`.
+  - P4c focused governance suite including `tests/test_tool_approval_wiring.py` -> `151 passed in 5.40s`.
+  - P1-P4c baseline including `tests/test_tool_approval_wiring.py` -> `193 passed in 3.74s`.
+  - compileall exited `0`.
+- Second final-review pass found remaining redaction gaps for token-shaped secrets, single-token raw output, arbitrary relative artifact refs, and missing shell persistence-failure audit event on fallback persistence failure.
+- Second final-review fixes added field-specific ledger validators, managed artifact ref shape requirements, and persistence-failure audit events on every shell state-persistence failure path.
+- Third final-review fix verification: targeted three-test RED pair -> `3 passed`; focused regression suite -> `54 passed in 3.31s`; P4c focused governance suite -> `153 passed in 5.66s`; P1-P4c baseline -> `194 passed in 3.80s`; compileall exited `0`; `git diff --check` emitted no output.
+- Fourth final-review fixes closed remaining audit-ledger gaps: credential-prefix values are rejected in generic metadata and preview/rollback ids, valid `cli`/`test` channel fields and `model`/`proactive` producer values are preserved, file/shell lifecycle statuses now survive enum validation, and managed file preview/apply/rollback exceptions produce bounded failure ledger events without persisting exception text.
+- Fourth final-review fix verification:
+  - focused regression suite `tests/test_tool_audit_ledger.py tests/test_tool_approval_wiring.py tests/test_approved_shell_side_effect_runtime.py tests/test_status_commands_approved_side_effects.py` -> `58 passed in 3.59s`.
+  - P4c focused governance suite including `tests/test_approved_side_effect_runtime.py` -> `160 passed in 6.05s`.
+  - P1-P4c baseline -> `197 passed in 4.04s`.
+  - compileall for touched policy/plugin/test files exited `0`.
+  - `git diff --check` and `git diff --check 7794819..HEAD` emitted no output.
+- Current P4c conclusion: first-version queryable persistent redacted ledger is implemented as fail-open audit projection; approval and side-effect stores remain source-of-truth; external API side-effect replay, destructive execution, TaskExecution shell resume, shell rollback, and network-enabled shell sandbox remain closed.
+- Documentation closeout after user asked whether to continue tool governance:
+  - Added `my_md/governance/09-tool-governance-current-state.md` with current P1-P4c capabilities, sandbox/rollback status, not-yet-open capabilities, completion estimate, and recommended stopping point.
+  - Updated governance README, roadmap, P1-P4c status, and design decisions.
+  - Recorded DD-006: current recommended stopping point is P4c plus a small P4d operational/documentation closeout; P5 external API side-effect replay should be design-first only when a concrete product need appears.
+
 ## 2026-07-27 Tool Governance P4b Documentation and Final Verification
 
 - P4b 已完成第一版 sandboxed approved shell execution：approved `shell` request 不再能由普通 ToolExecutor 直接执行，而是进入 approved shell side-effect runtime。该 runtime 从 workspace 私有 payload vault 读取原始 shell 参数，重新执行 P1/P2 resource policy，生成 sandbox preview，并只通过 Docker/Podman sandbox runner 执行。第一版 fail closed：Docker/Podman 不可用时不回退宿主 shell；workspace 只读挂载；network off；non-root user；read-only rootfs；cap drop；no-new-privileges；pids/memory/cpu/timeout limits。P4b 不支持 shell rollback，不开放 TaskExecution shell resume，不开放 external API side-effect replay。
