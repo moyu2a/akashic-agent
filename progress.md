@@ -21,6 +21,18 @@
 - Self-reviewed the plan for placeholder text, scope creep, type-name consistency, and a bad limit assertion; fixed the assertion inline.
 - Requested independent plan review. Reviewer verdict: ready to execute with fixes.
 - Revised plan to add value-level metadata validation, runtime-wide fail-open tests, real status plugin/passive turn wiring coverage, session-scoped `/tool_audit` filters, side-effect failure lifecycle tests, and schema `user_version` coverage.
+- Task 1 implemented `agent/policies/tool_audit_ledger.py` with schema/query/prune/redaction/fail-open helper and focused ledger coverage; initial review found allowlisted-value bypass risk, fixed by rejecting path/command/secret-like scalar values under allowed keys.
+- Task 2 wired `ToolExecutor` and `DefaultReasoner.run_turn()` to record policy decision ledger events fail-open.
+- Task 3 wired `ToolApprovalRuntime` and status-command approval paths to record requested/approved/denied/expired/consumed/executed/execution_failed lifecycle events.
+- Task 4 wired approved file and shell side-effect runtimes to record preview/apply/rollback/sandbox lifecycle events.
+- Task 5 added `/tool_audit` trusted read-only status command and README docs; RED failed with missing `session:ctx`, GREEN `tests/test_status_commands_approved_side_effects.py` -> `11 passed in 0.89s`; compileall for status command plugin/tests exited `0`; commit `8b2df28 feat: add tool audit status command`.
+- Task 6 verification:
+  - first focused governance run exposed missing temporary test imports `yaml`, `html2text`, then `lxml` from `tests/test_plugin_manager.py` import chain; this was environment/dependency setup, not a P4c behavior regression.
+  - focused governance suite with temporary `--with pyyaml --with html2text --with lxml` -> `144 passed in 4.87s`.
+  - P1-P4c baseline with the same temporary test dependencies -> `187 passed in 3.39s`.
+  - compileall for `agent/policies`, `agent/tool_hooks`, `agent/core/passive_turn.py`, `plugins/status_commands`, and `tests/test_tool_audit_ledger.py` exited `0`.
+  - `git diff --check` emitted no output.
+- Current P4c conclusion: first-version queryable persistent redacted ledger is implemented as fail-open audit projection; approval and side-effect stores remain source-of-truth; external API side-effect replay, destructive execution, TaskExecution shell resume, shell rollback, and network-enabled shell sandbox remain closed.
 
 ## 2026-07-27 Tool Governance P4b Documentation and Final Verification
 

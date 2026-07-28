@@ -227,6 +227,45 @@ Compileall: exit 0
 git diff --check: no output
 ```
 
+## P4c Queryable ToolAuditLedger 接入结果
+
+日期：2026-07-28
+
+P4c 已完成第一版 workspace-scoped、queryable、persistent、redacted `ToolAuditLedger`。Ledger 作为 SQLite sidecar 位于 `<workspace>/tool_audit/tool_audit.db`，记录工具 policy decision、approval lifecycle、approved file side-effect lifecycle 和 approved shell sandbox lifecycle 的脱敏审计投影；approval store 和 approved side-effect store 仍是状态 source-of-truth。
+
+实现范围：
+
+- 新增 `agent/policies/tool_audit_ledger.py`，提供 `ToolAuditLedgerEvent`、`ToolAuditLedgerQuery`、`ToolAuditLedgerStore`、allowlist/value-level metadata sanitizer、query/prune API 和 fail-open recorder helper。
+- `ToolExecutor` 在 allow/deny/defer/error policy paths 写入 `tool_invocation_policy_decision` ledger event；ledger 写失败不改变工具执行结果。
+- `ToolApprovalRuntime` 写入 requested、approved、denied、expired、consumed、executed 和 execution_failed lifecycle events。
+- `ApprovedSideEffectRuntime` 和 `ApprovedShellSideEffectRuntime` 写入 file preview/apply/rollback 与 shell preview/sandbox execution lifecycle events。
+- `DefaultReasoner.run_turn()` 和 `StatusCommands.before_turn_modules()` 按 workspace 构造并注入同一个 sidecar ledger 路径。
+- 新增只读 `/tool_audit` status command，支持 `/tool_audit [limit]`、`request <request_id>`、`approval <approval_id>`、`tool <tool_name> [limit]` 和 `event <event_type> [limit]`，所有查询默认绑定当前 `session_key`。
+
+红线：
+
+- Ledger 不保存 raw tool args、raw shell command、raw file path/content、raw diff、payload path、stdout/stderr text、token、cookie、secret、authorization 或 API key。
+- Metadata sanitizer 同时校验 key 和 value；allowlisted key 下看起来像路径、命令、payload、凭据 URL 或 secret 的值也会被丢弃。
+- `/tool_audit` 不提供跨 session admin 查询，不暴露 `since/until`，不修改 `ToolDiscoveryState`、LRU preload、approval state 或 side-effect state。
+- P4c 不开放 external API side-effect replay、destructive execution、TaskExecution shell resume、shell rollback 或 network-enabled shell sandbox。
+- Dashboard/admin 审计检索和更完整 retention 运维策略仍属于后续工作。
+
+P4c 验证结果：
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 uv run --with pytest --with pytest-asyncio --with json-repair --with docstring-parser --with pyyaml --with html2text --with lxml pytest tests/test_tool_audit.py tests/test_tool_audit_ledger.py tests/test_tool_executor.py tests/test_tool_approval_runtime.py tests/test_approved_side_effect_runtime.py tests/test_approved_shell_side_effect_runtime.py tests/test_status_commands_approved_side_effects.py tests/test_tool_governance_p4b_contract.py tests/test_lifecycle_phases.py tests/test_plugin_manager.py -q -p no:cacheprovider
+PYTHONDONTWRITEBYTECODE=1 uv run --with pytest --with pytest-asyncio --with json-repair --with docstring-parser --with pyyaml --with html2text --with lxml pytest tests/test_resource_policy.py tests/test_tool_invocation_resource_policy.py tests/test_tool_invocation_policy.py tests/test_tool_approval.py tests/test_tool_executor_approval_workflow.py tests/test_tool_governance_p3_contract.py tests/test_tool_governance_p4_contract.py tests/test_tool_governance_p4b_contract.py tests/test_tool_audit_ledger.py tests/test_lifecycle_phases.py tests/test_plugin_manager.py -q -p no:cacheprovider
+PYTHONDONTWRITEBYTECODE=1 uv run python -m compileall agent/policies agent/tool_hooks agent/core/passive_turn.py plugins/status_commands tests/test_tool_audit_ledger.py
+git diff --check
+```
+
+```text
+P4c focused governance suite: 144 passed in 4.87s
+P1-P4c baseline: 187 passed in 3.39s
+Compileall: exit 0
+git diff --check: no output
+```
+
 ## 验证结果
 
 P1.1 目标测试：
@@ -462,9 +501,9 @@ git diff --check
 
 ## 后续步骤
 
-P4a/P4b 已完成文件工具受控执行和 sandboxed approved shell execution 的 first-version scope，但不应直接声称生产级通用安全。下一步顺序如下：
+P4a/P4b/P4c 已完成文件工具受控执行、sandboxed approved shell execution 和第一版可查询持久审计 ledger，但不应直接声称生产级通用安全。下一步顺序如下：
 
-1. P5 设计可查询持久 `ToolAuditLedger`：timestamp、actor、request id、policy decision、args hash、脱敏摘要、执行结果预览和 retention 策略。
-2. 设计 external API side-effect replay/admin 执行入口：在不把 raw args 写入 approval/audit store 的前提下，明确如何由可信 runtime 取回原始调用、展示风险预览、执行或取消。
+1. 设计 external API side-effect replay/admin 执行入口：在不把 raw args 写入 approval/audit store 的前提下，明确如何由可信 runtime 取回原始调用、展示风险预览、执行或取消。
+2. 为 `ToolAuditLedger` 继续补 dashboard/admin 审计检索和更明确的 retention 运维入口。
 3. 继续收敛 no-root 兼容 allow，只让明确无法提供 workspace 的直接调用方走兼容路径。
 4. 评估 TaskExecution shell/external side-effect resume、shell rollback 和 network-enabled shell sandbox 的开放条件；当前不开放。

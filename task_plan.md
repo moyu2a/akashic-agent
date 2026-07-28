@@ -11,14 +11,17 @@ Goal: create a design-first specification for a workspace-scoped, queryable, per
 5. Self-review and commit design/planning docs - complete.
 6. Write P4c implementation plan with `writing-plans` skill - complete (`docs/superpowers/plans/2026-07-28-tool-governance-p4c-audit-ledger.md`).
 7. Review plan with `requesting-code-review` skill and revise issues - complete.
-8. Execute P4c implementation tasks - pending.
+8. Execute P4c implementation tasks - complete (`08f6e4d` through `8b2df28`; final verification documented).
 
-Current design decision:
+Current result:
 
-- Treat P4c as the next governance design step, functionally aligned with the roadmap's P5 queryable `ToolAuditLedger`.
-- Do not start external API side-effect replay yet.
-- Do not open destructive execution, TaskExecution shell resume, shell rollback, or network-enabled shell sandbox.
-- Build a sidecar `tool_audit/tool_audit.db` projection store rather than merging audit rows into approval or side-effect stores.
+- P4c implements a first-version workspace-scoped, queryable, persistent, redacted `ToolAuditLedger` sidecar at `<workspace>/tool_audit/tool_audit.db`.
+- Tool policy decisions, approval lifecycle, approved file side-effect lifecycle, and approved shell sandbox lifecycle write bounded ledger events fail-open.
+- `/tool_audit` is a trusted read-only current-session status command for recent ledger events and request/approval/tool/event filters.
+- Approval and side-effect stores remain source-of-truth; the ledger is an audit projection.
+- External API side-effect replay remains the next closed follow-up.
+- Destructive execution, TaskExecution shell resume, shell rollback, and network-enabled shell sandbox remain unavailable.
+- Verification: P4c focused governance suite `144 passed in 4.87s`; P1-P4c baseline `187 passed in 3.39s`; compileall exit `0`; `git diff --check` no output.
 
 ## 2026-07-27 Tool Governance P4b Documentation and Final Verification
 

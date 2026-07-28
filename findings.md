@@ -14,6 +14,10 @@
 - Plan review found allowlisted metadata keys alone are insufficient; implementation must also reject unsafe values under allowed keys.
 - Plan review found fail-open must be tested for approval and side-effect runtime ledger writes, not just executor writes.
 - Plan review found `/tool_audit` must be tested through the real `StatusCommands.before_turn_modules()` plugin path and must keep request/approval/tool/event queries session-scoped by default.
+- P4c implementation confirms the ledger can stay a sidecar audit projection: executor, approval runtime, approved file side-effect runtime, and approved shell side-effect runtime all write bounded events fail-open without taking over source-of-truth state.
+- `/tool_audit` should remain current-session scoped in V1. Broad cross-session/admin search, dashboard views, and richer retention operations need separate authorization design instead of being hidden behind command arguments.
+- Final P4c verification required temporary test dependencies `pyyaml`, `html2text`, and `lxml` for existing plugin-manager import paths; with those supplied, focused governance suite passed `144` tests and P1-P4c baseline passed `187` tests.
+- P4c does not make external API side-effect replay safe by itself. That remains the next design target, still requiring private payload retrieval, trusted preview/execution/cancel surfaces, and no raw args in approval/audit stores.
 
 ## 2026-07-20 Memory Phase 6k Findings
 

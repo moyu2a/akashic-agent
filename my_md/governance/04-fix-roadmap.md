@@ -362,7 +362,10 @@ Task 10 最终复审结果：focused `195 passed`，compatibility `278 passed`�
    - P2 已接入 passive turn trace 与 observe slim trace；observe 只保留固定白名单审计字段，不保存 `args_summary`。
    - P3 已完成 bounded approval lifecycle trace：requested、approved、denied、expired、consumed、executed、execution_failed 进入 executor trace、status command metadata 和 observe slim trace。
    - P4a 已完成 approved side-effect lifecycle trace allowlist：preview/apply/rollback 状态、approval id、request/session/tool/scope、args hash、preview id、path hash、before/after hash、rollback id 和执行/回滚状态进入 observe slim trace；raw args、`args_summary`、command、content、code、body、secret、cookie、token、payload path、真实 target path 和完整 diff 不进入 observe slim trace。
-   - 完整可查询 `ToolAuditLedger`、retention、dashboard/admin 审计检索仍属于后续 P5。
+   - P4c 已完成第一版 workspace-scoped 可查询持久 `ToolAuditLedger`：SQLite sidecar 位于 `<workspace>/tool_audit/tool_audit.db`，记录 policy decision、approval lifecycle、approved file side-effect lifecycle 和 approved shell sandbox lifecycle 的脱敏投影。
+   - P4c ledger 是 fail-open audit projection；approval store 和 approved side-effect store 仍是状态 source-of-truth。
+   - P4c `/tool_audit` status command 只读查询当前 session 的 ledger events，支持 request、approval、tool 和 event 类型过滤；不修改 `ToolDiscoveryState`、LRU、approval state 或 side-effect state。
+   - Dashboard/admin 审计检索和更完整 retention 运维策略仍属于后续工作。
 
 验收方式：
 
@@ -379,13 +382,14 @@ Task 10 最终复审结果：focused `195 passed`，compatibility `278 passed`�
 - P4 focused 回归已覆盖 payload vault、file snapshot/diff/apply/rollback、side-effect store/runtime、status commands、TaskExecution file resume 和 P4 contract；结果 `21 passed in 1.74s`。
 - P1/P2/P3/P4 focused baseline 结果 `72 passed in 2.86s`；compatibility plus P4 coverage 结果 `270 passed in 8.68s`；compileall 退出码 `0`，`git diff --check` 无输出。
 - P4b focused suite 结果 `61 passed in 3.36s`；P1/P2/P3/P4/P4b focused baseline 结果 `86 passed in 3.52s`；compatibility suite 结果 `275 passed in 9.07s`；compileall 退出码 `0`，`git diff --check` 无输出。
+- P4c focused governance suite 结果 `144 passed in 4.87s`；P1-P4c baseline 结果 `187 passed in 3.39s`；compileall 退出码 `0`，`git diff --check` 无输出。验证命令使用临时测试依赖 `pyyaml/html2text/lxml` 以满足 `tests/test_plugin_manager.py` 的 import 链。
 - 回归测试确认 Document RAG、TaskPlan、TaskExecution 现有工具边界不被破坏。
 
 边界：
 
 - P1/P2/P3/P4a 不承诺完整 Docker/chroot/seccomp 隔离；它们先建立统一裁决、资源判断、默认 workspace scope、结构化授权请求、trusted approval workflow、文件 snapshot/diff/rollback 和 bounded lifecycle audit。
-- P4b 已将 approved shell execution 收束为 Docker/Podman sandbox first-version scope；后续顺序为 P5 持久可查询 `ToolAuditLedger`，然后 external API side-effect replay。
-- P4b 后仍不开放 external API side-effect replay、destructive execution、TaskExecution shell resume、shell rollback 或 network-enabled shell sandbox。
+- P4b 已将 approved shell execution 收束为 Docker/Podman sandbox first-version scope；P4c 已完成第一版持久可查询 `ToolAuditLedger`，但它是审计投影，不是执行状态所有者。
+- P4c 后仍不开放 external API side-effect replay、destructive execution、TaskExecution shell resume、shell rollback 或 network-enabled shell sandbox。
 - shell 黑名单只能作为辅助 preflight，不作为最终生产安全边界。
 
 ## 暂不处理
