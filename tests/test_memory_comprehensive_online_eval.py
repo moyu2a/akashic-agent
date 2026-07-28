@@ -514,6 +514,77 @@ def test_tri_answer_contract_profile_injects_contract_block(tmp_path: Path) -> N
     assert result.raw["evidence_source"] == "tri_answer_contract.allowed_evidence_ids"
 
 
+def _case_with_tri_governance_drop():
+    for case in (
+        build_quantitative_eval_cases(case_set="common", limit=20, case_pack="standard")
+        + build_quantitative_eval_cases(case_set="hard", limit=20, case_pack="standard")
+    ):
+        tri_ids = set(evidence_ids_for_profile(case, "chain_tri_retrieval"))
+        governed_ids = set(
+            evidence_ids_for_profile(case, "chain_tri_candidate_governance")
+        )
+        if tri_ids - governed_ids:
+            return case
+    raise AssertionError("fixture must include at least one governed tri drop")
+
+
+def test_tri_governed_answer_contract_profile_is_optional_eval_only() -> None:
+    case = _case_with_tri_governance_drop()
+
+    specs = build_comprehensive_run_specs(
+        [case],
+        profiles=("chain_tri_governed_answer_contract",),
+        prompt_variants=("baseline",),
+        repeats=1,
+    )
+
+    assert len(specs) == 1
+    assert evidence_ids_for_profile(case, "chain_tri_governed_answer_contract")
+    assert evidence_ids_for_profile(
+        case,
+        "chain_tri_governed_answer_contract",
+    ) == evidence_ids_for_profile(case, "chain_tri_candidate_governance")
+    assert set(evidence_ids_for_profile(case, "chain_tri_retrieval")) > set(
+        evidence_ids_for_profile(case, "chain_tri_governed_answer_contract")
+    )
+    assert (
+        profile_evidence_source("chain_tri_governed_answer_contract")
+        == "tri_governed_answer_contract.governed_allowed_evidence_ids"
+    )
+
+
+def test_tri_governed_answer_contract_profile_injects_governed_contract_block(
+    tmp_path: Path,
+) -> None:
+    case = _case_with_tri_governance_drop()
+    engine = ComprehensiveOnlineMemoryEngine(
+        case,
+        profile_name="chain_tri_governed_answer_contract",
+        prompt_variant="baseline",
+    )
+
+    result = asyncio.run(
+        engine.retrieve(
+            MemoryEngineRetrieveRequest(
+                query=str(case.setup["query"]),
+                mode="explicit",
+                top_k=8,
+            )
+        )
+    )
+
+    assert "Answer Contract: chain_tri_governed_answer_contract" in result.text_block
+    assert "allowed_evidence:" in result.text_block
+    assert "forbidden_memory_ids:" in result.text_block
+    assert "governance_dropped_memory_ids:" in result.text_block
+    assert result.raw["governance_dropped_ids"]
+    assert result.raw["evidence_source"] == (
+        "tri_governed_answer_contract.governed_allowed_evidence_ids"
+    )
+    assert result.raw["answer_contract"]["diagnostic_eval_only"] is True
+    assert result.raw["answer_contract"]["combines_candidate_governance"] is True
+
+
 def test_tri_answer_contract_profile_report_records_eval_only_metadata(
     tmp_path: Path,
 ) -> None:
