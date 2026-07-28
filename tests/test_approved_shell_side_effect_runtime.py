@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import SimpleNamespace
@@ -12,6 +13,10 @@ from agent.policies.approved_shell_side_effect_runtime import (
 from agent.policies.approved_side_effect_store import ApprovedSideEffectStore
 from agent.policies.shell_sandbox_runner import SandboxRunResult
 from agent.policies.side_effect_payload_vault import SideEffectPayloadVault
+from agent.policies.tool_audit_ledger import (
+    ToolAuditLedgerQuery,
+    ToolAuditLedgerStore,
+)
 from agent.policies.tool_approval_runtime import ToolApprovalRuntime
 from agent.policies.tool_approval_store import ToolApprovalStore
 
@@ -43,12 +48,23 @@ class RecordingSandboxRunner:
         )
 
 
-def _approval_runtime(workspace: Path) -> ToolApprovalRuntime:
+class TimeoutSandboxRunner(RecordingSandboxRunner):
+    def run(self, preview, command: str) -> SandboxRunResult:
+        raise subprocess.TimeoutExpired(cmd=command, timeout=1)
+
+
+class _FailingLedger:
+    def record_event(self, _event):
+        raise RuntimeError("ledger down")
+
+
+def _approval_runtime(workspace: Path, audit_ledger_store=None) -> ToolApprovalRuntime:
     return ToolApprovalRuntime(
         ToolApprovalStore(ToolApprovalRuntime.approval_db_path_from_workspace(workspace)),
         side_effect_vault=SideEffectPayloadVault(
             SideEffectPayloadVault.root_for_workspace(workspace)
         ),
+        audit_ledger_store=audit_ledger_store,
     )
 
 
@@ -91,14 +107,15 @@ def _approved_shell(runtime: ToolApprovalRuntime, arguments: dict[str, object]) 
 
 
 def _runtime(
-    workspace: Path, sandbox_runner: object | None
+    workspace: Path, sandbox_runner: object | None, audit_ledger_store=None
 ) -> ApprovedShellSideEffectRuntime:
     return ApprovedShellSideEffectRuntime(
-        approval_runtime=_approval_runtime(workspace),
+        approval_runtime=_approval_runtime(workspace, audit_ledger_store),
         side_effect_store=ApprovedSideEffectStore(
             ApprovedSideEffectStore.db_path_from_workspace(workspace)
         ),
         sandbox_runner=sandbox_runner,
+        audit_ledger_store=audit_ledger_store,
     )
 
 
@@ -133,6 +150,94 @@ def test_approved_shell_runtime_prepares_and_runs_in_sandbox(tmp_path: Path) -> 
     assert stored.stdout_ref.startswith(f"artifacts/{stored.preview_id}/")
     assert stored.stderr_ref.startswith(f"artifacts/{stored.preview_id}/")
     assert b"echo hi" not in store.db_path.read_bytes()
+
+
+def test_shell_side_effect_runtime_ledger_failure_does_not_change_result(
+    tmp_path: Path,
+) -> None:
+    runtime = _runtime(
+        tmp_path,
+        sandbox_runner=RecordingSandboxRunner(),
+        audit_ledger_store=_FailingLedger(),
+    )
+    approval_id = _approved_shell(
+        runtime.approval_runtime, {"command": "echo hi", "timeout": 30}
+    )
+
+    prepared = runtime.prepare(approval_id, "cli:test", "status_command", tmp_path, (str(tmp_path),))
+    applied = runtime.apply(approval_id, "cli:test", "status_command", tmp_path, (str(tmp_path),))
+
+    assert prepared.ok is True
+    assert applied.ok is True
+    assert runtime.approval_runtime.store.get_request(approval_id).status == "executed"
+
+
+def test_shell_side_effect_runtime_records_bounded_sandbox_metadata(
+    tmp_path: Path,
+) -> None:
+    ledger = ToolAuditLedgerStore(tmp_path / "audit.db")
+    runtime = _runtime(
+        tmp_path,
+        sandbox_runner=RecordingSandboxRunner(),
+        audit_ledger_store=ledger,
+    )
+    approval_id = _approved_shell(
+        runtime.approval_runtime, {"command": "echo raw-secret", "timeout": 30}
+    )
+
+    prepared = runtime.prepare(approval_id, "cli:test", "status_command", tmp_path, (str(tmp_path),))
+    applied = runtime.apply(approval_id, "cli:test", "status_command", tmp_path, (str(tmp_path),))
+
+    assert prepared.ok is True
+    assert applied.ok is True
+    events = ledger.query_events(ToolAuditLedgerQuery(approval_request_id=approval_id, limit=20))
+    serialized = "\n".join(str(event.metadata) for event in events)
+    assert "command_hash" in serialized
+    assert "stdout_hash" in serialized
+    assert "echo raw-secret" not in serialized
+
+
+def test_shell_side_effect_runtime_records_sandbox_unavailable_and_timeout(
+    tmp_path: Path,
+) -> None:
+    ledger = ToolAuditLedgerStore(tmp_path / "audit.db")
+    unavailable_runtime = _runtime(
+        tmp_path / "unavailable", sandbox_runner=None, audit_ledger_store=ledger
+    )
+    unavailable_id = _approved_shell(
+        unavailable_runtime.approval_runtime, {"command": "echo hi", "timeout": 30}
+    )
+    unavailable = unavailable_runtime.prepare(
+        unavailable_id,
+        "cli:test",
+        "status_command",
+        tmp_path / "unavailable",
+        (str(tmp_path),),
+    )
+    assert unavailable.ok is False
+
+    timeout_runtime = _runtime(
+        tmp_path / "timeout",
+        sandbox_runner=TimeoutSandboxRunner(),
+        audit_ledger_store=ledger,
+    )
+    timeout_id = _approved_shell(
+        timeout_runtime.approval_runtime, {"command": "sleep 999", "timeout": 1}
+    )
+    timeout = timeout_runtime.apply(
+        timeout_id,
+        "cli:test",
+        "status_command",
+        tmp_path / "timeout",
+        (str(tmp_path),),
+    )
+    assert timeout.ok is False
+
+    events = ledger.query_events(ToolAuditLedgerQuery(limit=50))
+    assert {event.event_type for event in events} >= {
+        "approved_shell_sandbox_unavailable",
+        "approved_shell_sandbox_timeout",
+    }
 
 
 def test_approved_shell_runtime_fails_closed_without_sandbox_runner(tmp_path: Path) -> None:

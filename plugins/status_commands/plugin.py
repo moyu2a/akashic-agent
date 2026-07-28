@@ -378,6 +378,7 @@ class ToolApprovalCommandModule:
             approval_runtime=self._approval_runtime(),
             side_effect_store=self._side_effect_store,
             task_execution_service=self._task_execution_service,
+            audit_ledger_store=self._audit_ledger_store,
         )
 
     def _shell_side_effect_runtime(self) -> ApprovedShellSideEffectRuntime | None:
@@ -391,6 +392,7 @@ class ToolApprovalCommandModule:
             approval_runtime=self._approval_runtime(),
             side_effect_store=self._side_effect_store,
             sandbox_runner=self._shell_sandbox_runner,
+            audit_ledger_store=self._audit_ledger_store,
         )
 
     def _approval_runtime(self) -> ToolApprovalRuntime:
