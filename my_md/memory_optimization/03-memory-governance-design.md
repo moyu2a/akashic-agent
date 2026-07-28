@@ -394,6 +394,41 @@ AgentLoop 只继续通过生命周期、事件和工具抽象使用记忆。
 - 后续治理不应把所有候选一刀切删除，而应引入风险分级：高风险删除，中风险降权或放入 requires_review，低风险保留并通过重排控制注入位置。
 - 生产化前还需要去掉 oracle-protected 依赖，用真实 source_ref、scope、版本链、冲突状态和候选置信度做决策。
 
+### Tri Answer Contract 小型线上结论
+
+`chain_tri_answer_contract` 是下一轮 eval-only 诊断 profile。它不扩大召回，也不改变生产链路，而是把现有 `tri_retrieval.fused_ids` 渲染成更明确的回答契约：
+
+- `must_use_memory_ids`：期望必须使用的目标证据。
+- `allowed_evidence`：允许模型使用的证据块。
+- `forbidden_memory_ids`：从三路候选中识别出的 should-not 证据。
+- `required_terms` / `required_term_groups`：答案应保留的关键表达。
+- `forbidden_terms`：答案不能输出的冲突或错误表达。
+
+真实 LLM 小矩阵结果：
+
+| profile | answer_rate | grounding_rate | forbidden_rate |
+| --- | ---: | ---: | ---: |
+| `chain_memory_base` | `35.0%` | `100.0%` | `7.5%` |
+| `chain_tri_retrieval` | `40.0%` | `100.0%` | `12.5%` |
+| `chain_tri_candidate_governance` | `52.5%` | `100.0%` | `0.0%` |
+| `chain_tri_answer_contract` | `75.0%` | `100.0%` | `12.5%` |
+
+治理结论：
+
+- `chain_tri_answer_contract` 最有效的原因是它把“证据已召回”进一步转成“模型必须如何使用证据”的结构化约束，直接命中三路召回的 post-grounding answer failure。
+- 原始 memory baseline 性能低，是因为基础注入没有 must-use、required terms 和 forbidden 边界，模型容易漏关键事实。
+- `chain_tri_retrieval` 性能不够好，是因为三路召回扩大了证据面，也扩大了噪声和 should-not 风险；没有 answer contract 时，模型会混用或弱化证据。
+- `chain_tri_candidate_governance` 的安全性最好，但它只过滤坏候选，不告诉模型如何组织答案，所以 answer_rate 没有达到 P6n 的目标。
+- 生产治理应组合两类能力：候选层用风险分级和 forbidden filtering 控制输入，回答层用 evidence contract / answer constraints 控制输出。当前 eval 结果不能直接上线，因为 answer contract 使用 fixture answer expectations。
+
+后续设计计划：
+
+1. 设计 `governed answer contract`：先按真实风险信号过滤和标记候选，再生成回答契约。
+2. 将候选治理从二值删除改为风险分层：delete、downgrade、requires_review、allow。
+3. 用 source_ref、scope、active version、conflict、superseded、lane contribution 和 rerank score 替代 fixture `should_recall_ids` / answer terms。
+4. 将 answer contract 拆成生产可解释字段：allowed evidence、current facts、stale/conflict warnings、insufficient-evidence fallback 和 forbidden boundary。
+5. 先以 eval-only / shadow 方式验证回答后校验和 retry，不直接改变生产 `AgentLoop` 或默认 prompt。
+
 ## 8. 最小可行版本
 
 ### MVP 1：写入门控 trace

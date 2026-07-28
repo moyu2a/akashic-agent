@@ -253,6 +253,21 @@ MemoryValueScorer
 
 下一步不是直接把 fixture contract 上线，而是把这个诊断结果翻译成生产安全的 evidence injection：用真实候选置信度、风险标签、source_ref、版本状态和回答后校验替代 fixture expected terms；同时保留 `chain_tri_candidate_governance` 的轻量 forbidden filtering，避免 answer contract 提升回答率时重新放大 forbidden 风险。
 
+本轮四种方案的对比解释：
+
+- 原始方案 `chain_memory_base`：grounding 为 `100.0%`，但 answer_rate 只有 `35.0%`，说明基础 memory 注入不足以让模型稳定保留关键术语和具体事实。
+- 三路召回 `chain_tri_retrieval`：answer_rate 提升到 `40.0%`，但 forbidden_rate 也到 `12.5%`，说明增加召回覆盖会带来候选噪声和错误证据风险。
+- 候选治理 `chain_tri_candidate_governance`：forbidden_rate 降到 `0.0%`，answer_rate 到 `52.5%`，说明输入侧安全门有效，但还缺少输出侧答案约束。
+- Answer Contract `chain_tri_answer_contract`：answer_rate 达到 `75.0%`，通过 P6n gate，说明现阶段最有效的方向是 post-retrieval answer control，而不是继续扩大召回。
+
+后续路线：
+
+1. 新增 eval-only `chain_tri_governed_answer_contract`，组合轻量 forbidden / conflict filtering 和生产安全 evidence contract。
+2. 把 strict filtering 改成风险分层，避免候选治理再次因为过度剪枝拉低 answer_rate。
+3. 将 fixture answer expectations 替换为生产可用信号：source_ref、scope、版本状态、冲突状态、候选置信度和 route trace。
+4. 增加回答后校验 shadow，记录是否使用 allowed evidence、是否遗漏关键事实、是否输出 forbidden terms。
+5. 用同一 40-case 小矩阵先跑 A/B，只有当 answer_rate 维持接近 `75.0%` 且 forbidden_rate 低于 `12.5%` 时，再考虑扩大真实 LLM run。
+
 ## Phase 6t：source_ref 写入质量治理
 
 ### 目的

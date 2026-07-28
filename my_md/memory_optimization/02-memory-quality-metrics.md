@@ -298,6 +298,43 @@ Phase 6b-4 已经补上第一版答案级证据使用调试：
 
 Conclusion: `chain_tri_answer_contract` passes the P6n gate because answer rate is above `55.0%`, grounding is exactly `100.0%`, and forbidden rate is at or below `15.0%`; because it uses fixture answer expectations, this is diagnostic/oracle-assisted evidence, not production readiness.
 
+#### Phase 6n 方案对比和问题诊断
+
+这轮数据说明，当前主要瓶颈已经不是“目标记忆能不能进入上下文”，而是“模型能不能按正确证据稳定回答”。四个 profile 的 grounding 都是 `100.0%`，但 answer_rate 从 `35.0%` 到 `75.0%` 差异很大，说明召回命中只是必要条件，不是充分条件。
+
+| 方案 | 做了什么 | 有效点 | 性能不足原因 |
+| --- | --- | --- | --- |
+| `chain_memory_base` | 使用原始 memory baseline 注入 | forbidden 较低，说明基础证据相对干净 | 没有三路补充证据，也没有 must-use / required terms 约束；模型容易泛化回答或漏掉关键术语，answer_rate 只有 `35.0%` |
+| `chain_tri_retrieval` | 使用三路召回 fused ids | 覆盖更强，answer_rate 比 base 提升到 `40.0%` | 扩大候选后也带入更多弱相关、旧信息或 should-not 风险；没有回答约束时，forbidden_rate 升到 `12.5%` |
+| `chain_tri_candidate_governance` | 在三路 fused ids 上做受保护候选过滤 | forbidden 控制最好，`0.0%`，且成本最低 | 它主要回答“不要用坏证据”，没有回答“必须如何用好证据”；过强过滤和缺少 answer guidance 让 answer_rate 只到 `52.5%` |
+| `chain_tri_answer_contract` | 在三路 fused ids 上渲染 must-use、allowed、forbidden 和 required/forbidden terms | 直接约束模型如何使用证据，answer_rate 达到 `75.0%`，grounding 保持 `100.0%` | forbidden 回到 `12.5%`，说明只做 answer contract 还需要配合 forbidden filtering；同时它使用 fixture answer expectations，只能作为诊断/上限验证 |
+
+核心发现：
+
+- 原始 memory baseline 的问题是证据注入表达太弱，不足以稳定命中答案规则。
+- 三路召回的问题是解决了覆盖，但同时提高了候选噪声和 forbidden 风险。
+- 候选治理的问题是安全性有效，但单独过滤不能保证模型用对剩余证据。
+- Answer Contract 最有效，是因为它正好处理 post-retrieval answer control：告诉模型必须使用哪些证据、不要使用哪些证据、答案必须保留哪些关键表达。
+
+后续生产化不能直接使用 fixture `answer_expectations`。可转化的方向是：用真实候选置信度、risk tag、source_ref 可回源性、版本状态、scope、冲突状态和回答后校验来生成生产安全的 evidence contract；同时保留轻量 forbidden filtering，避免 answer_rate 提升时 forbidden 风险重新放大。
+
+#### Phase 6n 后续改进计划
+
+下一步主线是 `chain_tri_governed_answer_contract`，目标是把 candidate governance 的 forbidden 控制和 answer contract 的回答约束组合起来：
+
+1. 输入侧先做候选风险分层：高风险候选删除，中风险候选降权或标记 `requires_review`，低风险候选保留并进入 contract。
+2. 风险信号不再依赖 fixture oracle，而来自真实可用字段：source_ref 可回源性、scope 匹配、active version 状态、superseded / conflict 标记、候选分数、lane 来源和 route decision。
+3. 输出侧生成生产安全 evidence contract：列出 allowed evidence、likely relevant evidence、stale/conflict evidence、current active version 和回答时必须遵守的证据边界。
+4. 增加回答后校验 shadow：检查答案是否遗漏关键证据、是否出现 forbidden terms、是否引用 superseded / conflict memory，必要时触发更严格的 retry 方案。
+5. 评测先做同一 `40` unique case 小矩阵，对比 `chain_tri_retrieval`、`chain_tri_candidate_governance`、`chain_tri_answer_contract` 和新组合 profile。
+
+下一轮成功门槛：
+
+- answer_rate 接近或超过 `75.0%`；
+- grounding_rate 保持 `100.0%`；
+- forbidden_rate 低于 `12.5%`，目标是接近 candidate governance 的 `0.0%`；
+- avg_tokens 不出现明显膨胀。
+
 ### Phase 6c-1 已建立的离线 uplift proxy report
 
 Phase 6c-1 不是答案质量评测，而是把现有 shadow trace 转成统一的对照指标。它输出：
