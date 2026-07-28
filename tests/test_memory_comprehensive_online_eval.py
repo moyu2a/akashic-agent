@@ -40,6 +40,8 @@ class ComprehensiveScriptedProvider:
         )
         if "memory_id=" not in text:
             answer = "没有可用记忆，无法确认。"
+        elif "Answer Contract: chain_tri_answer_contract" in text:
+            answer = "根据 Answer Contract，应使用 must_use_memory_ids 中的证据回答，并避免 forbidden_terms。"
         elif "RRF" in text:
             answer = "三路召回使用 RRF 融合排序，并用中文回答。"
         elif "NetworkX" in text:
@@ -510,6 +512,46 @@ def test_tri_answer_contract_profile_injects_contract_block(tmp_path: Path) -> N
     assert "allowed_evidence:" in result.text_block
     assert "forbidden_memory_ids:" in result.text_block
     assert result.raw["evidence_source"] == "tri_answer_contract.allowed_evidence_ids"
+
+
+def test_tri_answer_contract_profile_report_records_eval_only_metadata(
+    tmp_path: Path,
+) -> None:
+    case = build_quantitative_eval_cases(
+        case_set="common",
+        limit=1,
+        case_pack="standard",
+    )[0]
+    specs = build_comprehensive_run_specs(
+        [case],
+        profiles=("chain_tri_answer_contract",),
+        prompt_variants=("baseline",),
+        repeats=1,
+    )
+
+    report = asyncio.run(
+        run_comprehensive_online_eval(
+            specs,
+            tmp_path / "workspace",
+            ComprehensiveScriptedProvider(),
+            model="scripted",
+            real_llm_enabled=False,
+        )
+    )
+
+    metadata = report.metrics["profile_metadata"]["chain_tri_answer_contract"]
+    assert metadata["eval_only"] is True
+    assert metadata["diagnostic_answer_contract"] is True
+    assert metadata["uses_fixture_answer_expectations"] is True
+    assert report.metrics["profile_summaries"]["chain_tri_answer_contract"][
+        "case_count"
+    ] == 1
+
+    md_path = tmp_path / "report.md"
+    write_comprehensive_online_markdown(report, md_path)
+    markdown = md_path.read_text(encoding="utf-8")
+    assert "diagnostic_answer_contract" in markdown
+    assert "uses_fixture_answer_expectations" in markdown
 
 
 def test_optional_tri_candidate_governance_profile_is_visible_in_markdown(
