@@ -1628,6 +1628,77 @@ Phase 6m 之后，三路召回和图谱召回增加了“场景路由 + 候选�
 - 后续要让图谱指标更可信，需要补图谱专用 case 或让 graph profile 输出可区分证据，再看回答命中、证据命中、噪声和上下文成本。
 - 这轮不能替代完整矩阵，也不能作为生产自然流量结论；它只说明路由治理后的链路值得继续做更大规模 fresh rerun。
 
+### Phase 6m 三路召回失败归因指标
+
+这组指标基于 `route_governance_small_online_v1` 的小型真实 LLM fresh rerun，不重新调用 LLM，只读取已有 `40` 个 `chain_tri_retrieval` case 的评测记录。报告路径：
+
+- `my_md/memory_optimization/eval_reports/tri_retrieval_failure_attribution_v1/tri_retrieval_failure_attribution.json`
+- `my_md/memory_optimization/eval_reports/tri_retrieval_failure_attribution_v1/tri_retrieval_failure_attribution.md`
+
+指标定义：
+
+| 指标 | 含义 |
+| --- | --- |
+| `tri_answer_fail_count` | 三路召回 profile 中回答规则未通过的 case 数 |
+| `tri_grounded_answer_fail_count_any` | grounding 已通过但回答未通过的 case 数，包含 forbidden 失败，代表证据已到但回答未稳定用对 |
+| `tri_grounded_non_forbidden_answer_fail_count` | grounding 已通过、回答未通过、且没有 forbidden 的 case 数，代表更纯粹的答案规则/证据使用问题 |
+| `tri_grounding_fail_count` | 三路召回真正没有命中期望记忆的 case 数 |
+| `tri_forbidden_fail_count` | 三路召回答案出现 forbidden 的 case 数 |
+| `failure_bucket_counts` | 互斥失败桶计数，所有 bucket 数量之和必须等于三路 case 数 |
+| `failure_bucket_code_counts` | 每个失败桶下的 failure code 分布，用于区分 forbidden、缺少答案词、缺少答案词组等 |
+| `pass_pattern_counts` | 原始 memory / 三路召回 / 后续累计 profile 的通过失败组合分布 |
+| `baseline_passed_but_tri_failed_count` | 原始 memory 通过但三路召回失败，代表三路引入回退 |
+| `baseline_failed_but_tri_passed_count` | 原始 memory 失败但三路召回通过，代表三路救活 |
+| `tri_failed_but_rerank_passed_count` | 三路失败但后续累计 `chain_rerank_injection` profile 通过，代表后续组合链路可能有效，不代表 rerank 单因素因果 |
+| `avg_fixture_evidence_count_delta_vs_base` | 三路 fixture evidence 数量相对原始 memory 的平均变化，只是 offline proxy，不是线上真实上下文证据数 |
+
+本轮实际结果：
+
+| 指标 | 数值 |
+| --- | ---: |
+| `tri_case_count` | `40` |
+| `tri_answer_fail_count` | `23` |
+| `tri_answer_fail_rate` | `57.5%` |
+| `tri_grounded_answer_fail_count_any` | `23` |
+| `tri_grounded_non_forbidden_answer_fail_count` | `18` |
+| `tri_grounding_fail_count` | `0` |
+| `tri_forbidden_fail_count` | `5` |
+| `baseline_passed_but_tri_failed_count` | `5` |
+| `baseline_failed_but_tri_passed_count` | `9` |
+| `tri_failed_but_rerank_passed_count` | `7` |
+| `avg_fixture_tri_evidence_id_count` | `4.95` |
+| `avg_fixture_evidence_count_delta_vs_base` | `0.375` |
+| `fixture_rerank_reduced_evidence_count_cases` | `34` |
+
+互斥失败桶：
+
+| bucket | case 数 | 含义 |
+| --- | ---: | --- |
+| `passed` | `17` | 三路召回答案通过 |
+| `grounded_answer_rule_miss` | `18` | 期望记忆已 grounding，但回答没有稳定命中答案规则 |
+| `forbidden_answer_failure` | `5` | 期望记忆已 grounding，但回答出现 forbidden 内容 |
+
+通过/失败组合：
+
+| pass pattern | case 数 | 解释 |
+| --- | ---: | --- |
+| `base_fail_tri_fail_rerank_fail` | `12` | 基线、三路和后续累计 profile 都没通过 |
+| `base_fail_tri_fail_rerank_pass` | `6` | 三路仍失败，但后续累计 profile 通过 |
+| `base_fail_tri_pass_rerank_fail` | `5` | 三路救活基线，但后续累计 profile 回退 |
+| `base_fail_tri_pass_rerank_pass` | `4` | 三路救活，后续累计 profile 也通过 |
+| `base_pass_tri_fail_rerank_fail` | `4` | 基线通过，三路和后续累计 profile 都回退 |
+| `base_pass_tri_fail_rerank_pass` | `1` | 基线通过、三路回退，但后续累计 profile 救回 |
+| `base_pass_tri_pass_rerank_fail` | `1` | 基线和三路通过，后续累计 profile 回退 |
+| `base_pass_tri_pass_rerank_pass` | `7` | 三个 profile 都通过 |
+
+归因结论：
+
+- 三路召回这轮的主要问题不是“没有召回到目标记忆”：`tri_grounding_fail_count = 0`。
+- `23` 个失败全部是 grounding 之后的失败，其中 `18` 个是证据使用/答案规则未命中，`5` 个是 forbidden 答案失败。
+- 三路召回同时存在正负作用：`9` 个 case 救活原始记忆基线，`5` 个 case 让原本通过的基线回退。
+- `7` 个三路失败 case 被后续累计 `chain_rerank_injection` profile 救活，说明下一步应验证后续组合链路，但不能把这解释成 rerank 单因素因果。
+- `fixture_*` 字段只用于估算候选规模和去噪方向，不代表真实线上 prompt 中观察到的 memory id 数量。
+
 ## Phase 3 可输出的指标
 
 ### 召回重排

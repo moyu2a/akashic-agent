@@ -1,5 +1,61 @@
 # Document RAG P10a Progress
 
+## 2026-07-28 Memory Tri Retrieval Failure Attribution
+
+- User asked to execute the reviewed plan for tri retrieval failure attribution on `memory-next`, without syncing remote/main first.
+- Scope stayed analysis-only:
+  - no real LLM call;
+  - no production `AgentLoop`, `Reasoner`, `ToolExecutor`, memory write, retrieval, or prompt change;
+  - reports exclude raw prompt, raw memory summary, session text, and full answers.
+- Added `memory2/eval_tri_retrieval_failure_attribution.py`:
+  - pairs `chain_tri_retrieval` rows with matching `chain_memory_base` and `chain_rerank_injection` rows by case id, prompt variant, and repeat index;
+  - classifies tri rows into mutually exclusive buckets: `passed`, `grounding_failure`, `forbidden_answer_failure`, `grounded_answer_rule_miss`, `infra_failure`;
+  - separates `tri_grounded_answer_fail_count_any` from `tri_grounded_non_forbidden_answer_fail_count`;
+  - records pass patterns and failure-code cross tables;
+  - adds `fixture_*` evidence-count proxy fields from eval fixtures, explicitly not observed online prompt ids.
+- Added `scripts/run_memory_tri_retrieval_failure_attribution.py`.
+- Added `tests/test_memory_tri_retrieval_failure_attribution.py`.
+- Generated report:
+  - `my_md/memory_optimization/eval_reports/tri_retrieval_failure_attribution_v1/tri_retrieval_failure_attribution.json`;
+  - `my_md/memory_optimization/eval_reports/tri_retrieval_failure_attribution_v1/tri_retrieval_failure_attribution.md`.
+- Report integrity checks passed:
+  - `tri_case_count = 40`;
+  - `tri_answer_fail_count = 23`;
+  - `tri_grounded_answer_fail_count_any = 23`;
+  - `tri_grounded_non_forbidden_answer_fail_count = 18`;
+  - `tri_grounding_fail_count = 0`;
+  - `tri_forbidden_fail_count = 5`;
+  - failure bucket counts sum to `40`;
+  - answer-failure buckets sum to `23`;
+  - `case_rows = 40`.
+- Main data:
+  - failure buckets: `passed = 17`, `grounded_answer_rule_miss = 18`, `forbidden_answer_failure = 5`;
+  - pass patterns: `base_fail_tri_fail_rerank_fail = 12`, `base_fail_tri_fail_rerank_pass = 6`, `base_fail_tri_pass_rerank_fail = 5`, `base_fail_tri_pass_rerank_pass = 4`, `base_pass_tri_fail_rerank_fail = 4`, `base_pass_tri_fail_rerank_pass = 1`, `base_pass_tri_pass_rerank_fail = 1`, `base_pass_tri_pass_rerank_pass = 7`;
+  - `baseline_passed_but_tri_failed_count = 5`;
+  - `baseline_failed_but_tri_passed_count = 9`;
+  - `tri_failed_but_rerank_passed_count = 7`;
+  - `avg_fixture_tri_evidence_id_count = 4.95`;
+  - `avg_fixture_evidence_count_delta_vs_base = 0.375`;
+  - `fixture_rerank_reduced_evidence_count_cases = 34`.
+- Current conclusion:
+  - tri retrieval's small-online failure is not a recall miss problem because `tri_grounding_fail_count = 0`;
+  - the dominant issue is after grounding: evidence use, candidate noise, answer constraints, and forbidden governance;
+  - tri retrieval can rescue baseline (`9` cases) but also regresses baseline (`5` cases), so it needs scene routing and candidate governance rather than global default-on;
+  - `tri_failed_but_rerank_passed_count = 7` indicates later cumulative profile rescue potential, not rerank single-factor causality.
+- Updated docs:
+  - `my_md/memory_optimization/README.md`;
+  - `my_md/memory_optimization/02-memory-quality-metrics.md`;
+  - `my_md/memory_optimization/04-memory-plugin-experiment-roadmap.md`.
+- Verification:
+  - `tests/test_memory_tri_retrieval_failure_attribution.py tests/test_memory_online_failure_attribution.py tests/test_memory_comprehensive_online_eval.py` -> `24 passed in 8.80s`;
+  - `compileall -q memory2 scripts tests` -> passed;
+  - `git diff --check` -> passed.
+- Commit:
+  - local commit created;
+  - not pushed.
+- Remaining:
+  - next technical step should be a small targeted validation around candidate denoising / forbidden filtering / evidence injection for the tri route, not another blind recall expansion.
+
 ## 2026-07-27 Memory Tri Retrieval Route Governance
 
 - User asked to execute the reviewed plan for tri retrieval governance after the real online answer-quality matrix showed that tri/graph retrieval are not safe global defaults.

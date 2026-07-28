@@ -591,6 +591,52 @@ my_md/memory_optimization/eval_reports/memory_route_governance_eval.md
 - 图谱召回本轮没有提升，但当前 answer-quality fixture 中 `chain_graph_retrieval` 和 `chain_tri_retrieval` 的 evidence ids 没有充分隔离，所以不能把这行解释为“图谱能力无效”；后续需要补图谱专用 case 或让 graph profile 输出可区分证据，再优化图谱触发条件、图谱候选去噪和证据注入约束。
 - 重排与注入治理是本轮最稳的增强路径，后续扩测应优先验证 `route + rerank/injection` 的组合。
 
+#### 三路召回失败归因
+
+在小型真实 LLM fresh rerun 之后，新增了一个三路召回失败归因报告。这个报告回答的问题不是“有没有召回”，而是“召回后为什么没有答对”。它只读取已有 `route_governance_small_online_v1` 报告，不重新调用 LLM，不写原始 prompt、session 文本、memory summary 或完整回答，也不修改生产 `AgentLoop`、`Reasoner`、`ToolExecutor`、真实召回、真实写入或 prompt。
+
+报告路径：
+
+- `my_md/memory_optimization/eval_reports/tri_retrieval_failure_attribution_v1/tri_retrieval_failure_attribution.json`
+- `my_md/memory_optimization/eval_reports/tri_retrieval_failure_attribution_v1/tri_retrieval_failure_attribution.md`
+
+核心数据：
+
+| 指标 | 数值 | 解释 |
+| --- | ---: | --- |
+| `tri_case_count` | `40` | 本轮三路召回 case 数 |
+| `tri_answer_fail_count` | `23` | 三路回答未通过数 |
+| `tri_grounding_fail_count` | `0` | 目标记忆未 grounding 的 case 数 |
+| `tri_grounded_answer_fail_count_any` | `23` | 证据已到但回答未通过，包含 forbidden |
+| `tri_grounded_non_forbidden_answer_fail_count` | `18` | 证据已到、没有 forbidden、但答案规则未命中 |
+| `tri_forbidden_fail_count` | `5` | 三路回答出现 forbidden 的 case 数 |
+| `baseline_passed_but_tri_failed_count` | `5` | 原始记忆通过但三路回退 |
+| `baseline_failed_but_tri_passed_count` | `9` | 原始记忆失败但三路救活 |
+| `tri_failed_but_rerank_passed_count` | `7` | 三路失败但后续累计 profile 通过 |
+
+互斥失败桶：
+
+| bucket | case 数 | 结论 |
+| --- | ---: | --- |
+| `passed` | `17` | 三路召回答案通过 |
+| `grounded_answer_rule_miss` | `18` | 主要瓶颈：证据进入上下文，但模型没有稳定用对 |
+| `forbidden_answer_failure` | `5` | 需要继续做 forbidden 过滤和冲突/旧信息控制 |
+
+本轮结论：
+
+- `tri_grounding_fail_count = 0`，所以三路召回当前的主要瓶颈已经不是召回覆盖。
+- 失败主要发生在召回之后：证据使用、候选噪声、排序、注入治理、forbidden 控制和回答约束。
+- `baseline_failed_but_tri_passed_count = 9` 说明三路召回确实有救活能力；`baseline_passed_but_tri_failed_count = 5` 说明它也会引入回退，不能全局无脑打开。
+- `tri_failed_but_rerank_passed_count = 7` 只表示后续累计 `chain_rerank_injection` profile 可能救活部分 case，不证明 rerank 是单一因果来源。
+- 当前 `40` case 的 category 粒度接近一类一个 common 和一个 hard 样本，不能把单个 category 失败解释成统计集中；下一步应优先看 failure bucket、pass pattern 和 failure-code 交叉表，再做专项小型真实 LLM 复测。
+
+下一步决策规则：
+
+- 如果三路仍出现 `grounded_answer_rule_miss`：优先做证据注入模板、答案约束和候选重排。
+- 如果 `forbidden_answer_failure` 上升：优先做 forbidden 过滤、旧版本过滤、冲突候选隔离。
+- 如果 `baseline_passed_but_tri_failed_count` 上升：优先做场景路由和候选去噪，避免三路在不适合的场景覆盖原始记忆基线。
+- 如果 `tri_failed_but_rerank_passed_count` 较高：设计 `route + tri + graph/rerank/injection` 累计组合验证，但报告中必须写清它不是单因素因果。
+
 ### 写入价值与睡眠巩固的专项评测
 
 本轮 Phase 6e 是 answer-level 评测，它天然更偏向检索、图谱、重排和注入治理。写入价值和睡眠巩固不应该只用这张表判断强弱。

@@ -1,5 +1,58 @@
 # Document RAG P10a Intent Preload Plan
 
+## 2026-07-28 Memory Tri Retrieval Failure Attribution
+
+Goal: explain why `chain_tri_retrieval` in the route-governed small online run has `100%` grounding but only `42.5%` answer pass rate, without rerunning real LLM or changing production behavior.
+
+1. Add tri retrieval failure attribution module and tests - complete
+2. Add report writers and CLI wrapper - complete
+3. Generate `tri_retrieval_failure_attribution_v1` from `route_governance_small_online_v1` - complete
+4. Update memory optimization docs with metrics, result, and next decisions - complete
+5. Run focused regression, compile, and diff checks - complete
+6. Commit locally without push - complete
+
+Inputs:
+
+- `my_md/memory_optimization/eval_reports/route_governance_small_online_v1/memory_comprehensive_online_eval.json`
+
+Outputs:
+
+- `my_md/memory_optimization/eval_reports/tri_retrieval_failure_attribution_v1/tri_retrieval_failure_attribution.json`
+- `my_md/memory_optimization/eval_reports/tri_retrieval_failure_attribution_v1/tri_retrieval_failure_attribution.md`
+
+Boundary:
+
+- No real LLM rerun.
+- No production `AgentLoop`, `Reasoner`, `ToolExecutor`, memory write, retrieval, or prompt change.
+- Reports omit raw prompt, raw memory summary, session text, and full answers.
+
+Current result:
+
+- `tri_case_count = 40`
+- `tri_answer_fail_count = 23`
+- `tri_grounding_fail_count = 0`
+- `tri_grounded_answer_fail_count_any = 23`
+- `tri_grounded_non_forbidden_answer_fail_count = 18`
+- `tri_forbidden_fail_count = 5`
+- `baseline_passed_but_tri_failed_count = 5`
+- `baseline_failed_but_tri_passed_count = 9`
+- `tri_failed_but_rerank_passed_count = 7`
+
+Current conclusion:
+
+- Tri retrieval's current small-online bottleneck is not recall coverage. The failures are after grounding: evidence use, noise, answer constraints, and forbidden governance.
+- Next decision: if later cumulative profile rescue remains high, validate `route + tri + graph/rerank/injection`; otherwise prioritize candidate denoising, forbidden filtering, and scenario routing.
+
+Verification:
+
+- `tests/test_memory_tri_retrieval_failure_attribution.py tests/test_memory_online_failure_attribution.py tests/test_memory_comprehensive_online_eval.py` -> `24 passed`.
+- `compileall -q memory2 scripts tests` -> passed.
+- `git diff --check` -> passed.
+
+Commit:
+
+- Local commit created; not pushed.
+
 ## 2026-07-27 Memory Tri Retrieval Route Governance
 
 Goal: turn tri retrieval / graph retrieval from global always-on enhancements into scene-routed candidate governance, while preserving the existing AgentLoop, Reasoner, ToolExecutor, production write path, and old `retrieve()` return contract.
