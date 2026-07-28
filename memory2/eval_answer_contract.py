@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
+from typing import Any
 
 from memory2.eval_quantitative_cases import EvalCase
 from memory2.eval_quantitative_uplift import _family_trace_for_case
@@ -29,6 +31,38 @@ class AnswerContract:
     raw_answer: str = ""
 
 
+@dataclass(frozen=True)
+class ProductionEvidenceContract:
+    profile_name: str
+    diagnostic_eval_only: bool
+    production_safe: bool
+    uses_fixture_answer_expectations: bool
+    candidate_governance_mode: str
+    allowed_evidence: tuple[str, ...]
+    likely_relevant_evidence: tuple[str, ...]
+    stale_warning: tuple[str, ...]
+    conflict_warning: tuple[str, ...]
+    active_version: tuple[str, ...]
+    forbidden_boundary: tuple[str, ...]
+    allowed_evidence_ids: tuple[str, ...]
+    likely_relevant_evidence_ids: tuple[str, ...]
+    downgrade_ids: tuple[str, ...]
+    requires_review_ids: tuple[str, ...]
+    stale_warning_ids: tuple[str, ...]
+    conflict_warning_ids: tuple[str, ...]
+    active_version_ids: tuple[str, ...]
+    insufficient_evidence_ids: tuple[str, ...]
+    insufficient_evidence_fallback: bool
+    forbidden_boundary_ids: tuple[str, ...]
+    deleted_evidence_ids: tuple[str, ...]
+    required_terms: tuple[str, ...] = ()
+    required_term_groups: tuple[tuple[str, ...], ...] = ()
+    forbidden_terms: tuple[str, ...] = ()
+    evidence_summaries: tuple[tuple[str, str], ...] = ()
+    raw_prompt: str = ""
+    raw_answer: str = ""
+
+
 def build_tri_answer_contract(case: EvalCase) -> AnswerContract:
     return _build_answer_contract(
         case,
@@ -45,6 +79,90 @@ def build_governed_tri_answer_contract(
         case,
         profile_name=GOVERNED_TRI_ANSWER_CONTRACT_PROFILE,
         governed_evidence_ids=governed_evidence_ids,
+    )
+
+
+def build_production_governed_tri_evidence_contract(
+    case: EvalCase,
+    governed_trace_info: object,
+) -> ProductionEvidenceContract:
+    trace_info = (
+        dict(governed_trace_info) if isinstance(governed_trace_info, Mapping) else {}
+    )
+    trace = trace_info.get("trace", {})
+    trace = dict(trace) if isinstance(trace, Mapping) else {}
+    allowed_ids = _string_tuple(trace_info.get("ids", ()))
+    tier_records = _tier_records_by_id(trace.get("candidate_risk_tiers", ()))
+    by_id = _memory_items_by_id(case)
+
+    downgrade_ids = _ids_with_tier(allowed_ids, tier_records, "downgrade")
+    requires_review_ids = _ids_with_tier(
+        allowed_ids,
+        tier_records,
+        "requires_review",
+    )
+    conflict_warning_ids = _ids_with_risk(
+        allowed_ids,
+        tier_records,
+        "conflict_candidate",
+    )
+    insufficient_evidence_ids = tuple(
+        item_id
+        for item_id in allowed_ids
+        if _record_has_risk(tier_records.get(item_id, {}), "insufficient_evidence")
+        or _item_truthy(by_id.get(item_id, {}), "insufficient_evidence")
+    )
+    deleted_ids = tuple(
+        item_id
+        for item_id, record in tier_records.items()
+        if str(record.get("tier") or "") == "delete"
+    )
+    forbidden_boundary_ids = tuple(
+        item_id
+        for item_id in deleted_ids
+        if _record_has_risk(tier_records.get(item_id, {}), "forbidden_candidate")
+        or _item_truthy(by_id.get(item_id, {}), "forbidden")
+        or _item_truthy(by_id.get(item_id, {}), "forbidden_candidate")
+    )
+    stale_warning_ids = tuple(
+        item_id
+        for item_id in deleted_ids
+        if _record_has_risk(tier_records.get(item_id, {}), "superseded_candidate")
+        or str(by_id.get(item_id, {}).get("status") or "").lower() == "superseded"
+    )
+    active_version_ids = tuple(
+        item_id
+        for item_id in allowed_ids
+        if str(by_id.get(item_id, {}).get("status") or "active").lower() == "active"
+    )
+    likely_relevant_ids = tuple(
+        item_id for item_id in allowed_ids if item_id not in requires_review_ids
+    )
+    return ProductionEvidenceContract(
+        profile_name=GOVERNED_TRI_ANSWER_CONTRACT_PROFILE,
+        diagnostic_eval_only=True,
+        production_safe=True,
+        uses_fixture_answer_expectations=False,
+        candidate_governance_mode=str(trace.get("candidate_governance_mode") or "tiered"),
+        allowed_evidence=allowed_ids,
+        likely_relevant_evidence=likely_relevant_ids,
+        stale_warning=stale_warning_ids,
+        conflict_warning=conflict_warning_ids,
+        active_version=active_version_ids,
+        forbidden_boundary=forbidden_boundary_ids,
+        allowed_evidence_ids=allowed_ids,
+        likely_relevant_evidence_ids=likely_relevant_ids,
+        downgrade_ids=downgrade_ids,
+        requires_review_ids=requires_review_ids,
+        stale_warning_ids=stale_warning_ids,
+        conflict_warning_ids=conflict_warning_ids,
+        active_version_ids=active_version_ids,
+        insufficient_evidence_ids=insufficient_evidence_ids,
+        insufficient_evidence_fallback=not allowed_ids
+        or bool(insufficient_evidence_ids),
+        forbidden_boundary_ids=forbidden_boundary_ids,
+        deleted_evidence_ids=deleted_ids,
+        evidence_summaries=_summaries_for_ids(case, allowed_ids),
     )
 
 
@@ -129,6 +247,42 @@ def render_answer_contract_block(contract: AnswerContract) -> str:
     return "\n".join(lines)
 
 
+def render_production_evidence_contract_block(
+    contract: ProductionEvidenceContract,
+) -> str:
+    lines = [
+        f"Evidence Contract: {contract.profile_name}",
+        "diagnostic_eval_only=true",
+        "production_safe=true",
+        "请只根据 allowed_evidence 回答；如果 insufficient_evidence_fallback=true，请说明证据不足。",
+        "不要使用 forbidden_boundary_ids 中的记忆；stale_warning_ids 和 conflict_warning_ids 只能作为风险提示。",
+        "allowed_evidence: " + ", ".join(contract.allowed_evidence),
+        "likely_relevant_evidence: " + ", ".join(contract.likely_relevant_evidence),
+        "stale_warning: " + ", ".join(contract.stale_warning),
+        "conflict_warning: " + ", ".join(contract.conflict_warning),
+        "active_version: " + ", ".join(contract.active_version),
+        "forbidden_boundary: " + ", ".join(contract.forbidden_boundary),
+        "allowed_evidence_ids: " + ", ".join(contract.allowed_evidence_ids),
+        "likely_relevant_evidence_ids: "
+        + ", ".join(contract.likely_relevant_evidence_ids),
+        "downgrade_ids: " + ", ".join(contract.downgrade_ids),
+        "requires_review_ids: " + ", ".join(contract.requires_review_ids),
+        "stale_warning_ids: " + ", ".join(contract.stale_warning_ids),
+        "conflict_warning_ids: " + ", ".join(contract.conflict_warning_ids),
+        "active_version_ids: " + ", ".join(contract.active_version_ids),
+        "insufficient_evidence_ids: "
+        + ", ".join(contract.insufficient_evidence_ids),
+        "insufficient_evidence_fallback: "
+        + ("true" if contract.insufficient_evidence_fallback else "false"),
+        "forbidden_boundary_ids: " + ", ".join(contract.forbidden_boundary_ids),
+        "deleted_evidence_ids: " + ", ".join(contract.deleted_evidence_ids),
+        "allowed_evidence:",
+    ]
+    for item_id, summary in contract.evidence_summaries:
+        lines.append(f"- memory_id={item_id}; summary={summary}")
+    return "\n".join(lines)
+
+
 def _summaries_for_ids(case: EvalCase, ids: tuple[str, ...]) -> tuple[tuple[str, str], ...]:
     by_id = {
         str(item.get("id") or item.get("memory_id") or ""): item
@@ -141,6 +295,60 @@ def _summaries_for_ids(case: EvalCase, ids: tuple[str, ...]) -> tuple[tuple[str,
         summary = str(item.get("summary") or item.get("content") or "")
         rows.append((item_id, _compact(summary)))
     return tuple(rows)
+
+
+def _memory_items_by_id(case: EvalCase) -> dict[str, dict[str, Any]]:
+    return {
+        str(item.get("id") or item.get("memory_id") or ""): dict(item)
+        for item in case.setup.get("memory_items", ())
+        if isinstance(item, Mapping)
+    }
+
+
+def _tier_records_by_id(records: object) -> dict[str, dict[str, Any]]:
+    if not isinstance(records, (list, tuple)):
+        return {}
+    result: dict[str, dict[str, Any]] = {}
+    for record in records:
+        if not isinstance(record, Mapping):
+            continue
+        candidate_id = str(record.get("candidate_id") or "")
+        if candidate_id:
+            result[candidate_id] = dict(record)
+    return result
+
+
+def _ids_with_tier(
+    ids: tuple[str, ...],
+    records: dict[str, dict[str, Any]],
+    tier: str,
+) -> tuple[str, ...]:
+    return tuple(
+        item_id
+        for item_id in ids
+        if str(records.get(item_id, {}).get("tier") or "allow") == tier
+    )
+
+
+def _ids_with_risk(
+    ids: tuple[str, ...],
+    records: dict[str, dict[str, Any]],
+    risk: str,
+) -> tuple[str, ...]:
+    return tuple(
+        item_id for item_id in ids if _record_has_risk(records.get(item_id, {}), risk)
+    )
+
+
+def _record_has_risk(record: Mapping[str, Any], risk: str) -> bool:
+    risks = record.get("risks", ())
+    return isinstance(risks, (list, tuple, set)) and risk in {
+        str(item) for item in risks
+    }
+
+
+def _item_truthy(item: Mapping[str, Any], key: str) -> bool:
+    return item.get(key) is True
 
 
 def _ids_from_trace(case: EvalCase, family_name: str, key: str) -> tuple[str, ...]:

@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+from dataclasses import replace
+
 from memory2.eval_answer_contract import (
     build_governed_tri_answer_contract,
+    build_production_governed_tri_evidence_contract,
     build_tri_answer_contract,
     render_answer_contract_block,
+    render_production_evidence_contract_block,
     tri_governed_answer_contract_evidence_ids,
     tri_answer_contract_evidence_ids,
 )
@@ -138,3 +142,175 @@ def test_render_governed_contract_uses_profile_name() -> None:
     assert "must_use_memory_ids" in text
     assert "governance_dropped_memory_ids" in text
     assert "allowed_evidence:" in text
+
+
+def test_production_governed_contract_uses_tiered_metadata_not_answer_expectations() -> None:
+    case = _case_with_should_not_in_tri()
+    governed_trace_info = {
+        "ids": ("target", "weak", "conflict", "gap"),
+        "trace": {
+            "candidate_governance_mode": "tiered",
+            "candidate_risk_tiers": [
+                {
+                    "candidate_id": "target",
+                    "tier": "allow",
+                    "risks": (),
+                    "lane": "semantic",
+                },
+                {
+                    "candidate_id": "weak",
+                    "tier": "downgrade",
+                    "risks": ("weak_source_ref",),
+                    "lane": "semantic",
+                },
+                {
+                    "candidate_id": "conflict",
+                    "tier": "requires_review",
+                    "risks": ("conflict_candidate",),
+                    "lane": "semantic",
+                },
+                {
+                    "candidate_id": "gap",
+                    "tier": "requires_review",
+                    "risks": ("insufficient_evidence",),
+                    "lane": "semantic",
+                },
+                {
+                    "candidate_id": "blocked",
+                    "tier": "delete",
+                    "risks": ("forbidden_candidate",),
+                    "lane": "semantic",
+                },
+                {
+                    "candidate_id": "old",
+                    "tier": "delete",
+                    "risks": ("superseded_candidate",),
+                    "lane": "semantic",
+                },
+            ],
+        },
+    }
+    case = replace(
+        case,
+        setup={
+            **case.setup,
+            "memory_items": [
+                {
+                    "id": "target",
+                    "summary": "active target evidence",
+                    "status": "active",
+                    "source_ref": "telegram:1:1",
+                },
+                {
+                    "id": "weak",
+                    "summary": "weak source evidence",
+                    "status": "active",
+                    "source_ref": "session:telegram:1",
+                },
+                {
+                    "id": "conflict",
+                    "summary": "conflicting evidence",
+                    "status": "active",
+                    "source_ref": "telegram:1:2",
+                    "conflict": True,
+                },
+                {
+                    "id": "gap",
+                    "summary": "insufficient evidence",
+                    "status": "active",
+                    "source_ref": "telegram:1:3",
+                    "insufficient_evidence": True,
+                },
+                {
+                    "id": "blocked",
+                    "summary": "blocked evidence",
+                    "status": "active",
+                    "source_ref": "telegram:1:4",
+                    "forbidden": True,
+                },
+                {
+                    "id": "old",
+                    "summary": "old superseded evidence",
+                    "status": "superseded",
+                    "source_ref": "telegram:1:5",
+                },
+            ],
+        },
+        expectations={
+            **case.expectations,
+            "answer_expectations": {
+                "expected_answer_contains": ["ORACLE_TERM"],
+                "expected_answer_contains_any": [["ORACLE_GROUP"]],
+                "forbidden_answer_contains": ["ORACLE_FORBIDDEN"],
+            },
+        },
+    )
+
+    contract = build_production_governed_tri_evidence_contract(
+        case,
+        governed_trace_info,
+    )
+
+    assert contract.profile_name == "chain_tri_governed_answer_contract"
+    assert contract.production_safe is True
+    assert contract.uses_fixture_answer_expectations is False
+    assert contract.allowed_evidence == ("target", "weak", "conflict", "gap")
+    assert contract.likely_relevant_evidence == ("target", "weak")
+    assert contract.stale_warning == ("old",)
+    assert contract.conflict_warning == ("conflict",)
+    assert contract.active_version == ("target", "weak", "conflict", "gap")
+    assert contract.forbidden_boundary == ("blocked",)
+    assert contract.allowed_evidence_ids == ("target", "weak", "conflict", "gap")
+    assert contract.likely_relevant_evidence_ids == ("target", "weak")
+    assert contract.downgrade_ids == ("weak",)
+    assert contract.requires_review_ids == ("conflict", "gap")
+    assert contract.conflict_warning_ids == ("conflict",)
+    assert contract.insufficient_evidence_ids == ("gap",)
+    assert contract.insufficient_evidence_fallback is True
+    assert contract.forbidden_boundary_ids == ("blocked",)
+    assert contract.stale_warning_ids == ("old",)
+    assert contract.active_version_ids == ("target", "weak", "conflict", "gap")
+    assert contract.required_terms == ()
+    assert contract.required_term_groups == ()
+    assert contract.forbidden_terms == ()
+
+
+def test_render_production_evidence_contract_is_structured_and_not_oracle_terms() -> None:
+    case = _case_with_should_not_in_tri()
+    case = replace(
+        case,
+        expectations={
+            **case.expectations,
+            "answer_expectations": {
+                "expected_answer_contains": ["ORACLE_TERM"],
+                "expected_answer_contains_any": [["ORACLE_GROUP"]],
+                "forbidden_answer_contains": ["ORACLE_FORBIDDEN"],
+            },
+        },
+    )
+    contract = build_production_governed_tri_evidence_contract(
+        case,
+        {
+            "ids": build_tri_answer_contract(case).allowed_evidence_ids,
+            "trace": {"candidate_governance_mode": "tiered", "candidate_risk_tiers": []},
+        },
+    )
+
+    text = render_production_evidence_contract_block(contract)
+
+    assert "Evidence Contract: chain_tri_governed_answer_contract" in text
+    assert "production_safe=true" in text
+    assert "allowed_evidence:" in text
+    assert "likely_relevant_evidence_ids:" in text
+    assert "stale_warning_ids:" in text
+    assert "conflict_warning_ids:" in text
+    assert "active_version_ids:" in text
+    assert "insufficient_evidence_fallback:" in text
+    assert "forbidden_boundary_ids:" in text
+    assert "required_terms:" not in text
+    assert "required_term_groups:" not in text
+    assert "forbidden_terms:" not in text
+    assert "ORACLE_TERM" not in text
+    assert "ORACLE_GROUP" not in text
+    assert "ORACLE_FORBIDDEN" not in text
+    assert case.setup["query"] not in text
