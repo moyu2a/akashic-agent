@@ -42,10 +42,21 @@
   - the dominant issue is after grounding: evidence use, candidate noise, answer constraints, and forbidden governance;
   - tri retrieval can rescue baseline (`9` cases) but also regresses baseline (`5` cases), so it needs scene routing and candidate governance rather than global default-on;
   - `tri_failed_but_rerank_passed_count = 7` indicates later cumulative profile rescue potential, not rerank single-factor causality.
+- User-facing explanation recorded:
+  - answer quality is poor because target evidence is present but not reliably used;
+  - the `18` non-forbidden grounded answer misses point to evidence-use / answer-rule / injection issues;
+  - the `5` forbidden answer failures point to old/conflicting/noisy candidate governance gaps;
+  - the combination of `9` rescued cases and `5` regressions means tri retrieval should be routed and denoised, not globally expanded.
+- Market/common solution mapping recorded:
+  - split retrieval evaluation from answer generation evaluation;
+  - apply candidate denoising, reranking, context compression, scenario routing, evidence injection constraints, post-answer grounding / relevance checks, and regression observability;
+  - mapped those practices to this project's next steps: candidate denoising, forbidden/conflict filtering, evidence injection constraints, answer post-check, and bounded real LLM rerun.
 - Updated docs:
   - `my_md/memory_optimization/README.md`;
   - `my_md/memory_optimization/02-memory-quality-metrics.md`;
+  - `my_md/memory_optimization/03-memory-governance-design.md`;
   - `my_md/memory_optimization/04-memory-plugin-experiment-roadmap.md`.
+  - `my_md/memory_optimization/eval_reports/tri_retrieval_failure_attribution_v1/tri_retrieval_failure_attribution.md`.
 - Verification:
   - `tests/test_memory_tri_retrieval_failure_attribution.py tests/test_memory_online_failure_attribution.py tests/test_memory_comprehensive_online_eval.py` -> `24 passed in 8.80s`;
   - `compileall -q memory2 scripts tests` -> passed;
@@ -1534,6 +1545,49 @@
   - no `memory_items.source_ref` rewrite;
   - no production `sessions.db` or memory DB writes;
   - no active cleanup.
+
+## 2026-07-28 Memory Tri Candidate Governance
+
+- Goal: add offline candidate denoising governance for tri retrieval after failure attribution showed the main bottleneck was grounded-but-wrong answers and forbidden/noise, not raw recall coverage.
+- Scope:
+  - no real LLM calls;
+  - no remote sync;
+  - no `AgentLoop`, `Reasoner`, `ToolExecutor`, `ToolRegistry`, production memory write, or production prompt changes;
+  - keep existing `retrieve()` result contract compatible.
+- Implemented:
+  - `CandidateGovernancePolicy` in `memory2/retrieval_governance.py`;
+  - `classify_candidate_risks()` with risks for forbidden, superseded, explicit conflict, scope mismatch, missing source_ref, weak source_ref, and low confidence;
+  - optional strict candidate filtering in `apply_retrieval_route()` with trace fields for dropped risks, protected target ids, would-drop protected reasons, and accepted risky candidates;
+  - `memory2/eval_tri_candidate_governance.py`;
+  - `scripts/run_memory_tri_candidate_governance_eval.py`;
+  - focused unit / CLI tests in `tests/test_memory_tri_candidate_governance.py`.
+- Important implementation correction:
+  - conflict risk is now based on explicit conflict fields / relations / tags;
+  - it no longer drops a valid active memory only because its summary or topic contains the Chinese word "冲突".
+- Generated report:
+  - `my_md/memory_optimization/eval_reports/tri_candidate_governance_v1/tri_candidate_governance.json`;
+  - `my_md/memory_optimization/eval_reports/tri_candidate_governance_v1/tri_candidate_governance.md`.
+- Current comprehensive offline trace result:
+  - `case_count = 320`;
+  - target evidence count: `640`;
+  - baseline expected hits: `640/640`;
+  - protected strict governance expected hits: `640/640`;
+  - protected target loss: `0`;
+  - should-not candidates in baseline route: `368`;
+  - strict should-not drops: `368/368`;
+  - strict should-not kept: `0`;
+  - unprotected strict governance target loss: `640/640`;
+  - protected would-drop reasons: `weak_source_ref = 1424`;
+  - dropped risks by reason: `weak_source_ref = 3936`, `forbidden_candidate = 1800`, `superseded_candidate = 712`, `missing_source_ref = 712`, `scope_mismatch = 376`.
+- Joined tri-failure buckets:
+  - `passed = 17`;
+  - `forbidden_answer_failure = 5`;
+  - `grounded_answer_rule_miss = 18`;
+  - `not_in_40_case_report = 280`.
+- Current conclusion:
+  - protected strict governance can preserve known target evidence while removing all fixture-labeled should-not candidates;
+  - unprotected strict governance is too aggressive and would erase all target evidence in this fixture, mainly because weak source_ref is common among expected memories;
+  - this validates candidate-governance trace and safety boundaries, but does not prove answer-rate uplift until a bounded real LLM rerun is performed.
 
 ## 2026-07-24 Answer Retrieval Metric Plan Boundary
 

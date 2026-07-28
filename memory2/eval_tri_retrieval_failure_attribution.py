@@ -313,6 +313,17 @@ def write_tri_retrieval_failure_attribution_markdown(
     lines.extend(
         [
             "",
+            "## 回答质量不好的原因",
+            "",
+            "- 三路召回这轮不是“没召回到”：`tri_grounding_fail_count = 0`，目标记忆都已经进入评测使用记录。",
+            "- 主要失败发生在召回之后：`tri_grounded_answer_fail_count_any = 23`，也就是所有三路回答失败都属于证据已到但没有答对。",
+            "- 其中 `tri_grounded_non_forbidden_answer_fail_count = 18`，说明主要问题是模型没有稳定使用证据、答案没有命中目标规则，或候选排序/注入方式没有把关键证据表达清楚。",
+            "- 另外 `tri_forbidden_fail_count = 5`，说明部分召回候选会把不该出现的旧信息、冲突信息或干扰信息带入回答，需要 forbidden 过滤和冲突候选隔离。",
+            "- 三路召回同时有正负作用：`baseline_failed_but_tri_passed_count = 9` 说明它能救活基线失败；`baseline_passed_but_tri_failed_count = 5` 说明它也会让部分原本答对的 case 回退。",
+            "- `tri_failed_but_rerank_passed_count = 7` 说明后续累计 profile 可能通过重排、注入治理或组合链路救回部分失败，但这不是 rerank 单因素因果结论。",
+            "",
+            "面试表达：三路召回已经把目标记忆召回进上下文，所以瓶颈从“召回覆盖”转移到了“召回后的证据治理”。后续优化重点不是继续扩大召回，而是候选去噪、forbidden 过滤、场景路由、重排和更强的证据注入约束。",
+            "",
             "## 下一步建议",
             "",
             "- 优先查看 `grounded_answer_rule_miss`：证据已经进入上下文，但回答没有稳定用对。",

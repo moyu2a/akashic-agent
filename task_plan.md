@@ -1591,3 +1591,42 @@ Conclusion:
 - Tri retrieval is positive after route governance on this slice.
 - Graph retrieval is still not better than the original memory baseline on this slice, but current answer-quality fixtures do not isolate graph evidence from tri evidence well enough to treat this as a standalone graph-capability verdict.
 - Rerank/injection is the strongest routed answer path and should be prioritized for the next expanded fresh rerun.
+
+## 2026-07-28 Memory Tri Candidate Governance
+
+Goal: execute the reviewed plan for tri retrieval candidate denoising and forbidden / conflict filtering, producing offline trace evidence before spending more real LLM calls.
+
+Plan status:
+
+1. Add candidate risk classification - complete.
+2. Add strict candidate governance policy and trace fields - complete.
+3. Add offline tri candidate governance report - complete.
+4. Add CLI wrapper and privacy tests - complete.
+5. Generate comprehensive report - complete.
+6. Update memory optimization docs and progress records - complete.
+7. Run final regression, compile, diff check, independent review, and commit - pending.
+
+Report:
+
+- `my_md/memory_optimization/eval_reports/tri_candidate_governance_v1/tri_candidate_governance.json`
+- `my_md/memory_optimization/eval_reports/tri_candidate_governance_v1/tri_candidate_governance.md`
+
+Key offline result:
+
+| metric | value |
+| --- | ---: |
+| `case_count` | `320` |
+| target evidence | `640` |
+| baseline expected hits | `640/640` |
+| protected strict expected hits | `640/640` |
+| protected target loss | `0` |
+| should-not candidates | `368` |
+| strict should-not drops | `368/368` |
+| strict should-not kept | `0` |
+| unprotected strict target loss | `640/640` |
+
+Interpretation:
+
+- This phase proves the candidate governance layer can be measured and can remove known bad candidates without losing protected target evidence.
+- It also proves a risky point: strict filtering without target protection is too aggressive on the current fixture because weak source_ref appears on many expected memories.
+- The next meaningful answer-quality check should be a small fresh real LLM rerun comparing current route-governed tri retrieval against candidate-governed tri retrieval, focused on forbidden rate and grounded-answer-rule misses.

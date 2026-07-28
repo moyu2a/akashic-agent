@@ -219,6 +219,34 @@ MemoryValueScorer
 - `lane_contribution`：每一路对最终结果的贡献。
 - `rerank_changed_count`：重排改变名次次数。
 
+### Phase 6m 候选去噪补充
+
+三路召回的线上失败归因显示，当前主要问题不是“证据完全没有召回”，而是“证据到了以后，噪声、forbidden 候选、旧版本和弱来源候选会干扰回答”。因此 Phase 6m-tri-candidate-governance 先在离线 trace 层补充候选治理，不调用 LLM，也不改真实 `AgentLoop`。
+
+新增可观测字段：
+
+- `candidate_governance_enabled`：本轮是否启用候选治理。
+- `dropped_risks_by_reason`：严格治理实际丢弃候选的风险原因。
+- `would_drop_protected_by_reason`：目标证据如果没有保护会被哪些风险误删。
+- `protected_risky_candidate_count`：被保护留下的风险目标证据数量。
+- `accepted_risky_candidate_count`：最终仍进入结果的带风险候选数量。
+
+本轮 comprehensive 离线结果：
+
+| 项目 | 数值 |
+| --- | ---: |
+| case 数 | `320` |
+| 目标证据 | `640` |
+| 原始路由目标命中 | `640/640` |
+| 受保护严格治理目标命中 | `640/640` |
+| 受保护目标损失 | `0` |
+| should-not 候选 | `368` |
+| 严格治理丢弃 should-not | `368/368` |
+| 严格治理保留 should-not | `0` |
+| 不受保护严格治理目标损失 | `640/640` |
+
+这个阶段的结论是：候选去噪可以作为三路召回进入真实 LLM 复测前的安全门，但必须继续保留“目标保护或生产替代信号”。下一步才适合做小型真实 LLM rerun，验证 forbidden 违规率和回答命中率是否真的改善。
+
 ## Phase 6t：source_ref 写入质量治理
 
 ### 目的
@@ -630,12 +658,37 @@ my_md/memory_optimization/eval_reports/memory_route_governance_eval.md
 - `tri_failed_but_rerank_passed_count = 7` 只表示后续累计 `chain_rerank_injection` profile 可能救活部分 case，不证明 rerank 是单一因果来源。
 - 当前 `40` case 的 category 粒度接近一类一个 common 和一个 hard 样本，不能把单个 category 失败解释成统计集中；下一步应优先看 failure bucket、pass pattern 和 failure-code 交叉表，再做专项小型真实 LLM 复测。
 
+回答质量不好的原因：
+
+1. 目标证据已经进入上下文，但模型没有稳定使用这些证据。对应数据是 `tri_grounded_answer_fail_count_any = 23`，且 `tri_grounding_fail_count = 0`。
+2. 三路召回扩大了候选来源，覆盖更强，但也更容易把次要证据、旧信息、冲突信息或低置信信息带进上下文。对应现象是三路救活 `9` 个基线失败 case，同时让 `5` 个基线通过 case 回退。
+3. forbidden 风险仍然存在。对应数据是 `tri_forbidden_fail_count = 5`，说明仅靠召回和 grounding 不能保证回答边界。
+4. 后续累计 profile 可以救回部分失败。对应数据是 `tri_failed_but_rerank_passed_count = 7`，说明重排、注入治理或组合链路有优化空间，但不能直接归因为某一个单独模块。
+
+面试表达可以压缩为：
+
+> 三路召回这轮 grounding 是 `100%`，说明目标记忆已经召回到了；但回答通过率只有 `42.5%`，说明瓶颈在召回之后。具体看，`23` 个失败全部是证据已到后的失败，其中 `18` 个是答案规则未命中，`5` 个是 forbidden 失败。所以后续重点不是继续扩大召回，而是候选去噪、forbidden 过滤、场景路由、重排和证据注入约束。
+
 下一步决策规则：
 
 - 如果三路仍出现 `grounded_answer_rule_miss`：优先做证据注入模板、答案约束和候选重排。
 - 如果 `forbidden_answer_failure` 上升：优先做 forbidden 过滤、旧版本过滤、冲突候选隔离。
 - 如果 `baseline_passed_but_tri_failed_count` 上升：优先做场景路由和候选去噪，避免三路在不适合的场景覆盖原始记忆基线。
 - 如果 `tri_failed_but_rerank_passed_count` 较高：设计 `route + tri + graph/rerank/injection` 累计组合验证，但报告中必须写清它不是单因素因果。
+
+#### 对齐行业通用方案后的执行入口
+
+市面上通常把这类问题拆成“检索是否拿到证据”和“生成是否正确使用证据”两层处理。对我们项目来说，三路召回当前已经达到 `100%` grounding，所以后续主线应转向召回后的治理：
+
+| 执行项 | 当前依据 | 目标指标 |
+| --- | --- | --- |
+| 候选去噪 | 三路救活 `9` 个 case，但也让 `5` 个基线通过 case 回退 | `baseline_passed_but_tri_failed_count` 下降 |
+| forbidden / 冲突过滤 | `tri_forbidden_fail_count = 5` | `tri_forbidden_fail_count` 和 `forbidden_rate` 下降 |
+| 证据注入约束 | `grounded_answer_rule_miss = 18` | `grounded_answer_rule_miss` 下降，`answer_rate` 上升 |
+| 回答后校验 | grounding 后仍有 `23` 个回答失败 | 不合格回答可重试、降级或标记为证据不足 |
+| 小型真实 LLM 复测 | 当前结论来自 `40` case 短线上样本 | 用相同 case 或失败专项 case 对比修改前后百分比 |
+
+执行顺序建议是：先做候选去噪和 forbidden / 冲突过滤，因为它们能直接降低三路引入的回退和违规；然后再做证据注入约束和回答后校验，因为这两项直接处理“证据到了但没用对”的问题。
 
 ### 写入价值与睡眠巩固的专项评测
 

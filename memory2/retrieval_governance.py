@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 import re
 from typing import Any
 
@@ -19,6 +19,37 @@ _LOW_CONFIDENCE_PHRASES = (
 
 
 @dataclass(frozen=True)
+class CandidateGovernancePolicy:
+    """可选候选治理策略；默认关闭以保持旧路由行为。"""
+
+    enabled: bool = False
+    protected_expected_ids: tuple[str, ...] = ()
+    drop_risks: tuple[str, ...] = (
+        "forbidden_candidate",
+        "superseded_candidate",
+        "conflict_candidate",
+        "scope_mismatch",
+        "missing_source_ref",
+        "weak_source_ref",
+        "low_confidence",
+    )
+    fatal_risks: tuple[str, ...] = (
+        "forbidden_candidate",
+        "superseded_candidate",
+        "conflict_candidate",
+        "scope_mismatch",
+    )
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "enabled": self.enabled,
+            "protected_expected_ids": list(self.protected_expected_ids),
+            "drop_risks": list(self.drop_risks),
+            "fatal_risks": list(self.fatal_risks),
+        }
+
+
+@dataclass(frozen=True)
 class RetrievalRoutingDecision:
     """某个查询可使用的召回通道及其治理约束。"""
 
@@ -30,11 +61,31 @@ class RetrievalRoutingDecision:
     graph_enabled: bool
     drop_low_confidence: bool
     reason: str
+    candidate_governance: CandidateGovernancePolicy = field(
+        default_factory=CandidateGovernancePolicy
+    )
 
     def to_dict(self) -> dict[str, object]:
         result = asdict(self)
         result["allowed_lanes"] = list(self.allowed_lanes)
+        result["candidate_governance"] = self.candidate_governance.to_dict()
         return result
+
+    def with_candidate_governance(
+        self,
+        policy: CandidateGovernancePolicy,
+    ) -> "RetrievalRoutingDecision":
+        return RetrievalRoutingDecision(
+            scene=self.scene,
+            allowed_lanes=self.allowed_lanes,
+            max_per_lane=dict(self.max_per_lane),
+            require_source_ref=self.require_source_ref,
+            require_scope_match=self.require_scope_match,
+            graph_enabled=self.graph_enabled,
+            drop_low_confidence=self.drop_low_confidence,
+            reason=self.reason,
+            candidate_governance=policy,
+        )
 
 
 def classify_retrieval_scene(query: str) -> str:
@@ -72,6 +123,11 @@ def apply_retrieval_route(
         lane: [] for lane in lane_order
     }
     seen: set[str] = set()
+    dropped_risks_by_reason: dict[str, int] = {}
+    would_drop_protected_by_reason: dict[str, int] = {}
+    protected_risky_candidate_count = 0
+    accepted_risky_candidate_count = 0
+    protected_expected_ids = set(decision.candidate_governance.protected_expected_ids)
 
     for lane, lane_candidates in candidates_by_lane.items():
         if lane not in decision.allowed_lanes or (
@@ -88,15 +144,37 @@ def apply_retrieval_route(
                 _count(dropped_by_reason, "lane_cap")
                 continue
             item = dict(candidate)
-            if decision.require_source_ref and not _has_source_ref(item):
-                _count(dropped_by_reason, "missing_source_ref")
-                continue
-            if decision.require_scope_match and item.get("scope_match") is False:
-                _count(dropped_by_reason, "scope_mismatch")
-                continue
-            if decision.drop_low_confidence and _is_low_confidence(item):
-                _count(dropped_by_reason, "low_confidence")
-                continue
+            risks = classify_candidate_risks(item)
+            protected = _candidate_id(item) in protected_expected_ids
+
+            if decision.candidate_governance.enabled:
+                drop_risks = [
+                    risk
+                    for risk in risks
+                    if risk in decision.candidate_governance.drop_risks
+                ]
+                fatal = any(
+                    risk in decision.candidate_governance.fatal_risks
+                    for risk in drop_risks
+                )
+                if drop_risks and (fatal or not protected):
+                    for risk in drop_risks:
+                        _count(dropped_risks_by_reason, risk)
+                    continue
+                if drop_risks and protected:
+                    protected_risky_candidate_count += 1
+                    for risk in drop_risks:
+                        _count(would_drop_protected_by_reason, risk)
+            else:
+                if decision.require_source_ref and "missing_source_ref" in risks:
+                    _count(dropped_by_reason, "missing_source_ref")
+                    continue
+                if decision.require_scope_match and "scope_mismatch" in risks:
+                    _count(dropped_by_reason, "scope_mismatch")
+                    continue
+                if decision.drop_low_confidence and "low_confidence" in risks:
+                    _count(dropped_by_reason, "low_confidence")
+                    continue
 
             dedupe_key = _candidate_key(item)
             if dedupe_key in seen:
@@ -107,6 +185,8 @@ def apply_retrieval_route(
             accepted_items_by_lane[lane].append(item)
             accepted_by_lane[lane] += 1
             retained_in_lane += 1
+            if risks:
+                accepted_risky_candidate_count += 1
 
     input_count = sum(len(candidates_by_lane.get(lane, ())) for lane in _LANES)
     output_count = len(accepted)
@@ -127,10 +207,38 @@ def apply_retrieval_route(
         "accepted_by_lane": accepted_by_lane,
         "accepted_items_by_lane": accepted_items_by_lane,
         "dropped_by_reason": dropped_by_reason,
+        "candidate_governance_enabled": decision.candidate_governance.enabled,
+        "candidate_governance": decision.candidate_governance.to_dict(),
+        "protected_expected_ids": list(
+            decision.candidate_governance.protected_expected_ids
+        ),
+        "dropped_risks_by_reason": dropped_risks_by_reason,
+        "would_drop_protected_by_reason": would_drop_protected_by_reason,
+        "protected_risky_candidate_count": protected_risky_candidate_count,
+        "accepted_risky_candidate_count": accepted_risky_candidate_count,
         "output_count": output_count,
         "route_hit_rate": round(output_count / input_count, 4) if input_count else 0.0,
     }
     return accepted, trace
+
+
+def classify_candidate_risks(candidate: Mapping[str, Any]) -> tuple[str, ...]:
+    risks: list[str] = []
+    if _is_forbidden_candidate(candidate):
+        risks.append("forbidden_candidate")
+    if str(candidate.get("status") or "").lower() == "superseded":
+        risks.append("superseded_candidate")
+    if _is_conflict_candidate(candidate):
+        risks.append("conflict_candidate")
+    if candidate.get("scope_match") is False:
+        risks.append("scope_mismatch")
+    if not _has_source_ref(candidate):
+        risks.append("missing_source_ref")
+    elif _has_weak_source_ref(candidate):
+        risks.append("weak_source_ref")
+    if _is_low_confidence(candidate):
+        risks.append("low_confidence")
+    return tuple(risks)
 
 
 _SCENE_POLICIES: dict[str, dict[str, object]] = {
@@ -203,6 +311,58 @@ def _has_source_ref(item: Mapping[str, Any]) -> bool:
     return bool(item.get("source_ref"))
 
 
+def _is_forbidden_candidate(item: Mapping[str, Any]) -> bool:
+    if item.get("forbidden") is True or item.get("forbidden_candidate") is True:
+        return True
+    if item.get("should_not_recall") is True:
+        return True
+    risk = item.get("risk")
+    if isinstance(risk, str) and risk.lower() in {"forbidden", "blocked", "deny"}:
+        return True
+    tags = item.get("tags")
+    if isinstance(tags, Sequence) and not isinstance(tags, (str, bytes)):
+        if any(str(tag).lower() in {"forbidden", "blocked", "deny"} for tag in tags):
+            return True
+    extra = item.get("extra_json")
+    if isinstance(extra, Mapping):
+        topics = extra.get("active_topics")
+        if isinstance(topics, Sequence) and not isinstance(topics, (str, bytes)):
+            return any(str(topic) in {"助手推断"} for topic in topics)
+    return False
+
+
+def _is_conflict_candidate(item: Mapping[str, Any]) -> bool:
+    if item.get("conflict") is True or item.get("conflict_candidate") is True:
+        return True
+    relation = str(item.get("relation_type") or "").lower()
+    if relation in {"conflicts", "conflict", "contradicts"}:
+        return True
+    if item.get("conflict_with") or item.get("conflict_ids"):
+        return True
+    risk = item.get("risk")
+    if isinstance(risk, str) and risk.lower() in {"conflict", "conflicts"}:
+        return True
+    tags = item.get("tags")
+    return isinstance(tags, Sequence) and not isinstance(tags, (str, bytes)) and any(
+        str(tag).lower() in {"conflict", "conflicts", "contradicts"}
+        for tag in tags
+    )
+
+
+def _has_weak_source_ref(item: Mapping[str, Any]) -> bool:
+    source_ref = str(item.get("source_ref") or "")
+    if not source_ref:
+        return False
+    if source_ref.endswith("@post_response"):
+        return True
+    if source_ref.startswith("session:"):
+        return True
+    confidence = item.get("source_ref_confidence")
+    if isinstance(confidence, int | float) and confidence < 0.6:
+        return True
+    return item.get("source_ref_confident") is False
+
+
 def _is_low_confidence(item: Mapping[str, Any]) -> bool:
     if item.get("low_confidence") is True:
         return True
@@ -225,6 +385,14 @@ def _candidate_key(item: Mapping[str, Any]) -> str:
     if summary:
         return f"text:{summary}"
     return f"object:{repr(sorted(item.items()))}"
+
+
+def _candidate_id(item: Mapping[str, Any]) -> str:
+    for field in ("id", "memory_id"):
+        value = item.get(field)
+        if value not in (None, ""):
+            return str(value)
+    return ""
 
 
 def _count(counts: dict[str, int], reason: str, amount: int = 1) -> None:

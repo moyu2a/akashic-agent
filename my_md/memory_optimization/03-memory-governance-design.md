@@ -26,6 +26,76 @@ Phase 6m 真实 LLM answer-quality 矩阵和失败归因又补充了一个新的
 
 当前已经落地的实现是 `memory2/retrieval_governance.py`。它把查询分成模糊指代、工具偏好、部分冲突、精确召回、来源查询和未知场景，并为每类场景配置召回通道、每路上限、是否要求来源、是否要求同作用域、是否启用图谱和是否丢弃低置信候选。`DefaultMemoryEngine.retrieve()` 透出 route trace，但不修改主循环、真实写入或工具执行边界。
 
+Phase 6m-tri-candidate-governance 在这层之后继续补了一层可选的候选治理策略：
+
+```text
+召回候选
+  -> classify_candidate_risks
+  -> CandidateGovernancePolicy
+  -> 受保护严格过滤
+  -> trace 记录保留、丢弃和 would-drop 原因
+```
+
+当前识别的候选风险包括：
+
+- `forbidden_candidate`：fixture 或候选字段显式标记为不应召回。
+- `superseded_candidate`：旧版本、已被替换的记忆。
+- `conflict_candidate`：候选字段显式标记为冲突项；不会再仅凭摘要里出现“冲突”两个字就判风险。
+- `scope_mismatch`：候选 scope 和当前会话不一致。
+- `missing_source_ref`：缺少来源。
+- `weak_source_ref`：来源过弱，例如 session 级或 post-response 级来源。
+- `low_confidence`：低置信候选。
+
+这层默认关闭，只有显式设置 `CandidateGovernancePolicy(enabled=True)` 才执行严格过滤，因此不会改变现有生产召回契约。本轮 320 case 离线 trace 结果显示：受保护严格治理能保住 `640/640` 个目标证据，目标损失为 `0`，同时丢弃 `368/368` 个 should-not 候选；但不受保护严格治理会误删 `640/640` 个目标证据。结论是候选去噪必须和场景路由、来源质量、目标保护或生产替代信号一起使用，不能把“低置信/弱来源”规则直接全局硬删。
+
+## 行业通用处理方式
+
+针对“证据已经召回进上下文，但回答质量仍然不好”的问题，市面上的 RAG / Agent 方案通常不会继续盲目扩大召回，而是把链路拆开治理：
+
+| 通用方向 | 常见做法 | 解决的问题 |
+| --- | --- | --- |
+| 分层评测 | 分开评估召回质量、上下文相关性、答案正确性、faithfulness / groundedness 和 forbidden 风险 | 避免只看最终答案分数，无法判断是召回错了还是生成没用对证据 |
+| 候选去噪 | 去重、低置信过滤、冲突隔离、权限和 scope 过滤、旧版本过滤 | 解决召回候选太多、相似候选太杂、旧信息干扰回答的问题 |
+| 重排 | 用规则分、交叉编码器、LLM reranker 或 RRF 后再排序 | 把真正关键的证据放到更靠前的位置，降低模型忽略关键证据的概率 |
+| 上下文压缩 | 只保留关键句、实体、时间、来源和必要上下文 | 降低 prompt 噪声和 token 成本 |
+| 场景路由 | 按问题类型选择不同检索策略，例如精确事实、模糊指代、工具偏好、冲突判断分别处理 | 避免高噪声通道在不适合的场景默认打开 |
+| 证据注入约束 | 在 prompt 中明确证据 ID、来源、当前有效版本和回答依据 | 让模型更稳定地使用正确记忆 |
+| 回答后校验 | 对输出做 grounding、relevance、forbidden 和 policy check，不通过则重试、降级或拒答 | 处理证据到了但答案仍答偏、幻觉或越界的问题 |
+| 观测和回归集 | 把失败 query、召回候选、回答、评分和 trace 记录成可复现 case | 后续每次改召回、重排、prompt 或模型时做回归对比 |
+
+这些做法和公开资料里的 RAG 评测、grounding guardrail、企业级 RAG 治理是一致的：
+
+- Braintrust 的 RAG evaluation 把检索和生成分开评估，常用指标包括 context precision、context recall、answer relevancy 和 groundedness / faithfulness。
+- Amazon Bedrock Guardrails 的 contextual grounding check 会同时检查回答是否基于来源、是否和用户问题相关，并支持阈值和阻断动作。
+- AWS 的 grounding and RAG 指南强调生产系统需要在 grounding 之外加入安全、合规、访问控制、可追溯和自动推理。
+
+参考：
+
+- https://www.braintrust.dev/articles/what-is-rag-evaluation
+- https://www.braintrust.dev/articles/rag-evaluation-metrics
+- https://docs.aws.amazon.com/bedrock/latest/userguide/guardrails-contextual-grounding-check.html
+- https://docs.aws.amazon.com/prescriptive-guidance/latest/agentic-ai-serverless/grounding-and-rag.html
+
+## 我们项目的对应方案
+
+结合 Phase 6m 三路召回失败归因，本项目当前问题更像“召回后的回答治理”，不是单纯召回覆盖不足：
+
+| 我们的现象 | 数据 | 对应治理方案 |
+| --- | --- | --- |
+| 目标记忆已经召回 | `tri_grounding_fail_count = 0` | 不继续把重点放在扩大召回覆盖 |
+| 证据到了但没答对 | `tri_grounded_answer_fail_count_any = 23`，其中非 forbidden 失败 `18` | 加强证据注入模板、答案约束和回答后 grounding / relevance 校验 |
+| 三路有救活能力也有回退 | 救活基线 `9` 个 case，回退基线 `5` 个 case | 做场景路由、候选去噪和低置信过滤，避免全局默认打开 |
+| forbidden 风险仍存在 | `tri_forbidden_fail_count = 5` | 加 forbidden 过滤、旧版本过滤、冲突候选隔离 |
+| 后续累计链路可救回部分失败 | `tri_failed_but_rerank_passed_count = 7` | 验证 `route + tri + graph/rerank/injection` 组合链路，但不把它解释成 rerank 单因素因果 |
+
+拟定执行顺序：
+
+1. 先做候选去噪：对三路候选加重复、低置信、旧版本、跨 scope 和弱来源过滤。
+2. 再做 forbidden / 冲突治理：把 forbidden term、superseded item、冲突链旧节点和低可信来源候选隔离出注入上下文。
+3. 然后做证据注入约束：让进入 prompt 的记忆带上更清晰的来源、当前有效版本、关键事实和回答时必须使用的证据边界。
+4. 再做回答后校验：对生成结果检查是否 grounded、是否回答了问题、是否包含 forbidden；失败时重试、降级为基线召回或输出证据不足。
+5. 最后做小型真实 LLM 复测：用同一批 40 case 或更聚焦的失败 case，比较 `answer_rate`、`forbidden_rate`、`baseline_passed_but_tri_failed_count` 和 `grounded_answer_rule_miss` 是否改善。
+
 目标是把记忆链路拆成五个治理点：
 
 ```text

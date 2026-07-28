@@ -265,6 +265,28 @@ Phase 6b-4 已经补上第一版答案级证据使用调试：
 
 这些指标用于判断“记忆已经给到模型”之后，模型是否稳定使用了关键证据。完整回答和证据块只在显式开启 `--include-answer-debug` 时写入临时 workspace，不进入常规报告。
 
+### Phase 6m-tri-candidate-governance 的候选治理 trace 指标
+
+这一组指标专门衡量“三路召回之后、注入之前”的候选去噪效果。它不调用真实 LLM，因此不能说明最终回答准确率，只能说明候选层是否保住目标证据、是否清理了 forbidden / 旧版本 / 跨 scope / 弱来源候选。
+
+| 指标 | 含义 | 本轮结果 |
+| --- | --- | ---: |
+| `baseline_expected_hit_count` | 原始路由保留的目标证据数量 | `640/640` |
+| `protected_expected_hit_count` | 开启受保护严格治理后保留的目标证据数量 | `640/640` |
+| `protected_expected_hit_loss_count` | 受保护治理相对原始路由误删目标证据数量 | `0` |
+| `should_not_candidate_count` | 原始路由中出现的 should-not 候选数量 | `368` |
+| `strict_should_not_drop_count` | 受保护严格治理成功丢弃的 should-not 候选数量 | `368/368` |
+| `strict_should_not_kept_count` | 受保护严格治理后仍保留的 should-not 候选数量 | `0` |
+| `unprotected_expected_hit_loss_count` | 不保护目标证据时严格规则会误删的目标证据数量 | `640/640` |
+| `would_drop_protected_by_reason` | 目标证据如果没有保护会被哪些非致命风险误删 | `weak_source_ref = 1424` |
+
+本轮报告路径：
+
+- `my_md/memory_optimization/eval_reports/tri_candidate_governance_v1/tri_candidate_governance.json`
+- `my_md/memory_optimization/eval_reports/tri_candidate_governance_v1/tri_candidate_governance.md`
+
+关键结论：候选治理本身可以把 fixture 标注的 should-not 候选全部挡掉，同时通过目标保护保持召回证据不损失；但不受保护的严格过滤会把目标证据全删掉，说明后续进入生产时不能直接把离线 oracle 保护照搬，需要用更可靠的质量评分、source_ref 修复、场景路由和回答后校验替代。
+
 ### Phase 6c-1 已建立的离线 uplift proxy report
 
 Phase 6c-1 不是答案质量评测，而是把现有 shadow trace 转成统一的对照指标。它输出：
@@ -1698,6 +1720,20 @@ Phase 6m 之后，三路召回和图谱召回增加了“场景路由 + 候选�
 - 三路召回同时存在正负作用：`9` 个 case 救活原始记忆基线，`5` 个 case 让原本通过的基线回退。
 - `7` 个三路失败 case 被后续累计 `chain_rerank_injection` profile 救活，说明下一步应验证后续组合链路，但不能把这解释成 rerank 单因素因果。
 - `fixture_*` 字段只用于估算候选规模和去噪方向，不代表真实线上 prompt 中观察到的 memory id 数量。
+
+回答质量不好的原因：
+
+| 原因 | 证据 | 后续优化方向 |
+| --- | --- | --- |
+| 召回覆盖已经不是主要瓶颈 | `tri_grounding_fail_count = 0` | 不继续盲目扩大召回规模 |
+| 证据到了但模型没稳定用对 | `tri_grounded_answer_fail_count_any = 23`，其中非 forbidden 失败 `18` | 优化证据注入模板、答案约束和关键证据显式化 |
+| 候选噪声会干扰回答 | 三路救活 `9` 个 case，同时让 `5` 个基线通过 case 回退 | 做候选去噪、场景路由和低置信候选过滤 |
+| forbidden 控制还不够稳 | `tri_forbidden_fail_count = 5` | 增加 forbidden 过滤、旧版本过滤和冲突候选隔离 |
+| 后续累计链路有救回潜力 | `tri_failed_but_rerank_passed_count = 7` | 验证 `route + tri + graph/rerank/injection` 组合，但不把它解释成 rerank 单因素因果 |
+
+面试表达：
+
+> 这轮测试说明，三路召回不是没有价值，它能救活一部分原始记忆失败的 case；但它也会带来候选噪声和 forbidden 风险。因为 grounding 是 `100%`，所以问题已经从“能不能召回到”转移到“召回后能不能让模型用对”。后续优化重点是场景路由、候选去噪、forbidden 过滤、重排和证据注入约束，而不是继续无条件扩大召回。
 
 ## Phase 3 可输出的指标
 
