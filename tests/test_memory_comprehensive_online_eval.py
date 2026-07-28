@@ -18,6 +18,7 @@ from memory2.eval_comprehensive_online import (
     profile_evidence_source,
     rerank_governed_evidence_order,
     run_comprehensive_online_eval,
+    version_governed_tri_trace_for_case,
     write_comprehensive_online_markdown,
 )
 from memory2.eval_quantitative_cases import build_quantitative_eval_cases
@@ -764,6 +765,205 @@ def test_governed_answer_contract_scoring_expectation_is_not_oracle_terms() -> N
         "chain_tri_governed_answer_contract",
     )
     assert expectation.grounding_required is True
+
+
+def _case_with_version_boundary_signal():
+    for case in (
+        build_quantitative_eval_cases(case_set="common", limit=20, case_pack="standard")
+        + build_quantitative_eval_cases(case_set="hard", limit=20, case_pack="standard")
+    ):
+        if case.setup.get("memory_replacements"):
+            return case
+    raise AssertionError("fixture must include memory replacements")
+
+
+def test_version_governed_profile_does_not_expand_governed_ids() -> None:
+    case = _case_with_version_boundary_signal()
+
+    governed_ids = evidence_ids_for_profile(
+        case,
+        "chain_tri_governed_answer_contract",
+    )
+    version_governed_ids = evidence_ids_for_profile(
+        case,
+        "chain_tri_version_governed_answer_contract",
+    )
+
+    assert version_governed_ids == governed_ids
+    assert set(version_governed_ids) == set(governed_ids)
+    assert profile_evidence_source(
+        "chain_tri_version_governed_answer_contract"
+    ) == (
+        "tri_version_governed_answer_contract."
+        "version_boundaried_governed_allowed_evidence_ids"
+    )
+
+
+def test_version_governed_trace_exposes_boundary_without_recall_expansion() -> None:
+    case = _case_with_version_boundary_signal()
+
+    trace_info = version_governed_tri_trace_for_case(case)
+    version_boundary = trace_info["trace"]["version_boundary"]
+    governed_ids = evidence_ids_for_profile(
+        case,
+        "chain_tri_governed_answer_contract",
+    )
+
+    assert trace_info["ids"] == governed_ids
+    assert version_boundary["recall_expanded"] is False
+    assert isinstance(version_boundary["active_version_ids"], list)
+    assert isinstance(version_boundary["stale_warning_ids"], list)
+    assert isinstance(version_boundary["forbidden_boundary_ids"], list)
+    assert set(version_boundary["active_version_ids"]) <= set(governed_ids)
+    assert set(version_boundary["stale_warning_ids"]) <= set(governed_ids)
+    assert set(version_boundary["forbidden_boundary_ids"]).isdisjoint(governed_ids)
+
+
+def test_version_governed_profile_injects_production_safe_contract_block(
+    tmp_path: Path,
+) -> None:
+    case = _case_with_version_boundary_signal()
+    engine = ComprehensiveOnlineMemoryEngine(
+        case,
+        profile_name="chain_tri_version_governed_answer_contract",
+        prompt_variant="baseline",
+    )
+
+    result = asyncio.run(
+        engine.retrieve(
+            MemoryEngineRetrieveRequest(
+                query=str(case.setup["query"]),
+                mode="explicit",
+                top_k=8,
+            )
+        )
+    )
+    governed_ids = evidence_ids_for_profile(
+        case,
+        "chain_tri_governed_answer_contract",
+    )
+
+    assert (
+        "Evidence Contract: chain_tri_version_governed_answer_contract"
+        in result.text_block
+    )
+    assert "active_version_ids:" in result.text_block
+    assert "stale_warning_ids:" in result.text_block
+    assert "forbidden_boundary_ids:" in result.text_block
+    assert result.raw["evidence_source"] == (
+        "tri_version_governed_answer_contract."
+        "version_boundaried_governed_allowed_evidence_ids"
+    )
+    assert result.raw["answer_contract"]["production_safe_evidence_contract"] is True
+    assert result.raw["answer_contract"]["combines_candidate_governance"] is True
+    assert result.raw["answer_contract"]["combines_version_boundary"] is True
+    assert result.raw["version_boundary"]["recall_expanded"] is False
+    assert tuple(result.raw["ids"]) == governed_ids
+    assert tuple(engine.used_memory_ids) == governed_ids
+    assert tuple(hit.id for hit in result.hits) == governed_ids
+    assert set(result.raw["answer_contract"]["forbidden_boundary_ids"]).isdisjoint(
+        result.raw["answer_contract"]["allowed_evidence_ids"]
+    )
+
+
+def test_version_governed_profile_report_metadata_and_post_check_shadow(
+    tmp_path: Path,
+) -> None:
+    case = _case_with_version_boundary_signal()
+    specs = build_comprehensive_run_specs(
+        [case],
+        profiles=("chain_tri_version_governed_answer_contract",),
+        prompt_variants=("baseline",),
+        repeats=1,
+    )
+
+    report = asyncio.run(
+        run_comprehensive_online_eval(
+            specs,
+            tmp_path / "workspace",
+            ComprehensiveScriptedProvider(),
+            model="scripted",
+            real_llm_enabled=False,
+        )
+    )
+
+    metadata = report.metrics["profile_metadata"][
+        "chain_tri_version_governed_answer_contract"
+    ]
+    assert metadata["eval_only"] is True
+    assert metadata["oracle_protected"] is True
+    assert metadata["production_safe_evidence_contract"] is True
+    assert metadata["combines_candidate_governance"] is True
+    assert metadata["combines_version_boundary"] is True
+    assert metadata["does_not_expand_recall"] is True
+    assert report.metrics["answer_post_check_shadow"]["case_count"] == 1
+    assert report.case_records[0]["answer_post_check_shadow"]["shadow_enabled"] is True
+
+
+def test_version_governed_answer_expectation_is_grounding_only_not_oracle_terms() -> None:
+    case = _case_with_version_boundary_signal()
+
+    expectation = answer_expectation_for_profile(
+        case,
+        "chain_tri_version_governed_answer_contract",
+    )
+
+    assert expectation.expected_answer_contains == ()
+    assert expectation.expected_answer_contains_any == ()
+    assert expectation.forbidden_answer_contains == ()
+    assert expectation.expected_memory_ids == evidence_ids_for_profile(
+        case,
+        "chain_tri_version_governed_answer_contract",
+    )
+    assert expectation.grounding_required is True
+
+
+def test_version_governed_boundary_ignores_unrelated_superseded_fixture_rows() -> None:
+    case = _case_with_version_boundary_signal()
+    governed_ids = evidence_ids_for_profile(
+        case,
+        "chain_tri_governed_answer_contract",
+    )
+    case = replace(
+        case,
+        setup={
+            **case.setup,
+            "memory_items": [
+                *case.setup.get("memory_items", ()),
+                {
+                    "id": "unrelated_old",
+                    "summary": "unrelated superseded fixture evidence",
+                    "status": "superseded",
+                    "source_ref": "telegram:unrelated:0",
+                },
+                {
+                    "id": "unrelated_new",
+                    "summary": "unrelated active fixture evidence",
+                    "status": "active",
+                    "source_ref": "telegram:unrelated:1",
+                },
+            ],
+            "memory_replacements": [
+                *case.setup.get("memory_replacements", ()),
+                {
+                    "old_item_id": "unrelated_old",
+                    "new_item_id": "unrelated_new",
+                    "old_summary": "unrelated superseded fixture evidence",
+                    "new_summary": "unrelated active fixture evidence",
+                    "old_source_ref": "telegram:unrelated:0",
+                    "new_source_ref": "telegram:unrelated:1",
+                },
+            ],
+        },
+    )
+
+    trace_info = version_governed_tri_trace_for_case(case)
+    boundary = trace_info["trace"]["version_boundary"]
+
+    assert trace_info["ids"] == governed_ids
+    assert "unrelated_old" not in boundary["stale_warning_ids"]
+    assert "unrelated_old" not in boundary["forbidden_boundary_ids"]
+    assert "unrelated_new" not in boundary["active_version_ids"]
 
 
 def test_tri_answer_contract_profile_report_records_eval_only_metadata(

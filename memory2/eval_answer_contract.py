@@ -247,10 +247,17 @@ def build_version_boundary_info(
         if item_id in governed_ids
     )
     stale_ids = _string_tuple(experimental.get("stale_recalled_ids", ()))
+    governed_predecessor_ids = {
+        str(replacement.get("old_item_id") or "")
+        for replacement in replacements
+        if str(replacement.get("new_item_id") or "") in set(active_ids)
+    }
     rollback_ids = tuple(
         item_id
         for item_id in _string_tuple(experimental.get("rollback_candidate_ids", ()))
-        if item_id not in governed_ids and item_id not in active_ids
+        if item_id in governed_predecessor_ids
+        and item_id not in governed_ids
+        and item_id not in active_ids
     )
     conflict_ids = _conflict_warning_ids_from_shadow_result(
         experimental,

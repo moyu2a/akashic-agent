@@ -45,6 +45,7 @@ from memory2.eval_llm_sample import (
 from memory2.eval_answer_contract import (
     build_production_governed_tri_evidence_contract,
     build_tri_answer_contract,
+    build_version_boundary_info,
     render_answer_contract_block,
     render_production_evidence_contract_block,
     tri_answer_contract_evidence_ids,
@@ -88,15 +89,20 @@ TRI_GOVERNED_ANSWER_CONTRACT_PROFILE = "chain_tri_governed_answer_contract"
 TRI_RERANK_GOVERNED_ANSWER_CONTRACT_PROFILE = (
     "chain_tri_rerank_governed_answer_contract"
 )
+TRI_VERSION_GOVERNED_ANSWER_CONTRACT_PROFILE = (
+    "chain_tri_version_governed_answer_contract"
+)
 PRODUCTION_GOVERNED_ANSWER_CONTRACT_PROFILES: tuple[str, ...] = (
     TRI_GOVERNED_ANSWER_CONTRACT_PROFILE,
     TRI_RERANK_GOVERNED_ANSWER_CONTRACT_PROFILE,
+    TRI_VERSION_GOVERNED_ANSWER_CONTRACT_PROFILE,
 )
 OPTIONAL_ANSWER_QUALITY_PROFILES: tuple[str, ...] = (
     TRI_CANDIDATE_GOVERNANCE_PROFILE,
     TRI_ANSWER_CONTRACT_PROFILE,
     TRI_GOVERNED_ANSWER_CONTRACT_PROFILE,
     TRI_RERANK_GOVERNED_ANSWER_CONTRACT_PROFILE,
+    TRI_VERSION_GOVERNED_ANSWER_CONTRACT_PROFILE,
 )
 PROFILE_METADATA: dict[str, dict[str, object]] = {
     TRI_CANDIDATE_GOVERNANCE_PROFILE: {
@@ -148,6 +154,23 @@ PROFILE_METADATA: dict[str, dict[str, object]] = {
             "Reorders candidate-governed tri ids with the existing "
             "rerank/injection signal, without adding ids outside governed tri "
             "evidence, then renders a production-safe evidence contract."
+        ),
+    },
+    TRI_VERSION_GOVERNED_ANSWER_CONTRACT_PROFILE: {
+        "eval_only": True,
+        "oracle_protected": True,
+        "uses_fixture_expected_ids": True,
+        "diagnostic_answer_contract": True,
+        "uses_fixture_answer_expectations": False,
+        "production_safe_evidence_contract": True,
+        "combines_candidate_governance": True,
+        "combines_version_boundary": True,
+        "does_not_expand_recall": True,
+        "candidate_governance_mode": "tiered",
+        "description": (
+            "Keeps candidate-governed tri allowed ids unchanged and adds "
+            "version-boundary fields for active versions, stale/superseded "
+            "warnings, conflict warnings, and forbidden boundaries."
         ),
     },
 }
@@ -241,9 +264,12 @@ class ComprehensiveOnlineMemoryEngine:
             TRI_CANDIDATE_GOVERNANCE_PROFILE,
             TRI_GOVERNED_ANSWER_CONTRACT_PROFILE,
             TRI_RERANK_GOVERNED_ANSWER_CONTRACT_PROFILE,
+            TRI_VERSION_GOVERNED_ANSWER_CONTRACT_PROFILE,
         }:
             governed_trace = (
-                rerank_governed_tri_trace_for_case(self.case)
+                version_governed_tri_trace_for_case(self.case)
+                if self.profile_name == TRI_VERSION_GOVERNED_ANSWER_CONTRACT_PROFILE
+                else rerank_governed_tri_trace_for_case(self.case)
                 if self.profile_name == TRI_RERANK_GOVERNED_ANSWER_CONTRACT_PROFILE
                 else governed_tri_trace_for_case(self.case)
             )
@@ -257,14 +283,25 @@ class ComprehensiveOnlineMemoryEngine:
             if self.profile_name in PRODUCTION_GOVERNED_ANSWER_CONTRACT_PROFILES:
                 assert governed_trace is not None
                 trace = dict(governed_trace.get("trace", {}))
+                version_boundary_info = (
+                    build_version_boundary_info(self.case, governed_trace)
+                    if self.profile_name
+                    == TRI_VERSION_GOVERNED_ANSWER_CONTRACT_PROFILE
+                    else None
+                )
                 contract = build_production_governed_tri_evidence_contract(
                     self.case,
                     governed_trace,
                     profile_name=self.profile_name,
+                    version_boundary_info=version_boundary_info,
                 )
                 combines_candidate_governance = True
                 combines_rerank_injection = (
                     self.profile_name == TRI_RERANK_GOVERNED_ANSWER_CONTRACT_PROFILE
+                )
+                combines_version_boundary = (
+                    self.profile_name
+                    == TRI_VERSION_GOVERNED_ANSWER_CONTRACT_PROFILE
                 )
                 self.used_memory_ids = list(contract.allowed_evidence_ids)
                 hits = [
@@ -300,7 +337,9 @@ class ComprehensiveOnlineMemoryEngine:
                     ),
                     "candidate_risk_tiers": trace.get("candidate_risk_tiers", []),
                     "combines_rerank_injection": combines_rerank_injection,
+                    "combines_version_boundary": combines_version_boundary,
                     "rerank_signal": trace.get("rerank_signal", {}),
+                    "version_boundary": trace.get("version_boundary", {}),
                     "answer_contract": {
                         "diagnostic_eval_only": contract.diagnostic_eval_only,
                         "production_safe": contract.production_safe,
@@ -310,6 +349,7 @@ class ComprehensiveOnlineMemoryEngine:
                         ),
                         "combines_candidate_governance": combines_candidate_governance,
                         "combines_rerank_injection": combines_rerank_injection,
+                        "combines_version_boundary": combines_version_boundary,
                         "candidate_governance_mode": contract.candidate_governance_mode,
                         "allowed_evidence": list(contract.allowed_evidence),
                         "likely_relevant_evidence": list(
@@ -523,6 +563,8 @@ def evidence_ids_for_profile(case: EvalCase, profile_name: str) -> tuple[str, ..
         return governed_tri_evidence_ids_for_case(case)
     if profile_name == TRI_RERANK_GOVERNED_ANSWER_CONTRACT_PROFILE:
         return tuple(rerank_governed_tri_trace_for_case(case).get("ids", ()))
+    if profile_name == TRI_VERSION_GOVERNED_ANSWER_CONTRACT_PROFILE:
+        return tuple(version_governed_tri_trace_for_case(case).get("ids", ()))
     if profile_name not in COMPREHENSIVE_CHAIN_PROFILES:
         raise ValueError(f"unknown profile_name: {profile_name}")
     if profile_name == "chain_tri_retrieval":
@@ -627,6 +669,25 @@ def rerank_governed_tri_trace_for_case(case: EvalCase) -> dict[str, object]:
     return {"ids": ordered_ids, "trace": trace}
 
 
+def version_governed_tri_trace_for_case(case: EvalCase) -> dict[str, object]:
+    governed_trace = governed_tri_trace_for_case(case)
+    governed_ids = tuple(str(item) for item in governed_trace.get("ids", ()))
+    boundary = build_version_boundary_info(case, governed_trace)
+    trace = dict(governed_trace.get("trace", {}))
+    trace["version_boundary"] = {
+        "active_version_ids": list(boundary.active_version_ids),
+        "stale_warning_ids": list(boundary.stale_warning_ids),
+        "conflict_warning_ids": list(boundary.conflict_warning_ids),
+        "forbidden_boundary_ids": list(boundary.forbidden_boundary_ids),
+        "rollback_candidate_ids": list(boundary.rollback_candidate_ids),
+        "conflict_chain_count": boundary.conflict_chain_count,
+        "stale_recalled_count": boundary.stale_recalled_count,
+        "superseded_recalled_count": boundary.superseded_recalled_count,
+        "recall_expanded": False,
+    }
+    return {"ids": governed_ids, "trace": trace}
+
+
 def _ordered_candidates_for_governed_tri(
     case: EvalCase,
     tri_ids: tuple[str, ...],
@@ -680,6 +741,10 @@ def profile_evidence_source(profile_name: str) -> str:
         TRI_RERANK_GOVERNED_ANSWER_CONTRACT_PROFILE: (
             "tri_rerank_governed_answer_contract."
             "reranked_governed_allowed_evidence_ids"
+        ),
+        TRI_VERSION_GOVERNED_ANSWER_CONTRACT_PROFILE: (
+            "tri_version_governed_answer_contract."
+            "version_boundaried_governed_allowed_evidence_ids"
         ),
     }
     if profile_name not in sources:
@@ -2131,9 +2196,10 @@ def _profile_metadata_markdown_section(metrics: dict[str, object]) -> list[str]:
             "| profile | eval_only | oracle_protected | uses_fixture_expected_ids | "
             "diagnostic_answer_contract | uses_fixture_answer_expectations | "
             "production_safe_evidence_contract | combines_candidate_governance | "
-            "combines_rerank_injection | does_not_expand_recall |"
+            "combines_rerank_injection | combines_version_boundary | "
+            "does_not_expand_recall |"
         ),
-        "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+        "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
     ]
     for profile in sorted(metadata):
         row = metadata.get(profile)
@@ -2152,6 +2218,7 @@ def _profile_metadata_markdown_section(metrics: dict[str, object]) -> list[str]:
                     _fmt(row.get("production_safe_evidence_contract")),
                     _fmt(row.get("combines_candidate_governance")),
                     _fmt(row.get("combines_rerank_injection")),
+                    _fmt(row.get("combines_version_boundary")),
                     _fmt(row.get("does_not_expand_recall")),
                 ]
             )
