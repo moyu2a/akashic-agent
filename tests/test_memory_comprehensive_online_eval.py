@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -939,6 +940,159 @@ def test_p6o3_governed_contract_fake_provider_smoke_is_private(
     assert "session_text" not in markdown
 
 
+def test_p6o4_governed_contract_records_answer_post_check_shadow(
+    tmp_path: Path,
+) -> None:
+    case = _case_with_tiered_tri_candidate()
+    specs = build_comprehensive_run_specs(
+        [case],
+        profiles=("chain_tri_governed_answer_contract",),
+        prompt_variants=("baseline",),
+        repeats=1,
+    )
+
+    report = asyncio.run(
+        run_comprehensive_online_eval(
+            specs,
+            tmp_path / "workspace",
+            ComprehensiveScriptedProvider(),
+            model="scripted",
+            real_llm_enabled=False,
+        )
+    )
+
+    assert report.metrics["answer_post_check_shadow"]["case_count"] == 1
+    assert report.metrics["answer_post_check_shadow"]["enabled_case_count"] == 1
+    assert report.metrics["answer_post_check_shadow"]["needs_retry_count"] == 0
+    record = report.case_records[0]
+    shadow = record["answer_post_check_shadow"]
+    assert shadow["shadow_enabled"] is True
+    assert shadow["production_safe_evidence_contract"] is True
+    assert shadow["allowed_evidence_included"] is True
+    assert shadow["forbidden_boundary_included"] is False
+    assert shadow["needs_retry"] is False
+    assert "raw_answer" not in shadow
+    assert "full_answer" not in shadow
+
+
+def test_p6o4_answer_post_check_shadow_markdown_is_private(
+    tmp_path: Path,
+) -> None:
+    case = _case_with_tiered_tri_candidate()
+    specs = build_comprehensive_run_specs(
+        [case],
+        profiles=("chain_tri_governed_answer_contract",),
+        prompt_variants=("baseline",),
+        repeats=1,
+    )
+
+    report = asyncio.run(
+        run_comprehensive_online_eval(
+            specs,
+            tmp_path / "workspace",
+            ComprehensiveScriptedProvider(),
+            model="scripted",
+            real_llm_enabled=False,
+        )
+    )
+    md_path = tmp_path / "report.md"
+    write_comprehensive_online_markdown(report, md_path)
+    markdown = md_path.read_text(encoding="utf-8")
+
+    assert "## Answer Post-Check Shadow" in markdown
+    assert "needs_retry_count" in markdown
+    assert "raw_prompt" not in markdown
+    assert "full_answer" not in markdown
+    assert "session_text" not in markdown
+    assert "根据 production-safe evidence contract" not in markdown
+
+
+def test_p6o4_post_check_shadow_does_not_change_scoring_or_provider_calls(
+    tmp_path: Path,
+) -> None:
+    case = _case_with_tiered_tri_candidate()
+    governed_ids = evidence_ids_for_profile(
+        case,
+        "chain_tri_governed_answer_contract",
+    )
+    target_id = governed_ids[0]
+    case = replace(
+        case,
+        setup={
+            **case.setup,
+            "memory_items": [
+                {
+                    **item,
+                    "insufficient_evidence": (
+                        True
+                        if str(item.get("id") or item.get("memory_id") or "")
+                        == target_id
+                        else item.get("insufficient_evidence", False)
+                    ),
+                }
+                for item in case.setup["memory_items"]
+            ],
+        },
+    )
+    specs = build_comprehensive_run_specs(
+        [case],
+        profiles=("chain_tri_governed_answer_contract",),
+        prompt_variants=("baseline",),
+        repeats=1,
+    )
+    provider = CountingProvider()
+
+    report = asyncio.run(
+        run_comprehensive_online_eval(
+            specs,
+            tmp_path / "workspace",
+            provider,
+            model="scripted",
+            real_llm_enabled=False,
+        )
+    )
+
+    record = report.case_records[0]
+    shadow = record["answer_post_check_shadow"]
+    assert provider.call_count == 1
+    assert record["passed"] is True
+    assert record["answer_rule_passed"] is True
+    assert record["memory_grounding_passed"] is True
+    assert record["failures"] == []
+    assert shadow["needs_retry"] is True
+    assert "insufficient_evidence_fallback_missing" in shadow["retry_reasons"]
+    assert report.metrics["answer_post_check_shadow"]["needs_retry_count"] == 1
+
+
+def test_p6o4_non_governed_rows_have_no_post_check_shadow(
+    tmp_path: Path,
+) -> None:
+    case = build_quantitative_eval_cases(
+        case_set="common",
+        limit=1,
+        case_pack="standard",
+    )[0]
+    specs = build_comprehensive_run_specs(
+        [case],
+        profiles=("chain_tri_retrieval",),
+        prompt_variants=("baseline",),
+        repeats=1,
+    )
+
+    report = asyncio.run(
+        run_comprehensive_online_eval(
+            specs,
+            tmp_path / "workspace",
+            ComprehensiveScriptedProvider(),
+            model="scripted",
+            real_llm_enabled=False,
+        )
+    )
+
+    assert report.case_records[0]["answer_post_check_shadow"] is None
+    assert report.metrics["answer_post_check_shadow"]["case_count"] == 0
+
+
 def test_optional_tri_candidate_governance_profile_is_visible_in_markdown(
     tmp_path: Path,
 ) -> None:
@@ -1182,6 +1336,33 @@ def test_build_report_from_checkpoint_can_exclude_infra_failures(
     assert report.metrics["checkpoint_input_count"] == 3
     assert report.metrics["excluded_infra_failure_count"] == 2
     assert report.metrics["partial_due_to_infra_failure"] is True
+
+
+def test_p6o4_checkpoint_loader_accepts_rows_without_post_check_shadow(
+    tmp_path: Path,
+) -> None:
+    checkpoint = tmp_path / "checkpoint.jsonl"
+    checkpoint.write_text(
+        json.dumps(
+            {
+                "spec_key": "old",
+                "result": _checkpoint_result(
+                    case_id="case-old",
+                    profile_name="chain_tri_governed_answer_contract",
+                ),
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    report = build_comprehensive_online_report_from_checkpoint(
+        checkpoint,
+        real_llm_enabled=False,
+    )
+
+    assert report.case_records[0]["answer_post_check_shadow"] is None
+    assert report.metrics["answer_post_check_shadow"]["case_count"] == 0
 
 
 def test_answer_quality_uplift_handles_zero_denominators_and_filters_profiles(

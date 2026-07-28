@@ -49,6 +49,10 @@ from memory2.eval_answer_contract import (
     render_production_evidence_contract_block,
     tri_answer_contract_evidence_ids,
 )
+from memory2.eval_answer_post_check import (
+    answer_post_check_shadow_to_dict,
+    build_answer_post_check_shadow,
+)
 from memory2.eval_runner import _baseline_recalled_items
 from memory2.eval_quantitative_uplift import (
     BALANCED_SCORE_FORMULA,
@@ -161,6 +165,7 @@ class ComprehensiveCaseResult:
     evidence_source: str
     used_memory_id_count: int
     failures: tuple[str, ...]
+    answer_post_check_shadow: dict[str, object] | None = None
 
 
 @dataclass(frozen=True)
@@ -199,6 +204,7 @@ class ComprehensiveOnlineMemoryEngine:
         self.retrieve_requests: list[MemoryEngineRetrieveRequest] = []
         self.used_memory_ids: list[str] = []
         self.last_text_block = ""
+        self.last_raw: dict[str, object] = {}
 
     async def retrieve(
         self,
@@ -295,6 +301,7 @@ class ComprehensiveOnlineMemoryEngine:
                         "deleted_evidence_ids": list(contract.deleted_evidence_ids),
                     },
                 }
+                self.last_raw = dict(raw)
                 return MemoryEngineRetrieveResult(
                     text_block=self.last_text_block,
                     hits=hits,
@@ -358,6 +365,7 @@ class ComprehensiveOnlineMemoryEngine:
                         "candidate_risk_tiers": trace.get("candidate_risk_tiers", []),
                     }
                 )
+            self.last_raw = dict(raw)
             return MemoryEngineRetrieveResult(
                 text_block=self.last_text_block,
                 hits=hits,
@@ -416,6 +424,7 @@ class ComprehensiveOnlineMemoryEngine:
                     "candidate_risk_tiers": trace.get("candidate_risk_tiers", []),
                 }
             )
+        self.last_raw = dict(raw)
         return MemoryEngineRetrieveResult(
             text_block=self.last_text_block,
             hits=hits,
@@ -927,6 +936,7 @@ def write_comprehensive_online_markdown(
         _answer_quality_markdown_sections(metrics)
     )
     lines.extend(_profile_metadata_markdown_section(metrics))
+    lines.extend(_answer_post_check_shadow_markdown_section(metrics))
     lines.extend(
         [
             "",
@@ -1020,6 +1030,19 @@ async def _run_comprehensive_case(
         answer_expectation_for_profile(spec.case, spec.profile_name),
         memory.used_memory_ids,
     )
+    answer_post_check_shadow: dict[str, object] | None = None
+    answer_contract = memory.last_raw.get("answer_contract")
+    if (
+        spec.profile_name == TRI_GOVERNED_ANSWER_CONTRACT_PROFILE
+        and isinstance(answer_contract, dict)
+    ):
+        answer_post_check_shadow = answer_post_check_shadow_to_dict(
+            build_answer_post_check_shadow(
+                answer,
+                answer_contract,
+                memory.used_memory_ids,
+            )
+        )
     failures.extend(score.failures)
     token_counts = _extract_token_counts(
         recording_provider.responses[-1] if recording_provider.responses else None
@@ -1046,6 +1069,7 @@ async def _run_comprehensive_case(
         evidence_source=profile_evidence_source(spec.profile_name),
         used_memory_id_count=len(memory.used_memory_ids),
         failures=tuple(failures),
+        answer_post_check_shadow=answer_post_check_shadow,
     )
     if answer_debug_dir is not None:
         write_llm_sample_answer_debug(
@@ -1181,6 +1205,7 @@ def _metrics_from_results(
         "answer_quality_missing_profiles": answer_quality_missing_profiles,
         "answer_quality_partial_matrix": bool(answer_quality_missing_profiles),
         "profile_metadata": profile_metadata,
+        "answer_post_check_shadow": _answer_post_check_shadow_metrics(results),
         "profile_answer_quality_uplift_vs_memory_base": answer_quality_rows,
         "chain_answer_quality_uplift_rows": answer_quality_chain_rows,
         "profile_uplift_vs_memory_base": uplift,
@@ -1231,6 +1256,7 @@ def _empty_metrics(real_memory_sample_metrics: dict[str, object]) -> dict[str, o
         "answer_quality_missing_profiles": list(ANSWER_QUALITY_PROFILES),
         "answer_quality_partial_matrix": True,
         "profile_metadata": {},
+        "answer_post_check_shadow": _answer_post_check_shadow_metrics(()),
         "profile_answer_quality_uplift_vs_memory_base": {},
         "chain_answer_quality_uplift_rows": (),
         "profile_uplift_vs_memory_base": {},
@@ -1283,6 +1309,46 @@ def _profile_summaries(
             "evidence_source": profile_evidence_source(profile),
         }
     return summaries
+
+
+def _answer_post_check_shadow_metrics(
+    results: tuple[ComprehensiveCaseResult, ...],
+) -> dict[str, object]:
+    shadows = [
+        result.answer_post_check_shadow
+        for result in results
+        if isinstance(result.answer_post_check_shadow, dict)
+    ]
+    enabled = [shadow for shadow in shadows if shadow.get("shadow_enabled") is True]
+    return {
+        "case_count": len(shadows),
+        "enabled_case_count": len(enabled),
+        "needs_retry_count": sum(
+            1 for shadow in enabled if shadow.get("needs_retry") is True
+        ),
+        "forbidden_boundary_included_count": sum(
+            1
+            for shadow in enabled
+            if shadow.get("forbidden_boundary_included") is True
+        ),
+        "stale_evidence_included_count": sum(
+            1 for shadow in enabled if shadow.get("stale_evidence_included") is True
+        ),
+        "conflict_evidence_included_count": sum(
+            1 for shadow in enabled if shadow.get("conflict_evidence_included") is True
+        ),
+        "missing_likely_relevant_context_count": sum(
+            1
+            for shadow in enabled
+            if shadow.get("missing_likely_relevant_context_ids")
+        ),
+        "insufficient_fallback_missing_count": sum(
+            1
+            for shadow in enabled
+            if shadow.get("insufficient_evidence_fallback_expected") is True
+            and shadow.get("insufficient_evidence_fallback_observed") is False
+        ),
+    }
 
 
 def _profile_uplift_vs_off(
@@ -1635,6 +1701,7 @@ def _case_record(result: ComprehensiveCaseResult) -> dict[str, object]:
         "evidence_source": result.evidence_source,
         "used_memory_id_count": result.used_memory_id_count,
         "failures": [_sanitize_failure(failure) for failure in result.failures],
+        "answer_post_check_shadow": result.answer_post_check_shadow,
     }
 
 
@@ -1687,6 +1754,9 @@ def _load_checkpoint_rows(
                         **{
                             **result_payload,
                             "failures": tuple(result_payload.get("failures", [])),
+                            "answer_post_check_shadow": result_payload.get(
+                                "answer_post_check_shadow"
+                            ),
                         }
                     ),
                 )
@@ -1997,6 +2067,35 @@ def _profile_metadata_markdown_section(metrics: dict[str, object]) -> list[str]:
             + " |"
         )
     return lines
+
+
+def _answer_post_check_shadow_markdown_section(metrics: dict[str, object]) -> list[str]:
+    shadow = metrics.get("answer_post_check_shadow", {})
+    if not isinstance(shadow, dict) or not shadow:
+        return []
+    return [
+        "",
+        "## Answer Post-Check Shadow",
+        "",
+        "- `case_count`: `" + _fmt(shadow.get("case_count")) + "`",
+        "- `enabled_case_count`: `" + _fmt(shadow.get("enabled_case_count")) + "`",
+        "- `needs_retry_count`: `" + _fmt(shadow.get("needs_retry_count")) + "`",
+        "- `forbidden_boundary_included_count`: `"
+        + _fmt(shadow.get("forbidden_boundary_included_count"))
+        + "`",
+        "- `stale_evidence_included_count`: `"
+        + _fmt(shadow.get("stale_evidence_included_count"))
+        + "`",
+        "- `conflict_evidence_included_count`: `"
+        + _fmt(shadow.get("conflict_evidence_included_count"))
+        + "`",
+        "- `missing_likely_relevant_context_count`: `"
+        + _fmt(shadow.get("missing_likely_relevant_context_count"))
+        + "`",
+        "- `insufficient_fallback_missing_count`: `"
+        + _fmt(shadow.get("insufficient_fallback_missing_count"))
+        + "`",
+    ]
 
 
 def _fmt_percent(value: object) -> str:
