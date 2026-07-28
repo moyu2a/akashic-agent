@@ -160,6 +160,85 @@ def test_ledger_sanitizes_unsafe_top_level_fields_and_preserves_safe_refs(
     assert "home/user/data" not in raw
 
 
+def test_ledger_rejects_credential_prefixes_in_generic_metadata_and_ids(tmp_path) -> None:
+    store = ToolAuditLedgerStore(tmp_path / "tool_audit.db")
+
+    store.record_event(
+        _event(
+            metadata={
+                "resource_type": "ghp_AbCd1234567890",
+                "resource_decision": "sk-proj-AbCd1234567890",
+                "sandbox_backend": "cred_live_AbCd1234567890",
+                "preview_id": "ghp_AbCd1234567890",
+                "rollback_id": "sk-proj-AbCd1234567890",
+                "error_code": "cred_live_AbCd1234567890",
+            },
+        )
+    )
+
+    event = store.query_events(ToolAuditLedgerQuery(limit=1))[0]
+    raw = store.db_path.read_text(encoding="utf-8", errors="ignore")
+    assert event.metadata == {}
+    assert "ghp_AbCd1234567890" not in raw
+    assert "sk-proj-AbCd1234567890" not in raw
+    assert "cred_live_AbCd1234567890" not in raw
+
+
+def test_ledger_preserves_valid_short_channels_model_actor_and_proactive_source(
+    tmp_path,
+) -> None:
+    store = ToolAuditLedgerStore(tmp_path / "tool_audit.db")
+
+    store.record_event(
+        _event(
+            channel="cli",
+            chat_id="test",
+            source="proactive",
+            actor="model",
+        )
+    )
+
+    event = store.query_events(ToolAuditLedgerQuery(limit=1))[0]
+    assert event.channel == "cli"
+    assert event.chat_id == "test"
+    assert event.source == "proactive"
+    assert event.actor == "model"
+
+
+def test_ledger_preserves_current_file_and_shell_lifecycle_statuses(tmp_path) -> None:
+    store = ToolAuditLedgerStore(tmp_path / "tool_audit.db")
+
+    for index, status in enumerate(
+        (
+            "snapshot_conflict",
+            "created_file_removed",
+            "sandbox_exit_nonzero",
+            "shell_sandbox_image_unavailable",
+            "shell_sandbox_launch_failed",
+            "shell_sandbox_policy_invalid",
+            "shell_artifact_path_invalid",
+        )
+    ):
+        store.record_event(
+            _event(
+                request_id=f"call-status-{index}",
+                execution_status=status,
+                rollback_status=status,
+                side_effect_status=status,
+            )
+        )
+
+    events = store.query_events(ToolAuditLedgerQuery(limit=20))
+    by_request = {event.request_id: event for event in events}
+    assert by_request["call-status-0"].execution_status == "snapshot_conflict"
+    assert by_request["call-status-1"].rollback_status == "created_file_removed"
+    assert by_request["call-status-2"].execution_status == "sandbox_exit_nonzero"
+    assert by_request["call-status-3"].execution_status == "shell_sandbox_image_unavailable"
+    assert by_request["call-status-4"].execution_status == "shell_sandbox_launch_failed"
+    assert by_request["call-status-5"].execution_status == "shell_sandbox_policy_invalid"
+    assert by_request["call-status-6"].execution_status == "shell_artifact_path_invalid"
+
+
 def test_ledger_preserves_canonical_hashes_and_rejects_noncanonical_refs(tmp_path) -> None:
     store = ToolAuditLedgerStore(tmp_path / "tool_audit.db")
     args_hash = "0" * 64

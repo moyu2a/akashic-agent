@@ -433,6 +433,38 @@ async def test_tool_audit_command_never_prints_raw_metadata(tmp_path: Path) -> N
 
 
 @pytest.mark.asyncio
+async def test_tool_audit_command_never_prints_credential_prefix_metadata(
+    tmp_path: Path,
+) -> None:
+    ledger = ToolAuditLedgerStore(tmp_path / "audit.db")
+    ledger.record_event(
+        ToolAuditLedgerEvent(
+            event_type="approved_side_effect_preview_ready",
+            session_key="cli:s",
+            tool_name="write_file",
+            metadata={
+                "resource_type": "ghp_AbCd1234567890",
+                "preview_id": "sk-proj-AbCd1234567890",
+                "rollback_id": "cred_live_AbCd1234567890",
+            },
+        )
+    )
+    module = ToolApprovalCommandModule(
+        "status_commands",
+        ToolApprovalStore(tmp_path / "approvals.db"),
+        audit_ledger_store=ledger,
+    )
+
+    ctx = await _run_command(module, "/tool_audit tool write_file 5", session_key="cli:s")
+    reply = ctx.abort_reply
+
+    assert "approved_side_effect_preview_ready" in reply
+    assert "ghp_AbCd1234567890" not in reply
+    assert "sk-proj-AbCd1234567890" not in reply
+    assert "cred_live_AbCd1234567890" not in reply
+
+
+@pytest.mark.asyncio
 async def test_tool_audit_command_filters_request_approval_and_event_with_session_scope(
     tmp_path: Path,
 ) -> None:

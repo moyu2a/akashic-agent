@@ -115,6 +115,7 @@ _EVENT_TYPES = frozenset(
         "tool_approval_executed",
         "tool_approval_execution_failed",
         "approved_side_effect_payload_recorded",
+        "approved_side_effect_preview_failed",
         "approved_side_effect_preview_ready",
         "approved_side_effect_executed",
         "approved_side_effect_execution_failed",
@@ -147,6 +148,7 @@ _APPROVAL_STATUSES = frozenset(
 _SIDE_EFFECT_STATUSES = frozenset(
     {
         "payload_recorded",
+        "preview_failed",
         "preview_ready",
         "executed",
         "execution_failed",
@@ -165,19 +167,26 @@ _EXECUTION_STATUSES = frozenset(
         "executed",
         "execution_failed",
         "file_change_applied",
+        "snapshot_conflict",
         "shell_sandbox_unavailable",
+        "sandbox_exit_nonzero",
         "sandbox_timeout",
         "sandbox_execution_failed",
         "sandbox_executed",
         "shell_command_failed",
+        "shell_sandbox_image_unavailable",
+        "shell_sandbox_launch_failed",
+        "shell_sandbox_policy_invalid",
+        "shell_artifact_path_invalid",
     }
 )
 _ROLLBACK_STATUSES = frozenset(
-    {"rolled_back", "rollback_failed", "snapshot_restored"}
+    {"rolled_back", "rollback_failed", "snapshot_restored", "created_file_removed"}
 )
 _SOURCES = frozenset(
     {
         "passive",
+        "proactive",
         "status_command",
         "approved_side_effect_runtime",
         "approved_shell_side_effect_runtime",
@@ -190,6 +199,7 @@ _ACTORS = frozenset(
         "status_command",
         "approved_side_effect_runtime",
         "approved_shell_side_effect_runtime",
+        "model",
         "user",
         "system",
     }
@@ -217,6 +227,7 @@ _SENSITIVE_PREFIXES = (
     "gho_",
     "ghu_",
     "github_pat_",
+    "cred_live_",
     "xoxb-",
     "xoxp-",
 )
@@ -506,8 +517,8 @@ def _sanitize_event(event: ToolAuditLedgerEvent) -> ToolAuditLedgerEvent:
         event_id=_safe_identifier(event.event_id),
         event_type=_safe_enum(event.event_type, _EVENT_TYPES),
         session_key=_safe_identifier(event.session_key),
-        channel=_safe_identifier(event.channel),
-        chat_id=_safe_identifier(event.chat_id),
+        channel=_safe_short_identifier(event.channel),
+        chat_id=_safe_short_identifier(event.chat_id),
         request_id=_safe_identifier(event.request_id),
         turn_id=_safe_identifier(event.turn_id),
         tool_name=_safe_code(event.tool_name),
@@ -546,6 +557,7 @@ def _is_safe_string(value: str) -> bool:
     return (
         len(value) <= 240
         and not any(marker in lower for marker in _SENSITIVE_VALUE_MARKERS)
+        and not _has_sensitive_prefix(value)
         and not value.startswith("/")
         and not _looks_like_raw_path(value)
         and not any(
@@ -559,6 +571,25 @@ def _safe_token(value: str) -> str:
     if not value:
         return ""
     if not _SAFE_TOKEN_RE.fullmatch(value):
+        return ""
+    if not _is_safe_string(value):
+        return ""
+    return value
+
+
+def _safe_short_identifier(value: str) -> str:
+    if not value:
+        return ""
+    if not _SAFE_TOKEN_RE.fullmatch(value):
+        return ""
+    lower = value.lower()
+    if any(marker in lower for marker in _SENSITIVE_VALUE_MARKERS):
+        return ""
+    if _has_sensitive_prefix(value):
+        return ""
+    if _looks_like_raw_path(value):
+        return ""
+    if lower.startswith(_COMMAND_PREFIXES):
         return ""
     return value
 

@@ -147,12 +147,25 @@ class ApprovedSideEffectRuntime:
                 record,
                 side_effect_status="payload_recorded",
             )
-        preview = prepare_file_change(
-            workspace_root=workspace,
-            artifact_root=artifact_root,
-            tool_name=record.tool_name,
-            arguments=payload.arguments,
-        )
+        try:
+            preview = prepare_file_change(
+                workspace_root=workspace,
+                artifact_root=artifact_root,
+                tool_name=record.tool_name,
+                arguments=payload.arguments,
+            )
+        except Exception:
+            logger.warning("approved side-effect preview failed", exc_info=True)
+            self._record_ledger(
+                "approved_side_effect_preview_failed",
+                record,
+                side_effect_status="preview_failed",
+            )
+            return self._error(
+                approval_request_id,
+                "preview_failed",
+                "Approved file side-effect preview failed.",
+            )
         self.side_effect_store.record_preview(
             approval_request_id=record.approval_request_id,
             preview_id=preview.preview_id,
@@ -265,13 +278,54 @@ class ApprovedSideEffectRuntime:
                 consume.reason,
                 "Approved side-effect request could not be consumed.",
             )
-        preview = self._preview_from_record(
-            workspace_root.expanduser().resolve(),
-            side_effect,
-            record.tool_name,
-            payload.arguments,
-        )
-        applied = apply_file_change(preview)
+        try:
+            preview = self._preview_from_record(
+                workspace_root.expanduser().resolve(),
+                side_effect,
+                record.tool_name,
+                payload.arguments,
+            )
+            applied = apply_file_change(preview)
+        except Exception:
+            logger.warning("approved side-effect apply failed", exc_info=True)
+            try:
+                self.approval_runtime.finalize_execution(
+                    approval_request_id=approval_request_id,
+                    request_id=record.request_id,
+                    session_key=record.session_key,
+                    tool_name=record.tool_name,
+                    approval_scope=record.approval_scope,
+                    arguments=payload.arguments,
+                    execution_status="execution_failed",
+                )
+            except Exception:
+                logger.warning(
+                    "failed to finalize approved side-effect apply failure",
+                    exc_info=True,
+                )
+            try:
+                self.side_effect_store.mark_execution_failed(
+                    approval_request_id=approval_request_id,
+                    execution_status="execution_failed",
+                    actor=actor,
+                    now=self.now(),
+                )
+            except Exception:
+                logger.warning(
+                    "failed to mark approved side-effect apply failure",
+                    exc_info=True,
+                )
+            self._record_ledger(
+                "approved_side_effect_execution_failed",
+                record,
+                side_effect_status="execution_failed",
+                execution_status="execution_failed",
+            )
+            return self._error(
+                approval_request_id,
+                "execution_failed",
+                "Approved side-effect apply failed.",
+            )
         execution_status = "executed" if applied.ok else "execution_failed"
         self.approval_runtime.finalize_execution(
             approval_request_id=approval_request_id,
@@ -381,13 +435,39 @@ class ApprovedSideEffectRuntime:
                 "Resource policy denied approved side-effect rollback.",
                 metadata={"resource_policy": resource_decision.to_trace_metadata()},
             )
-        preview = self._preview_from_record(
-            workspace_root.expanduser().resolve(),
-            side_effect,
-            side_effect.tool_name,
-            payload.arguments,
-        )
-        rolled_back = rollback_file_change(preview)
+        try:
+            preview = self._preview_from_record(
+                workspace_root.expanduser().resolve(),
+                side_effect,
+                side_effect.tool_name,
+                payload.arguments,
+            )
+            rolled_back = rollback_file_change(preview)
+        except Exception:
+            logger.warning("approved side-effect rollback failed", exc_info=True)
+            try:
+                self.side_effect_store.mark_rollback_failed(
+                    approval_request_id=approval_request_id,
+                    rollback_status="rollback_failed",
+                    actor=actor,
+                    now=self.now(),
+                )
+            except Exception:
+                logger.warning(
+                    "failed to mark approved side-effect rollback failure",
+                    exc_info=True,
+                )
+            self._record_ledger(
+                "approved_side_effect_rollback_failed",
+                side_effect,
+                side_effect_status="rollback_failed",
+                rollback_status="rollback_failed",
+            )
+            return self._error(
+                approval_request_id,
+                "rollback_failed",
+                "Approved side-effect rollback failed.",
+            )
         if not rolled_back.ok:
             self.side_effect_store.mark_rollback_failed(
                 approval_request_id=approval_request_id,

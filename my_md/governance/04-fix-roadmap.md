@@ -365,6 +365,7 @@ Task 10 最终复审结果：focused `195 passed`，compatibility `278 passed`�
    - P4c 已完成第一版 workspace-scoped 可查询持久 `ToolAuditLedger`：SQLite sidecar 位于 `<workspace>/tool_audit/tool_audit.db`，记录 policy decision、approval lifecycle、approved file side-effect lifecycle 和 approved shell sandbox lifecycle 的脱敏投影。
    - P4c ledger 是 fail-open audit projection；approval store 和 approved side-effect store 仍是状态 source-of-truth。
    - P4c `/tool_audit` status command 只读查询当前 session 的 ledger events，支持 request、approval、tool 和 event 类型过滤；不修改 `ToolDiscoveryState`、LRU、approval state 或 side-effect state。
+   - P4c ledger redaction 已覆盖 generic metadata、preview/rollback ids、credential-prefix tokens 和 `/tool_audit` display；managed file preview/apply/rollback 异常路径会写 bounded failure event，不保存异常文本。
    - Dashboard/admin 审计检索和更完整 retention 运维策略仍属于后续工作。
 
 验收方式：
@@ -382,7 +383,7 @@ Task 10 最终复审结果：focused `195 passed`，compatibility `278 passed`�
 - P4 focused 回归已覆盖 payload vault、file snapshot/diff/apply/rollback、side-effect store/runtime、status commands、TaskExecution file resume 和 P4 contract；结果 `21 passed in 1.74s`。
 - P1/P2/P3/P4 focused baseline 结果 `72 passed in 2.86s`；compatibility plus P4 coverage 结果 `270 passed in 8.68s`；compileall 退出码 `0`，`git diff --check` 无输出。
 - P4b focused suite 结果 `61 passed in 3.36s`；P1/P2/P3/P4/P4b focused baseline 结果 `86 passed in 3.52s`；compatibility suite 结果 `275 passed in 9.07s`；compileall 退出码 `0`，`git diff --check` 无输出。
-- P4c final-review fix 后 focused governance suite 结果 `153 passed in 5.66s`；P1-P4c baseline 结果 `194 passed in 3.80s`；compileall 退出码 `0`，`git diff --check` 无输出。验证命令使用临时测试依赖 `pyyaml/html2text/lxml` 以满足 `tests/test_plugin_manager.py` 的 import 链。
+- P4c final-review fix 后 focused regression suite 结果 `58 passed in 3.59s`；focused governance suite 结果 `160 passed in 6.05s`；P1-P4c baseline 结果 `197 passed in 4.04s`；compileall 退出码 `0`，`git diff --check` 和 `git diff --check 7794819..HEAD` 无输出。验证命令使用临时测试依赖 `pyyaml/html2text/lxml` 以满足 `tests/test_plugin_manager.py` 的 import 链。
 - 回归测试确认 Document RAG、TaskPlan、TaskExecution 现有工具边界不被破坏。
 
 边界：

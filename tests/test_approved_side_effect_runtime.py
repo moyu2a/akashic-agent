@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+import agent.policies.approved_side_effect_runtime as side_effect_runtime_module
 from agent.policies.approved_side_effect_runtime import ApprovedSideEffectRuntime
 from agent.policies.approved_side_effect_store import ApprovedSideEffectStore
 from agent.policies.side_effect_payload_vault import SideEffectPayloadVault
@@ -193,3 +194,100 @@ def test_file_side_effect_runtime_records_preview_execute_and_rollback(
     assert "approved_side_effect_executed" in event_types
     assert "approved_side_effect_rolled_back" in event_types
     assert all("payload_ref" not in event.metadata for event in events)
+
+
+def test_file_side_effect_runtime_records_preview_exception_failure(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    ledger = ToolAuditLedgerStore(tmp_path / "audit.db")
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    (workspace / "notes.md").write_text("before\n", encoding="utf-8")
+    runtime = _runtime(workspace, audit_ledger_store=ledger)
+    approval_id = _defer_and_approve(runtime)
+
+    def raise_preview_error(**_kwargs):
+        raise RuntimeError("raw /tmp/secret token")
+
+    monkeypatch.setattr(
+        side_effect_runtime_module,
+        "prepare_file_change",
+        raise_preview_error,
+    )
+
+    result = runtime.prepare(approval_id, "cli:test", "status_command", workspace, (str(workspace),))
+
+    assert result.ok is False
+    assert result.reason == "preview_failed"
+    events = ledger.query_events(ToolAuditLedgerQuery(approval_request_id=approval_id, limit=20))
+    assert any(event.event_type == "approved_side_effect_preview_failed" for event in events)
+    raw = ledger.db_path.read_text(encoding="utf-8", errors="ignore")
+    assert "/tmp/secret" not in raw
+    assert "token" not in raw
+
+
+def test_file_side_effect_runtime_records_apply_exception_failure(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    ledger = ToolAuditLedgerStore(tmp_path / "audit.db")
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    (workspace / "notes.md").write_text("before\n", encoding="utf-8")
+    runtime = _runtime(workspace, audit_ledger_store=ledger)
+    approval_id = _defer_and_approve(runtime)
+    prepared = runtime.prepare(approval_id, "cli:test", "status_command", workspace, (str(workspace),))
+    assert prepared.ok is True
+
+    def raise_apply_error(_preview):
+        raise RuntimeError("raw /tmp/secret token")
+
+    monkeypatch.setattr(
+        side_effect_runtime_module,
+        "apply_file_change",
+        raise_apply_error,
+    )
+
+    result = runtime.apply(approval_id, "cli:test", "status_command", workspace, (str(workspace),))
+
+    assert result.ok is False
+    assert result.reason == "execution_failed"
+    events = ledger.query_events(ToolAuditLedgerQuery(approval_request_id=approval_id, limit=20))
+    assert any(event.event_type == "approved_side_effect_execution_failed" for event in events)
+    raw = ledger.db_path.read_text(encoding="utf-8", errors="ignore")
+    assert "/tmp/secret" not in raw
+    assert "token" not in raw
+
+
+def test_file_side_effect_runtime_records_rollback_exception_failure(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    ledger = ToolAuditLedgerStore(tmp_path / "audit.db")
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    (workspace / "notes.md").write_text("before\n", encoding="utf-8")
+    runtime = _runtime(workspace, audit_ledger_store=ledger)
+    approval_id = _defer_and_approve(runtime)
+    applied = runtime.apply(approval_id, "cli:test", "status_command", workspace, (str(workspace),))
+    assert applied.ok is True
+
+    def raise_rollback_error(_preview):
+        raise RuntimeError("raw /tmp/secret token")
+
+    monkeypatch.setattr(
+        side_effect_runtime_module,
+        "rollback_file_change",
+        raise_rollback_error,
+    )
+
+    result = runtime.rollback(approval_id, "cli:test", "status_command", workspace, (str(workspace),))
+
+    assert result.ok is False
+    assert result.reason == "rollback_failed"
+    events = ledger.query_events(ToolAuditLedgerQuery(approval_request_id=approval_id, limit=20))
+    assert any(event.event_type == "approved_side_effect_rollback_failed" for event in events)
+    raw = ledger.db_path.read_text(encoding="utf-8", errors="ignore")
+    assert "/tmp/secret" not in raw
+    assert "token" not in raw

@@ -42,6 +42,13 @@
 - Second final-review pass found remaining redaction gaps for token-shaped secrets, single-token raw output, arbitrary relative artifact refs, and missing shell persistence-failure audit event on fallback persistence failure.
 - Second final-review fixes added field-specific ledger validators, managed artifact ref shape requirements, and persistence-failure audit events on every shell state-persistence failure path.
 - Third final-review fix verification: targeted three-test RED pair -> `3 passed`; focused regression suite -> `54 passed in 3.31s`; P4c focused governance suite -> `153 passed in 5.66s`; P1-P4c baseline -> `194 passed in 3.80s`; compileall exited `0`; `git diff --check` emitted no output.
+- Fourth final-review fixes closed remaining audit-ledger gaps: credential-prefix values are rejected in generic metadata and preview/rollback ids, valid `cli`/`test` channel fields and `model`/`proactive` producer values are preserved, file/shell lifecycle statuses now survive enum validation, and managed file preview/apply/rollback exceptions produce bounded failure ledger events without persisting exception text.
+- Fourth final-review fix verification:
+  - focused regression suite `tests/test_tool_audit_ledger.py tests/test_tool_approval_wiring.py tests/test_approved_shell_side_effect_runtime.py tests/test_status_commands_approved_side_effects.py` -> `58 passed in 3.59s`.
+  - P4c focused governance suite including `tests/test_approved_side_effect_runtime.py` -> `160 passed in 6.05s`.
+  - P1-P4c baseline -> `197 passed in 4.04s`.
+  - compileall for touched policy/plugin/test files exited `0`.
+  - `git diff --check` and `git diff --check 7794819..HEAD` emitted no output.
 - Current P4c conclusion: first-version queryable persistent redacted ledger is implemented as fail-open audit projection; approval and side-effect stores remain source-of-truth; external API side-effect replay, destructive execution, TaskExecution shell resume, shell rollback, and network-enabled shell sandbox remain closed.
 
 ## 2026-07-27 Tool Governance P4b Documentation and Final Verification

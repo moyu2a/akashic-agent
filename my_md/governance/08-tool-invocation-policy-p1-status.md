@@ -239,6 +239,7 @@ P4c 已完成第一版 workspace-scoped、queryable、persistent、redacted `Too
 - `ToolExecutor` 在 allow/deny/defer/error policy paths 写入 `tool_invocation_policy_decision` ledger event；ledger 写失败不改变工具执行结果。
 - `ToolApprovalRuntime` 写入 requested、approved、denied、expired、consumed、executed 和 execution_failed lifecycle events。
 - `ApprovedSideEffectRuntime` 和 `ApprovedShellSideEffectRuntime` 写入 file preview/apply/rollback 与 shell preview/sandbox execution lifecycle events。
+- `ApprovedSideEffectRuntime` 在 preview/apply/rollback helper 抛出异常时写入 bounded failure ledger event；ledger 不保存异常文本、raw path 或 payload 内容。
 - `DefaultReasoner.run_turn()` 和 `StatusCommands.before_turn_modules()` 按 workspace 构造并注入同一个 sidecar ledger 路径。
 - 新增只读 `/tool_audit` status command，支持 `/tool_audit [limit]`、`request <request_id>`、`approval <approval_id>`、`tool <tool_name> [limit]` 和 `event <event_type> [limit]`，所有查询默认绑定当前 `session_key`。
 
@@ -255,15 +256,17 @@ P4c 验证结果：
 ```bash
 PYTHONDONTWRITEBYTECODE=1 uv run --with pytest --with pytest-asyncio --with json-repair --with docstring-parser --with pyyaml --with html2text --with lxml pytest tests/test_tool_audit.py tests/test_tool_audit_ledger.py tests/test_tool_executor.py tests/test_tool_approval_runtime.py tests/test_approved_side_effect_runtime.py tests/test_approved_shell_side_effect_runtime.py tests/test_status_commands_approved_side_effects.py tests/test_tool_governance_p4b_contract.py tests/test_lifecycle_phases.py tests/test_plugin_manager.py -q -p no:cacheprovider
 PYTHONDONTWRITEBYTECODE=1 uv run --with pytest --with pytest-asyncio --with json-repair --with docstring-parser --with pyyaml --with html2text --with lxml pytest tests/test_resource_policy.py tests/test_tool_invocation_resource_policy.py tests/test_tool_invocation_policy.py tests/test_tool_approval.py tests/test_tool_executor_approval_workflow.py tests/test_tool_governance_p3_contract.py tests/test_tool_governance_p4_contract.py tests/test_tool_governance_p4b_contract.py tests/test_tool_audit_ledger.py tests/test_lifecycle_phases.py tests/test_plugin_manager.py -q -p no:cacheprovider
-PYTHONDONTWRITEBYTECODE=1 uv run python -m compileall agent/policies agent/tool_hooks agent/core/passive_turn.py plugins/status_commands tests/test_tool_audit_ledger.py
+PYTHONDONTWRITEBYTECODE=1 uv run python -m compileall agent/policies/tool_audit_ledger.py agent/policies/approved_side_effect_runtime.py plugins/status_commands/plugin.py tests/test_tool_audit_ledger.py tests/test_approved_side_effect_runtime.py tests/test_status_commands_approved_side_effects.py
 git diff --check
 ```
 
 ```text
-P4c focused governance suite: 153 passed in 5.66s
-P1-P4c baseline: 194 passed in 3.80s
+P4c focused regression suite: 58 passed in 3.59s
+P4c focused governance suite: 160 passed in 6.05s
+P1-P4c baseline: 197 passed in 4.04s
 Compileall: exit 0
 git diff --check: no output
+git diff --check 7794819..HEAD: no output
 ```
 
 ## 验证结果
