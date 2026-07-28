@@ -22,6 +22,7 @@ Current result:
 - External API side-effect replay remains the next closed follow-up.
 - Destructive execution, TaskExecution shell resume, shell rollback, and network-enabled shell sandbox remain unavailable.
 - Verification after final review fixes: focused regression suite `58 passed in 3.59s`; P4c focused governance suite `160 passed in 6.05s`; P1-P4c baseline `197 passed in 4.04s`; compileall exit `0`; `git diff --check` and `git diff --check 7794819..HEAD` no output.
+- Current capability/conclusion record added at `my_md/governance/09-tool-governance-current-state.md`: recommends P4c as the current mainline completion point, with only a small P4d operational/documentation follow-up before any optional P5 external API replay design.
 
 ## 2026-07-27 Tool Governance P4b Documentation and Final Verification
 

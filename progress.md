@@ -50,6 +50,10 @@
   - compileall for touched policy/plugin/test files exited `0`.
   - `git diff --check` and `git diff --check 7794819..HEAD` emitted no output.
 - Current P4c conclusion: first-version queryable persistent redacted ledger is implemented as fail-open audit projection; approval and side-effect stores remain source-of-truth; external API side-effect replay, destructive execution, TaskExecution shell resume, shell rollback, and network-enabled shell sandbox remain closed.
+- Documentation closeout after user asked whether to continue tool governance:
+  - Added `my_md/governance/09-tool-governance-current-state.md` with current P1-P4c capabilities, sandbox/rollback status, not-yet-open capabilities, completion estimate, and recommended stopping point.
+  - Updated governance README, roadmap, P1-P4c status, and design decisions.
+  - Recorded DD-006: current recommended stopping point is P4c plus a small P4d operational/documentation closeout; P5 external API side-effect replay should be design-first only when a concrete product need appears.
 
 ## 2026-07-27 Tool Governance P4b Documentation and Final Verification
 

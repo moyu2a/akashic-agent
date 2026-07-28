@@ -366,6 +366,7 @@ Task 10 最终复审结果：focused `195 passed`，compatibility `278 passed`�
    - P4c ledger 是 fail-open audit projection；approval store 和 approved side-effect store 仍是状态 source-of-truth。
    - P4c `/tool_audit` status command 只读查询当前 session 的 ledger events，支持 request、approval、tool 和 event 类型过滤；不修改 `ToolDiscoveryState`、LRU、approval state 或 side-effect state。
    - P4c ledger redaction 已覆盖 generic metadata、preview/rollback ids、credential-prefix tokens 和 `/tool_audit` display；managed file preview/apply/rollback 异常路径会写 bounded failure event，不保存异常文本。
+   - 当前能力总览见 [09-tool-governance-current-state.md](./09-tool-governance-current-state.md)。推荐短期只做 P4d 运维收尾，不默认进入 P5 external API side-effect replay。
    - Dashboard/admin 审计检索和更完整 retention 运维策略仍属于后续工作。
 
 验收方式：
@@ -390,7 +391,7 @@ Task 10 最终复审结果：focused `195 passed`，compatibility `278 passed`�
 
 - P1/P2/P3/P4a 不承诺完整 Docker/chroot/seccomp 隔离；它们先建立统一裁决、资源判断、默认 workspace scope、结构化授权请求、trusted approval workflow、文件 snapshot/diff/rollback 和 bounded lifecycle audit。
 - P4b 已将 approved shell execution 收束为 Docker/Podman sandbox first-version scope；P4c 已完成第一版持久可查询 `ToolAuditLedger`，但它是审计投影，不是执行状态所有者。
-- P4c 后仍不开放 external API side-effect replay、destructive execution、TaskExecution shell resume、shell rollback 或 network-enabled shell sandbox。
+- P4c 后仍不开放 external API side-effect replay、destructive execution、TaskExecution shell resume、shell rollback 或 network-enabled shell sandbox。当前推荐停靠点是 P4c + 小型 P4d 运维收尾；P5 只有在出现明确产品需求时才 design-first。
 - shell 黑名单只能作为辅助 preflight，不作为最终生产安全边界。
 
 ## 暂不处理

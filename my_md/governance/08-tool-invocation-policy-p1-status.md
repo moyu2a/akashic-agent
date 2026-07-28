@@ -233,6 +233,12 @@ git diff --check: no output
 
 P4c 已完成第一版 workspace-scoped、queryable、persistent、redacted `ToolAuditLedger`。Ledger 作为 SQLite sidecar 位于 `<workspace>/tool_audit/tool_audit.db`，记录工具 policy decision、approval lifecycle、approved file side-effect lifecycle 和 approved shell sandbox lifecycle 的脱敏审计投影；approval store 和 approved side-effect store 仍是状态 source-of-truth。
 
+当前总览：
+
+- 工具安全治理底座已完成约 `80%`：policy gate、resource policy、durable approval、file preview/apply/rollback、approved shell sandbox 和 persistent redacted audit ledger 均已具备。
+- 完整工具能力平台约完成 `60% - 65%`：external API replay、跨 session admin audit、TaskExecution shell/external resume、network-enabled shell sandbox 等仍未开放。
+- 当前推荐停靠点是 P4c，再补一个小型 P4d 运维收尾即可。详见 [09-tool-governance-current-state.md](./09-tool-governance-current-state.md)。
+
 实现范围：
 
 - 新增 `agent/policies/tool_audit_ledger.py`，提供 `ToolAuditLedgerEvent`、`ToolAuditLedgerQuery`、`ToolAuditLedgerStore`、allowlist/value-level metadata sanitizer、query/prune API 和 fail-open recorder helper。
