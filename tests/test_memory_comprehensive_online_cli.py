@@ -235,6 +235,61 @@ def test_comprehensive_online_cli_p6o7_version_governed_fake_provider_matrix_sha
     assert "session_text" not in markdown
 
 
+def test_comprehensive_online_cli_p6o8_safe_boundary_fake_provider_matrix_shape(
+    tmp_path: Path,
+) -> None:
+    output_dir = tmp_path / "reports"
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "scripts/run_memory_comprehensive_online_eval.py",
+            "--workspace",
+            str(tmp_path / "workspace"),
+            "--out-dir",
+            str(output_dir),
+            "--fake-provider",
+            "--case-pack",
+            "standard",
+            "--balanced-small",
+            "--common-limit",
+            "2",
+            "--hard-limit",
+            "2",
+            "--profiles",
+            (
+                "chain_tri_governed_answer_contract,"
+                "chain_tri_version_governed_answer_contract"
+            ),
+            "--prompt-variants",
+            "baseline",
+            "--repeats",
+            "1",
+            "--checkpoint-jsonl",
+            str(tmp_path / "checkpoint.jsonl"),
+            "--real-memory-workspace",
+            str(tmp_path / "empty-real-workspace"),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    payload = json.loads(
+        (output_dir / "memory_comprehensive_online_eval.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    markdown = (output_dir / "memory_comprehensive_online_eval.md").read_text(
+        encoding="utf-8"
+    )
+    assert payload["metrics"]["case_count"] == 8
+    assert payload["metrics"]["profile_count"] == 2
+    assert payload["metrics"]["provider_error_count"] == 0
+    assert payload["metrics"]["timeout_count"] == 0
+    assert "chain_tri_version_governed_answer_contract" in markdown
+
+
 def test_comprehensive_online_cli_balanced_small_rejects_negative_limits(
     tmp_path: Path,
 ) -> None:
