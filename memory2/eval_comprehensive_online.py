@@ -90,9 +90,10 @@ PROFILE_METADATA: dict[str, dict[str, object]] = {
         "eval_only": True,
         "oracle_protected": True,
         "uses_fixture_expected_ids": True,
+        "candidate_governance_mode": "tiered",
         "description": (
-            "Applies strict candidate governance to existing tri fused ids "
-            "while protecting fixture should_recall_ids."
+            "Applies risk-tiered candidate governance to existing tri fused "
+            "ids while protecting fixture should_recall_ids."
         ),
     },
     TRI_ANSWER_CONTRACT_PROFILE: {
@@ -111,6 +112,7 @@ PROFILE_METADATA: dict[str, dict[str, object]] = {
         "diagnostic_answer_contract": True,
         "uses_fixture_answer_expectations": True,
         "combines_candidate_governance": True,
+        "candidate_governance_mode": "tiered",
         "description": (
             "Combines candidate-governed tri ids with the diagnostic answer "
             "contract to test whether input filtering plus answer constraints "
@@ -201,16 +203,27 @@ class ComprehensiveOnlineMemoryEngine:
         request: MemoryEngineRetrieveRequest,
     ) -> MemoryEngineRetrieveResult:
         self.retrieve_requests.append(request)
-        ids = list(evidence_ids_for_profile(self.case, self.profile_name))
+        governed_trace: dict[str, object] | None = None
+        if self.profile_name in {
+            TRI_CANDIDATE_GOVERNANCE_PROFILE,
+            TRI_GOVERNED_ANSWER_CONTRACT_PROFILE,
+        }:
+            governed_trace = governed_tri_trace_for_case(self.case)
+            ids = list(tuple(governed_trace.get("ids", ())))
+        else:
+            ids = list(evidence_ids_for_profile(self.case, self.profile_name))
         if self.profile_name in {
             TRI_ANSWER_CONTRACT_PROFILE,
             TRI_GOVERNED_ANSWER_CONTRACT_PROFILE,
         }:
             if self.profile_name == TRI_GOVERNED_ANSWER_CONTRACT_PROFILE:
-                governed_ids = governed_tri_evidence_ids_for_case(self.case)
+                assert governed_trace is not None
+                governed_ids = tuple(governed_trace.get("ids", ()))
+                trace = dict(governed_trace.get("trace", {}))
                 contract = build_governed_tri_answer_contract(self.case, governed_ids)
                 combines_candidate_governance = True
             else:
+                trace = {}
                 contract = build_tri_answer_contract(self.case)
                 combines_candidate_governance = False
             self.used_memory_ids = list(contract.allowed_evidence_ids)
@@ -227,25 +240,50 @@ class ComprehensiveOnlineMemoryEngine:
                 for item_id, summary in contract.evidence_summaries
             ]
             self.last_text_block = render_answer_contract_block(contract)
+            raw: dict[str, object] = {
+                "ids": list(contract.allowed_evidence_ids),
+                "must_use_ids": list(contract.must_use_ids),
+                "forbidden_ids": list(contract.forbidden_ids),
+                "governance_dropped_ids": list(contract.governance_dropped_ids),
+                "evidence_source": profile_evidence_source(self.profile_name),
+                "answer_contract": {
+                    "diagnostic_eval_only": contract.diagnostic_eval_only,
+                    "combines_candidate_governance": combines_candidate_governance,
+                    "candidate_governance_mode": (
+                        "tiered" if combines_candidate_governance else "none"
+                    ),
+                    "required_terms": list(contract.required_terms),
+                    "required_term_groups": [
+                        list(group) for group in contract.required_term_groups
+                    ],
+                    "forbidden_terms": list(contract.forbidden_terms),
+                },
+            }
+            if self.profile_name == TRI_GOVERNED_ANSWER_CONTRACT_PROFILE:
+                raw.update(
+                    {
+                        "candidate_governance_mode": trace.get(
+                            "candidate_governance_mode"
+                        ),
+                        "candidate_risk_tier_counts": trace.get(
+                            "candidate_risk_tier_counts",
+                            {},
+                        ),
+                        "accepted_candidate_risk_tier_counts": trace.get(
+                            "accepted_candidate_risk_tier_counts",
+                            {},
+                        ),
+                        "tiered_deleted_risks_by_reason": trace.get(
+                            "tiered_deleted_risks_by_reason",
+                            {},
+                        ),
+                        "candidate_risk_tiers": trace.get("candidate_risk_tiers", []),
+                    }
+                )
             return MemoryEngineRetrieveResult(
                 text_block=self.last_text_block,
                 hits=hits,
-                raw={
-                    "ids": list(contract.allowed_evidence_ids),
-                    "must_use_ids": list(contract.must_use_ids),
-                    "forbidden_ids": list(contract.forbidden_ids),
-                    "governance_dropped_ids": list(contract.governance_dropped_ids),
-                    "evidence_source": profile_evidence_source(self.profile_name),
-                    "answer_contract": {
-                        "diagnostic_eval_only": contract.diagnostic_eval_only,
-                        "combines_candidate_governance": combines_candidate_governance,
-                        "required_terms": list(contract.required_terms),
-                        "required_term_groups": [
-                            list(group) for group in contract.required_term_groups
-                        ],
-                        "forbidden_terms": list(contract.forbidden_terms),
-                    },
-                },
+                raw=raw,
             )
         summaries = _memory_summaries_by_id(self.case)
         self.used_memory_ids = ids
@@ -273,10 +311,37 @@ class ComprehensiveOnlineMemoryEngine:
                 "请在答案中保留这些关键术语。",
             )
         self.last_text_block = "\n".join(lines)
+        raw: dict[str, object] = {
+            "ids": ids,
+            "evidence_source": profile_evidence_source(self.profile_name),
+        }
+        if self.profile_name == TRI_CANDIDATE_GOVERNANCE_PROFILE:
+            assert governed_trace is not None
+            trace = dict(governed_trace.get("trace", {}))
+            raw.update(
+                {
+                    "candidate_governance_mode": trace.get(
+                        "candidate_governance_mode"
+                    ),
+                    "candidate_risk_tier_counts": trace.get(
+                        "candidate_risk_tier_counts",
+                        {},
+                    ),
+                    "accepted_candidate_risk_tier_counts": trace.get(
+                        "accepted_candidate_risk_tier_counts",
+                        {},
+                    ),
+                    "tiered_deleted_risks_by_reason": trace.get(
+                        "tiered_deleted_risks_by_reason",
+                        {},
+                    ),
+                    "candidate_risk_tiers": trace.get("candidate_risk_tiers", []),
+                }
+            )
         return MemoryEngineRetrieveResult(
             text_block=self.last_text_block,
             hits=hits,
-            raw={"ids": ids, "evidence_source": profile_evidence_source(self.profile_name)},
+            raw=raw,
         )
 
     async def retrieve_explicit(
@@ -352,9 +417,13 @@ def evidence_ids_for_profile(case: EvalCase, profile_name: str) -> tuple[str, ..
 
 
 def governed_tri_evidence_ids_for_case(case: EvalCase) -> tuple[str, ...]:
+    return tuple(governed_tri_trace_for_case(case).get("ids", ()))
+
+
+def governed_tri_trace_for_case(case: EvalCase) -> dict[str, object]:
     tri_ids = tuple(_ids_from_trace(case, "tri_retrieval", "fused_ids"))
     if not tri_ids:
-        return ()
+        return {"ids": (), "trace": {}}
     expected_ids = tuple(
         str(item) for item in case.expectations.get("should_recall_ids", ())
     )
@@ -374,15 +443,17 @@ def governed_tri_evidence_ids_for_case(case: EvalCase) -> tuple[str, ...]:
     decision = decision.with_candidate_governance(
         CandidateGovernancePolicy(
             enabled=True,
+            mode="tiered",
             protected_expected_ids=expected_ids,
         )
     )
-    governed, _trace = apply_retrieval_route(decision, {"semantic": candidates})
-    return tuple(
+    governed, trace = apply_retrieval_route(decision, {"semantic": candidates})
+    ids = tuple(
         str(candidate.get("id") or candidate.get("memory_id") or "")
         for candidate in governed
         if candidate.get("id") or candidate.get("memory_id")
     )
+    return {"ids": ids, "trace": trace}
 
 
 def _ordered_candidates_for_governed_tri(
@@ -429,7 +500,7 @@ def profile_evidence_source(profile_name: str) -> str:
         "chain_sleep_consolidation": "sleep_consolidation.filtered_active_ids",
         "chain_all_on": "sleep_consolidation.filtered_active_ids",
         TRI_CANDIDATE_GOVERNANCE_PROFILE: (
-            "tri_candidate_governance.protected_strict_ids"
+            "tri_candidate_governance.risk_tiered_allowed_ids"
         ),
         TRI_ANSWER_CONTRACT_PROFILE: "tri_answer_contract.allowed_evidence_ids",
         TRI_GOVERNED_ANSWER_CONTRACT_PROFILE: (

@@ -13,6 +13,7 @@ from memory2.eval_comprehensive_online import (
     build_comprehensive_run_specs,
     ComprehensiveOnlineMemoryEngine,
     evidence_ids_for_profile,
+    governed_tri_trace_for_case,
     profile_evidence_source,
     run_comprehensive_online_eval,
     write_comprehensive_online_markdown,
@@ -514,6 +515,110 @@ def test_tri_answer_contract_profile_injects_contract_block(tmp_path: Path) -> N
     assert "allowed_evidence:" in result.text_block
     assert "forbidden_memory_ids:" in result.text_block
     assert result.raw["evidence_source"] == "tri_answer_contract.allowed_evidence_ids"
+
+
+def _case_with_tiered_tri_candidate():
+    for case in (
+        build_quantitative_eval_cases(case_set="common", limit=20, case_pack="standard")
+        + build_quantitative_eval_cases(case_set="hard", limit=20, case_pack="standard")
+    ):
+        trace_info = governed_tri_trace_for_case(case)
+        trace = trace_info["trace"]
+        records = trace.get("candidate_risk_tiers", [])
+        accepted_ids = set(trace_info["ids"])
+        accepted_soft_ids = {
+            str(record["candidate_id"])
+            for record in records
+            if record.get("tier") in {"downgrade", "requires_review"}
+            and str(record.get("candidate_id") or "") in accepted_ids
+        }
+        deleted_ids = {
+            str(record["candidate_id"])
+            for record in records
+            if record.get("tier") == "delete"
+        }
+        if accepted_soft_ids and deleted_ids.isdisjoint(accepted_ids):
+            return case
+    raise AssertionError("fixture must include a tiered governed tri case")
+
+
+def test_tri_candidate_governance_uses_tiered_evidence_source() -> None:
+    case = _case_with_tiered_tri_candidate()
+
+    governed_ids = evidence_ids_for_profile(case, "chain_tri_candidate_governance")
+
+    assert governed_ids
+    assert (
+        profile_evidence_source("chain_tri_candidate_governance")
+        == "tri_candidate_governance.risk_tiered_allowed_ids"
+    )
+    assert set(governed_ids) <= set(evidence_ids_for_profile(case, "chain_tri_retrieval"))
+    assert set(governed_ids).isdisjoint(
+        set(str(item) for item in case.expectations["should_not_recall_ids"])
+    )
+    trace_info = governed_tri_trace_for_case(case)
+    trace = trace_info["trace"]
+    accepted_ids = set(trace_info["ids"])
+    assert any(
+        record.get("tier") in {"downgrade", "requires_review"}
+        and str(record.get("candidate_id") or "") in accepted_ids
+        for record in trace["candidate_risk_tiers"]
+    )
+    assert all(
+        record.get("tier") != "delete"
+        or str(record.get("candidate_id") or "") not in accepted_ids
+        for record in trace["candidate_risk_tiers"]
+    )
+
+
+def test_tri_candidate_governance_raw_exposes_tiered_trace(tmp_path: Path) -> None:
+    case = _case_with_tiered_tri_candidate()
+    engine = ComprehensiveOnlineMemoryEngine(
+        case,
+        profile_name="chain_tri_candidate_governance",
+        prompt_variant="baseline",
+    )
+
+    result = asyncio.run(
+        engine.retrieve(
+            MemoryEngineRetrieveRequest(
+                query=str(case.setup["query"]),
+                mode="explicit",
+                top_k=8,
+            )
+        )
+    )
+
+    assert result.raw["candidate_governance_mode"] == "tiered"
+    assert isinstance(result.raw["candidate_risk_tier_counts"], dict)
+    assert isinstance(result.raw["accepted_candidate_risk_tier_counts"], dict)
+    assert isinstance(result.raw["candidate_risk_tiers"], list)
+
+
+def test_governed_answer_contract_raw_exposes_tiered_candidate_trace(
+    tmp_path: Path,
+) -> None:
+    case = _case_with_tiered_tri_candidate()
+    engine = ComprehensiveOnlineMemoryEngine(
+        case,
+        profile_name="chain_tri_governed_answer_contract",
+        prompt_variant="baseline",
+    )
+
+    result = asyncio.run(
+        engine.retrieve(
+            MemoryEngineRetrieveRequest(
+                query=str(case.setup["query"]),
+                mode="explicit",
+                top_k=8,
+            )
+        )
+    )
+
+    assert result.raw["candidate_governance_mode"] == "tiered"
+    assert isinstance(result.raw["candidate_risk_tier_counts"], dict)
+    assert isinstance(result.raw["candidate_risk_tiers"], list)
+    assert result.raw["answer_contract"]["candidate_governance_mode"] == "tiered"
 
 
 def _case_with_tri_governance_drop():
