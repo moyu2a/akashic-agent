@@ -1,5 +1,20 @@
 # Document RAG P10a Intent Preload Plan
 
+## 2026-07-28 Memory Tri Answer Contract Implementation Plan
+
+Goal: create an executable plan for eval-only `chain_tri_answer_contract`, testing whether structured evidence injection and answer constraints can fix tri retrieval's post-grounding answer-quality failures.
+
+1. Inspect current `memory-next` eval/profile/report entry points - complete
+2. Write `docs/superpowers/plans/2026-07-28-memory-tri-answer-contract.md` - complete
+3. Self-review the plan for scope, placeholders, interfaces, and verification gates - complete
+4. Hand off execution choice to user - complete
+
+Boundary:
+
+- Planning only; no implementation code changed.
+- Plan keeps production `AgentLoop`, `Reasoner`, `ToolExecutor`, memory writes, production prompt behavior, and old `Retriever.retrieve()` contract unchanged.
+- Plan file is under ignored `docs/`; use `git add -f` only if the plan should be committed.
+
 ## 2026-07-28 Memory Tri Retrieval Failure Attribution
 
 Goal: explain why `chain_tri_retrieval` in the route-governed small online run has `100%` grounding but only `42.5%` answer pass rate, without rerunning real LLM or changing production behavior.
@@ -1695,3 +1710,13 @@ Conclusion:
 - The candidate governance layer succeeded on forbidden control: `chain_tri_candidate_governance` reduced forbidden violations from tri retrieval's `15.0%` to `0.0%`.
 - It did not satisfy the planned answer-quality success gate: answer rate dropped from tri retrieval's `55.0%` to `42.5%`.
 - Grounding stayed at `100.0%`, so the next bottleneck is not target recall but recall-after-answer quality: evidence injection, answer constraints, candidate confidence routing, and fallback behavior.
+
+## 2026-07-28 Memory Tri Answer Contract
+
+Goal: test whether structured answer-contract evidence injection fixes tri retrieval's post-grounding answer-quality failures without changing production retrieval or prompt behavior.
+
+1. Add pure answer-contract helper and tests - complete
+2. Add eval-only `chain_tri_answer_contract` profile - complete
+3. Run fake-provider smoke and focused regression - complete
+4. Run bounded real LLM comparison and document measured outcome - complete
+5. Commit locally without push - pending

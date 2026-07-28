@@ -1867,3 +1867,48 @@
   - candidate governance reduced forbidden from tri retrieval's `15.0%` to `0.0%`;
   - answer rate dropped from tri retrieval's `55.0%` to `42.5%`, so the answer-quality success gate was not met;
   - grounding stayed `100.0%`, so the next work should focus on evidence injection, answer constraints, candidate confidence routing, and fallback instead of simply expanding recall.
+
+## 2026-07-28 Memory Tri Answer Contract Plan
+
+- User chose方案 1: continue on `memory-next` and create a plan for eval-only Evidence Injection / Answer Contract work.
+- Confirmed current worktree is `/home/jjh/git_work/akashic-agent/.worktrees/memory-next`, branch `memory-next`, clean before planning, and currently `领先 10, 落后 44` against `origin/main`.
+- Wrote implementation plan:
+  - `docs/superpowers/plans/2026-07-28-memory-tri-answer-contract.md`
+- Plan scope:
+  - add pure `memory2/eval_answer_contract.py`;
+  - add optional eval-only `chain_tri_answer_contract` profile;
+  - render structured Answer Contract only inside `ComprehensiveOnlineMemoryEngine`;
+  - run fake-provider smoke and bounded 40-case real LLM comparison;
+  - update memory optimization docs with measured result and explicit diagnostic/oracle-assisted boundary.
+- Production boundary:
+  - no production `AgentLoop`, `Reasoner`, `ToolExecutor`, memory write, production prompt, or old `Retriever.retrieve()` contract change in the plan.
+- Self-review:
+  - scanned the plan for placeholder markers and removed `<measured>` style placeholders;
+  - `docs/` is ignored by `.gitignore`, so the plan requires `git add -f` if it should be committed.
+- Plan revision after review:
+  - fixed answer expectation field names from nonexistent `expected_terms` / `expected_term_groups` / `forbidden_terms` to current fixture keys `expected_answer_contains` / `expected_answer_contains_any` / `forbidden_answer_contains`;
+  - fixed report metric assertion from nonexistent `profile_summary` to current `profile_summaries`;
+  - added explicit Markdown metadata-column update so `diagnostic_answer_contract` and `uses_fixture_answer_expectations` are visible in reports;
+  - aligned Task 1 interface notes with direct `EvalCase.trace["tri_retrieval"]["fused_ids"]` usage instead of mentioning `_ids_from_trace`.
+- Execution:
+  - committed Task 1 as `fd202a8 feat: add memory tri answer contract helper`;
+  - committed Task 2 as `8ceba0d feat: add eval-only tri answer contract profile`;
+  - committed Task 3 as `959d828 test: cover tri answer contract online eval profile`;
+  - fake-provider smoke command:
+    `PYTHONDONTWRITEBYTECODE=1 .venv/bin/python scripts/run_memory_comprehensive_online_eval.py --workspace /tmp/akashic-memory-tri-answer-contract-fake/workspace --out-dir /tmp/akashic-memory-tri-answer-contract-fake/reports --case-pack standard --balanced-small --common-limit 20 --hard-limit 20 --profiles chain_memory_base,chain_tri_retrieval,chain_tri_candidate_governance,chain_tri_answer_contract --prompt-variants baseline --repeats 1 --fake-provider --timeout-s 60 --concurrency 1`;
+  - fake-provider result: `case_count = 160`, `unique_case_count = 40`, `profile_count = 4`, `real_llm_enabled = False`, `provider_error_count = 0`, `timeout_count = 0`;
+  - first real run with worktree-relative `config.toml` failed before provider setup because the linked worktree had no `config.toml`;
+  - second sandboxed real run using `/home/jjh/git_work/akashic-agent/config.toml` produced 4 checkpointed rows and all 4 timed out at 60s, so it was interrupted and not used as evidence;
+  - escalated real LLM command:
+    `PYTHONDONTWRITEBYTECODE=1 .venv/bin/python scripts/run_memory_comprehensive_online_eval.py --workspace /tmp/akashic-memory-tri-answer-contract-online-escalated/workspace --out-dir my_md/memory_optimization/eval_reports/tri_answer_contract_small_online_v1 --config /home/jjh/git_work/akashic-agent/config.toml --case-pack standard --balanced-small --common-limit 20 --hard-limit 20 --profiles chain_memory_base,chain_tri_retrieval,chain_tri_candidate_governance,chain_tri_answer_contract --prompt-variants baseline --repeats 1 --enable-real-llm --checkpoint-jsonl /tmp/akashic-memory-tri-answer-contract-online-escalated/reports/memory_comprehensive_online_eval.checkpoint.jsonl --timeout-s 60 --concurrency 1`;
+  - real LLM output:
+    `my_md/memory_optimization/eval_reports/tri_answer_contract_small_online_v1/memory_comprehensive_online_eval.json`;
+    `my_md/memory_optimization/eval_reports/tri_answer_contract_small_online_v1/memory_comprehensive_online_eval.md`;
+  - real LLM result: `real_llm_enabled = True`, `case_count = 160`, `unique_case_count = 40`, `profile_count = 4`, `provider_error_count = 0`, `timeout_count = 0`;
+  - profile rows:
+    `chain_memory_base`: answer `35.0%`, grounding `100.0%`, forbidden `7.5%`, avg tokens `5499.525`, avg latency `4152.275ms`;
+    `chain_tri_retrieval`: answer `40.0%`, grounding `100.0%`, forbidden `12.5%`, avg tokens `5492.15`, avg latency `3768.3ms`;
+    `chain_tri_candidate_governance`: answer `52.5%`, grounding `100.0%`, forbidden `0.0%`, avg tokens `5428.85`, avg latency `3869.3ms`;
+    `chain_tri_answer_contract`: answer `75.0%`, grounding `100.0%`, forbidden `12.5%`, avg tokens `5698.625`, avg latency `3897.975ms`;
+  - P6n success gate: passed for `chain_tri_answer_contract` because answer rate is above `55.0%`, grounding is `100.0%`, and forbidden is `<= 15.0%`;
+  - boundary: `chain_tri_answer_contract` is eval-only and diagnostic/oracle-assisted because it uses fixture answer expectations; it is not production-ready behavior.

@@ -247,6 +247,12 @@ MemoryValueScorer
 
 这个阶段的结论是：候选去噪可以作为三路召回进入真实 LLM 复测前的安全门，但必须继续保留“目标保护或生产替代信号”。下一步才适合做小型真实 LLM rerun，验证 forbidden 违规率和回答命中率是否真的改善。
 
+### Phase 6n Answer Contract 诊断结果
+
+小型真实 LLM 复测已验证 eval-only `chain_tri_answer_contract`：在 common `20` + hard `20`、baseline、repeat `1` 的 160-call 矩阵中，`chain_tri_answer_contract` 达到 `answer_rate = 75.0%`、`grounding_rate = 100.0%`、`forbidden_rate = 12.5%`，通过 P6n 成功门槛。它不扩大召回，也不改变生产链路，只把现有 tri fused ids 和 fixture answer expectations 转成 must-use、allowed evidence、forbidden ids、required terms 和 forbidden terms。
+
+下一步不是直接把 fixture contract 上线，而是把这个诊断结果翻译成生产安全的 evidence injection：用真实候选置信度、风险标签、source_ref、版本状态和回答后校验替代 fixture expected terms；同时保留 `chain_tri_candidate_governance` 的轻量 forbidden filtering，避免 answer contract 提升回答率时重新放大 forbidden 风险。
+
 ## Phase 6t：source_ref 写入质量治理
 
 ### 目的

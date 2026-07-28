@@ -287,6 +287,17 @@ Phase 6b-4 已经补上第一版答案级证据使用调试：
 
 关键结论：候选治理本身可以把 fixture 标注的 should-not 候选全部挡掉，同时通过目标保护保持召回证据不损失；但不受保护的严格过滤会把目标证据全删掉，说明后续进入生产时不能直接把离线 oracle 保护照搬，需要用更可靠的质量评分、source_ref 修复、场景路由和回答后校验替代。
 
+### Phase 6n Tri Answer Contract Small Online
+
+| profile | answer_rate | grounding_rate | forbidden_rate | avg_tokens | avg_latency_ms |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `chain_memory_base` | `35.0` | `100.0` | `7.5` | `5499.525` | `4152.275` |
+| `chain_tri_retrieval` | `40.0` | `100.0` | `12.5` | `5492.15` | `3768.3` |
+| `chain_tri_candidate_governance` | `52.5` | `100.0` | `0.0` | `5428.85` | `3869.3` |
+| `chain_tri_answer_contract` | `75.0` | `100.0` | `12.5` | `5698.625` | `3897.975` |
+
+Conclusion: `chain_tri_answer_contract` passes the P6n gate because answer rate is above `55.0%`, grounding is exactly `100.0%`, and forbidden rate is at or below `15.0%`; because it uses fixture answer expectations, this is diagnostic/oracle-assisted evidence, not production readiness.
+
 ### Phase 6c-1 已建立的离线 uplift proxy report
 
 Phase 6c-1 不是答案质量评测，而是把现有 shadow trace 转成统一的对照指标。它输出：
