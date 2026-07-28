@@ -408,3 +408,97 @@ def test_comprehensive_online_debug_dir_must_stay_under_workspace(
             include_answer_debug=True,
             answer_debug_dir=tmp_path / "reports" / "answer_debug",
         )
+
+
+def test_comprehensive_online_cli_p6o5_scaled_fake_provider_matrix_shape(
+    tmp_path: Path,
+) -> None:
+    output_dir = tmp_path / "reports"
+    workspace = tmp_path / "workspace"
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "scripts/run_memory_comprehensive_online_eval.py",
+            "--workspace",
+            str(workspace),
+            "--out-dir",
+            str(output_dir),
+            "--fake-provider",
+            "--case-pack",
+            "standard",
+            "--balanced-small",
+            "--common-limit",
+            "2",
+            "--hard-limit",
+            "2",
+            "--profiles",
+            (
+                "chain_tri_retrieval,"
+                "chain_tri_candidate_governance,"
+                "chain_tri_answer_contract,"
+                "chain_tri_governed_answer_contract"
+            ),
+            "--prompt-variants",
+            "baseline",
+            "--repeats",
+            "1",
+            "--checkpoint-jsonl",
+            str(tmp_path / "checkpoint.jsonl"),
+            "--real-memory-workspace",
+            str(tmp_path / "empty-real-workspace"),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    payload = json.loads(
+        (output_dir / "memory_comprehensive_online_eval.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    markdown = (output_dir / "memory_comprehensive_online_eval.md").read_text(
+        encoding="utf-8"
+    )
+
+    assert payload["metrics"]["case_count"] == 16
+    assert payload["metrics"]["unique_case_count"] == 4
+    assert payload["metrics"]["completed_call_count"] == 16
+    assert payload["metrics"]["profile_count"] == 4
+    assert payload["metrics"]["prompt_variant_count"] == 1
+    assert payload["metrics"]["repeat_count"] == 1
+    assert payload["metrics"]["provider_error_count"] == 0
+    assert payload["metrics"]["timeout_count"] == 0
+    assert set(payload["metrics"]["profile_summaries"]) == {
+        "chain_tri_retrieval",
+        "chain_tri_candidate_governance",
+        "chain_tri_answer_contract",
+        "chain_tri_governed_answer_contract",
+    }
+    assert payload["metrics"]["answer_post_check_shadow"]["case_count"] == 4
+    assert payload["metrics"]["answer_post_check_shadow"]["enabled_case_count"] == 4
+    assert payload["metrics"]["profile_metadata"][
+        "chain_tri_governed_answer_contract"
+    ]["production_safe_evidence_contract"] is True
+    case_records = payload["case_records"]
+    unique_common_ids = {
+        row["case_id"]
+        for row in case_records
+        if str(row["case_id"]).startswith("common_")
+    }
+    unique_hard_ids = {
+        row["case_id"]
+        for row in case_records
+        if str(row["case_id"]).startswith("hard_")
+    }
+    assert len(unique_common_ids) == 2
+    assert len(unique_hard_ids) == 2
+    assert {row["prompt_variant"] for row in case_records} == {"baseline"}
+    assert {row["repeat_index"] for row in case_records} == {0}
+    assert "## Answer Post-Check Shadow" in markdown
+    assert "production_safe_evidence_contract" in markdown
+    assert "raw_prompt" not in markdown
+    assert "full_answer" not in markdown
+    assert "session_text" not in markdown
