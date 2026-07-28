@@ -23,7 +23,12 @@ from agent.policies.shell_sandbox_runner import (
     SandboxRunner,
 )
 from agent.policies.tool_approval_decision import ToolApprovalDecision
-from agent.policies.tool_audit_ledger import ToolAuditLedgerStore
+from agent.policies.tool_audit_ledger import (
+    ToolAuditLedgerEvent,
+    ToolAuditLedgerQuery,
+    ToolAuditLedgerStore,
+    sanitize_tool_audit_metadata,
+)
 from agent.policies.tool_approval_runtime import ToolApprovalRuntime
 from agent.policies.tool_approval_store import (
     ToolApprovalRequestRecord,
@@ -207,6 +212,8 @@ class ToolApprovalCommandModule:
             return self._handle_run_approved(frame, state)
         if command == "/rollback_tool":
             return self._handle_rollback(frame, state)
+        if command == "/tool_audit":
+            return self._handle_tool_audit(frame, state)
         return frame
 
     def _handle_list(self, frame, state: TurnState) -> object:
@@ -367,6 +374,28 @@ class ToolApprovalCommandModule:
         )
         return frame
 
+    def _handle_tool_audit(self, frame, state: TurnState) -> object:
+        logger.info(
+            "[%s:%s] 命中命令: /tool_audit",
+            self._plugin_name,
+            self.__class__.__name__,
+        )
+        if self._audit_ledger_store is None:
+            frame.slots[_CTX_SLOT] = _abort_ctx(
+                state, "Tool audit ledger unavailable."
+            )
+            return frame
+        query = _tool_audit_query_from_command(
+            state.msg.content,
+            session_key=state.session_key,
+        )
+        events = self._audit_ledger_store.query_events(query)
+        frame.slots[_CTX_SLOT] = _abort_ctx(
+            state,
+            _format_tool_audit_events(events),
+        )
+        return frame
+
     def _side_effect_runtime(self) -> ApprovedSideEffectRuntime | None:
         if (
             self._workspace is None
@@ -501,6 +530,7 @@ class StatusCommands(Plugin):
             ("memorystatus", "查看记忆整理状态"),
             ("kvcache", "查看 KVCache 状态"),
             ("approvals", "查看待审批工具调用"),
+            ("tool_audit", "查看工具治理审计记录"),
         ]
 
     def before_turn_modules(self) -> list[object]:
@@ -652,6 +682,111 @@ def _format_side_effect_result(reason: str, message: str, diff_text: str = "") -
     if diff_text:
         lines.extend(["", "```diff", diff_text, "```"])
     return "\n".join(lines)
+
+
+def _tool_audit_query_from_command(
+    content: str,
+    *,
+    session_key: str,
+) -> ToolAuditLedgerQuery:
+    parts = (content or "").strip().split()
+    if len(parts) == 1:
+        return ToolAuditLedgerQuery(session_key=session_key)
+    if len(parts) == 2 and _int_or_none(parts[1]) is not None:
+        return ToolAuditLedgerQuery(session_key=session_key, limit=int(parts[1]))
+
+    subcommand = parts[1].lower() if len(parts) > 1 else ""
+    if subcommand == "request" and len(parts) >= 3:
+        return ToolAuditLedgerQuery(session_key=session_key, request_id=parts[2])
+    if subcommand == "approval" and len(parts) >= 3:
+        return ToolAuditLedgerQuery(
+            session_key=session_key, approval_request_id=parts[2]
+        )
+    if subcommand == "tool" and len(parts) >= 3:
+        return ToolAuditLedgerQuery(
+            session_key=session_key,
+            tool_name=parts[2],
+            limit=_limit_arg(parts, 3),
+        )
+    if subcommand == "event" and len(parts) >= 3:
+        return ToolAuditLedgerQuery(
+            session_key=session_key,
+            event_type=parts[2],
+            limit=_limit_arg(parts, 3),
+        )
+    return ToolAuditLedgerQuery(session_key=session_key)
+
+
+def _limit_arg(parts: list[str], index: int) -> int:
+    if len(parts) <= index:
+        return 50
+    value = _int_or_none(parts[index])
+    return value if value is not None else 50
+
+
+def _int_or_none(value: str) -> int | None:
+    try:
+        return int(value)
+    except ValueError:
+        return None
+
+
+def _format_tool_audit_events(events: list[ToolAuditLedgerEvent]) -> str:
+    lines = ["Tool audit ledger"]
+    if not events:
+        lines.append("events: none")
+        return "\n".join(lines)
+    lines.append(f"events: {len(events)}")
+    for event in events:
+        lines.extend(["", _format_tool_audit_event(event)])
+    return "\n".join(lines)
+
+
+def _format_tool_audit_event(event: ToolAuditLedgerEvent) -> str:
+    fields = [
+        f"time: {_format_tool_audit_ts(event.created_at)}",
+        f"event: {event.event_type}",
+    ]
+    if event.tool_name:
+        fields.append(f"tool: {event.tool_name}")
+    if event.policy_action:
+        fields.append(f"policy: {event.policy_action}")
+    if event.policy_reason:
+        fields.append(f"reason: {event.policy_reason}")
+    for label, value in (
+        ("approval_status", event.approval_status),
+        ("side_effect_status", event.side_effect_status),
+        ("execution_status", event.execution_status),
+        ("rollback_status", event.rollback_status),
+    ):
+        if value:
+            fields.append(f"{label}: {value}")
+    if event.request_id:
+        fields.append(f"request: {_short_id(event.request_id)}")
+    if event.approval_request_id:
+        fields.append(f"approval: {_short_id(event.approval_request_id)}")
+    fields.append(
+        "invoker: "
+        f"reached={str(event.invoker_reached).lower()} "
+        f"succeeded={str(event.invoker_succeeded).lower()}"
+    )
+    metadata = sanitize_tool_audit_metadata(event.metadata)
+    if metadata:
+        items = ", ".join(f"{key}={metadata[key]}" for key in sorted(metadata))
+        fields.append(f"metadata: {items}")
+    return "\n".join(fields)
+
+
+def _format_tool_audit_ts(value: datetime | str | None) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, datetime):
+        return value.astimezone(UTC).isoformat() if value.tzinfo else value.isoformat()
+    return value
+
+
+def _short_id(value: str) -> str:
+    return value if len(value) <= 12 else value[:12]
 
 
 def _abort_ctx(

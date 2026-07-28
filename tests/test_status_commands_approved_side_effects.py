@@ -9,13 +9,18 @@ from types import SimpleNamespace
 import pytest
 
 from agent.lifecycle.types import TurnState
+from agent.plugins.context import PluginContext, PluginKVStore
 from agent.policies.approved_side_effect_store import ApprovedSideEffectStore
 from agent.policies.shell_sandbox_runner import SandboxRunResult
 from agent.policies.side_effect_payload_vault import SideEffectPayloadVault
+from agent.policies.tool_audit_ledger import (
+    ToolAuditLedgerEvent,
+    ToolAuditLedgerStore,
+)
 from agent.policies.tool_approval_runtime import ToolApprovalRuntime
 from agent.policies.tool_approval_store import ToolApprovalStore
 from bus.events import InboundMessage
-from plugins.status_commands.plugin import ToolApprovalCommandModule
+from plugins.status_commands.plugin import StatusCommands, ToolApprovalCommandModule
 
 
 @dataclass
@@ -361,3 +366,144 @@ async def test_rollback_tool_shell_is_unsupported_without_raw_command_leakage(
     assert "rollback_not_supported_for_shell" in rolled_back.abort_reply
     assert command not in rolled_back.abort_reply
     assert command not in json.dumps(rolled_back.extra_metadata, ensure_ascii=False)
+
+
+@pytest.mark.asyncio
+async def test_tool_audit_command_lists_current_session_events(tmp_path: Path) -> None:
+    ledger = ToolAuditLedgerStore(tmp_path / "audit.db")
+    ledger.record_event(
+        ToolAuditLedgerEvent(
+            event_type="tool_invocation_policy_decision",
+            session_key="cli:s",
+            request_id="call-1",
+            tool_name="write_file",
+            policy_action="defer",
+            policy_reason="risk_strategy_write_requires_approval",
+        )
+    )
+    ledger.record_event(
+        ToolAuditLedgerEvent(
+            event_type="tool_invocation_policy_decision",
+            session_key="cli:other",
+            request_id="call-2",
+            tool_name="shell",
+            policy_action="defer",
+            policy_reason="risk_strategy_shell_requires_approval",
+        )
+    )
+    module = ToolApprovalCommandModule(
+        "status_commands",
+        ToolApprovalStore(tmp_path / "approvals.db"),
+        audit_ledger_store=ledger,
+    )
+
+    ctx = await _run_command(module, "/tool_audit 10", session_key="cli:s")
+    reply = ctx.abort_reply
+
+    assert "tool_invocation_policy_decision" in reply
+    assert "write_file" in reply
+    assert "call-1" in reply
+    assert "call-2" not in reply
+
+
+@pytest.mark.asyncio
+async def test_tool_audit_command_never_prints_raw_metadata(tmp_path: Path) -> None:
+    ledger = ToolAuditLedgerStore(tmp_path / "audit.db")
+    ledger.record_event(
+        ToolAuditLedgerEvent(
+            event_type="approved_shell_sandbox_executed",
+            session_key="cli:s",
+            tool_name="shell",
+            metadata={"command": "echo secret", "command_hash": "abc"},
+        )
+    )
+    module = ToolApprovalCommandModule(
+        "status_commands",
+        ToolApprovalStore(tmp_path / "approvals.db"),
+        audit_ledger_store=ledger,
+    )
+
+    ctx = await _run_command(module, "/tool_audit tool shell 5", session_key="cli:s")
+    reply = ctx.abort_reply
+
+    assert "command_hash" in reply
+    assert "abc" in reply
+    assert "echo secret" not in reply
+
+
+@pytest.mark.asyncio
+async def test_tool_audit_command_filters_request_approval_and_event_with_session_scope(
+    tmp_path: Path,
+) -> None:
+    ledger = ToolAuditLedgerStore(tmp_path / "audit.db")
+    ledger.record_event(
+        ToolAuditLedgerEvent(
+            event_type="tool_approval_requested",
+            session_key="cli:s",
+            request_id="call-1",
+            approval_request_id="approval-1",
+            tool_name="write_file",
+        )
+    )
+    ledger.record_event(
+        ToolAuditLedgerEvent(
+            event_type="tool_approval_requested",
+            session_key="cli:other",
+            request_id="call-1",
+            approval_request_id="approval-other",
+            tool_name="shell",
+        )
+    )
+    module = ToolApprovalCommandModule(
+        "status_commands",
+        ToolApprovalStore(tmp_path / "approvals.db"),
+        audit_ledger_store=ledger,
+    )
+
+    request_reply = (
+        await _run_command(module, "/tool_audit request call-1", session_key="cli:s")
+    ).abort_reply
+    approval_reply = (
+        await _run_command(
+            module, "/tool_audit approval approval-1", session_key="cli:s"
+        )
+    ).abort_reply
+    event_reply = (
+        await _run_command(
+            module,
+            "/tool_audit event tool_approval_requested 10",
+            session_key="cli:s",
+        )
+    ).abort_reply
+
+    assert "approval-1" in request_reply
+    assert "approval-other" not in request_reply
+    assert "approval-1" in approval_reply
+    assert "approval-other" not in approval_reply
+    assert "tool_approval_requested" in event_reply
+    assert "approval-other" not in event_reply
+
+
+def test_status_commands_plugin_wires_workspace_tool_audit_ledger(
+    tmp_path: Path,
+) -> None:
+    plugin = StatusCommands()
+    plugin.context = PluginContext(
+        event_bus=None,
+        tool_registry=None,
+        plugin_id="status_commands",
+        plugin_dir=tmp_path,
+        kv_store=PluginKVStore(tmp_path / "kv.json"),
+        workspace=tmp_path,
+    )
+
+    modules = plugin.before_turn_modules()
+    approval_module = next(
+        module for module in modules if isinstance(module, ToolApprovalCommandModule)
+    )
+
+    assert approval_module._audit_ledger_store is not None
+    assert (
+        approval_module._audit_ledger_store.db_path
+        == ToolAuditLedgerStore.db_path_from_workspace(tmp_path)
+    )
