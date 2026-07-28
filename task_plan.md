@@ -1790,3 +1790,77 @@ Goal: record answer post-check shadow diagnostics for the governed production-sa
 2. Attach post-check shadow to comprehensive eval reports - complete
 3. Add fake-provider smoke and privacy coverage - complete
 4. Update docs and commit locally without push - complete
+
+## 2026-07-28 Memory P6o5 Small Real LLM AB
+
+Goal: run a bounded real LLM A/B comparing raw tri retrieval, candidate governance, oracle answer contract, and governed production-safe evidence contract.
+
+Plan:
+
+- `docs/superpowers/plans/2026-07-28-memory-p6o5-small-real-llm-ab.md`
+
+Matrix:
+
+- common `20` + hard `20`;
+- prompt variant `baseline`;
+- repeats `1`;
+- profiles: `chain_tri_retrieval`, `chain_tri_candidate_governance`, `chain_tri_answer_contract`, `chain_tri_governed_answer_contract`;
+- expected and completed calls: `160`.
+
+Execution status:
+
+1. Add scaled fake-provider CLI matrix-shape regression - complete.
+2. Run full fake-provider 160-row smoke - complete.
+3. Run real LLM 160-call matrix - complete.
+4. Update docs and commit locally without push - in progress.
+
+Real report:
+
+- `my_md/memory_optimization/eval_reports/p6o5_governed_answer_contract_small_online_v1/memory_comprehensive_online_eval.json`
+- `my_md/memory_optimization/eval_reports/p6o5_governed_answer_contract_small_online_v1/memory_comprehensive_online_eval.md`
+
+Real report integrity:
+
+- `real_llm_enabled = True`;
+- `case_count = 160`;
+- `unique_case_count = 40`;
+- `completed_call_count = 160`;
+- `profile_count = 4`;
+- `prompt_variant_count = 1`;
+- `repeat_count = 1`;
+- `provider_error_count = 0`;
+- `timeout_count = 0`;
+- `excluded_infra_failure_count = 0`;
+- `partial_due_to_infra_failure = False`.
+
+Per-profile result:
+
+- `chain_tri_retrieval`: answer `15/40 = 37.5%`, grounding `100.0%`, forbidden `12.5%`, avg tokens `5518.825`.
+- `chain_tri_candidate_governance`: answer `20/40 = 50.0%`, grounding `100.0%`, forbidden `15.0%`, avg tokens `5538.125`.
+- `chain_tri_answer_contract`: answer `32/40 = 80.0%`, grounding `100.0%`, forbidden `15.0%`, avg tokens `5688.775`.
+- `chain_tri_governed_answer_contract`: answer `39/40 = 97.5%`, grounding `100.0%`, forbidden `0.0%`, avg tokens `6079.675`.
+
+Post-check shadow:
+
+- `case_count = 40`;
+- `enabled_case_count = 40`;
+- `needs_retry_count = 0`;
+- `forbidden_boundary_included_count = 0`;
+- `missing_likely_relevant_context_count = 0`;
+- `stale_evidence_included_count = 0`;
+- `conflict_evidence_included_count = 0`;
+- `insufficient_fallback_missing_count = 0`.
+
+Conclusion:
+
+- `chain_tri_governed_answer_contract` is the best P6o-5 profile: it combines candidate governance and production-safe evidence contract, reaching `97.5%` answer rate with `0.0%` forbidden.
+- Raw tri retrieval underperforms because it expands context without answer guidance.
+- Candidate governance alone underperforms because it filters input but does not tell the model how to use allowed evidence.
+- Oracle answer contract performs well but is not production-safe because it uses fixture answer expectations.
+- Post-check shadow ids mean injected/included context ids, not proven answer citation use.
+
+Boundary:
+
+- Small controlled eval only, not production natural traffic.
+- No production `AgentLoop`, `Reasoner`, `ToolExecutor`, memory write, production prompt, or old `Retriever.retrieve()` contract changes.
+- Next step should be robustness / targeted failure expansion before productionization.

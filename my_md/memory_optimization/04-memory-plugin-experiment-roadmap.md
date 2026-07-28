@@ -278,6 +278,12 @@ P6o-3 complete criteria: governed tri contract uses production-safe evidence fie
 
 P6o-4 complete criteria: comprehensive eval case records include private `answer_post_check_shadow`, aggregate metrics expose retry and evidence-risk counts, Markdown shows only aggregate shadow metrics, fake-provider smoke passes, and no production answer behavior changes. P6o-5 should run the small real LLM A/B with these shadow metrics enabled.
 
+P6o-5 complete result: small real LLM A/B used common `20` + hard `20`, baseline prompt, repeat `1`, and four profiles for `160` completed calls. Report path is `my_md/memory_optimization/eval_reports/p6o5_governed_answer_contract_small_online_v1/`. Infra was clean: `provider_error_count = 0`, `timeout_count = 0`, `excluded_infra_failure_count = 0`. The winning profile was `chain_tri_governed_answer_contract`: answer `39/40 = 97.5%`, grounding `100.0%`, forbidden `0.0%`, avg tokens `6079.675`. The comparison rows were `chain_tri_retrieval` answer `37.5%` / forbidden `12.5%`, `chain_tri_candidate_governance` answer `50.0%` / forbidden `15.0%`, and `chain_tri_answer_contract` answer `80.0%` / forbidden `15.0%`.
+
+P6o-5 conclusion: the combination works because it joins the two previously separated controls. Candidate risk tiers keep dangerous or stale boundaries visible before injection, while the production-safe evidence contract gives the model a clear allowed-evidence and insufficient-evidence structure without fixture answer terms. Raw tri retrieval is too weak because it only expands context. Candidate governance alone is too weak because it filters input but does not guide answer construction. Oracle answer contract is useful diagnostically but cannot be productized as-is. The governed contract is now the best candidate for the next shadow expansion, not for immediate production activation.
+
+Next recommended roadmap step: do a P6o-6 robustness pass before productionization. Keep production code unchanged; rerun a slightly larger or failure-targeted real LLM matrix, inspect the remaining `1/40` governed answer miss, and add non-oracle citation/use signals if available. Only after that should a production evidence contract or retry policy be designed.
+
 ## Phase 6t：source_ref 写入质量治理
 
 ### 目的

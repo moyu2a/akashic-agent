@@ -1978,3 +1978,63 @@
 - Fake-provider smoke: `case_count = 12`, `enabled_case_count = 4`, `real_llm_enabled = False`, `provider_error_count = 0`, `timeout_count = 0`, `forbidden_boundary_included_count = 0`, `insufficient_fallback_missing_count = 0`.
 - Final verification: `tests/test_memory_answer_contract.py tests/test_memory_answer_post_check.py tests/test_memory_comprehensive_online_eval.py tests/test_memory_retrieval_governance.py tests/test_memory_tri_candidate_governance.py` passed with `78 passed`; `compileall -q memory2 scripts tests` and `git diff --check` passed.
 - Next handoff: P6o-5 small real LLM A/B should compare `chain_tri_retrieval`, `chain_tri_candidate_governance`, `chain_tri_answer_contract`, and `chain_tri_governed_answer_contract` with post-check shadow metrics enabled.
+
+## 2026-07-28 Memory P6o5 Small Real LLM AB
+
+- Plan path: `docs/superpowers/plans/2026-07-28-memory-p6o5-small-real-llm-ab.md`.
+- Scope: small controlled real LLM A/B, sanitized reports, docs; no production AgentLoop / Reasoner / ToolExecutor / memory write / production prompt / old `Retriever.retrieve()` contract changes.
+- Plan review fixes applied before execution:
+  - JSON and Markdown privacy gates;
+  - `completed_call_count` assertion;
+  - common `20` + hard `20` split assertion;
+  - literal `baseline` prompt variant and repeat `0` assertions;
+  - corrected wording from aggregate-only to sanitized report artifacts.
+- Task 1 commit: `248a234 test: cover p6o5 small online matrix shape`.
+- Fake-provider smoke:
+  - path: `/tmp/akashic-memory-p6o5-small-fake/reports`;
+  - `case_count = 160`;
+  - `unique_case_count = 40`;
+  - `completed_call_count = 160`;
+  - `profile_count = 4`;
+  - `provider_error_count = 0`;
+  - `timeout_count = 0`;
+  - `answer_post_check_shadow.case_count = 40`;
+  - artifact integrity and privacy checks passed.
+- Real LLM report:
+  - `my_md/memory_optimization/eval_reports/p6o5_governed_answer_contract_small_online_v1/memory_comprehensive_online_eval.json`;
+  - `my_md/memory_optimization/eval_reports/p6o5_governed_answer_contract_small_online_v1/memory_comprehensive_online_eval.md`.
+- Real LLM integrity:
+  - `real_llm_enabled = True`;
+  - `case_count = 160`;
+  - `unique_case_count = 40`;
+  - `completed_call_count = 160`;
+  - `profile_count = 4`;
+  - `prompt_variant_count = 1`;
+  - `repeat_count = 1`;
+  - `provider_error_count = 0`;
+  - `timeout_count = 0`;
+  - `excluded_infra_failure_count = 0`;
+  - `partial_due_to_infra_failure = False`;
+  - JSON / Markdown privacy checks passed.
+- Per-profile result:
+  - `chain_tri_retrieval`: answer `15/40 = 37.5%`, grounding `100.0%`, forbidden `12.5%`, avg tokens `5518.825`;
+  - `chain_tri_candidate_governance`: answer `20/40 = 50.0%`, grounding `100.0%`, forbidden `15.0%`, avg tokens `5538.125`;
+  - `chain_tri_answer_contract`: answer `32/40 = 80.0%`, grounding `100.0%`, forbidden `15.0%`, avg tokens `5688.775`;
+  - `chain_tri_governed_answer_contract`: answer `39/40 = 97.5%`, grounding `100.0%`, forbidden `0.0%`, avg tokens `6079.675`.
+- Post-check shadow:
+  - `case_count = 40`;
+  - `enabled_case_count = 40`;
+  - `needs_retry_count = 0`;
+  - `forbidden_boundary_included_count = 0`;
+  - `missing_likely_relevant_context_count = 0`;
+  - `stale_evidence_included_count = 0`;
+  - `conflict_evidence_included_count = 0`;
+  - `insufficient_fallback_missing_count = 0`.
+- Conclusion:
+  - latest governed profile is most effective because it combines candidate risk governance with production-safe evidence contract;
+  - raw tri retrieval underperforms because it expands context without answer guidance;
+  - candidate governance alone underperforms because it filters input but lacks answer-construction guidance;
+  - oracle answer contract performs well but is not production-safe because it uses fixture answer expectations;
+  - post-check shadow id fields mean injected/included context, not proven answer citation use.
+- Remaining:
+  - update docs commit, final verification, plan commit.

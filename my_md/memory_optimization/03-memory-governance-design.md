@@ -439,6 +439,19 @@ P6o-3 design boundary: the governed evidence contract no longer says what terms 
 
 P6o-4 design boundary: answer post-check is shadow-only. It does not rewrite, retry, or block answers; it records whether the eval context included allowed evidence, missed likely evidence, included forbidden boundaries, included stale/conflict evidence, or whether the answer text failed to acknowledge insufficient evidence. P6o-5 can use these fields to compare real LLM profiles before any active retry policy exists.
 
+P6o-5 small real LLM result:
+
+| profile | answer_rate | grounding_rate | forbidden_rate | avg_tokens |
+| --- | ---: | ---: | ---: | ---: |
+| `chain_tri_retrieval` | `37.5%` | `100.0%` | `12.5%` | `5518.825` |
+| `chain_tri_candidate_governance` | `50.0%` | `100.0%` | `15.0%` | `5538.125` |
+| `chain_tri_answer_contract` | `80.0%` | `100.0%` | `15.0%` | `5688.775` |
+| `chain_tri_governed_answer_contract` | `97.5%` | `100.0%` | `0.0%` | `6079.675` |
+
+Governance conclusion: the best result comes from combining input-side candidate risk governance with output-side production-safe evidence contract. Candidate governance alone controls what evidence can enter, but it does not tell the model how to use the remaining evidence. The oracle `chain_tri_answer_contract` shows answer constraints are effective, but it still depends on fixture answer expectations. The governed contract keeps the useful part of the answer contract by using production-safe evidence states: allowed evidence, likely relevant evidence, stale/conflict warnings, active version, insufficient-evidence fallback, and forbidden boundary.
+
+P6o-5 post-check shadow reported `enabled_case_count = 40`, `needs_retry_count = 0`, and no forbidden/stale/conflict/insufficient fallback misses. These fields must be treated as context-inclusion diagnostics: they show what evidence ids were injected or included by the eval harness, not that the generated answer cited those ids. The productionization path should therefore stay staged: first shadow a larger matrix and targeted failures, then design retry/fallback policy, then consider active prompt or retrieval changes.
+
 ## 8. 最小可行版本
 
 ### MVP 1：写入门控 trace

@@ -372,6 +372,54 @@ The key boundary is that `chain_tri_answer_contract` remains the oracle diagnost
 
 P6o-4 adds report-only post-answer diagnostics for the production-safe governed contract. These metrics are not pass/fail gates yet: `needs_retry_count`, `forbidden_boundary_included_count`, `missing_likely_relevant_context_count`, `stale_evidence_included_count`, `conflict_evidence_included_count`, and `insufficient_fallback_missing_count` describe what a future production retry/fallback policy would have observed.
 
+### Phase 6o5 Small Real LLM A/B
+
+P6o-5 completed the same `40` unique case small matrix: common `20` + hard `20`, baseline prompt, repeat `1`, four profiles, and `160` completed real LLM calls. Report path:
+
+- `my_md/memory_optimization/eval_reports/p6o5_governed_answer_contract_small_online_v1/memory_comprehensive_online_eval.json`
+- `my_md/memory_optimization/eval_reports/p6o5_governed_answer_contract_small_online_v1/memory_comprehensive_online_eval.md`
+
+Integrity:
+
+- `real_llm_enabled = True`
+- `case_count = 160`
+- `unique_case_count = 40`
+- `completed_call_count = 160`
+- `provider_error_count = 0`
+- `timeout_count = 0`
+- `excluded_infra_failure_count = 0`
+- `partial_due_to_infra_failure = False`
+
+| profile | answer_success | answer_rate | grounding_rate | forbidden_rate | avg_tokens |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `chain_tri_retrieval` | `15/40` | `37.5%` | `100.0%` | `12.5%` | `5518.825` |
+| `chain_tri_candidate_governance` | `20/40` | `50.0%` | `100.0%` | `15.0%` | `5538.125` |
+| `chain_tri_answer_contract` | `32/40` | `80.0%` | `100.0%` | `15.0%` | `5688.775` |
+| `chain_tri_governed_answer_contract` | `39/40` | `97.5%` | `100.0%` | `0.0%` | `6079.675` |
+
+Post-check shadow aggregate for `chain_tri_governed_answer_contract`:
+
+| metric | value |
+| --- | ---: |
+| `case_count` | `40` |
+| `enabled_case_count` | `40` |
+| `needs_retry_count` | `0` |
+| `forbidden_boundary_included_count` | `0` |
+| `missing_likely_relevant_context_count` | `0` |
+| `stale_evidence_included_count` | `0` |
+| `conflict_evidence_included_count` | `0` |
+| `insufficient_fallback_missing_count` | `0` |
+
+Metric interpretation:
+
+- `chain_tri_retrieval` is raw tri recall plus normal injection. It keeps grounding at `100.0%`, but answer control is weak and forbidden remains nonzero.
+- `chain_tri_candidate_governance` is candidate filtering only. It improves answer rate versus raw tri in this run, but still lacks answer-construction guidance.
+- `chain_tri_answer_contract` is an oracle diagnostic control because it uses fixture answer expectations; it proves structured answer constraints are powerful, not production-ready.
+- `chain_tri_governed_answer_contract` is strongest because it combines candidate risk tiering with production-safe evidence fields. It avoids fixture answer terms, reaches `97.5%` answer rate, keeps grounding at `100.0%`, and reduces forbidden to `0.0%`.
+- Post-check shadow ids mean the eval harness injected or included those context ids. They are not proof that the LLM cited those ids in its generated answer.
+
+This is still a small controlled eval, not production natural traffic. The next quality metric step should check robustness on a slightly larger fresh matrix or targeted failure set before any production activation.
+
 ### Phase 6c-1 已建立的离线 uplift proxy report
 
 Phase 6c-1 不是答案质量评测，而是把现有 shadow trace 转成统一的对照指标。它输出：
