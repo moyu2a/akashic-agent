@@ -36,6 +36,8 @@ class ScriptedComprehensiveOnlineProvider:
         )
         if "memory_id=" not in text:
             answer = "没有可用记忆，无法确认。"
+        elif "Answer Contract: chain_tri_governed_answer_contract" in text:
+            answer = "根据 governed Answer Contract，应使用治理后的 allowed_evidence，并避免 forbidden_terms。"
         elif "Answer Contract: chain_tri_answer_contract" in text:
             answer = "根据 Answer Contract，应使用 must_use_memory_ids 中的证据回答，并避免 forbidden_terms。"
         elif "RRF" in text:

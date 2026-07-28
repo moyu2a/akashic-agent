@@ -1815,9 +1815,10 @@ def _profile_metadata_markdown_section(metrics: dict[str, object]) -> list[str]:
         "",
         (
             "| profile | eval_only | oracle_protected | uses_fixture_expected_ids | "
-            "diagnostic_answer_contract | uses_fixture_answer_expectations |"
+            "diagnostic_answer_contract | uses_fixture_answer_expectations | "
+            "combines_candidate_governance |"
         ),
-        "| --- | ---: | ---: | ---: | ---: | ---: |",
+        "| --- | ---: | ---: | ---: | ---: | ---: | ---: |",
     ]
     for profile in sorted(metadata):
         row = metadata.get(profile)
@@ -1833,6 +1834,7 @@ def _profile_metadata_markdown_section(metrics: dict[str, object]) -> list[str]:
                     _fmt(row.get("uses_fixture_expected_ids")),
                     _fmt(row.get("diagnostic_answer_contract")),
                     _fmt(row.get("uses_fixture_answer_expectations")),
+                    _fmt(row.get("combines_candidate_governance")),
                 ]
             )
             + " |"

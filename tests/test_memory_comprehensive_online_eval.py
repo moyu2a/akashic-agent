@@ -40,6 +40,8 @@ class ComprehensiveScriptedProvider:
         )
         if "memory_id=" not in text:
             answer = "没有可用记忆，无法确认。"
+        elif "Answer Contract: chain_tri_governed_answer_contract" in text:
+            answer = "根据 governed Answer Contract，应使用治理后的 allowed_evidence，并避免 forbidden_terms。"
         elif "Answer Contract: chain_tri_answer_contract" in text:
             answer = "根据 Answer Contract，应使用 must_use_memory_ids 中的证据回答，并避免 forbidden_terms。"
         elif "RRF" in text:
@@ -623,6 +625,48 @@ def test_tri_answer_contract_profile_report_records_eval_only_metadata(
     markdown = md_path.read_text(encoding="utf-8")
     assert "diagnostic_answer_contract" in markdown
     assert "uses_fixture_answer_expectations" in markdown
+
+
+def test_tri_governed_answer_contract_report_records_combined_eval_metadata(
+    tmp_path: Path,
+) -> None:
+    case = build_quantitative_eval_cases(
+        case_set="common",
+        limit=1,
+        case_pack="standard",
+    )[0]
+    specs = build_comprehensive_run_specs(
+        [case],
+        profiles=("chain_tri_governed_answer_contract",),
+        prompt_variants=("baseline",),
+        repeats=1,
+    )
+
+    report = asyncio.run(
+        run_comprehensive_online_eval(
+            specs,
+            tmp_path / "workspace",
+            ComprehensiveScriptedProvider(),
+            model="scripted",
+            real_llm_enabled=False,
+        )
+    )
+
+    metadata = report.metrics["profile_metadata"][
+        "chain_tri_governed_answer_contract"
+    ]
+    assert metadata["eval_only"] is True
+    assert metadata["oracle_protected"] is True
+    assert metadata["uses_fixture_expected_ids"] is True
+    assert metadata["diagnostic_answer_contract"] is True
+    assert metadata["uses_fixture_answer_expectations"] is True
+    assert metadata["combines_candidate_governance"] is True
+
+    md_path = tmp_path / "report.md"
+    write_comprehensive_online_markdown(report, md_path)
+    markdown = md_path.read_text(encoding="utf-8")
+    assert "chain_tri_governed_answer_contract" in markdown
+    assert "combines_candidate_governance" in markdown
 
 
 def test_optional_tri_candidate_governance_profile_is_visible_in_markdown(
