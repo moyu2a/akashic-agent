@@ -1,0 +1,95 @@
+from __future__ import annotations
+
+from memory2.eval_answer_post_check import (
+    answer_post_check_shadow_to_dict,
+    build_answer_post_check_shadow,
+)
+
+
+def _contract() -> dict[str, object]:
+    return {
+        "production_safe_evidence_contract": True,
+        "allowed_evidence_ids": ["target", "weak", "conflict"],
+        "likely_relevant_evidence_ids": ["target", "weak"],
+        "stale_warning_ids": ["old"],
+        "conflict_warning_ids": ["conflict"],
+        "active_version_ids": ["target", "weak", "conflict"],
+        "insufficient_evidence_ids": ["gap"],
+        "insufficient_evidence_fallback": True,
+        "forbidden_boundary_ids": ["blocked"],
+        "deleted_evidence_ids": ["blocked", "old"],
+    }
+
+
+def test_post_check_records_allowed_missing_risky_and_fallback_signals() -> None:
+    shadow = build_answer_post_check_shadow(
+        "根据证据不足，无法确认。",
+        _contract(),
+        ["target", "conflict", "blocked"],
+    )
+
+    assert shadow.shadow_enabled is True
+    assert shadow.production_safe_evidence_contract is True
+    assert shadow.allowed_evidence_included is True
+    assert shadow.included_allowed_evidence_ids == ("target", "conflict")
+    assert shadow.missing_likely_relevant_context_ids == ("weak",)
+    assert shadow.forbidden_boundary_included is True
+    assert shadow.included_forbidden_boundary_ids == ("blocked",)
+    assert shadow.conflict_evidence_included is True
+    assert shadow.included_conflict_warning_ids == ("conflict",)
+    assert shadow.stale_evidence_included is False
+    assert shadow.insufficient_evidence_fallback_expected is True
+    assert shadow.insufficient_evidence_fallback_observed is True
+    assert shadow.needs_retry is True
+    assert shadow.retry_reasons == (
+        "forbidden_boundary_included",
+        "missing_likely_relevant_context",
+        "conflict_evidence_included",
+    )
+    assert shadow.raw_answer == ""
+    assert shadow.raw_prompt == ""
+
+
+def test_post_check_marks_missing_fallback_when_evidence_is_insufficient() -> None:
+    shadow = build_answer_post_check_shadow(
+        "可以继续执行。",
+        _contract(),
+        ["target", "weak"],
+    )
+
+    assert shadow.insufficient_evidence_fallback_expected is True
+    assert shadow.insufficient_evidence_fallback_observed is False
+    assert shadow.needs_retry is True
+    assert "insufficient_evidence_fallback_missing" in shadow.retry_reasons
+
+
+def test_post_check_is_disabled_for_non_production_safe_contract() -> None:
+    shadow = build_answer_post_check_shadow(
+        "根据 Answer Contract 回答。",
+        {"required_terms": ["ORACLE_TERM"]},
+        ["target"],
+    )
+
+    assert shadow.shadow_enabled is False
+    assert shadow.production_safe_evidence_contract is False
+    assert shadow.included_allowed_evidence_ids == ()
+    assert shadow.retry_reasons == ()
+
+
+def test_post_check_dict_is_private_and_structured() -> None:
+    shadow = build_answer_post_check_shadow(
+        "这是一段完整回答，证据不足，无法确认。",
+        _contract(),
+        ["target", "weak"],
+    )
+
+    payload = answer_post_check_shadow_to_dict(shadow)
+
+    assert payload["shadow_enabled"] is True
+    assert payload["production_safe_evidence_contract"] is True
+    assert payload["allowed_evidence_included"] is True
+    assert payload["included_allowed_evidence_ids"] == ["target", "weak"]
+    assert "raw_answer" not in payload
+    assert "raw_prompt" not in payload
+    assert "full_answer" not in payload
+    assert "这是一段完整回答" not in str(payload)
