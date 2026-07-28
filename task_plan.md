@@ -1928,3 +1928,68 @@ Next step:
 
 - Test version-boundary governed fields separately.
 - Do not add graph or all-on until version-boundary has its own controlled result.
+
+## 2026-07-28 P6o-7 Version-Boundary Governed Slice
+
+Goal: test version-boundary evidence-contract fields as a governed tri signal, without expanding recall and without enabling graph/all-on/rerank combinations.
+
+Plan:
+
+- `docs/superpowers/plans/2026-07-28-memory-p6o7-version-boundary-governed.md`
+
+Execution status:
+
+1. Confirm P6o-6 data is recorded in docs - complete.
+2. Write, review, and revise P6o-7 plan - complete.
+3. Add version-boundary evidence contract fields - complete.
+4. Add eval-only `chain_tri_version_governed_answer_contract` profile - complete.
+5. Add fake-provider CLI matrix smoke - complete.
+6. Run fake-provider 40-case gate - complete.
+7. Run bounded real LLM matrix - complete.
+8. Update docs and commit locally without push - in progress.
+
+Real report:
+
+- `my_md/memory_optimization/eval_reports/p6o7_version_boundary_governed_small_online_v1/memory_comprehensive_online_eval.json`
+- `my_md/memory_optimization/eval_reports/p6o7_version_boundary_governed_small_online_v1/memory_comprehensive_online_eval.md`
+
+Real report integrity:
+
+- `real_llm_enabled = True`;
+- `case_count = 80`;
+- `unique_case_count = 40`;
+- `completed_call_count = 80`;
+- `profile_count = 2`;
+- `prompt_variant_count = 1`;
+- `repeat_count = 1`;
+- `provider_error_count = 0`;
+- `timeout_count = 0`;
+- JSON / Markdown privacy checks passed.
+
+Per-profile real result:
+
+- `chain_tri_governed_answer_contract`: answer `40/40 = 100.0%`, grounding `100.0%`, forbidden `0.0%`, avg tokens `6149.875`.
+- `chain_tri_version_governed_answer_contract`: answer `39/40 = 97.5%`, grounding `100.0%`, forbidden `0.0%`, avg tokens `6077.7`.
+
+Post-check shadow:
+
+- `case_count = 80`;
+- `enabled_case_count = 80`;
+- `needs_retry_count = 0`;
+- `forbidden_boundary_included_count = 0`;
+- `missing_likely_relevant_context_count = 0`;
+- `stale_evidence_included_count = 0`;
+- `conflict_evidence_included_count = 0`;
+- `insufficient_fallback_missing_count = 0`.
+
+Conclusion:
+
+- Version-boundary metadata did not expand recall and did not introduce forbidden/stale/conflict post-check risk.
+- It passed the safety gate, with grounding `100.0%`, forbidden `0.0%`, and token cost down by `72.175` avg tokens versus the same-run governed baseline.
+- It did not beat the governed baseline on answer_rate in this run: `97.5%` vs `100.0%`, a `-2.5` point delta.
+- Keep version-boundary as eval/shadow evidence-contract metadata for now; do not productionize it alone.
+
+Next step:
+
+- Analyze the one version-governed miss and compare governed, rerank-governed, and version-governed in the same matrix before combining rerank + version.
+- Continue deferring graph/all-on until combined governed-contract signals have targeted evidence.

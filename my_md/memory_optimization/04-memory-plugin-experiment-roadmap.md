@@ -307,6 +307,10 @@ P6o-6 first slice result: implemented eval-only `chain_tri_rerank_governed_answe
 
 P6o-6 first slice conclusion: rerank is useful when treated as contract-internal ordering and budget signal, not as unconditional extra context. It recovered the remaining `1/40` miss from the governed baseline with only about `0.77%` avg-token overhead and no post-check risk count increase. The next P6o-6 slice should test version-boundary governed fields separately: active version, stale warning, conflict warning, superseded forbidden boundary, and insufficient evidence fallback. Do not add routed graph or all-on until version-boundary has its own result.
 
+P6o-7 version-boundary slice result: implemented eval-only `chain_tri_version_governed_answer_contract`, which keeps `chain_tri_governed_answer_contract` allowed evidence unchanged and adds scoped version-boundary fields. The bounded real LLM matrix used common `20` + hard `20`, baseline prompt, repeat `1`, two profiles, and `80` completed calls. Report path is `my_md/memory_optimization/eval_reports/p6o7_version_boundary_governed_small_online_v1/`. Infra was clean: `provider_error_count = 0`, `timeout_count = 0`. Results: `chain_tri_governed_answer_contract` answer `40/40 = 100.0%`, grounding `100.0%`, forbidden `0.0%`, avg tokens `6149.875`; `chain_tri_version_governed_answer_contract` answer `39/40 = 97.5%`, grounding `100.0%`, forbidden `0.0%`, avg tokens `6077.7`.
+
+P6o-7 version-boundary conclusion: version-boundary fields are safe as contract metadata in this slice: no recall expansion, no forbidden/stale/conflict post-check risk increase, and avg tokens decreased by `72.175`. They did not improve answer_rate over the same-run governed baseline, dropping `2.5` points, so this should remain shadow/evidence-contract signal rather than a production activation. Next recommended step is targeted failure analysis of the one version-governed miss plus a same-matrix comparison among governed, rerank-governed, and version-governed before combining rerank + version or adding graph/all-on.
+
 ## Phase 6t：source_ref 写入质量治理
 
 ### 目的

@@ -2134,3 +2134,60 @@
 - Next step:
   - test version-boundary governed fields separately;
   - do not add routed graph or all-on until the version-boundary slice has its own result.
+
+## 2026-07-28 P6o-7 version-boundary governed slice
+
+- Plan:
+  - `docs/superpowers/plans/2026-07-28-memory-p6o7-version-boundary-governed.md`.
+- Review revisions:
+  - scoped version-boundary `recalled_items` to governed allowed evidence rows;
+  - kept full `memory_items` only for version-chain topology;
+  - restricted superseded forbidden boundary to predecessors of governed active leaves;
+  - enforced `allowed_evidence_ids` and `active_version_ids` disjoint from `forbidden_boundary_ids`;
+  - added unrelated superseded fixture regression so unrelated version chains do not pollute the profile.
+- Implementation commits:
+  - `836c67d feat: add version boundary evidence contract fields`;
+  - `ede1a9e feat: add version governed answer contract eval profile`;
+  - `604de4b test: cover p6o7 version governed online matrix`.
+- Fake-provider full gate:
+  - report path: `/tmp/akashic-memory-p6o7-version-boundary-governed/fake-reports/memory_comprehensive_online_eval.json`;
+  - `case_count = 80`;
+  - `unique_case_count = 40`;
+  - `profile_count = 2`;
+  - `provider_error_count = 0`;
+  - `timeout_count = 0`;
+  - `answer_post_check_shadow.case_count = 80`.
+- Real LLM run:
+  - report path: `my_md/memory_optimization/eval_reports/p6o7_version_boundary_governed_small_online_v1/memory_comprehensive_online_eval.json`;
+  - markdown path: `my_md/memory_optimization/eval_reports/p6o7_version_boundary_governed_small_online_v1/memory_comprehensive_online_eval.md`;
+  - `case_count = 80`;
+  - `unique_case_count = 40`;
+  - `completed_call_count = 80`;
+  - `profile_count = 2`;
+  - `prompt_variant_count = 1`;
+  - `repeat_count = 1`;
+  - `provider_error_count = 0`;
+  - `timeout_count = 0`;
+  - privacy flags: `raw_query_included = False`, `raw_memory_summary_included = False`, `prompt_included = False`, `session_text_included = False`, `full_answer_included = False`.
+- Per-profile real result:
+  - `chain_tri_governed_answer_contract`: answer `40/40 = 100.0%`, grounding `100.0%`, forbidden `0.0%`, avg tokens `6149.875`;
+  - `chain_tri_version_governed_answer_contract`: answer `39/40 = 97.5%`, grounding `100.0%`, forbidden `0.0%`, avg tokens `6077.7`.
+- Post-check shadow aggregate:
+  - `case_count = 80`;
+  - `enabled_case_count = 80`;
+  - `needs_retry_count = 0`;
+  - `forbidden_boundary_included_count = 0`;
+  - `missing_likely_relevant_context_count = 0`;
+  - `stale_evidence_included_count = 0`;
+  - `conflict_evidence_included_count = 0`;
+  - `insufficient_fallback_missing_count = 0`.
+- Conclusion:
+  - version-boundary metadata is safe as scoped contract metadata in this slice;
+  - it did not expand recall beyond candidate-governed tri ids;
+  - it did not increase forbidden/stale/conflict/fallback post-check risk;
+  - token cost decreased by `72.175` avg tokens versus the same-run governed baseline;
+  - answer_rate was `97.5%` versus governed baseline `100.0%`, so it is not a standalone answer-quality improvement.
+- Next step:
+  - analyze the one version-governed miss;
+  - compare governed, rerank-governed, and version-governed in the same bounded matrix before combining rerank + version;
+  - keep graph/all-on deferred.

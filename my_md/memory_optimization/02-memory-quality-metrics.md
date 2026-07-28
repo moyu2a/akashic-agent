@@ -469,6 +469,72 @@ Interpretation:
 - Token cost increased slightly versus the governed baseline in this run: `6209.475 - 6162.05 = 47.425` average tokens, about `0.77%`.
 - This is still a small controlled eval. The next slice should test version-boundary fields separately; graph and all-on remain deferred.
 
+### Phase 6o7 Version-Boundary Governed
+
+P6o-7 tested only one added signal: `chain_tri_version_governed_answer_contract`.
+It keeps `chain_tri_governed_answer_contract` allowed evidence unchanged and
+adds version-boundary fields for active versions, stale/superseded warnings,
+conflict warnings, forbidden boundaries, and insufficient-evidence fallback.
+The implementation scopes version-boundary computation to governed tri ids and
+their relevant replacement predecessors so unrelated fixture version chains do
+not contaminate the contract. This is still eval/shadow-only and
+oracle-protected through P6o-2 candidate governance; it is not production
+traffic.
+
+Report path:
+
+- `my_md/memory_optimization/eval_reports/p6o7_version_boundary_governed_small_online_v1/memory_comprehensive_online_eval.json`
+- `my_md/memory_optimization/eval_reports/p6o7_version_boundary_governed_small_online_v1/memory_comprehensive_online_eval.md`
+
+Integrity:
+
+- `real_llm_enabled = True`
+- `case_count = 80`
+- `unique_case_count = 40`
+- `completed_call_count = 80`
+- `profile_count = 2`
+- `provider_error_count = 0`
+- `timeout_count = 0`
+- JSON / Markdown privacy checks passed.
+
+| profile | answer_success | answer_rate | grounding_rate | forbidden_rate | avg_tokens |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `chain_tri_governed_answer_contract` | `40/40` | `100.0%` | `100.0%` | `0.0%` | `6149.875` |
+| `chain_tri_version_governed_answer_contract` | `39/40` | `97.5%` | `100.0%` | `0.0%` | `6077.7` |
+
+Delta:
+
+- Answer rate changed by `-2.5` points versus this run's governed baseline.
+- Avg tokens changed by `6077.7 - 6149.875 = -72.175` tokens.
+- Grounding and forbidden stayed at `100.0%` and `0.0%`.
+
+Post-check shadow aggregate across both governed profiles:
+
+| metric | value |
+| --- | ---: |
+| `case_count` | `80` |
+| `enabled_case_count` | `80` |
+| `needs_retry_count` | `0` |
+| `forbidden_boundary_included_count` | `0` |
+| `missing_likely_relevant_context_count` | `0` |
+| `stale_evidence_included_count` | `0` |
+| `conflict_evidence_included_count` | `0` |
+| `insufficient_fallback_missing_count` | `0` |
+
+Per-profile post-check comparison also stayed flat:
+
+| profile | needs_retry | forbidden_boundary_included | missing_likely_relevant_context | stale_evidence_included | conflict_evidence_included | insufficient_fallback_missing |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `chain_tri_governed_answer_contract` | `0` | `0` | `0` | `0` | `0` | `0` |
+| `chain_tri_version_governed_answer_contract` | `0` | `0` | `0` | `0` | `0` | `0` |
+
+Interpretation:
+
+- Version-boundary fields did not expand recall and did not introduce forbidden/stale/conflict context risk.
+- The version-governed profile stayed within the success gate: answer rate dropped only `2.5` points, grounding remained `100.0%`, forbidden remained `0.0%`, and token cost decreased.
+- Because answer_rate did not beat the governed baseline in this run, version-boundary should remain a shadow/evidence-contract safety signal. It is not a standalone production win.
+- The next slice should not jump to graph/all-on. The useful follow-up is targeted failure analysis of the one version-governed miss and a small comparison of `governed`, `rerank-governed`, and `version-governed` under the same seed/order before combining signals.
+
 ### Phase 6c-1 已建立的离线 uplift proxy report
 
 Phase 6c-1 不是答案质量评测，而是把现有 shadow trace 转成统一的对照指标。它输出：
