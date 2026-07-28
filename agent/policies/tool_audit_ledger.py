@@ -104,6 +104,96 @@ _BOOLEAN_METADATA_KEYS = frozenset(
         "background_allowed",
     }
 )
+_EVENT_TYPES = frozenset(
+    {
+        "tool_invocation_policy_decision",
+        "tool_approval_requested",
+        "tool_approval_approved",
+        "tool_approval_denied",
+        "tool_approval_expired",
+        "tool_approval_consumed",
+        "tool_approval_executed",
+        "tool_approval_execution_failed",
+        "approved_side_effect_payload_recorded",
+        "approved_side_effect_preview_ready",
+        "approved_side_effect_executed",
+        "approved_side_effect_execution_failed",
+        "approved_side_effect_rolled_back",
+        "approved_side_effect_rollback_failed",
+        "approved_shell_sandbox_unavailable",
+        "approved_shell_payload_recorded",
+        "approved_shell_sandbox_preview_ready",
+        "approved_shell_sandbox_timeout",
+        "approved_shell_sandbox_execution_failed",
+        "approved_shell_sandbox_executed",
+        "approved_shell_state_persistence_failed",
+    }
+)
+_RISKS = frozenset(
+    {"read-only", "write", "external-side-effect", "destructive", "unknown"}
+)
+_POLICY_ACTIONS = frozenset({"allow", "deny", "defer", "error"})
+_APPROVAL_STATUSES = frozenset(
+    {
+        "requested",
+        "approved",
+        "denied",
+        "expired",
+        "consumed",
+        "executed",
+        "execution_failed",
+    }
+)
+_SIDE_EFFECT_STATUSES = frozenset(
+    {
+        "payload_recorded",
+        "preview_ready",
+        "executed",
+        "execution_failed",
+        "rolled_back",
+        "rollback_failed",
+        "sandbox_unavailable",
+        "sandbox_preview_ready",
+        "sandbox_timeout",
+        "sandbox_execution_failed",
+        "sandbox_executed",
+        "shell_execution_state_persistence_failed",
+    }
+)
+_EXECUTION_STATUSES = frozenset(
+    {
+        "executed",
+        "execution_failed",
+        "file_change_applied",
+        "shell_sandbox_unavailable",
+        "sandbox_timeout",
+        "sandbox_execution_failed",
+        "sandbox_executed",
+        "shell_command_failed",
+    }
+)
+_ROLLBACK_STATUSES = frozenset(
+    {"rolled_back", "rollback_failed", "snapshot_restored"}
+)
+_SOURCES = frozenset(
+    {
+        "passive",
+        "status_command",
+        "approved_side_effect_runtime",
+        "approved_shell_side_effect_runtime",
+        "task_execution",
+        "subagent",
+    }
+)
+_ACTORS = frozenset(
+    {
+        "status_command",
+        "approved_side_effect_runtime",
+        "approved_shell_side_effect_runtime",
+        "user",
+        "system",
+    }
+)
 _SENSITIVE_VALUE_MARKERS = (
     "token",
     "password",
@@ -121,6 +211,7 @@ _SENSITIVE_VALUE_MARKERS = (
 )
 _REF_RE = re.compile(r"^[A-Za-z0-9._/-]{1,160}$")
 _SAFE_TOKEN_RE = re.compile(r"^[A-Za-z0-9_.:@-]{1,160}$")
+_SAFE_CODE_RE = re.compile(r"^[a-z][a-z0-9_.:-]{0,159}$")
 _HEX_RE = re.compile(r"^[0-9a-fA-F]+$")
 _COMMAND_PREFIXES = (
     "awk ",
@@ -401,26 +492,26 @@ def _event_from_row(row: sqlite3.Row) -> ToolAuditLedgerEvent:
 def _sanitize_event(event: ToolAuditLedgerEvent) -> ToolAuditLedgerEvent:
     return replace(
         event,
-        event_id=_safe_token(event.event_id),
-        event_type=_safe_token(event.event_type),
+        event_id=_safe_identifier(event.event_id),
+        event_type=_safe_enum(event.event_type, _EVENT_TYPES),
         session_key=_safe_token(event.session_key),
         channel=_safe_token(event.channel),
         chat_id=_safe_token(event.chat_id),
-        request_id=_safe_token(event.request_id),
-        turn_id=_safe_token(event.turn_id),
-        tool_name=_safe_token(event.tool_name),
-        source=_safe_token(event.source),
-        risk=_safe_token(event.risk),
-        policy_action=_safe_token(event.policy_action),
-        policy_reason=_safe_token(event.policy_reason),
-        approval_request_id=_safe_token(event.approval_request_id),
-        approval_scope=_safe_token(event.approval_scope),
-        approval_status=_safe_token(event.approval_status),
-        side_effect_status=_safe_token(event.side_effect_status),
-        execution_status=_safe_token(event.execution_status),
-        rollback_status=_safe_token(event.rollback_status),
-        actor=_safe_token(event.actor),
-        args_hash=_safe_token(event.args_hash),
+        request_id=_safe_identifier(event.request_id),
+        turn_id=_safe_identifier(event.turn_id),
+        tool_name=_safe_code(event.tool_name),
+        source=_safe_enum(event.source, _SOURCES),
+        risk=_safe_enum(event.risk, _RISKS),
+        policy_action=_safe_enum(event.policy_action, _POLICY_ACTIONS),
+        policy_reason=_safe_reason(event.policy_reason),
+        approval_request_id=_safe_identifier(event.approval_request_id),
+        approval_scope=_safe_code(event.approval_scope),
+        approval_status=_safe_enum(event.approval_status, _APPROVAL_STATUSES),
+        side_effect_status=_safe_enum(event.side_effect_status, _SIDE_EFFECT_STATUSES),
+        execution_status=_safe_enum(event.execution_status, _EXECUTION_STATUSES),
+        rollback_status=_safe_enum(event.rollback_status, _ROLLBACK_STATUSES),
+        actor=_safe_enum(event.actor, _ACTORS),
+        args_hash=_safe_code(event.args_hash),
         metadata=sanitize_tool_audit_metadata(event.metadata),
     )
 
@@ -461,6 +552,47 @@ def _safe_token(value: str) -> str:
     return value
 
 
+def _safe_identifier(value: str) -> str:
+    if not value:
+        return ""
+    if not _SAFE_TOKEN_RE.fullmatch(value):
+        return ""
+    lower = value.lower()
+    if any(marker in lower for marker in _SENSITIVE_VALUE_MARKERS):
+        return ""
+    if len(value) < 8 and not any(
+        separator in value for separator in {":", "-", "_", "."}
+    ):
+        return ""
+    return value
+
+
+def _safe_code(value: str) -> str:
+    if not value:
+        return ""
+    if not _SAFE_CODE_RE.fullmatch(value):
+        return ""
+    lower = value.lower()
+    if any(marker in lower for marker in _SENSITIVE_VALUE_MARKERS):
+        return ""
+    if lower in _COMMAND_PREFIXES:
+        return ""
+    return value
+
+
+def _safe_reason(value: str) -> str:
+    sanitized = _safe_code(value)
+    if not sanitized:
+        return ""
+    if "_" not in sanitized and ":" not in sanitized:
+        return ""
+    return sanitized
+
+
+def _safe_enum(value: str, allowed: frozenset[str]) -> str:
+    return value if value in allowed else ""
+
+
 def _is_safe_token_value(key: str, value: str) -> bool:
     if not _is_safe_string(value):
         return False
@@ -472,12 +604,13 @@ def _is_safe_token_value(key: str, value: str) -> bool:
 def _is_safe_ref(value: str) -> bool:
     lower = value.lower()
     return (
-        not value.startswith("/")
-        and len(value) <= 160
+        len(value) <= 160
         and not any(marker in lower for marker in _SENSITIVE_VALUE_MARKERS)
         and not lower.startswith(_COMMAND_PREFIXES)
+        and value.startswith("artifacts/")
         and _REF_RE.fullmatch(value) is not None
         and all(segment not in {".", ".."} for segment in value.split("/"))
+        and len([segment for segment in value.split("/") if segment]) == 3
     )
 
 

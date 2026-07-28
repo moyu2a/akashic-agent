@@ -278,6 +278,9 @@ def test_shell_side_effect_runtime_does_not_record_timeout_before_state_persists
     assert "approved_shell_sandbox_timeout" not in {
         event.event_type for event in events
     }
+    assert "approved_shell_state_persistence_failed" in {
+        event.event_type for event in events
+    }
 
 
 def test_approved_shell_runtime_fails_closed_without_sandbox_runner(tmp_path: Path) -> None:

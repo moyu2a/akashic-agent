@@ -551,6 +551,10 @@ class ApprovedShellSideEffectRuntime:
                 now=self.now(),
             )
         except Exception:
+            self._record_state_persistence_failure_ledger(
+                record,
+                "shell_execution_state_persistence_failed",
+            )
             return self._error(
                 record.approval_request_id,
                 "shell_execution_state_persistence_failed",
@@ -637,19 +641,23 @@ class ApprovedShellSideEffectRuntime:
                     now=self.now(),
                 )
             except Exception:
-                pass
-            else:
-                self._record_ledger(
-                    "approved_shell_state_persistence_failed",
+                self._record_state_persistence_failure_ledger(
                     record,
-                    side_effect_status="shell_execution_state_persistence_failed",
-                    execution_status=(
-                        execution_status
-                        or (
-                            "sandbox_executed"
-                            if execution_succeeded
-                            else "sandbox_execution_failed"
-                        )
+                    execution_status
+                    or (
+                        "sandbox_executed"
+                        if execution_succeeded
+                        else "sandbox_execution_failed"
+                    ),
+                )
+            else:
+                self._record_state_persistence_failure_ledger(
+                    record,
+                    execution_status
+                    or (
+                        "sandbox_executed"
+                        if execution_succeeded
+                        else "sandbox_execution_failed"
                     ),
                 )
         return self._error(
@@ -657,6 +665,18 @@ class ApprovedShellSideEffectRuntime:
             "shell_execution_state_persistence_failed",
             "Approved shell execution state could not be persisted.",
             preview_id=preview_id,
+        )
+
+    def _record_state_persistence_failure_ledger(
+        self,
+        record: ToolApprovalRequestRecord,
+        execution_status: str,
+    ) -> None:
+        self._record_ledger(
+            "approved_shell_state_persistence_failed",
+            record,
+            side_effect_status="shell_execution_state_persistence_failed",
+            execution_status=execution_status,
         )
 
     def _error(

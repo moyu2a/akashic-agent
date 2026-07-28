@@ -120,11 +120,13 @@ def test_ledger_sanitizes_unsafe_top_level_fields_and_preserves_safe_refs(
             policy_action="defer",
             policy_reason="Bearer token-secret",
             approval_request_id="approval-1",
+            approval_status="Bearer_token_secret",
             side_effect_status="raw stdout account 1234",
-            execution_status="sandbox_executed",
+            execution_status="root",
             metadata={
                 "stdout_ref": "artifacts/preview-1/stdout.txt",
                 "stderr_ref": "artifacts/preview-1/stderr.txt",
+                "rollback_id": "home/user/data",
                 "error_code": "raw stdout account 1234",
                 "sandbox_backend": "printf private data",
                 "stdout_hash": "stdout-hash",
@@ -137,7 +139,9 @@ def test_ledger_sanitizes_unsafe_top_level_fields_and_preserves_safe_refs(
     assert event.event_type == ""
     assert event.request_id == ""
     assert event.policy_reason == ""
+    assert event.approval_status == ""
     assert event.side_effect_status == ""
+    assert event.execution_status == ""
     assert event.metadata == {
         "stderr_ref": "artifacts/preview-1/stderr.txt",
         "stdout_hash": "stdout-hash",
@@ -146,8 +150,10 @@ def test_ledger_sanitizes_unsafe_top_level_fields_and_preserves_safe_refs(
     assert "cat /tmp/secret" not in raw
     assert "../payloads/raw-args.json" not in raw
     assert "Bearer token-secret" not in raw
+    assert "Bearer_token_secret" not in raw
     assert "raw stdout account" not in raw
     assert "printf private data" not in raw
+    assert "home/user/data" not in raw
 
 
 class _FailingLedger:
