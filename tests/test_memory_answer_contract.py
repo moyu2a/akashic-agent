@@ -307,7 +307,10 @@ def test_render_production_evidence_contract_is_structured_and_not_oracle_terms(
     assert "conflict_warning_ids:" in text
     assert "active_version_ids:" in text
     assert "insufficient_evidence_fallback:" in text
-    assert "forbidden_boundary_ids:" in text
+    assert "forbidden_boundary_count:" in text
+    assert "deleted_evidence_count:" in text
+    assert "forbidden_boundary_ids:" not in text
+    assert "deleted_evidence_ids:" not in text
     assert "required_terms:" not in text
     assert "required_term_groups:" not in text
     assert "forbidden_terms:" not in text
@@ -458,4 +461,85 @@ def test_production_governed_contract_merges_version_boundary_fields() -> None:
     assert contract.uses_fixture_answer_expectations is False
     assert contract.required_terms == ()
     assert "active_version_ids: target" in text
-    assert "forbidden_boundary_ids: old" in text
+    assert "forbidden_boundary_count: 1" in text
+    assert "forbidden_boundary_ids:" not in text
+
+
+def test_version_boundary_render_hides_forbidden_and_deleted_raw_ids_from_prompt() -> None:
+    case = _case_with_should_not_in_tri()
+    governed_trace_info = {
+        "ids": ("target",),
+        "trace": {
+            "candidate_governance_mode": "tiered",
+            "candidate_risk_tiers": [
+                {
+                    "candidate_id": "target",
+                    "tier": "allow",
+                    "risks": (),
+                    "lane": "semantic",
+                },
+                {
+                    "candidate_id": "blocked",
+                    "tier": "delete",
+                    "risks": ("forbidden_candidate",),
+                    "lane": "semantic",
+                },
+            ],
+        },
+    }
+    case = replace(
+        case,
+        setup={
+            **case.setup,
+            "memory_items": [
+                {
+                    "id": "old",
+                    "summary": "old version",
+                    "status": "superseded",
+                    "source_ref": "telegram:1:0",
+                },
+                {
+                    "id": "target",
+                    "summary": "current version",
+                    "status": "active",
+                    "source_ref": "telegram:1:1",
+                },
+                {
+                    "id": "blocked",
+                    "summary": "blocked evidence",
+                    "status": "active",
+                    "source_ref": "telegram:1:2",
+                    "forbidden": True,
+                },
+            ],
+            "memory_replacements": [
+                {
+                    "old_item_id": "old",
+                    "new_item_id": "target",
+                    "old_summary": "old version",
+                    "new_summary": "current version",
+                    "old_source_ref": "telegram:1:0",
+                    "new_source_ref": "telegram:1:1",
+                }
+            ],
+        },
+    )
+    boundary = build_version_boundary_info(case, governed_trace_info)
+    contract = build_production_governed_tri_evidence_contract(
+        case,
+        governed_trace_info,
+        profile_name="chain_tri_version_governed_answer_contract",
+        version_boundary_info=boundary,
+    )
+
+    text = render_production_evidence_contract_block(contract)
+
+    assert set(contract.forbidden_boundary_ids) == {"blocked", "old"}
+    assert contract.deleted_evidence_ids == ("blocked",)
+    for item_id in contract.forbidden_boundary_ids + contract.deleted_evidence_ids:
+        assert item_id not in text
+    assert "forbidden_boundary_ids:" not in text
+    assert "deleted_evidence_ids:" not in text
+    assert "forbidden_boundary_count: 2" in text
+    assert "deleted_evidence_count: 1" in text
+    assert "superseded evidence exists" in text

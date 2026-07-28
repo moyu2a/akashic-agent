@@ -687,8 +687,10 @@ def test_tri_governed_answer_contract_profile_injects_governed_contract_block(
 
     assert "Evidence Contract: chain_tri_governed_answer_contract" in result.text_block
     assert "allowed_evidence:" in result.text_block
-    assert "forbidden_boundary_ids:" in result.text_block
-    assert "deleted_evidence_ids:" in result.text_block
+    assert "forbidden_boundary_count:" in result.text_block
+    assert "deleted_evidence_count:" in result.text_block
+    assert "forbidden_boundary_ids:" not in result.text_block
+    assert "deleted_evidence_ids:" not in result.text_block
     assert result.raw["candidate_risk_tier_counts"]["delete"] > 0
     assert result.raw["tiered_deleted_risks_by_reason"]
     assert result.raw["evidence_source"] == (
@@ -725,7 +727,8 @@ def test_governed_answer_contract_profile_uses_production_safe_contract(
     assert "production_safe=true" in result.text_block
     assert "allowed_evidence:" in result.text_block
     assert "likely_relevant_evidence_ids:" in result.text_block
-    assert "forbidden_boundary_ids:" in result.text_block
+    assert "forbidden_boundary_count:" in result.text_block
+    assert "forbidden_boundary_ids:" not in result.text_block
     assert "required_terms:" not in result.text_block
     assert "required_term_groups:" not in result.text_block
     assert "forbidden_terms:" not in result.text_block
@@ -849,7 +852,8 @@ def test_version_governed_profile_injects_production_safe_contract_block(
     )
     assert "active_version_ids:" in result.text_block
     assert "stale_warning_ids:" in result.text_block
-    assert "forbidden_boundary_ids:" in result.text_block
+    assert "forbidden_boundary_count:" in result.text_block
+    assert "forbidden_boundary_ids:" not in result.text_block
     assert result.raw["evidence_source"] == (
         "tri_version_governed_answer_contract."
         "version_boundaried_governed_allowed_evidence_ids"
@@ -864,6 +868,35 @@ def test_version_governed_profile_injects_production_safe_contract_block(
     assert set(result.raw["answer_contract"]["forbidden_boundary_ids"]).isdisjoint(
         result.raw["answer_contract"]["allowed_evidence_ids"]
     )
+
+
+def test_version_governed_engine_hides_forbidden_ids_but_keeps_raw_post_check() -> None:
+    case = _case_with_version_boundary_signal()
+    engine = ComprehensiveOnlineMemoryEngine(
+        case,
+        profile_name="chain_tri_version_governed_answer_contract",
+        prompt_variant="baseline",
+    )
+
+    result = asyncio.run(
+        engine.retrieve(
+            MemoryEngineRetrieveRequest(
+                query=str(case.setup["query"]),
+                mode="explicit",
+                top_k=8,
+            )
+        )
+    )
+    forbidden_ids = tuple(result.raw["answer_contract"]["forbidden_boundary_ids"])
+    deleted_ids = tuple(result.raw["answer_contract"]["deleted_evidence_ids"])
+
+    assert forbidden_ids
+    assert "forbidden_boundary_ids:" not in result.text_block
+    assert "deleted_evidence_ids:" not in result.text_block
+    for item_id in forbidden_ids + deleted_ids:
+        assert item_id not in result.text_block
+    assert "forbidden_boundary_count:" in result.text_block
+    assert "deleted_evidence_count:" in result.text_block
 
 
 def test_version_governed_profile_report_metadata_and_post_check_shadow(
@@ -1184,7 +1217,8 @@ def test_rerank_governed_profile_injects_production_safe_contract_block(
     )
     assert "production_safe=true" in result.text_block
     assert "allowed_evidence:" in result.text_block
-    assert "forbidden_boundary_ids:" in result.text_block
+    assert "forbidden_boundary_count:" in result.text_block
+    assert "forbidden_boundary_ids:" not in result.text_block
     assert result.raw["evidence_source"] == (
         "tri_rerank_governed_answer_contract.reranked_governed_allowed_evidence_ids"
     )

@@ -369,13 +369,15 @@ def render_production_evidence_contract_block(
         "diagnostic_eval_only=true",
         "production_safe=true",
         "请只根据 allowed_evidence 回答；如果 insufficient_evidence_fallback=true，请说明证据不足。",
-        "不要使用 forbidden_boundary_ids 中的记忆；stale_warning_ids 和 conflict_warning_ids 只能作为风险提示。",
+        "如果存在 forbidden boundary，表示有旧版本、越界或禁止使用的记忆边界；不要复述或引用这些边界内容。",
         "allowed_evidence: " + ", ".join(contract.allowed_evidence),
         "likely_relevant_evidence: " + ", ".join(contract.likely_relevant_evidence),
         "stale_warning: " + ", ".join(contract.stale_warning),
         "conflict_warning: " + ", ".join(contract.conflict_warning),
         "active_version: " + ", ".join(contract.active_version),
-        "forbidden_boundary: " + ", ".join(contract.forbidden_boundary),
+        "forbidden_boundary_count: " + str(len(contract.forbidden_boundary_ids)),
+        "deleted_evidence_count: " + str(len(contract.deleted_evidence_ids)),
+        "forbidden_boundary_instruction: superseded evidence exists; use only allowed_evidence and active_version evidence.",
         "allowed_evidence_ids: " + ", ".join(contract.allowed_evidence_ids),
         "likely_relevant_evidence_ids: "
         + ", ".join(contract.likely_relevant_evidence_ids),
@@ -388,8 +390,6 @@ def render_production_evidence_contract_block(
         + ", ".join(contract.insufficient_evidence_ids),
         "insufficient_evidence_fallback: "
         + ("true" if contract.insufficient_evidence_fallback else "false"),
-        "forbidden_boundary_ids: " + ", ".join(contract.forbidden_boundary_ids),
-        "deleted_evidence_ids: " + ", ".join(contract.deleted_evidence_ids),
         "allowed_evidence:",
     ]
     for item_id, summary in contract.evidence_summaries:
