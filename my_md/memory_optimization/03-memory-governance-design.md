@@ -435,6 +435,8 @@ P6o-2 design boundary: tiered governance changes the eval/shadow decision record
 
 P6o-2 offline standard report facts: `case_count = 80`, `tiered_candidate_risk_tier_counts = {"delete": 324, "downgrade": 896}`, `tiered_accepted_candidate_risk_tier_counts = {"downgrade": 480}`, `tiered_deleted_risks_by_reason = {"forbidden_candidate": 324, "scope_mismatch": 52, "superseded_candidate": 176}`, `protected_expected_hit_loss_count = 0`, and `strict_should_not_kept_count = 0`. The strict-mode compatibility result matters as much as the tiered result: existing callers still default to `mode="strict"`, while eval-only tri profiles opt into `mode="tiered"`.
 
+P6o-3 design boundary: the governed evidence contract no longer says what terms the answer must contain. Instead it exposes evidence state that production code could plausibly know: allowed ids, likely relevant ids, downgraded ids, requires-review ids, stale/superseded warnings, conflict warnings, active version ids, insufficient-evidence fallback, and forbidden boundary ids. This keeps the answer contract useful without depending on fixture answer expectations.
+
 ## 8. 最小可行版本
 
 ### MVP 1：写入门控 trace

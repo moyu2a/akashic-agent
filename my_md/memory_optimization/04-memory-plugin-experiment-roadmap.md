@@ -274,6 +274,8 @@ P6o-2 complete criteria: strict mode remains compatible, tiered mode records can
 
 P6o-2 comparison conclusion: strict candidate governance was too coarse because weak source_ref and low confidence are common on useful fixture evidence; deleting them protects forbidden boundaries but can remove answer-useful context. Tiered governance keeps those candidates as `downgrade` or `requires_review` while still deleting forbidden / superseded / scope-mismatch records. P6o-3 should consume these tiers to render production-safe contract fields without fixture answer expectations.
 
+P6o-3 complete criteria: governed tri contract uses production-safe evidence fields, JSON / Markdown metadata marks `production_safe_evidence_contract`, fixture answer expectations are absent from the governed contract raw output and rendered block, and fake-provider smoke passes. P6o-4 should add answer post-check shadow over these fields before any real LLM A/B.
+
 ## Phase 6t：source_ref 写入质量治理
 
 ### 目的

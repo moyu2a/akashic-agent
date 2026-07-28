@@ -1954,3 +1954,16 @@
 - Offline standard report facts: `case_count = 80`, `tiered_candidate_risk_tier_counts = {"delete": 324, "downgrade": 896}`, `tiered_accepted_candidate_risk_tier_counts = {"downgrade": 480}`, `tiered_deleted_risks_by_reason = {"forbidden_candidate": 324, "scope_mismatch": 52, "superseded_candidate": 176}`, `protected_expected_hit_loss_count = 0`, `strict_should_not_kept_count = 0`.
 - Conclusion: strict candidate governance is useful for forbidden control but over-prunes weak-source / low-confidence evidence; tiered governance keeps soft-risk candidates visible for answer contracts while still deleting forbidden, superseded, and scope-mismatch candidates.
 - Next handoff: P6o-3 production-safe evidence contract should consume tiered candidate metadata and remove fixture answer expectations.
+
+## 2026-07-28 Memory P6o3 Production-Safe Evidence Contract
+
+- Plan path: `docs/superpowers/plans/2026-07-28-memory-p6o3-production-safe-evidence-contract.md`.
+- Scope: eval/shadow-only evidence contract, no real LLM.
+- Production boundary: no AgentLoop, Reasoner, ToolExecutor, memory write, production prompt, or old `Retriever.retrieve()` contract changes.
+- Contract fields: `allowed_evidence`, `likely_relevant_evidence`, `stale_warning`, `conflict_warning`, `active_version`, `insufficient_evidence_fallback`, `forbidden_boundary`.
+- Old `chain_tri_answer_contract` remains oracle diagnostic; governed profile is the production-safe eval/shadow path.
+- Fake-provider smoke: `case_count = 12`, `real_llm_enabled = False`, `provider_error_count = 0`, `timeout_count = 0`; all governed rows passed with empty failures.
+- Focused verification: `tests/test_memory_answer_contract.py` plus governed profile integration tests passed with `14 passed`.
+- Comprehensive fake-provider regression: `tests/test_memory_comprehensive_online_eval.py` passed with `33 passed`.
+- Final verification: `tests/test_memory_answer_contract.py tests/test_memory_comprehensive_online_eval.py tests/test_memory_retrieval_governance.py tests/test_memory_tri_candidate_governance.py` passed with `68 passed`; `compileall -q memory2 scripts tests` and `git diff --check` passed.
+- Next handoff: P6o-4 answer post-check shadow should record allowed evidence usage, missed key evidence, forbidden terms, superseded/conflict evidence usage, and retry need.

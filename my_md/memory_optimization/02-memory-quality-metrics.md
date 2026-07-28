@@ -362,6 +362,12 @@ Offline standard report facts from `/tmp/akashic-memory-p6o2-risk-tiered-candida
 
 结论：P6o-2 证明了“候选风险分层”能把原本会被 strict 一刀切删除的弱来源 / 低置信候选保留下来，同时继续删除 forbidden、superseded 和 scope mismatch 候选。它还没有证明 answer_rate 提升；它的价值是为 P6o-3 的生产安全 evidence contract 提供非 oracle 的候选风险输入。
 
+### Phase 6o3 Production-Safe Evidence Contract
+
+P6o-3 removes fixture answer-term dependencies from the governed tri contract path. The metric meaning is still schema / harness readiness, not answer-quality uplift: it proves that production-safe contract fields can be derived from candidate tiers, source/status/conflict metadata, and allowed evidence ids.
+
+The key boundary is that `chain_tri_answer_contract` remains the oracle diagnostic profile, while `chain_tri_governed_answer_contract` becomes the production-safe eval/shadow profile. Real LLM A/B remains deferred until P6o-5.
+
 ### Phase 6c-1 已建立的离线 uplift proxy report
 
 Phase 6c-1 不是答案质量评测，而是把现有 shadow trace 转成统一的对照指标。它输出：

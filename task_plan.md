@@ -1772,3 +1772,12 @@ Goal: replace eval-only strict candidate filtering with risk-tiered candidate go
 3. Switch eval-only tri candidate/governed profiles to tiered ids - complete
 4. Add offline report tier metrics - complete
 5. Update docs and commit locally without push - pending
+
+## 2026-07-28 Memory P6o3 Production-Safe Evidence Contract
+
+Goal: replace fixture answer expectations in the governed tri contract path with production-safe evidence contract fields.
+
+1. Add pure production-safe evidence contract helper - complete
+2. Switch governed eval profile to production-safe contract - complete
+3. Add fake-provider smoke and privacy coverage - complete
+4. Update docs and commit locally without push - complete
