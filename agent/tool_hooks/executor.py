@@ -7,6 +7,7 @@ from typing import Any, Awaitable, Callable, Protocol
 from agent.policies.tool_approval import build_approval_payload
 from agent.policies.tool_approval_decision import ToolApprovalDecision
 from agent.policies.tool_approval_runtime import ToolApprovalRuntime
+from agent.policies.side_effect_payload_vault import MANAGED_SIDE_EFFECT_TOOLS
 from agent.policies.tool_audit import build_tool_audit_event
 from agent.policies.tool_invocation_policy import (
     ToolInvocationContext,
@@ -74,6 +75,7 @@ class ToolExecutor:
         4. post hooks：记录成功或错误后的附加信息与 trace
         """
         current_arguments = dict(request.arguments)
+        public_final_arguments = _public_final_arguments(request, current_arguments)
         extra_messages: list[str] = []
         pre_trace: list[HookTraceItem] = []
         post_trace: list[HookTraceItem] = []
@@ -87,10 +89,13 @@ class ToolExecutor:
                 traces=pre_trace,
             )
         except HookExecutionError as exc:
+            if request.tool_name == "shell":
+                pre_trace = _redact_shell_hook_traces(pre_trace)
+                extra_messages = _redact_shell_hook_messages(extra_messages)
             return ToolExecutionResult(
                 status="error",
-                output=f"工具执行出错: {exc}",
-                final_arguments=dict(current_arguments),
+                output=_hook_execution_error_output(request, exc),
+                final_arguments=public_final_arguments,
                 invoker_reached=False,
                 invoker_succeeded=False,
                 extra_messages=extra_messages,
@@ -98,11 +103,20 @@ class ToolExecutor:
                 post_hook_trace=post_trace,
             )
         final_arguments = dict(current_arguments)
+        public_final_arguments = _public_final_arguments(request, final_arguments)
+        if request.tool_name == "shell":
+            pre_trace = _redact_shell_hook_traces(pre_trace)
+            extra_messages = _redact_shell_hook_messages(extra_messages)
         if denied_reason:
+            output = denied_reason
+            if request.tool_name == "shell":
+                output = "工具调用被拦截"
+                pre_trace = _redact_shell_hook_traces(pre_trace)
+                extra_messages = _redact_shell_hook_messages(extra_messages)
             return ToolExecutionResult(
                 status="denied",
-                output=denied_reason,
-                final_arguments=final_arguments,
+                output=output,
+                final_arguments=public_final_arguments,
                 invoker_reached=False,
                 invoker_succeeded=False,
                 extra_messages=extra_messages,
@@ -113,12 +127,43 @@ class ToolExecutor:
         policy_decision = self._policy_engine.evaluate(
             _build_policy_context(request, final_arguments)
         )
-        policy_trace = policy_decision.to_trace_metadata()
+        policy_trace = _policy_trace(request, policy_decision)
         if policy_decision.action == "deny":
             return ToolExecutionResult(
                 status="denied",
-                output=_policy_block_output(policy_decision),
-                final_arguments=final_arguments,
+                output=_policy_block_output(policy_decision, policy_trace),
+                final_arguments=public_final_arguments,
+                invoker_reached=False,
+                invoker_succeeded=False,
+                extra_messages=extra_messages,
+                pre_hook_trace=pre_trace,
+                post_hook_trace=post_trace,
+                policy_trace=policy_trace,
+                audit_trace=_audit_trace(
+                    request,
+                    final_arguments,
+                    policy_decision,
+                    invoker_reached=False,
+                    invoker_succeeded=False,
+                ),
+            )
+        if (
+            request.tool_name == "shell"
+            and request.trusted_approval_context is not None
+        ):
+            return ToolExecutionResult(
+                status="deferred",
+                output=_managed_side_effect_required_output(
+                    policy_decision,
+                    tool_name=request.tool_name,
+                    arguments=final_arguments,
+                    approval_scope=_approval_scope_from_trace(policy_trace),
+                    approval_request_id=(
+                        request.trusted_approval_context.approval_request_id
+                    ),
+                    policy_trace=policy_trace,
+                ),
+                final_arguments=public_final_arguments,
                 invoker_reached=False,
                 invoker_succeeded=False,
                 extra_messages=extra_messages,
@@ -137,6 +182,39 @@ class ToolExecutor:
             approval_scope = _approval_scope_from_trace(policy_trace)
             approval_decision: ToolApprovalDecision | None = None
             approval_lifecycle: list[dict[str, object]] = []
+            if (
+                request.tool_name in MANAGED_SIDE_EFFECT_TOOLS
+                and request.trusted_approval_context is not None
+                and request.trusted_approval_context.source
+                != "approved_side_effect_runtime"
+            ):
+                return ToolExecutionResult(
+                    status="deferred",
+                    output=_managed_side_effect_required_output(
+                        policy_decision,
+                        tool_name=request.tool_name,
+                        arguments=final_arguments,
+                        approval_scope=approval_scope,
+                        approval_request_id=(
+                            request.trusted_approval_context.approval_request_id
+                        ),
+                        policy_trace=policy_trace,
+                    ),
+                    final_arguments=public_final_arguments,
+                    invoker_reached=False,
+                    invoker_succeeded=False,
+                    extra_messages=extra_messages,
+                    pre_hook_trace=pre_trace,
+                    post_hook_trace=post_trace,
+                    policy_trace=policy_trace,
+                    audit_trace=_audit_trace(
+                        request,
+                        final_arguments,
+                        policy_decision,
+                        invoker_reached=False,
+                        invoker_succeeded=False,
+                    ),
+                )
             if self._approval_runtime is not None:
                 approval_decision = self._approval_runtime.consume_for_execution(
                     trusted_context=request.trusted_approval_context,
@@ -191,6 +269,10 @@ class ToolExecutor:
                 )
                 approval_request_id = record.approval_request_id
                 expires_at = record.expires_at
+                self._approval_runtime.record_managed_side_effect_payload(
+                    record,
+                    arguments=final_arguments,
+                )
                 approval_lifecycle.append(
                     self._approval_runtime.lifecycle_event_from_record(
                         record,
@@ -206,8 +288,9 @@ class ToolExecutor:
                     arguments=final_arguments,
                     approval_request_id=approval_request_id,
                     expires_at=expires_at,
+                    policy_trace=policy_trace,
                 ),
-                final_arguments=final_arguments,
+                final_arguments=public_final_arguments,
                 invoker_reached=False,
                 invoker_succeeded=False,
                 extra_messages=extra_messages,
@@ -251,6 +334,7 @@ class ToolExecutor:
         approval_lifecycle: list[dict[str, object]] | None = None,
     ) -> ToolExecutionResult:
         lifecycle_events = list(approval_lifecycle or [])
+        public_final_arguments = _public_final_arguments(request, final_arguments)
         try:
             # 这里才进入真实工具执行；hook 本身不直接替代工具实现。
             output = await invoker(request.tool_name, final_arguments)
@@ -277,11 +361,17 @@ class ToolExecutor:
                     extra_messages=extra_messages,
                     traces=post_trace,
                 )
+                if request.tool_name == "shell":
+                    post_trace = _redact_shell_hook_traces(post_trace)
+                    extra_messages = _redact_shell_hook_messages(extra_messages)
             except HookExecutionError as hook_exc:
+                if request.tool_name == "shell":
+                    post_trace = _redact_shell_hook_traces(post_trace)
+                    extra_messages = _redact_shell_hook_messages(extra_messages)
                 return ToolExecutionResult(
                     status="error",
-                    output=f"工具执行出错: {hook_exc}",
-                    final_arguments=final_arguments,
+                    output=_hook_execution_error_output(request, hook_exc),
+                    final_arguments=public_final_arguments,
                     invoker_reached=True,
                     invoker_succeeded=False,
                     extra_messages=extra_messages,
@@ -299,8 +389,8 @@ class ToolExecutor:
                 )
             return ToolExecutionResult(
                 status="error",
-                output=f"工具执行出错: {error_text}",
-                final_arguments=final_arguments,
+                output=_tool_execution_error_output(request, error_text),
+                final_arguments=public_final_arguments,
                 invoker_reached=True,
                 invoker_succeeded=False,
                 extra_messages=extra_messages,
@@ -339,11 +429,17 @@ class ToolExecutor:
                 traces=post_trace,
                 fail_open=True,
             )
+            if request.tool_name == "shell":
+                post_trace = _redact_shell_hook_traces(post_trace)
+                extra_messages = _redact_shell_hook_messages(extra_messages)
         except HookExecutionError as exc:
+            if request.tool_name == "shell":
+                post_trace = _redact_shell_hook_traces(post_trace)
+                extra_messages = _redact_shell_hook_messages(extra_messages)
             return ToolExecutionResult(
                 status="error",
-                output=f"工具执行出错: {exc}",
-                final_arguments=final_arguments,
+                output=_hook_execution_error_output(request, exc),
+                final_arguments=public_final_arguments,
                 invoker_reached=True,
                 invoker_succeeded=True,
                 extra_messages=extra_messages,
@@ -362,7 +458,7 @@ class ToolExecutor:
         return ToolExecutionResult(
             status="success",
             output=output,
-            final_arguments=final_arguments,
+            final_arguments=public_final_arguments,
             invoker_reached=True,
             invoker_succeeded=True,
             extra_messages=extra_messages,
@@ -415,6 +511,7 @@ class ToolExecutor:
         request: ToolExecutionRequest,
     ) -> ToolExecutionResult:
         current_arguments = dict(request.arguments)
+        public_final_arguments = _public_final_arguments(request, current_arguments)
         extra_messages: list[str] = []
         pre_trace: list[HookTraceItem] = []
         try:
@@ -425,20 +522,31 @@ class ToolExecutor:
                 traces=pre_trace,
             )
         except HookExecutionError as exc:
+            if request.tool_name == "shell":
+                pre_trace = _redact_shell_hook_traces(pre_trace)
+                extra_messages = _redact_shell_hook_messages(extra_messages)
             return ToolExecutionResult(
                 status="error",
-                output=f"工具执行出错: {exc}",
-                final_arguments=dict(current_arguments),
+                output=_hook_execution_error_output(request, exc),
+                final_arguments=public_final_arguments,
                 invoker_reached=False,
                 invoker_succeeded=False,
                 extra_messages=extra_messages,
                 pre_hook_trace=pre_trace,
             )
+        if request.tool_name == "shell":
+            pre_trace = _redact_shell_hook_traces(pre_trace)
+            extra_messages = _redact_shell_hook_messages(extra_messages)
         if denied_reason:
+            output = denied_reason
+            if request.tool_name == "shell":
+                output = "工具调用被拦截"
+                pre_trace = _redact_shell_hook_traces(pre_trace)
+                extra_messages = _redact_shell_hook_messages(extra_messages)
             return ToolExecutionResult(
                 status="denied",
-                output=denied_reason,
-                final_arguments=dict(current_arguments),
+                output=output,
+                final_arguments=_public_final_arguments(request, current_arguments),
                 invoker_reached=False,
                 invoker_succeeded=False,
                 extra_messages=extra_messages,
@@ -447,7 +555,7 @@ class ToolExecutor:
         return ToolExecutionResult(
             status="success",
             output="",
-            final_arguments=dict(current_arguments),
+            final_arguments=_public_final_arguments(request, current_arguments),
             invoker_reached=False,
             invoker_succeeded=False,
             extra_messages=extra_messages,
@@ -576,6 +684,33 @@ def _policy_source(request: ToolExecutionRequest) -> ToolInvocationSource:
     return "passive"
 
 
+def _public_final_arguments(
+    request: ToolExecutionRequest,
+    arguments: dict[str, Any],
+) -> dict[str, Any]:
+    if request.tool_name == "shell":
+        return {}
+    return dict(arguments)
+
+
+def _hook_execution_error_output(
+    request: ToolExecutionRequest,
+    exc: HookExecutionError,
+) -> str:
+    if request.tool_name == "shell":
+        return "工具执行出错: shell hook failed"
+    return f"工具执行出错: {exc}"
+
+
+def _tool_execution_error_output(
+    request: ToolExecutionRequest,
+    error_text: str,
+) -> str:
+    if request.tool_name == "shell":
+        return "工具执行出错: shell execution failed"
+    return f"工具执行出错: {error_text}"
+
+
 def _policy_task_execution_phase(value: str) -> ToolInvocationTaskExecutionPhase:
     phases: dict[str, ToolInvocationTaskExecutionPhase] = {
         "": "",
@@ -622,7 +757,7 @@ def _audit_trace(
     invoker_reached: bool,
     invoker_succeeded: bool,
 ) -> dict[str, object]:
-    return build_tool_audit_event(
+    trace = build_tool_audit_event(
         request_id=request.call_id,
         session_key=request.session_key,
         channel=request.channel,
@@ -636,10 +771,21 @@ def _audit_trace(
         invoker_reached=invoker_reached,
         invoker_succeeded=invoker_succeeded,
     ).to_trace_metadata()
+    return _redact_shell_trace(trace) if request.tool_name == "shell" else trace
 
 
-def _policy_block_output(decision: ToolInvocationDecision) -> str:
+def _policy_trace(
+    request: ToolExecutionRequest,
+    decision: ToolInvocationDecision,
+) -> dict[str, object]:
     trace = decision.to_trace_metadata()
+    return _redact_shell_trace(trace) if request.tool_name == "shell" else trace
+
+
+def _policy_block_output(
+    decision: ToolInvocationDecision,
+    trace: dict[str, object],
+) -> str:
     return json.dumps(
         {
             "ok": False,
@@ -649,6 +795,35 @@ def _policy_block_output(decision: ToolInvocationDecision) -> str:
             "policy": trace,
             "invoker_reached": False,
         },
+        ensure_ascii=False,
+    )
+
+
+def _managed_side_effect_required_output(
+    decision: ToolInvocationDecision,
+    *,
+    tool_name: str,
+    arguments: dict[str, Any],
+    approval_scope: str,
+    approval_request_id: str,
+    policy_trace: dict[str, object],
+) -> str:
+    payload = build_approval_payload(
+        tool_name=tool_name,
+        arguments=arguments,
+        action="defer",
+        reason="approved_side_effect_requires_managed_apply",
+        risk=str(policy_trace["risk"]),
+        approval_scope=approval_scope,
+        approval_request_id=approval_request_id,
+    )
+    payload["message"] = (
+        "Approved side effects must be prepared and applied through "
+        "the managed runtime."
+    )
+    payload["policy"] = policy_trace
+    return json.dumps(
+        payload,
         ensure_ascii=False,
     )
 
@@ -675,8 +850,9 @@ def _policy_defer_output(
     arguments: dict[str, Any],
     approval_request_id: str = "",
     expires_at: str = "",
+    policy_trace: dict[str, object] | None = None,
 ) -> str:
-    trace = decision.to_trace_metadata()
+    trace = policy_trace or decision.to_trace_metadata()
     payload = build_approval_payload(
         tool_name=tool_name,
         arguments=arguments,
@@ -692,3 +868,46 @@ def _policy_defer_output(
         payload,
         ensure_ascii=False,
     )
+
+
+def _redact_shell_trace(value: object) -> object:
+    if isinstance(value, HookTraceItem):
+        return HookTraceItem(
+            hook_name=value.hook_name,
+            event=value.event,
+            matched=value.matched,
+            decision=value.decision,
+            reason="[redacted_shell_hook_detail]" if value.reason else "",
+            extra_message=(
+                "[redacted_shell_hook_detail]" if value.extra_message else ""
+            ),
+        )
+    if isinstance(value, dict):
+        return {
+            key: (
+                "[redacted_shell_command]"
+                if key in {"command", "target"}
+                else _redact_shell_trace(child)
+            )
+            for key, child in value.items()
+        }
+    if isinstance(value, list):
+        return [_redact_shell_trace(item) for item in value]
+    if isinstance(value, tuple):
+        return tuple(_redact_shell_trace(item) for item in value)
+    return value
+
+
+def _redact_shell_hook_traces(
+    traces: list[HookTraceItem],
+) -> list[HookTraceItem]:
+    redacted = _redact_shell_trace(traces)
+    if isinstance(redacted, list) and all(
+        isinstance(trace, HookTraceItem) for trace in redacted
+    ):
+        return redacted
+    return []
+
+
+def _redact_shell_hook_messages(messages: list[str]) -> list[str]:
+    return ["[redacted_shell_hook_detail]" for message in messages if message]

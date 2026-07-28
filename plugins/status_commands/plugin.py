@@ -5,10 +5,23 @@ import re
 import sqlite3
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 from zoneinfo import ZoneInfo
 
 from agent.lifecycle.types import BeforeTurnCtx, TurnState
+from agent.policies.approved_side_effect_runtime import ApprovedSideEffectRuntime
+from agent.policies.approved_shell_side_effect_runtime import (
+    ApprovedShellSideEffectRuntime,
+)
+from agent.policies.approved_side_effect_store import (
+    ApprovedSideEffectRecord,
+    ApprovedSideEffectStore,
+)
+from agent.policies.side_effect_payload_vault import SideEffectPayloadVault
+from agent.policies.shell_sandbox_runner import (
+    DockerPodmanSandboxRunner,
+    SandboxRunner,
+)
 from agent.policies.tool_approval_decision import ToolApprovalDecision
 from agent.policies.tool_approval_runtime import ToolApprovalRuntime
 from agent.policies.tool_approval_store import (
@@ -155,9 +168,24 @@ class ToolApprovalCommandModule:
     requires = ("before_turn.acquire_session", _SESSION_SLOT)
     produces = (_CTX_SLOT,)
 
-    def __init__(self, plugin_name: str, approval_store: ToolApprovalStore) -> None:
+    def __init__(
+        self,
+        plugin_name: str,
+        approval_store: ToolApprovalStore,
+        *,
+        workspace: Path | None = None,
+        side_effect_store: ApprovedSideEffectStore | None = None,
+        side_effect_vault: SideEffectPayloadVault | None = None,
+        shell_sandbox_runner: SandboxRunner | None = None,
+        task_execution_service: Any = None,
+    ) -> None:
         self._plugin_name = plugin_name
         self._approval_store = approval_store
+        self._workspace = workspace.expanduser().resolve() if workspace else None
+        self._side_effect_store = side_effect_store
+        self._side_effect_vault = side_effect_vault
+        self._shell_sandbox_runner = shell_sandbox_runner
+        self._task_execution_service = task_execution_service
 
     async def run(self, frame) -> object:
         if _CTX_SLOT in frame.slots:
@@ -170,6 +198,12 @@ class ToolApprovalCommandModule:
             return self._handle_approve(frame, state)
         if command == "/deny_tool":
             return self._handle_deny(frame, state)
+        if command == "/prepare_tool":
+            return self._handle_prepare(frame, state)
+        if command == "/run_approved_tool":
+            return self._handle_run_approved(frame, state)
+        if command == "/rollback_tool":
+            return self._handle_rollback(frame, state)
         return frame
 
     def _handle_list(self, frame, state: TurnState) -> object:
@@ -248,6 +282,146 @@ class ToolApprovalCommandModule:
             ),
         )
         return frame
+
+    def _handle_prepare(self, frame, state: TurnState) -> object:
+        approval_request_id = _approval_command_id(state.msg.content)
+        runtime = self._managed_side_effect_runtime(approval_request_id)
+        if runtime is None:
+            frame.slots[_CTX_SLOT] = _abort_ctx(
+                state,
+                "status: error\nreason: "
+                f"{self._managed_side_effect_unavailable_reason(approval_request_id)}",
+            )
+            return frame
+        result = runtime.prepare(
+            approval_request_id=approval_request_id,
+            session_key=state.session_key,
+            actor="status_command",
+            workspace_root=cast(Path, self._workspace),
+            resource_roots=(str(self._workspace),),
+        )
+        frame.slots[_CTX_SLOT] = _abort_ctx(
+            state,
+            _format_side_effect_result(
+                result.reason, result.message, getattr(result, "diff_text", "")
+            ),
+            approved_side_effect_lifecycle=self._side_effect_lifecycle(
+                approval_request_id
+            ),
+        )
+        return frame
+
+    def _handle_run_approved(self, frame, state: TurnState) -> object:
+        approval_request_id = _approval_command_id(state.msg.content)
+        runtime = self._managed_side_effect_runtime(approval_request_id)
+        if runtime is None:
+            frame.slots[_CTX_SLOT] = _abort_ctx(
+                state,
+                "status: error\nreason: "
+                f"{self._managed_side_effect_unavailable_reason(approval_request_id)}",
+            )
+            return frame
+        result = runtime.apply(
+            approval_request_id=approval_request_id,
+            session_key=state.session_key,
+            actor="status_command",
+            workspace_root=cast(Path, self._workspace),
+            resource_roots=(str(self._workspace),),
+        )
+        frame.slots[_CTX_SLOT] = _abort_ctx(
+            state,
+            _format_side_effect_result(result.reason, result.message),
+            approved_side_effect_lifecycle=self._side_effect_lifecycle(
+                approval_request_id
+            ),
+        )
+        return frame
+
+    def _handle_rollback(self, frame, state: TurnState) -> object:
+        approval_request_id = _approval_command_id(state.msg.content)
+        runtime = self._managed_side_effect_runtime(approval_request_id)
+        if runtime is None:
+            frame.slots[_CTX_SLOT] = _abort_ctx(
+                state,
+                "status: error\nreason: "
+                f"{self._managed_side_effect_unavailable_reason(approval_request_id)}",
+            )
+            return frame
+        result = runtime.rollback(
+            approval_request_id=approval_request_id,
+            session_key=state.session_key,
+            actor="status_command",
+            workspace_root=cast(Path, self._workspace),
+            resource_roots=(str(self._workspace),),
+        )
+        frame.slots[_CTX_SLOT] = _abort_ctx(
+            state,
+            _format_side_effect_result(result.reason, result.message),
+            approved_side_effect_lifecycle=self._side_effect_lifecycle(
+                approval_request_id
+            ),
+        )
+        return frame
+
+    def _side_effect_runtime(self) -> ApprovedSideEffectRuntime | None:
+        if (
+            self._workspace is None
+            or self._side_effect_store is None
+            or self._side_effect_vault is None
+        ):
+            return None
+        return ApprovedSideEffectRuntime(
+            approval_runtime=ToolApprovalRuntime(
+                self._approval_store,
+                side_effect_vault=self._side_effect_vault,
+            ),
+            side_effect_store=self._side_effect_store,
+            task_execution_service=self._task_execution_service,
+        )
+
+    def _shell_side_effect_runtime(self) -> ApprovedShellSideEffectRuntime | None:
+        if (
+            self._workspace is None
+            or self._side_effect_store is None
+            or self._side_effect_vault is None
+        ):
+            return None
+        return ApprovedShellSideEffectRuntime(
+            approval_runtime=ToolApprovalRuntime(
+                self._approval_store,
+                side_effect_vault=self._side_effect_vault,
+            ),
+            side_effect_store=self._side_effect_store,
+            sandbox_runner=self._shell_sandbox_runner,
+        )
+
+    def _managed_side_effect_runtime(self, approval_request_id: str) -> object | None:
+        record = self._approval_store.get_request(approval_request_id)
+        if record is None:
+            return self._side_effect_runtime()
+        if record.tool_name in {"write_file", "edit_file"}:
+            return self._side_effect_runtime()
+        if record.tool_name == "shell":
+            return self._shell_side_effect_runtime()
+        return None
+
+    def _managed_side_effect_unavailable_reason(self, approval_request_id: str) -> str:
+        record = self._approval_store.get_request(approval_request_id)
+        if record is not None and record.tool_name not in {
+            "write_file",
+            "edit_file",
+            "shell",
+        }:
+            return "managed_side_effect_tool_unsupported"
+        return "approved_side_effect_runtime_unavailable"
+
+    def _side_effect_lifecycle(
+        self, approval_request_id: str
+    ) -> list[dict[str, object]]:
+        if self._side_effect_store is None:
+            return []
+        record = self._side_effect_store.get_by_approval_id(approval_request_id)
+        return [_side_effect_lifecycle_event(record)] if record is not None else []
 
     def _approve_or_reject(
         self,
@@ -336,6 +510,8 @@ class StatusCommands(Plugin):
         plugin_name = self.name or "status_commands"
         db_path = None
         approval_store = None
+        side_effect_store = None
+        side_effect_vault = None
         if self.context.workspace is not None:
             db_path = self.context.workspace / "observe" / "observe.db"
             approval_store = ToolApprovalStore(
@@ -343,12 +519,35 @@ class StatusCommands(Plugin):
                     self.context.workspace
                 )
             )
+            side_effect_store = ApprovedSideEffectStore(
+                ApprovedSideEffectStore.db_path_from_workspace(
+                    self.context.workspace
+                )
+            )
+            side_effect_vault = ToolApprovalRuntime.side_effect_vault_from_workspace(
+                self.context.workspace
+            )
+        task_execution_service = getattr(
+            self.context,
+            "task_execution_service",
+            None,
+        )
         modules: list[object] = [
             MemoryStatusCommandModule(plugin_name),
             KVCacheCommandModule(plugin_name, db_path),
         ]
         if approval_store is not None:
-            modules.append(ToolApprovalCommandModule(plugin_name, approval_store))
+            modules.append(
+                ToolApprovalCommandModule(
+                    plugin_name,
+                    approval_store,
+                    workspace=self.context.workspace,
+                    side_effect_store=side_effect_store,
+                    side_effect_vault=side_effect_vault,
+                    shell_sandbox_runner=DockerPodmanSandboxRunner.find_available(),
+                    task_execution_service=task_execution_service,
+                )
+            )
         return cast(
             "list[object]",
             modules,
@@ -446,15 +645,27 @@ def _format_approval_decision(decision: ToolApprovalDecision) -> str:
     return "\n".join(lines)
 
 
+def _format_side_effect_result(reason: str, message: str, diff_text: str = "") -> str:
+    lines = [f"status: {reason}", f"message: {message}"]
+    if diff_text:
+        lines.extend(["", "```diff", diff_text, "```"])
+    return "\n".join(lines)
+
+
 def _abort_ctx(
     state: TurnState,
     reply: str,
     *,
     approval_lifecycle: list[dict[str, object]] | None = None,
+    approved_side_effect_lifecycle: list[dict[str, object]] | None = None,
 ) -> BeforeTurnCtx:
     extra_metadata = {}
     if approval_lifecycle:
         extra_metadata["tool_approval_lifecycle"] = approval_lifecycle
+    if approved_side_effect_lifecycle:
+        extra_metadata["approved_side_effect_lifecycle"] = (
+            approved_side_effect_lifecycle
+        )
     return BeforeTurnCtx(
         session_key=state.session_key,
         channel=state.msg.channel,
@@ -492,6 +703,50 @@ def _approval_lifecycle_from_decisions(
             )
         )
     return events
+
+
+def _side_effect_lifecycle_event(
+    record: ApprovedSideEffectRecord,
+) -> dict[str, object]:
+    event: dict[str, object] = {
+        "event_type": "approved_side_effect_lifecycle",
+        "approval_request_id": record.approval_request_id,
+        "request_id": record.request_id,
+        "session_key": record.session_key,
+        "actor": "status_command",
+        "tool_name": record.tool_name,
+        "approval_scope": record.approval_scope,
+        "args_hash": record.args_hash,
+        "status": record.status,
+        "preview_id": record.preview_id,
+        "target_path_hash": record.target_path_hash,
+        "before_hash": record.before_hash,
+        "after_hash": record.after_hash,
+        "diff_truncated": record.diff_truncated,
+        "rollback_id": record.rollback_id,
+        "execution_status": record.execution_status,
+        "rollback_status": record.rollback_status,
+    }
+    if record.tool_name == "shell":
+        event.update(
+            {
+                "command_hash": record.command_hash,
+                "sandbox_backend": record.sandbox_backend,
+                "sandbox_image": record.sandbox_image,
+                "network_mode": record.network_mode,
+                "workspace_mount_mode": record.workspace_mount_mode,
+                "timeout_seconds": record.timeout_seconds,
+                "exit_code": record.exit_code,
+                "stdout_hash": record.stdout_hash,
+                "stderr_hash": record.stderr_hash,
+                "stdout_bytes": record.stdout_bytes,
+                "stderr_bytes": record.stderr_bytes,
+                "stdout_truncated": record.stdout_truncated,
+                "stderr_truncated": record.stderr_truncated,
+                "duration_ms": record.duration_ms,
+            }
+        )
+    return event
 
 
 def _format_ts(ts: str) -> str:

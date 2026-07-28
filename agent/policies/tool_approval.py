@@ -23,6 +23,8 @@ _SAFE_INLINE_TEXT_KEYS = frozenset(
 )
 _MAX_INLINE_TEXT = 160
 _MAX_SEQUENCE_ITEMS = 20
+_SHELL_TOOL_NAMES = frozenset({"shell"})
+_SHELL_SAFE_SCALAR_KEYS = frozenset({"timeout", "run_in_background"})
 
 
 def canonical_args_hash(arguments: Mapping[str, Any]) -> str:
@@ -30,10 +32,67 @@ def canonical_args_hash(arguments: Mapping[str, Any]) -> str:
     return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
 
 
-def summarize_arguments(arguments: Mapping[str, Any]) -> dict[str, Any]:
+def summarize_arguments(
+    arguments: Mapping[str, Any], *, tool_name: str = ""
+) -> dict[str, Any]:
+    if tool_name in _SHELL_TOOL_NAMES:
+        return {
+            str(key): _summarize_shell_argument_value(str(key), value, top_level=True)
+            for key, value in sorted(arguments.items(), key=lambda item: str(item[0]))
+        }
     return {
         str(key): summarize_argument_value(str(key), value)
         for key, value in sorted(arguments.items(), key=lambda item: str(item[0]))
+    }
+
+
+def _summarize_shell_argument_value(
+    key: str, value: Any, *, top_level: bool = False
+) -> object:
+    lower_key = key.lower()
+    if _is_sensitive_key(lower_key):
+        return {"redacted": True}
+    if isinstance(value, Mapping):
+        return {
+            str(child_key): _summarize_shell_argument_value(
+                str(child_key), child_value
+            )
+            for child_key, child_value in sorted(
+                value.items(), key=lambda item: str(item[0])
+            )
+        }
+    if isinstance(value, (list, tuple)):
+        return [
+            _summarize_shell_argument_value(key, item)
+            for item in value[:_MAX_SEQUENCE_ITEMS]
+        ]
+    if isinstance(value, str):
+        return _hashed_summary(value)
+    if top_level and lower_key in _SHELL_SAFE_SCALAR_KEYS:
+        if lower_key == "run_in_background" and isinstance(value, bool):
+            return value
+        if (
+            lower_key == "timeout"
+            and isinstance(value, (int, float))
+            and not isinstance(value, bool)
+            and 0 < value <= 120
+        ):
+            return value
+    return {
+        "kind": type(value).__name__,
+        "sha256": hashlib.sha256(
+            json.dumps(value, sort_keys=True, ensure_ascii=False, default=str).encode(
+                "utf-8"
+            )
+        ).hexdigest(),
+    }
+
+
+def _hashed_summary(value: str) -> dict[str, object]:
+    return {
+        "kind": "text",
+        "length": len(value),
+        "sha256": hashlib.sha256(value.encode("utf-8")).hexdigest(),
     }
 
 
@@ -54,11 +113,7 @@ def summarize_argument_value(key: str, value: Any) -> object:
         ]
     if isinstance(value, str):
         if lower_key in _TEXT_HASH_KEYS or lower_key not in _SAFE_INLINE_TEXT_KEYS:
-            return {
-                "kind": "text",
-                "length": len(value),
-                "sha256": hashlib.sha256(value.encode("utf-8")).hexdigest(),
-            }
+            return _hashed_summary(value)
         return value[:_MAX_INLINE_TEXT]
     if isinstance(value, (int, float, bool)) or value is None:
         return value
@@ -84,7 +139,7 @@ def build_approval_payload(
     expires_at: str = "",
 ) -> dict[str, Any]:
     args_hash = canonical_args_hash(arguments)
-    args_summary = summarize_arguments(arguments)
+    args_summary = summarize_arguments(arguments, tool_name=tool_name)
     approval_request: dict[str, Any] = {
         "tool_name": tool_name,
         "risk": risk,

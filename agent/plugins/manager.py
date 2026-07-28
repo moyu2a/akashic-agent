@@ -55,6 +55,7 @@ class PluginManager:
         workspace: Path | None = None,
         session_manager: Any = None,
         memory_engine: Any = None,
+        task_execution_service: Any = None,
         app_config: "Config | None" = None,
     ) -> None:
         self._dirs = plugin_dirs
@@ -63,6 +64,7 @@ class PluginManager:
         self._workspace = workspace
         self._session_manager = session_manager
         self._memory_engine = memory_engine
+        self._task_execution_service = task_execution_service
         self._app_config = app_config
         self._loaded: set[str] = set()
         self._tool_hooks: list[ToolHook] = []
@@ -194,6 +196,7 @@ class PluginManager:
             workspace=self._workspace,
             session_manager=self._session_manager,
             memory_engine=self._memory_engine,
+            task_execution_service=self._task_execution_service,
         )
         plugin_registry.register_instance(mp, instance)
         self._bind_handlers(instance, mp)

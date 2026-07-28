@@ -52,6 +52,15 @@ async def _invoke(tool_name: str, arguments: dict[str, Any]) -> Any:
     return {"tool": tool_name, "arguments": dict(arguments)}
 
 
+class RecordingInvoker:
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, dict[str, Any]]] = []
+
+    async def __call__(self, tool_name: str, arguments: dict[str, Any]) -> Any:
+        self.calls.append((tool_name, dict(arguments)))
+        return {"tool": tool_name, "ok": True}
+
+
 def _run(coro: Any) -> Any:
     return asyncio.run(coro)
 
@@ -64,6 +73,7 @@ def test_shell_rm_hook_rewrites_rm_and_creates_restore_dir(tmp_path: Path) -> No
         mgr = _make_manager([FIXTURES_DIR], event_bus=bus)
         _run(mgr.load_all())
         executor = ToolExecutor(mgr.tool_hooks, policy_engine=_AllowToolPolicy())
+        invoker = RecordingInvoker()
 
         result = _run(
             executor.execute(
@@ -76,20 +86,14 @@ def test_shell_rm_hook_rewrites_rm_and_creates_restore_dir(tmp_path: Path) -> No
                     },
                     source="passive",
                 ),
-                _invoke,
+                invoker,
             )
         )
 
         assert result.status == "success"
         assert restore_dir.is_dir()
-        assert shlex.split(result.final_arguments["command"]) == [
-            "mv",
-            "--",
-            "foo",
-            "bar",
-            str(restore_dir),
-        ]
-        assert shlex.split(result.output["arguments"]["command"]) == [
+        assert result.final_arguments == {}
+        assert shlex.split(invoker.calls[0][1]["command"]) == [
             "mv",
             "--",
             "foo",
@@ -107,6 +111,7 @@ def test_shell_rm_hook_rewrites_sudo_rm(tmp_path: Path) -> None:
         bus = EventBus()
         mgr = _make_manager([FIXTURES_DIR], event_bus=bus)
         _run(mgr.load_all())
+        invoker = RecordingInvoker()
 
         result = _run(
             ToolExecutor(mgr.tool_hooks, policy_engine=_AllowToolPolicy()).execute(
@@ -119,12 +124,13 @@ def test_shell_rm_hook_rewrites_sudo_rm(tmp_path: Path) -> None:
                     },
                     source="passive",
                 ),
-                _invoke,
+                invoker,
             )
         )
 
         assert result.status == "success"
-        assert shlex.split(result.final_arguments["command"]) == [
+        assert result.final_arguments == {}
+        assert shlex.split(invoker.calls[0][1]["command"]) == [
             "sudo",
             "mv",
             "--",
@@ -142,6 +148,7 @@ def test_shell_rm_hook_skips_non_rm_command(tmp_path: Path) -> None:
         bus = EventBus()
         mgr = _make_manager([FIXTURES_DIR], event_bus=bus)
         _run(mgr.load_all())
+        invoker = RecordingInvoker()
 
         result = _run(
             ToolExecutor(mgr.tool_hooks, policy_engine=_AllowToolPolicy()).execute(
@@ -154,12 +161,13 @@ def test_shell_rm_hook_skips_non_rm_command(tmp_path: Path) -> None:
                     },
                     source="passive",
                 ),
-                _invoke,
+                invoker,
             )
         )
 
         assert result.status == "success"
         assert not restore_dir.exists()
-        assert result.final_arguments["command"] == "ls -la"
+        assert result.final_arguments == {}
+        assert invoker.calls[0][1]["command"] == "ls -la"
     finally:
         os.environ.pop("AKASIC_RESTORE_DIR", None)

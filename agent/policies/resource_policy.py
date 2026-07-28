@@ -31,22 +31,42 @@ _PROTECTED_ARGUMENT_KEYS = frozenset(
 _SHELL_TOOL_NAMES = frozenset({"shell"})
 _SHELL_COMMAND_ARG = "command"
 _SHELL_TOP_LEVEL_OPERATORS = frozenset({"|", ";", "&&", "||", ">", ">>", "<"})
+_SHELL_UNSUPPORTED_COMPOUND_OPERATORS = frozenset(
+    {";", "&&", "||", "&", "(", ")", "{", "}"}
+)
+_SHELL_DANGEROUS_BUILTINS = frozenset({"eval", "exec", ".", "source"})
+_SHELL_COMMAND_DISPATCHERS = frozenset({"busybox", "toybox"})
+_SHELL_FIND_EXEC_FLAGS = frozenset({"-exec", "-execdir", "-ok"})
+_SHELL_HEREDOC_OPERATORS = frozenset({"<<", "<<<"})
+_SHELL_CONTROL_KEYWORDS = frozenset(
+    {
+        "if",
+        "then",
+        "elif",
+        "else",
+        "fi",
+        "for",
+        "while",
+        "until",
+        "case",
+        "esac",
+        "do",
+        "done",
+        "function",
+        "select",
+    }
+)
 _SHELL_DESTRUCTIVE_COMMANDS = frozenset(
     {"rm", "rmdir", "unlink", "shred", "dd", "mkfs", "chmod", "chown", "truncate"}
 )
 _SHELL_INLINE_INTERPRETERS = frozenset(
     {"python", "python3", "bash", "sh", "zsh", "node", "perl", "ruby", "php"}
 )
-_SHELL_WRAPPER_COMMANDS = frozenset({"sudo", "doas", "env", "command", "time", "nohup"})
-_INLINE_DANGEROUS_MARKERS = (
-    "os.remove",
-    "os.unlink",
-    "shutil.rmtree",
-    "subprocess",
-    "os.system",
-    "exec(",
-    "eval(",
+_SHELL_NESTED_INTERPRETERS = frozenset(
+    {"ash", "bash", "dash", "ksh", "sh", "zsh"}
 )
+_SHELL_INLINE_FLAGS = frozenset({"-c", "-e", "-r"})
+_SHELL_WRAPPER_COMMANDS = frozenset({"sudo", "doas", "env", "command", "time", "nohup"})
 _URL_TOOL_ARGUMENTS = {
     "web_fetch": ("url",),
     "send_webhook": ("url", "webhook_url", "callback_url"),
@@ -272,21 +292,57 @@ def _evaluate_shell_command(context: ResourcePolicyContext) -> ResourcePolicyDec
                 "invoker_reached": False,
             },
         )
+    if _contains_embedded_line_break(command):
+        return _shell_syntax_denial(
+            context, command, "resource_policy_shell_control_syntax_denied"
+        )
+    if any(executable in _SHELL_DANGEROUS_BUILTINS for executable in executables):
+        return _shell_syntax_denial(
+            context, command, "resource_policy_shell_nested_interpreter_denied"
+        )
+    if any(executable in _SHELL_COMMAND_DISPATCHERS for executable in executables):
+        return _shell_syntax_denial(
+            context, command, "resource_policy_shell_nested_interpreter_denied"
+        )
+    if "find" in executables and any(flag in tokens for flag in _SHELL_FIND_EXEC_FLAGS):
+        return _shell_syntax_denial(
+            context, command, "resource_policy_shell_nested_interpreter_denied"
+        )
+    if _uses_shell_wrapper(tokens):
+        return _shell_syntax_denial(
+            context, command, "resource_policy_shell_wrapper_denied"
+        )
     for executable in executables:
-        if executable in _SHELL_INLINE_INTERPRETERS and "-c" in tokens:
-            inline = " ".join(tokens)
-            if any(marker in inline for marker in _INLINE_DANGEROUS_MARKERS):
-                return ResourcePolicyDecision(
-                    action="deny",
-                    reason="resource_policy_shell_inline_interpreter_denied",
-                    resource_type="shell",
-                    target=command,
-                    metadata={
-                        "tool_name": context.tool_name,
-                        "executable": executable,
-                        "invoker_reached": False,
-                    },
-                )
+        if executable in _SHELL_NESTED_INTERPRETERS:
+            return _shell_syntax_denial(
+                context, command, "resource_policy_shell_nested_interpreter_denied"
+            )
+        if executable in _SHELL_INLINE_INTERPRETERS and any(
+            flag in tokens for flag in _SHELL_INLINE_FLAGS
+        ):
+            return _shell_syntax_denial(
+                context, command, "resource_policy_shell_inline_interpreter_denied"
+            )
+    if _contains_command_substitution(command):
+        return _shell_syntax_denial(
+            context, command, "resource_policy_shell_command_substitution_denied"
+        )
+    if _contains_shell_expansion(command):
+        return _shell_syntax_denial(
+            context, command, "resource_policy_shell_command_substitution_denied"
+        )
+    if any(token in _SHELL_HEREDOC_OPERATORS for token in tokens):
+        return _shell_syntax_denial(
+            context, command, "resource_policy_shell_heredoc_denied"
+        )
+    if any(token.lower() in _SHELL_CONTROL_KEYWORDS for token in tokens):
+        return _shell_syntax_denial(
+            context, command, "resource_policy_shell_control_syntax_denied"
+        )
+    if any(token in _SHELL_UNSUPPORTED_COMPOUND_OPERATORS for token in tokens):
+        return _shell_syntax_denial(
+            context, command, "resource_policy_shell_compound_syntax_denied"
+        )
     return ResourcePolicyDecision(
         action="allow",
         reason="resource_policy_shell_command_allowed",
@@ -302,6 +358,95 @@ def _shell_tokens(command: str) -> list[str]:
     return list(lexer)
 
 
+def _contains_embedded_line_break(command: str) -> bool:
+    return "\n" in command.strip() or "\r" in command.strip()
+
+
+def _shell_syntax_denial(
+    context: ResourcePolicyContext, command: str, reason: str
+) -> ResourcePolicyDecision:
+    return ResourcePolicyDecision(
+        action="deny",
+        reason=reason,
+        resource_type="shell",
+        target=command,
+        metadata={
+            "tool_name": context.tool_name,
+            "invoker_reached": False,
+        },
+    )
+
+
+def _contains_command_substitution(command: str) -> bool:
+    quote = ""
+    escaped = False
+    index = 0
+    while index < len(command):
+        char = command[index]
+        if escaped:
+            escaped = False
+            index += 1
+            continue
+        if char == "\\" and quote != "'":
+            escaped = True
+            index += 1
+            continue
+        if char == "'":
+            if not quote:
+                quote = "'"
+            elif quote == "'":
+                quote = ""
+            index += 1
+            continue
+        if char == '"':
+            if not quote:
+                quote = '"'
+            elif quote == '"':
+                quote = ""
+            index += 1
+            continue
+        if quote != "'" and (
+            char == "`" or (char == "$" and command[index : index + 2] == "$(")
+        ):
+            return True
+        index += 1
+    return False
+
+
+def _contains_shell_expansion(command: str) -> bool:
+    quote = ""
+    escaped = False
+    index = 0
+    while index < len(command):
+        char = command[index]
+        if escaped:
+            escaped = False
+            index += 1
+            continue
+        if char == "\\" and quote != "'":
+            escaped = True
+            index += 1
+            continue
+        if char == "'":
+            if not quote:
+                quote = "'"
+            elif quote == "'":
+                quote = ""
+            index += 1
+            continue
+        if char == '"':
+            if not quote:
+                quote = '"'
+            elif quote == '"':
+                quote = ""
+            index += 1
+            continue
+        if quote != "'" and char == "$":
+            return True
+        index += 1
+    return False
+
+
 def _shell_executables(tokens: list[str]) -> list[str]:
     executables: list[str] = []
     segment: list[str] = []
@@ -313,6 +458,26 @@ def _shell_executables(tokens: list[str]) -> list[str]:
         segment.append(token)
     executables.extend(_segment_executables(segment))
     return executables
+
+
+def _uses_shell_wrapper(tokens: list[str]) -> bool:
+    at_segment_start = True
+    for token in tokens:
+        if token in _SHELL_TOP_LEVEL_OPERATORS:
+            at_segment_start = True
+            continue
+        if not at_segment_start:
+            continue
+        if (
+            "=" in token
+            and not token.startswith("-")
+            and token.split("=", 1)[0].isidentifier()
+        ):
+            continue
+        at_segment_start = False
+        if token.rsplit("/", 1)[-1] in _SHELL_WRAPPER_COMMANDS:
+            return True
+    return False
 
 
 def _segment_executables(segment: list[str]) -> list[str]:

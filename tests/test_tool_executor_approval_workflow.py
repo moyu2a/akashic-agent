@@ -11,9 +11,20 @@ from agent.policies.tool_approval_context import (
     TrustedApprovalContext,
     trusted_approval_from_runtime,
 )
+from agent.policies.side_effect_payload_vault import SideEffectPayloadVault
 from agent.policies.tool_approval_runtime import ToolApprovalRuntime
 from agent.policies.tool_approval_store import ToolApprovalStore
-from agent.tool_hooks import ToolExecutionRequest, ToolExecutor
+from agent.policies.tool_invocation_policy import (
+    ToolInvocationContext,
+    ToolInvocationDecision,
+)
+from agent.tool_hooks import (
+    HookContext,
+    HookOutcome,
+    ToolExecutionRequest,
+    ToolExecutor,
+    ToolHook,
+)
 
 
 UTC = timezone.utc
@@ -36,6 +47,70 @@ class RecordingInvoker:
         return {"tool": tool_name, "arguments": dict(arguments)}
 
 
+class AllowToolPolicy:
+    def evaluate(self, context: ToolInvocationContext) -> ToolInvocationDecision:
+        return ToolInvocationDecision(
+            action="allow",
+            reason="test_policy_allow",
+            risk=context.registry_risk,
+        )
+
+
+class DenyShellHook(ToolHook):
+    name = "deny_shell"
+    event = "pre_tool_use"
+
+    def matches(self, ctx: HookContext) -> bool:
+        return ctx.request.tool_name == "shell"
+
+    async def run(self, ctx: HookContext) -> HookOutcome:
+        return HookOutcome(
+            decision="deny",
+            reason=f"blocked command: {ctx.current_arguments['command']}",
+        )
+
+
+class FailingShellHook(ToolHook):
+    name = "failing_shell"
+    event = "pre_tool_use"
+
+    def matches(self, ctx: HookContext) -> bool:
+        return ctx.request.tool_name == "shell"
+
+    async def run(self, ctx: HookContext) -> HookOutcome:
+        raise RuntimeError(f"failed command: {ctx.current_arguments['command']}")
+
+
+class LeakyShellPassHook(ToolHook):
+    name = "leaky_shell_pass"
+    event = "pre_tool_use"
+
+    def matches(self, ctx: HookContext) -> bool:
+        return ctx.request.tool_name == "shell"
+
+    async def run(self, ctx: HookContext) -> HookOutcome:
+        command = ctx.current_arguments["command"]
+        return HookOutcome(
+            reason=f"observed command: {command}",
+            extra_message=f"extra command: {command}",
+        )
+
+
+class LeakyShellErrorHook(ToolHook):
+    name = "leaky_shell_error"
+    event = "post_tool_error"
+
+    def matches(self, ctx: HookContext) -> bool:
+        return ctx.request.tool_name == "shell"
+
+    async def run(self, ctx: HookContext) -> HookOutcome:
+        command = ctx.current_arguments["command"]
+        return HookOutcome(
+            reason=f"observed failed command: {command}",
+            extra_message=f"failed command detail: {command}",
+        )
+
+
 def _run(coro: Any) -> Any:
     return asyncio.run(coro)
 
@@ -47,7 +122,10 @@ def _runtime(
     ttl: timedelta = timedelta(minutes=5),
 ) -> ToolApprovalRuntime:
     return ToolApprovalRuntime(
-        ToolApprovalStore(tmp_path / "approvals.db"),
+        ToolApprovalStore(ToolApprovalRuntime.approval_db_path_from_workspace(tmp_path)),
+        side_effect_vault=SideEffectPayloadVault(
+            SideEffectPayloadVault.root_for_workspace(tmp_path)
+        ),
         now_factory=clock or MutableClock(),
         approval_ttl=ttl,
     )
@@ -77,6 +155,28 @@ def _write_request(
     )
 
 
+def _external_request(
+    *,
+    call_id: str = "call-external",
+    arguments: Mapping[str, object] | None = None,
+    trusted_approval_context: TrustedApprovalContext | None = None,
+) -> ToolExecutionRequest:
+    return ToolExecutionRequest(
+        call_id=call_id,
+        tool_name="send_webhook",
+        arguments=dict(arguments)
+        if arguments is not None
+        else {"target": "example-webhook"},
+        source="passive",
+        session_key="cli:session-1",
+        channel="cli",
+        chat_id="chat-1",
+        registered=True,
+        registry_risk="external-side-effect",
+        trusted_approval_context=trusted_approval_context,
+    )
+
+
 def _defer_write(
     runtime: ToolApprovalRuntime,
     invoker: RecordingInvoker,
@@ -86,6 +186,24 @@ def _defer_write(
     result = _run(
         ToolExecutor(approval_runtime=runtime).execute(
             _write_request(call_id=call_id), invoker
+        )
+    )
+    payload = json.loads(result.output)
+    approval_request_id = payload["approval_request"]["approval_request_id"]
+    record = runtime.store.get_request(approval_request_id)
+    assert record is not None
+    return result, record
+
+
+def _defer_external(
+    runtime: ToolApprovalRuntime,
+    invoker: RecordingInvoker,
+    *,
+    call_id: str = "call-external",
+):
+    result = _run(
+        ToolExecutor(approval_runtime=runtime).execute(
+            _external_request(call_id=call_id), invoker
         )
     )
     payload = json.loads(result.output)
@@ -128,6 +246,28 @@ def test_deferred_write_persists_pending_approval_id(tmp_path: Path) -> None:
     assert "hello" not in str(payload["approval_request"]["args_summary"])
 
 
+def test_executor_records_file_payload_when_write_is_deferred(tmp_path: Path) -> None:
+    runtime = _runtime(tmp_path)
+    invoker = RecordingInvoker()
+
+    result = _run(
+        ToolExecutor(approval_runtime=runtime).execute(
+            _write_request(
+                arguments={"path": "notes.md", "content": "raw-secret-content"}
+            ),
+            invoker,
+        )
+    )
+    payload = json.loads(result.output)
+    approval_id = payload["approval_request"]["approval_request_id"]
+
+    assert runtime.side_effect_vault is not None
+    loaded = runtime.side_effect_vault.get_payload(approval_id)
+    assert loaded is not None
+    assert loaded.arguments == {"path": "notes.md", "content": "raw-secret-content"}
+    assert invoker.calls == []
+
+
 def test_executor_defer_trace_includes_approval_requested_event(
     tmp_path: Path,
 ) -> None:
@@ -154,7 +294,7 @@ def test_executor_defer_trace_includes_approval_requested_event(
     assert "raw-secret-content" not in str(event)
 
 
-def test_trusted_approved_write_executes_once_and_marks_executed(
+def test_executor_does_not_directly_execute_approved_managed_file_tool(
     tmp_path: Path,
 ) -> None:
     runtime = _runtime(tmp_path)
@@ -173,11 +313,280 @@ def test_trusted_approved_write_executes_once_and_marks_executed(
         )
     )
 
-    assert result.status == "success"
+    assert result.status == "deferred"
+    assert result.invoker_reached is False
+    assert "approved_side_effect_requires_managed_apply" in str(result.output)
+    payload = json.loads(result.output)
+    assert payload["error_code"] == "approved_side_effect_requires_managed_apply"
+    assert (
+        payload["approval_request"]["approval_request_id"]
+        == record.approval_request_id
+    )
+    assert "hello" not in str(payload["approval_request"]["args_summary"])
+    assert invoker.calls == []
+    assert runtime.store.get_request(record.approval_request_id).status == "approved"
+
+
+def test_executor_records_shell_payload_and_blocks_direct_approved_shell(
+    tmp_path: Path,
+) -> None:
+    runtime = _runtime(tmp_path)
+    invoker = RecordingInvoker()
+    request = ToolExecutionRequest(
+        call_id="call-shell",
+        tool_name="shell",
+        arguments={"command": "echo hi", "description": "say hi"},
+        source="passive",
+        session_key="cli:session-1",
+        channel="cli",
+        chat_id="chat-1",
+        registered=True,
+        registry_risk="external-side-effect",
+    )
+
+    deferred = _run(ToolExecutor(approval_runtime=runtime).execute(request, invoker))
+    payload = json.loads(deferred.output)
+    approval_id = payload["approval_request"]["approval_request_id"]
+    record = runtime.store.get_request(approval_id)
+    assert record is not None
+    _approve(runtime, record)
+    trusted = trusted_approval_from_runtime(
+        approval_request_id=approval_id,
+        actor="user",
+        source="status_command",
+    )
+    direct_request = ToolExecutionRequest(
+        call_id="call-shell",
+        tool_name="shell",
+        arguments={"command": "echo hi", "description": "say hi"},
+        source="passive",
+        session_key="cli:session-1",
+        channel="cli",
+        chat_id="chat-1",
+        registered=True,
+        registry_risk="external-side-effect",
+        trusted_approval_context=trusted,
+    )
+
+    direct = _run(ToolExecutor(approval_runtime=runtime).execute(direct_request, invoker))
+
+    assert runtime.side_effect_vault.get_payload(approval_id) is not None
+    assert "echo hi" not in deferred.output
+    assert "echo hi" not in json.dumps(deferred.final_arguments, ensure_ascii=False)
+    assert "echo hi" not in json.dumps(payload, ensure_ascii=False)
+    assert "echo hi" not in json.dumps(deferred.policy_trace, ensure_ascii=False)
+    assert "echo hi" not in json.dumps(deferred.audit_trace, ensure_ascii=False)
+    raw_approval_db = ToolApprovalRuntime.approval_db_path_from_workspace(
+        tmp_path
+    ).read_bytes()
+    assert b"echo hi" not in raw_approval_db
+    assert direct.status == "deferred"
+    assert direct.invoker_reached is False
+    assert "approved_side_effect_requires_managed_apply" in direct.output
+    assert invoker.calls == []
+
+
+def test_executor_redacts_denied_destructive_shell_command(tmp_path: Path) -> None:
+    runtime = _runtime(tmp_path)
+    invoker = RecordingInvoker()
+    command = "rm -rf notes"
+    request = ToolExecutionRequest(
+        call_id="call-denied-shell",
+        tool_name="shell",
+        arguments={"command": command},
+        source="passive",
+        session_key="cli:session-1",
+        channel="cli",
+        chat_id="chat-1",
+        registered=True,
+        registry_risk="external-side-effect",
+    )
+
+    denied = _run(ToolExecutor(approval_runtime=runtime).execute(request, invoker))
+
+    assert denied.status == "denied"
+    assert command not in denied.output
+    assert command not in json.dumps(denied.final_arguments, ensure_ascii=False)
+    assert command not in json.dumps(denied.policy_trace, ensure_ascii=False)
+    assert command not in json.dumps(denied.audit_trace, ensure_ascii=False)
+    assert invoker.calls == []
+
+
+def test_executor_denies_trusted_approved_destructive_shell_request(
+    tmp_path: Path,
+) -> None:
+    runtime = _runtime(tmp_path)
+    invoker = RecordingInvoker()
+    command = "rm -rf notes"
+    arguments = {"command": command}
+    record = runtime.record_defer_request(
+        request_id="call-trusted-denied-shell",
+        session_key="cli:session-1",
+        channel="cli",
+        chat_id="chat-1",
+        source="passive",
+        tool_name="shell",
+        risk="destructive",
+        approval_scope="tool_call",
+        policy_reason="risk_strategy_destructive_requires_approval",
+        arguments=arguments,
+    )
+    _approve(runtime, record)
+    trusted = trusted_approval_from_runtime(
+        approval_request_id=record.approval_request_id,
+        actor="user",
+        source="status_command",
+    )
+    request = ToolExecutionRequest(
+        call_id="call-trusted-denied-shell",
+        tool_name="shell",
+        arguments=arguments,
+        source="passive",
+        session_key="cli:session-1",
+        channel="cli",
+        chat_id="chat-1",
+        registered=True,
+        registry_risk="destructive",
+        trusted_approval_context=trusted,
+    )
+
+    result = _run(ToolExecutor(approval_runtime=runtime).execute(request, invoker))
+
+    assert result.status == "denied"
+    assert result.invoker_reached is False
+    assert "approved_side_effect_requires_managed_apply" not in str(result.output)
+    assert command not in str(result.output)
+    assert command not in json.dumps(result.final_arguments, ensure_ascii=False)
+    assert command not in json.dumps(result.policy_trace, ensure_ascii=False)
+    assert command not in json.dumps(result.audit_trace, ensure_ascii=False)
+    assert invoker.calls == []
+
+
+def test_executor_redacts_shell_post_error_hook_messages(tmp_path: Path) -> None:
+    runtime = _runtime(tmp_path)
+    command = "echo post-error-secret-token"
+    request = ToolExecutionRequest(
+        call_id="call-post-hook-error-shell",
+        tool_name="shell",
+        arguments={"command": command},
+        source="passive",
+        session_key="cli:session-1",
+        channel="cli",
+        chat_id="chat-1",
+        registered=True,
+        registry_risk="read-only",
+    )
+
+    async def failing_invoker(tool_name: str, arguments: dict[str, Any]) -> object:
+        raise RuntimeError(f"failed command: {arguments['command']}")
+
+    result = _run(
+        ToolExecutor(
+            hooks=[LeakyShellErrorHook()],
+            policy_engine=AllowToolPolicy(),
+            approval_runtime=runtime,
+        ).execute(request, failing_invoker)
+    )
+
+    assert result.status == "error"
     assert result.invoker_reached is True
-    assert result.invoker_succeeded is True
-    assert invoker.calls == [("write_file", {"path": "notes.md", "content": "hello"})]
-    assert runtime.store.get_request(record.approval_request_id).status == "executed"
+    assert command not in str(result.output)
+    assert command not in json.dumps(result.final_arguments, ensure_ascii=False)
+    assert command not in json.dumps(result.extra_messages, ensure_ascii=False)
+    assert command not in json.dumps(result.post_hook_trace, default=vars)
+
+
+def test_executor_redacts_shell_pre_hook_denial_reason(tmp_path: Path) -> None:
+    runtime = _runtime(tmp_path)
+    invoker = RecordingInvoker()
+    command = "echo secret-token"
+    request = ToolExecutionRequest(
+        call_id="call-pre-hook-denied-shell",
+        tool_name="shell",
+        arguments={"command": command},
+        source="passive",
+        session_key="cli:session-1",
+        channel="cli",
+        chat_id="chat-1",
+        registered=True,
+        registry_risk="external-side-effect",
+    )
+
+    denied = _run(
+        ToolExecutor(
+            hooks=[DenyShellHook()], approval_runtime=runtime
+        ).execute(request, invoker)
+    )
+
+    assert denied.status == "denied"
+    assert denied.invoker_reached is False
+    assert command not in denied.output
+    assert command not in json.dumps(denied.final_arguments, ensure_ascii=False)
+    assert command not in json.dumps(denied.pre_hook_trace, default=vars)
+    assert command not in json.dumps(denied.policy_trace, ensure_ascii=False)
+    assert command not in json.dumps(denied.audit_trace, ensure_ascii=False)
+    assert invoker.calls == []
+
+
+def test_executor_redacts_shell_pre_hook_exception(tmp_path: Path) -> None:
+    runtime = _runtime(tmp_path)
+    invoker = RecordingInvoker()
+    command = "echo exception-secret-token"
+    request = ToolExecutionRequest(
+        call_id="call-pre-hook-error-shell",
+        tool_name="shell",
+        arguments={"command": command},
+        source="passive",
+        session_key="cli:session-1",
+        channel="cli",
+        chat_id="chat-1",
+        registered=True,
+        registry_risk="external-side-effect",
+    )
+
+    result = _run(
+        ToolExecutor(
+            hooks=[LeakyShellPassHook(), FailingShellHook()],
+            approval_runtime=runtime,
+        ).execute(request, invoker)
+    )
+
+    assert result.status == "error"
+    assert result.invoker_reached is False
+    serialized_result = json.dumps(result, default=vars, ensure_ascii=False)
+    assert command not in result.output
+    assert command not in json.dumps(result.final_arguments, ensure_ascii=False)
+    assert command not in serialized_result
+    assert invoker.calls == []
+
+
+def test_preflight_redacts_shell_pre_hook_exception(tmp_path: Path) -> None:
+    runtime = _runtime(tmp_path)
+    command = "echo preflight-exception-secret-token"
+    request = ToolExecutionRequest(
+        call_id="call-preflight-hook-error-shell",
+        tool_name="shell",
+        arguments={"command": command},
+        source="passive",
+        session_key="cli:session-1",
+        channel="cli",
+        chat_id="chat-1",
+        registered=True,
+        registry_risk="external-side-effect",
+    )
+
+    result = _run(
+        ToolExecutor(
+            hooks=[LeakyShellPassHook(), FailingShellHook()],
+            approval_runtime=runtime,
+        ).preflight(request)
+    )
+
+    assert result.status == "error"
+    serialized_result = json.dumps(result, default=vars, ensure_ascii=False)
+    assert command not in result.output
+    assert command not in json.dumps(result.final_arguments, ensure_ascii=False)
+    assert command not in serialized_result
 
 
 def test_executor_approved_execution_trace_includes_consumed_and_executed_events(
@@ -185,7 +594,7 @@ def test_executor_approved_execution_trace_includes_consumed_and_executed_events
 ) -> None:
     runtime = _runtime(tmp_path)
     invoker = RecordingInvoker()
-    _, record = _defer_write(runtime, invoker)
+    _, record = _defer_external(runtime, invoker)
     _approve(runtime, record)
     trusted = trusted_approval_from_runtime(
         approval_request_id=record.approval_request_id,
@@ -195,7 +604,7 @@ def test_executor_approved_execution_trace_includes_consumed_and_executed_events
 
     result = _run(
         ToolExecutor(approval_runtime=runtime).execute(
-            _write_request(trusted_approval_context=trusted), invoker
+            _external_request(trusted_approval_context=trusted), invoker
         )
     )
 
@@ -206,16 +615,16 @@ def test_executor_approved_execution_trace_includes_consumed_and_executed_events
         assert event["approval_request_id"] == record.approval_request_id
         assert event["request_id"] == record.request_id
         assert event["session_key"] == record.session_key
-        assert event["tool_name"] == "write_file"
+        assert event["tool_name"] == "send_webhook"
         assert event["args_hash"] == record.args_hash
         assert "content" not in event
         assert "args_summary" not in event
 
 
-def test_reusing_consumed_approval_does_not_execute(tmp_path: Path) -> None:
+def test_reusing_consumed_external_approval_does_not_execute(tmp_path: Path) -> None:
     runtime = _runtime(tmp_path)
     invoker = RecordingInvoker()
-    _, record = _defer_write(runtime, invoker)
+    _, record = _defer_external(runtime, invoker)
     _approve(runtime, record)
     trusted = trusted_approval_from_runtime(
         approval_request_id=record.approval_request_id,
@@ -224,13 +633,13 @@ def test_reusing_consumed_approval_does_not_execute(tmp_path: Path) -> None:
     )
     _run(
         ToolExecutor(approval_runtime=runtime).execute(
-            _write_request(trusted_approval_context=trusted), invoker
+            _external_request(trusted_approval_context=trusted), invoker
         )
     )
 
     second = _run(
         ToolExecutor(approval_runtime=runtime).execute(
-            _write_request(trusted_approval_context=trusted), invoker
+            _external_request(trusted_approval_context=trusted), invoker
         )
     )
 
@@ -342,7 +751,7 @@ def test_denied_or_expired_approval_does_not_execute(tmp_path: Path) -> None:
     clock = MutableClock()
     runtime = _runtime(tmp_path, clock=clock, ttl=timedelta(seconds=1))
     invoker = RecordingInvoker()
-    _, denied_record = _defer_write(runtime, invoker)
+    _, denied_record = _defer_external(runtime, invoker)
     runtime.store.deny_request(
         approval_request_id=denied_record.approval_request_id,
         request_id=denied_record.request_id,
@@ -362,12 +771,12 @@ def test_denied_or_expired_approval_does_not_execute(tmp_path: Path) -> None:
 
     denied_result = _run(
         ToolExecutor(approval_runtime=runtime).execute(
-            _write_request(trusted_approval_context=denied_trusted), invoker
+            _external_request(trusted_approval_context=denied_trusted), invoker
         )
     )
 
     clock.now = datetime(2026, 7, 24, 12, 0, tzinfo=UTC)
-    expired_result, expired_record = _defer_write(
+    expired_result, expired_record = _defer_external(
         runtime, invoker, call_id="call-expired"
     )
     assert expired_result.status == "deferred"
@@ -389,7 +798,7 @@ def test_denied_or_expired_approval_does_not_execute(tmp_path: Path) -> None:
     )
     expired_consume_result = _run(
         ToolExecutor(approval_runtime=runtime).execute(
-            _write_request(
+            _external_request(
                 call_id="call-expired",
                 trusted_approval_context=expired_trusted,
             ),
