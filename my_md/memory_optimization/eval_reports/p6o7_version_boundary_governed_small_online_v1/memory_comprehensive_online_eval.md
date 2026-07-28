@@ -24,19 +24,19 @@
 - `profile_count`: `2`
 - `prompt_variant_count`: `1`
 - `repeat_count`: `1`
-- `answer_rule_pass_rate`: `98.75`
+- `answer_rule_pass_rate`: `95.0`
 - `memory_grounding_pass_rate`: `100.0`
 - `forbidden_violation_rate`: `0.0`
-- `avg_latency_ms`: `4920.35`
-- `total_token_count`: `489103`
-- `avg_total_token_count`: `6113.7875`
+- `avg_latency_ms`: `5169.825`
+- `total_token_count`: `488938`
+- `avg_total_token_count`: `6111.725`
 
 ## Profile Summary
 
 | profile | cases | answer_success | grounding_success | forbidden_cases | answer_rate | grounding_rate | forbidden_rate | avg_tokens |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| chain_tri_governed_answer_contract | 40 | 40 | 40 | 0 | 100 | 100 | 0 | 6149.875 |
-| chain_tri_version_governed_answer_contract | 40 | 39 | 40 | 0 | 97.5 | 100 | 0 | 6077.7 |
+| chain_tri_governed_answer_contract | 40 | 38 | 40 | 0 | 95 | 100 | 0 | 6170.85 |
+| chain_tri_version_governed_answer_contract | 40 | 38 | 40 | 0 | 95 | 100 | 0 | 6052.6 |
 
 ## Answer Quality Uplift Vs Original Memory
 
@@ -63,7 +63,7 @@
 
 - `case_count`: `80`
 - `enabled_case_count`: `80`
-- `needs_retry_count`: `0`
+- `needs_retry_count`: `2`
 - `forbidden_boundary_included_count`: `0`
 - `stale_evidence_included_count`: `0`
 - `conflict_evidence_included_count`: `0`

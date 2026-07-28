@@ -347,7 +347,7 @@ def _conflict_warning_ids_from_shadow_result(
         active_in_chain = [item_id for item_id in chain_ids if item_id in active_ids]
         if len(active_in_chain) <= 1:
             continue
-        result.extend(active_in_chain)
+        result.extend(item_id for item_id in active_in_chain if item_id not in governed_ids)
     return _dedupe_ids(tuple(result))
 
 

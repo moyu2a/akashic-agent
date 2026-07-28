@@ -499,13 +499,13 @@ Integrity:
 
 | profile | answer_success | answer_rate | grounding_rate | forbidden_rate | avg_tokens |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| `chain_tri_governed_answer_contract` | `40/40` | `100.0%` | `100.0%` | `0.0%` | `6149.875` |
-| `chain_tri_version_governed_answer_contract` | `39/40` | `97.5%` | `100.0%` | `0.0%` | `6077.7` |
+| `chain_tri_governed_answer_contract` | `38/40` | `95.0%` | `100.0%` | `0.0%` | `6170.85` |
+| `chain_tri_version_governed_answer_contract` | `38/40` | `95.0%` | `100.0%` | `0.0%` | `6052.6` |
 
 Delta:
 
-- Answer rate changed by `-2.5` points versus this run's governed baseline.
-- Avg tokens changed by `6077.7 - 6149.875 = -72.175` tokens.
+- Answer rate changed by `0.0` points versus this run's governed baseline.
+- Avg tokens changed by `6052.6 - 6170.85 = -118.25` tokens.
 - Grounding and forbidden stayed at `100.0%` and `0.0%`.
 
 Post-check shadow aggregate across both governed profiles:
@@ -514,26 +514,26 @@ Post-check shadow aggregate across both governed profiles:
 | --- | ---: |
 | `case_count` | `80` |
 | `enabled_case_count` | `80` |
-| `needs_retry_count` | `0` |
+| `needs_retry_count` | `2` |
 | `forbidden_boundary_included_count` | `0` |
 | `missing_likely_relevant_context_count` | `0` |
 | `stale_evidence_included_count` | `0` |
 | `conflict_evidence_included_count` | `0` |
 | `insufficient_fallback_missing_count` | `0` |
 
-Per-profile post-check comparison also stayed flat:
+Per-profile post-check comparison shows the version-governed retry increase:
 
 | profile | needs_retry | forbidden_boundary_included | missing_likely_relevant_context | stale_evidence_included | conflict_evidence_included | insufficient_fallback_missing |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
 | `chain_tri_governed_answer_contract` | `0` | `0` | `0` | `0` | `0` | `0` |
-| `chain_tri_version_governed_answer_contract` | `0` | `0` | `0` | `0` | `0` | `0` |
+| `chain_tri_version_governed_answer_contract` | `2` | `0` | `0` | `0` | `0` | `0` |
 
 Interpretation:
 
-- Version-boundary fields did not expand recall and did not introduce forbidden/stale/conflict context risk.
-- The version-governed profile stayed within the success gate: answer rate dropped only `2.5` points, grounding remained `100.0%`, forbidden remained `0.0%`, and token cost decreased.
-- Because answer_rate did not beat the governed baseline in this run, version-boundary should remain a shadow/evidence-contract safety signal. It is not a standalone production win.
-- The next slice should not jump to graph/all-on. The useful follow-up is targeted failure analysis of the one version-governed miss and a small comparison of `governed`, `rerank-governed`, and `version-governed` under the same seed/order before combining signals.
+- Version-boundary fields did not expand recall and did not hurt answer, grounding, or forbidden main metrics in this final run.
+- The version-governed profile did not pass the post-check no-rise gate: `needs_retry_count` rose from `0` to `2`, both due to `forbidden_boundary_mentioned` on `hard_version_chain_01` and `hard_stale_sleep_02`.
+- Token cost decreased by `118.25` average tokens versus the same-run governed baseline, so the failure is not cost or raw answer quality; it is the safety behavior of exposing forbidden boundary ids in the contract.
+- Version-boundary should remain shadow/evidence-contract metadata. The next slice should analyze and redesign forbidden-boundary presentation before combining rerank + version or adding graph/all-on.
 
 ### Phase 6c-1 已建立的离线 uplift proxy report
 

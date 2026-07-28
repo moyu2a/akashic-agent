@@ -450,6 +450,7 @@ def test_production_governed_contract_merges_version_boundary_fields() -> None:
     assert set(contract.active_version_ids) == {"target"}
     assert "old" in contract.forbidden_boundary_ids
     assert "conflict" in contract.conflict_warning_ids
+    assert "target" not in contract.conflict_warning_ids
     assert "target" not in contract.forbidden_boundary_ids
     assert "conflict" not in contract.allowed_evidence_ids
     assert set(contract.allowed_evidence_ids).isdisjoint(contract.forbidden_boundary_ids)

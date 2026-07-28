@@ -2170,24 +2170,27 @@
   - `timeout_count = 0`;
   - privacy flags: `raw_query_included = False`, `raw_memory_summary_included = False`, `prompt_included = False`, `session_text_included = False`, `full_answer_included = False`.
 - Per-profile real result:
-  - `chain_tri_governed_answer_contract`: answer `40/40 = 100.0%`, grounding `100.0%`, forbidden `0.0%`, avg tokens `6149.875`;
-  - `chain_tri_version_governed_answer_contract`: answer `39/40 = 97.5%`, grounding `100.0%`, forbidden `0.0%`, avg tokens `6077.7`.
+  - `chain_tri_governed_answer_contract`: answer `38/40 = 95.0%`, grounding `100.0%`, forbidden `0.0%`, avg tokens `6170.85`;
+  - `chain_tri_version_governed_answer_contract`: answer `38/40 = 95.0%`, grounding `100.0%`, forbidden `0.0%`, avg tokens `6052.6`.
 - Post-check shadow aggregate:
   - `case_count = 80`;
   - `enabled_case_count = 80`;
-  - `needs_retry_count = 0`;
+  - `needs_retry_count = 2`;
   - `forbidden_boundary_included_count = 0`;
   - `missing_likely_relevant_context_count = 0`;
   - `stale_evidence_included_count = 0`;
   - `conflict_evidence_included_count = 0`;
   - `insufficient_fallback_missing_count = 0`.
 - Conclusion:
-  - version-boundary metadata is safe as scoped contract metadata in this slice;
+  - version-boundary metadata is scoped and does not expand recall in this slice;
   - it did not expand recall beyond candidate-governed tri ids;
-  - it did not increase forbidden/stale/conflict/fallback post-check risk;
-  - token cost decreased by `72.175` avg tokens versus the same-run governed baseline;
-  - answer_rate was `97.5%` versus governed baseline `100.0%`, so it is not a standalone answer-quality improvement.
+  - it did not hurt answer, grounding, or forbidden main metrics;
+  - token cost decreased by `118.25` avg tokens versus the same-run governed baseline;
+  - it failed the post-check no-rise gate because `needs_retry_count` rose from governed `0` to version-governed `2`;
+  - both retry cases were `forbidden_boundary_mentioned`: `hard_version_chain_01` and `hard_stale_sleep_02`;
+  - this is not production-ready as currently rendered.
 - Next step:
-  - analyze the one version-governed miss;
-  - compare governed, rerank-governed, and version-governed in the same bounded matrix before combining rerank + version;
+  - analyze the two forbidden-boundary mention retries;
+  - redesign forbidden-boundary presentation so the model can respect boundaries without echoing forbidden ids;
+  - then compare governed, rerank-governed, and revised version-governed before combining rerank + version;
   - keep graph/all-on deferred.

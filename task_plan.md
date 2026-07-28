@@ -1968,14 +1968,14 @@ Real report integrity:
 
 Per-profile real result:
 
-- `chain_tri_governed_answer_contract`: answer `40/40 = 100.0%`, grounding `100.0%`, forbidden `0.0%`, avg tokens `6149.875`.
-- `chain_tri_version_governed_answer_contract`: answer `39/40 = 97.5%`, grounding `100.0%`, forbidden `0.0%`, avg tokens `6077.7`.
+- `chain_tri_governed_answer_contract`: answer `38/40 = 95.0%`, grounding `100.0%`, forbidden `0.0%`, avg tokens `6170.85`.
+- `chain_tri_version_governed_answer_contract`: answer `38/40 = 95.0%`, grounding `100.0%`, forbidden `0.0%`, avg tokens `6052.6`.
 
 Post-check shadow:
 
 - `case_count = 80`;
 - `enabled_case_count = 80`;
-- `needs_retry_count = 0`;
+- `needs_retry_count = 2`;
 - `forbidden_boundary_included_count = 0`;
 - `missing_likely_relevant_context_count = 0`;
 - `stale_evidence_included_count = 0`;
@@ -1984,12 +1984,12 @@ Post-check shadow:
 
 Conclusion:
 
-- Version-boundary metadata did not expand recall and did not introduce forbidden/stale/conflict post-check risk.
-- It passed the safety gate, with grounding `100.0%`, forbidden `0.0%`, and token cost down by `72.175` avg tokens versus the same-run governed baseline.
-- It did not beat the governed baseline on answer_rate in this run: `97.5%` vs `100.0%`, a `-2.5` point delta.
+- Version-boundary metadata did not expand recall and did not hurt answer, grounding, or forbidden main metrics.
+- It reduced token cost by `118.25` avg tokens versus the same-run governed baseline.
+- It did not pass the post-check no-rise safety gate: version-governed `needs_retry_count = 2` versus governed `0`, both due to `forbidden_boundary_mentioned` on `hard_version_chain_01` and `hard_stale_sleep_02`.
 - Keep version-boundary as eval/shadow evidence-contract metadata for now; do not productionize it alone.
 
 Next step:
 
-- Analyze the one version-governed miss and compare governed, rerank-governed, and version-governed in the same matrix before combining rerank + version.
+- Analyze the two forbidden-boundary mention retries and redesign how forbidden boundary ids are presented or hidden from the model before combining rerank + version.
 - Continue deferring graph/all-on until combined governed-contract signals have targeted evidence.
