@@ -41,7 +41,7 @@
   - compileall exited `0`.
 - Second final-review pass found remaining redaction gaps for token-shaped secrets, single-token raw output, arbitrary relative artifact refs, and missing shell persistence-failure audit event on fallback persistence failure.
 - Second final-review fixes added field-specific ledger validators, managed artifact ref shape requirements, and persistence-failure audit events on every shell state-persistence failure path.
-- Second final-review fix verification: targeted two-test RED pair -> `2 passed`; focused regression suite -> `52 passed in 3.27s`; P4c focused governance suite -> `151 passed in 5.50s`; P1-P4c baseline -> `193 passed in 3.76s`; compileall exited `0`; `git diff --check` emitted no output.
+- Third final-review fix verification: targeted three-test RED pair -> `3 passed`; focused regression suite -> `54 passed in 3.31s`; P4c focused governance suite -> `153 passed in 5.66s`; P1-P4c baseline -> `194 passed in 3.80s`; compileall exited `0`; `git diff --check` emitted no output.
 - Current P4c conclusion: first-version queryable persistent redacted ledger is implemented as fail-open audit projection; approval and side-effect stores remain source-of-truth; external API side-effect replay, destructive execution, TaskExecution shell resume, shell rollback, and network-enabled shell sandbox remain closed.
 
 ## 2026-07-27 Tool Governance P4b Documentation and Final Verification

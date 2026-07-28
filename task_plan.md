@@ -21,7 +21,7 @@ Current result:
 - Approval and side-effect stores remain source-of-truth; the ledger is an audit projection.
 - External API side-effect replay remains the next closed follow-up.
 - Destructive execution, TaskExecution shell resume, shell rollback, and network-enabled shell sandbox remain unavailable.
-- Verification after final review fixes: P4c focused governance suite `151 passed in 5.40s`; P1-P4c baseline `193 passed in 3.74s`; compileall exit `0`; `git diff --check` no output.
+- Verification after final review fixes: P4c focused governance suite `153 passed in 5.66s`; P1-P4c baseline `194 passed in 3.80s`; compileall exit `0`; `git diff --check` no output.
 
 ## 2026-07-27 Tool Governance P4b Documentation and Final Verification
 

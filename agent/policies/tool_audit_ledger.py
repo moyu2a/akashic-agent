@@ -209,6 +209,17 @@ _SENSITIVE_VALUE_MARKERS = (
     "command=",
     "?",
 )
+_SENSITIVE_PREFIXES = (
+    "sk-",
+    "sk_",
+    "sk-proj-",
+    "ghp_",
+    "gho_",
+    "ghu_",
+    "github_pat_",
+    "xoxb-",
+    "xoxp-",
+)
 _REF_RE = re.compile(r"^[A-Za-z0-9._/-]{1,160}$")
 _SAFE_TOKEN_RE = re.compile(r"^[A-Za-z0-9_.:@-]{1,160}$")
 _SAFE_CODE_RE = re.compile(r"^[a-z][a-z0-9_.:-]{0,159}$")
@@ -494,9 +505,9 @@ def _sanitize_event(event: ToolAuditLedgerEvent) -> ToolAuditLedgerEvent:
         event,
         event_id=_safe_identifier(event.event_id),
         event_type=_safe_enum(event.event_type, _EVENT_TYPES),
-        session_key=_safe_token(event.session_key),
-        channel=_safe_token(event.channel),
-        chat_id=_safe_token(event.chat_id),
+        session_key=_safe_identifier(event.session_key),
+        channel=_safe_identifier(event.channel),
+        chat_id=_safe_identifier(event.chat_id),
         request_id=_safe_identifier(event.request_id),
         turn_id=_safe_identifier(event.turn_id),
         tool_name=_safe_code(event.tool_name),
@@ -511,7 +522,7 @@ def _sanitize_event(event: ToolAuditLedgerEvent) -> ToolAuditLedgerEvent:
         execution_status=_safe_enum(event.execution_status, _EXECUTION_STATUSES),
         rollback_status=_safe_enum(event.rollback_status, _ROLLBACK_STATUSES),
         actor=_safe_enum(event.actor, _ACTORS),
-        args_hash=_safe_code(event.args_hash),
+        args_hash=_safe_hash_value(event.args_hash),
         metadata=sanitize_tool_audit_metadata(event.metadata),
     )
 
@@ -560,6 +571,8 @@ def _safe_identifier(value: str) -> str:
     lower = value.lower()
     if any(marker in lower for marker in _SENSITIVE_VALUE_MARKERS):
         return ""
+    if _has_sensitive_prefix(value):
+        return ""
     if len(value) < 8 and not any(
         separator in value for separator in {":", "-", "_", "."}
     ):
@@ -575,6 +588,8 @@ def _safe_code(value: str) -> str:
     lower = value.lower()
     if any(marker in lower for marker in _SENSITIVE_VALUE_MARKERS):
         return ""
+    if _has_sensitive_prefix(value):
+        return ""
     if lower in _COMMAND_PREFIXES:
         return ""
     return value
@@ -587,6 +602,10 @@ def _safe_reason(value: str) -> str:
     if "_" not in sanitized and ":" not in sanitized:
         return ""
     return sanitized
+
+
+def _safe_hash_value(value: str) -> str:
+    return value if _is_safe_hash(value) else ""
 
 
 def _safe_enum(value: str, allowed: frozenset[str]) -> str:
@@ -606,19 +625,29 @@ def _is_safe_ref(value: str) -> bool:
     return (
         len(value) <= 160
         and not any(marker in lower for marker in _SENSITIVE_VALUE_MARKERS)
+        and not _has_sensitive_prefix(value)
         and not lower.startswith(_COMMAND_PREFIXES)
         and value.startswith("artifacts/")
         and _REF_RE.fullmatch(value) is not None
         and all(segment not in {".", ".."} for segment in value.split("/"))
-        and len([segment for segment in value.split("/") if segment]) == 3
+        and len(value.split("/")) == 3
+        and all(value.split("/"))
     )
 
 
 def _is_safe_hash(value: str) -> bool:
     lower = value.lower()
-    return bool(_HEX_RE.fullmatch(value) or value.endswith("-hash")) and not lower.startswith(
-        _COMMAND_PREFIXES
+    if _has_sensitive_prefix(value):
+        return False
+    return (
+        bool(_HEX_RE.fullmatch(value) and len(value) == 64)
+        or value in {"hash-1", "stdout-hash", "stderr-hash"}
     )
+
+
+def _has_sensitive_prefix(value: str) -> bool:
+    lower = value.lower()
+    return lower.startswith(_SENSITIVE_PREFIXES)
 
 
 def _looks_like_raw_path(value: str) -> bool:

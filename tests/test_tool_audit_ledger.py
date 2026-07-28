@@ -57,7 +57,7 @@ def test_ledger_sanitizes_metadata_allowlist(tmp_path) -> None:
         {
             "resource_type": "workspace",
             "exit_code": 2,
-            "stdout_hash": "abc",
+            "stdout_hash": "a" * 64,
             "command": "rm -rf secret",
             "path": "/tmp/secret.txt",
             "content": "secret body",
@@ -70,7 +70,7 @@ def test_ledger_sanitizes_metadata_allowlist(tmp_path) -> None:
     assert metadata == {
         "resource_type": "workspace",
         "exit_code": 2,
-        "stdout_hash": "abc",
+        "stdout_hash": "a" * 64,
     }
 
     store = ToolAuditLedgerStore(tmp_path / "tool_audit.db")
@@ -114,7 +114,7 @@ def test_ledger_sanitizes_unsafe_top_level_fields_and_preserves_safe_refs(
     store.record_event(
         ToolAuditLedgerEvent(
             event_type="tool_approval_requested; cat /tmp/secret",
-            session_key="cli:one",
+            session_key="ghp_AbCd1234567890",
             request_id="../payloads/raw-args.json",
             tool_name="write_file",
             policy_action="defer",
@@ -130,13 +130,15 @@ def test_ledger_sanitizes_unsafe_top_level_fields_and_preserves_safe_refs(
                 "error_code": "raw stdout account 1234",
                 "sandbox_backend": "printf private data",
                 "stdout_hash": "stdout-hash",
+                "stderr_hash": "sk-proj-AbCd1234567890-hash",
             },
         )
     )
 
-    event = store.query_events(ToolAuditLedgerQuery(session_key="cli:one"))[0]
+    event = store.query_events(ToolAuditLedgerQuery(limit=1))[0]
     raw = store.db_path.read_text(encoding="utf-8", errors="ignore")
     assert event.event_type == ""
+    assert event.session_key == ""
     assert event.request_id == ""
     assert event.policy_reason == ""
     assert event.approval_status == ""
@@ -151,9 +153,51 @@ def test_ledger_sanitizes_unsafe_top_level_fields_and_preserves_safe_refs(
     assert "../payloads/raw-args.json" not in raw
     assert "Bearer token-secret" not in raw
     assert "Bearer_token_secret" not in raw
+    assert "ghp_AbCd1234567890" not in raw
+    assert "sk-proj-AbCd1234567890" not in raw
     assert "raw stdout account" not in raw
     assert "printf private data" not in raw
     assert "home/user/data" not in raw
+
+
+def test_ledger_preserves_canonical_hashes_and_rejects_noncanonical_refs(tmp_path) -> None:
+    store = ToolAuditLedgerStore(tmp_path / "tool_audit.db")
+    args_hash = "0" * 64
+
+    store.record_event(
+        _event(
+            args_hash=args_hash,
+            metadata={
+                "stdout_ref": "artifacts/preview-1/stdout.txt",
+                "stderr_ref": "artifacts/preview-1/stderr.txt",
+                "rollback_id": "rollback-1",
+                "stdout_hash": "a" * 64,
+                "stderr_hash": "b" * 64,
+            },
+        )
+    )
+    store.record_event(
+        _event(
+            request_id="call-bad-ref",
+            metadata={
+                "stdout_ref": "artifacts/preview-1/stdout.txt/",
+                "stderr_ref": "artifacts/preview-1//stderr.txt",
+                "rollback_id": "home/user/data",
+            },
+        )
+    )
+
+    events = store.query_events(ToolAuditLedgerQuery(session_key="cli:one", limit=10))
+    valid = next(event for event in events if event.args_hash == args_hash)
+    invalid = next(event for event in events if event.request_id == "call-bad-ref")
+    assert valid.metadata == {
+        "rollback_id": "rollback-1",
+        "stderr_hash": "b" * 64,
+        "stderr_ref": "artifacts/preview-1/stderr.txt",
+        "stdout_hash": "a" * 64,
+        "stdout_ref": "artifacts/preview-1/stdout.txt",
+    }
+    assert invalid.metadata == {}
 
 
 class _FailingLedger:

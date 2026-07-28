@@ -15,6 +15,7 @@ from agent.policies.shell_sandbox_runner import SandboxRunResult
 from agent.policies.side_effect_payload_vault import SideEffectPayloadVault
 from agent.policies.tool_audit_ledger import (
     ToolAuditLedgerEvent,
+    ToolAuditLedgerQuery,
     ToolAuditLedgerStore,
 )
 from agent.policies.tool_approval_runtime import ToolApprovalRuntime
@@ -414,7 +415,7 @@ async def test_tool_audit_command_never_prints_raw_metadata(tmp_path: Path) -> N
             event_type="approved_shell_sandbox_executed",
             session_key="cli:s",
             tool_name="shell",
-            metadata={"command": "echo secret", "command_hash": "abc"},
+            metadata={"command": "echo secret", "command_hash": "a" * 64},
         )
     )
     module = ToolApprovalCommandModule(
@@ -427,7 +428,7 @@ async def test_tool_audit_command_never_prints_raw_metadata(tmp_path: Path) -> N
     reply = ctx.abort_reply
 
     assert "command_hash" in reply
-    assert "abc" in reply
+    assert "a" * 64 in reply
     assert "echo secret" not in reply
 
 
@@ -482,6 +483,47 @@ async def test_tool_audit_command_filters_request_approval_and_event_with_sessio
     assert "approval-other" not in approval_reply
     assert "tool_approval_requested" in event_reply
     assert "approval-other" not in event_reply
+
+
+@pytest.mark.asyncio
+async def test_approve_tool_expiration_records_tool_audit_event(tmp_path: Path) -> None:
+    ledger = ToolAuditLedgerStore(tmp_path / "audit.db")
+    runtime = ToolApprovalRuntime(
+        ToolApprovalStore(tmp_path / "approvals.db"),
+        now_factory=lambda: datetime.fromtimestamp(0, UTC),
+        approval_ttl=timedelta(seconds=1),
+        audit_ledger_store=ledger,
+    )
+    record = runtime.record_defer_request(
+        request_id="call-expire",
+        session_key="cli:local",
+        channel="cli",
+        chat_id="local",
+        source="passive",
+        tool_name="write_file",
+        risk="write",
+        approval_scope="tool_call",
+        policy_reason="risk_strategy_write_requires_approval",
+        arguments={"path": "notes.md", "content": "after\n"},
+    )
+    module = ToolApprovalCommandModule(
+        "status_commands",
+        runtime.store,
+        audit_ledger_store=ledger,
+    )
+
+    ctx = await _run_command(module, f"/approve_tool {record.approval_request_id}")
+
+    events = ledger.query_events(
+        ToolAuditLedgerQuery(
+            approval_request_id=record.approval_request_id,
+            event_type="tool_approval_expired",
+        )
+    )
+    assert "expired" in ctx.abort_reply
+    assert runtime.store.get_request(record.approval_request_id).status == "expired"
+    assert len(events) == 1
+    assert events[0].approval_status == "expired"
 
 
 def test_status_commands_plugin_wires_workspace_tool_audit_ledger(

@@ -260,8 +260,8 @@ git diff --check
 ```
 
 ```text
-P4c focused governance suite: 151 passed in 5.40s
-P1-P4c baseline: 193 passed in 3.74s
+P4c focused governance suite: 153 passed in 5.66s
+P1-P4c baseline: 194 passed in 3.80s
 Compileall: exit 0
 git diff --check: no output
 ```

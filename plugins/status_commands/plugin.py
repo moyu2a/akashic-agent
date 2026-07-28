@@ -469,7 +469,7 @@ class ToolApprovalCommandModule:
         reason: str = "",
     ) -> ToolApprovalDecision:
         now = _approval_now()
-        self._approval_store.expire_pending_requests(now=now)
+        self._approval_runtime().expire_pending_requests()
         if not approval_request_id:
             return ToolApprovalDecision(
                 action="not_found",
