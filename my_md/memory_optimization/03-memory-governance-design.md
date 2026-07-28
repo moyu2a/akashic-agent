@@ -452,6 +452,20 @@ Governance conclusion: the best result comes from combining input-side candidate
 
 P6o-5 post-check shadow reported `enabled_case_count = 40`, `needs_retry_count = 0`, and no forbidden/stale/conflict/insufficient fallback misses. These fields must be treated as context-inclusion diagnostics: they show what evidence ids were injected or included by the eval harness, not that the generated answer cited those ids. The productionization path should therefore stay staged: first shadow a larger matrix and targeted failures, then design retry/fallback policy, then consider active prompt or retrieval changes.
 
+P6o-6 combination guidance: use `chain_tri_governed_answer_contract` as the base, then add one governed signal at a time. Rerank should be tested first because it affects evidence order and token budget without requiring more recall. Version/provenance should be tested as boundary metadata inside the evidence contract: active version, stale warning, conflict warning, and forbidden boundary. Graph should be routed to graph-needed scenes only; global graph-on can reintroduce noise when tri grounding is already `100.0%`.
+
+The intended sequence is:
+
+```text
+tri governed
+tri + rerank governed
+tri + version-boundary governed
+tri + rerank + version-boundary governed
+tri + rerank + version-boundary + routed graph governed
+```
+
+Do not interpret this as a plan to remove graph or version work. The P6o-5 data only says the current small matrix does not need more recall coverage. Graph and version should continue as precision/boundary signals under governed contract, not as unconditional extra context.
+
 ## 8. 最小可行版本
 
 ### MVP 1：写入门控 trace

@@ -2038,3 +2038,38 @@
   - post-check shadow id fields mean injected/included context, not proven answer citation use.
 - Remaining:
   - update docs commit, final verification, plan commit.
+
+## 2026-07-28 Side Conversation: P6o-6 Combination Guidance
+
+- User asked how to combine graph, version/provenance, rerank, and the P6o-5 governed contract after seeing that tri recall grounding was already `100.0%`.
+- Current decision:
+  - do not directly combine all modules in one production-like profile;
+  - use `chain_tri_governed_answer_contract` as the baseline candidate;
+  - test one governed signal layer at a time.
+- Rationale:
+  - P6o-5 proves the current bottleneck is answer/evidence control, not raw recall coverage;
+  - `chain_tri_retrieval` had grounding `100.0%` but answer only `37.5%`;
+  - `chain_tri_governed_answer_contract` had answer `39/40 = 97.5%`, grounding `100.0%`, forbidden `0.0%`;
+  - adding graph/version/rerank as unconditional extra context could reintroduce noise and reduce answer quality.
+- Recommended P6o-6 sequence:
+  1. `tri governed` vs `tri + rerank governed`;
+  2. `tri governed` vs `tri + version-boundary governed`;
+  3. `tri + rerank + version-boundary governed`;
+  4. only after that, `tri + rerank + version-boundary + routed graph governed`.
+- Module roles:
+  - tri retrieval: candidate coverage;
+  - rerank/injection: evidence order and context budget;
+  - version/provenance: active version, stale warning, conflict warning, forbidden boundary;
+  - graph retrieval: graph-needed scenes only, such as fuzzy references and entity relationship hops;
+  - governed evidence contract: model-facing allowed evidence and fallback structure;
+  - post-check shadow: observe retry/fallback need without changing answers.
+- P6o-6 success gates:
+  - answer_rate stays close to P6o-5 governed `97.5%`;
+  - grounding remains `100.0%`;
+  - forbidden remains close to `0.0%`;
+  - avg tokens do not grow materially;
+  - post-check `needs_retry_count` and evidence-risk counts do not rise.
+- Boundary:
+  - this side conversation only records guidance;
+  - no new eval has been run;
+  - no code or production behavior has been changed.

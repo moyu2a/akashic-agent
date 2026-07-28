@@ -284,6 +284,25 @@ P6o-5 conclusion: the combination works because it joins the two previously sepa
 
 Next recommended roadmap step: do a P6o-6 robustness pass before productionization. Keep production code unchanged; rerun a slightly larger or failure-targeted real LLM matrix, inspect the remaining `1/40` governed answer miss, and add non-oracle citation/use signals if available. Only after that should a production evidence contract or retry policy be designed.
 
+P6o-6 side-conversation handoff: the next combination should not directly turn on graph, version, rerank, and governed contract all at once. P6o-5 already showed that the current bottleneck is not raw recall coverage: `chain_tri_retrieval` had `100.0%` grounding but only `37.5%` answer rate, while `chain_tri_governed_answer_contract` reached `97.5%` answer rate and `0.0%` forbidden. The next work should treat `chain_tri_governed_answer_contract` as the baseline candidate and test additional modules as governed-contract inputs.
+
+Recommended P6o-6 order:
+
+1. Test rerank / injection ordering first: compare `chain_tri_governed_answer_contract` with a tri + rerank governed variant. Rerank should decide allowed evidence order and context budget, not expand recall blindly.
+2. Test version boundary second: add active version, stale warning, superseded forbidden boundary, and conflict warning as contract fields. This should reduce old-fact misuse, not serve as a separate broad recall expansion.
+3. Test graph only as routed graph: use graph retrieval for graph-needed scenes such as fuzzy references, entity relationship hops, and multi-hop project/person references. Do not use global graph-on as the next default.
+4. Test cumulative governed chain only after the first two layers show no regression: tri governed, tri + rerank governed, tri + version-boundary governed, and tri + rerank + version-boundary governed.
+
+Success criteria for P6o-6:
+
+- answer_rate should stay close to the P6o-5 governed result and should not fall materially below `97.5%` without an explainable tradeoff;
+- grounding should remain `100.0%`;
+- forbidden should stay close to `0.0%`;
+- avg tokens should not grow obviously beyond the governed baseline;
+- post-check `needs_retry_count`, `missing_likely_relevant_context_count`, stale/conflict inclusion, and insufficient fallback misses should not rise.
+
+Interpretation rule: graph, version, and rerank may conflict with the P6o-5 gain if they are added as unconditional extra context. They are more likely to help if they become signals inside the governed evidence contract: graph for relationship recovery, rerank for evidence order and compression, version/provenance for current-vs-stale boundaries, and post-check shadow for future retry/fallback policy.
+
 ## Phase 6t：source_ref 写入质量治理
 
 ### 目的
