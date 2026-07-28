@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable, Mapping
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -7,6 +8,11 @@ from pathlib import Path
 from agent.policies.tool_approval import canonical_args_hash
 from agent.policies.tool_approval_context import TrustedApprovalContext
 from agent.policies.tool_approval_decision import ToolApprovalDecision
+from agent.policies.tool_audit_ledger import (
+    ToolAuditLedgerEvent,
+    ToolAuditLedgerStore,
+    record_tool_audit_event_fail_open,
+)
 from agent.policies.side_effect_payload_vault import (
     MANAGED_SIDE_EFFECT_TOOLS,
     SideEffectPayloadVault,
@@ -17,6 +23,8 @@ from agent.policies.tool_approval_store import (
     ToolApprovalStore,
 )
 
+logger = logging.getLogger(__name__)
+
 
 class ToolApprovalRuntime:
     def __init__(
@@ -24,11 +32,13 @@ class ToolApprovalRuntime:
         store: ToolApprovalStore,
         *,
         side_effect_vault: SideEffectPayloadVault | None = None,
+        audit_ledger_store: ToolAuditLedgerStore | None = None,
         now_factory: Callable[[], datetime] | None = None,
         approval_ttl: timedelta = timedelta(minutes=15),
     ) -> None:
         self._store = store
         self.side_effect_vault = side_effect_vault
+        self._audit_ledger_store = audit_ledger_store
         self._now_factory = now_factory or _utcnow
         self._approval_ttl = approval_ttl
 
@@ -64,7 +74,7 @@ class ToolApprovalRuntime:
         policy_reason: str,
         arguments: Mapping[str, object],
     ) -> ToolApprovalRequestRecord:
-        return self._store.create_or_get_pending_request(
+        record = self._store.create_or_get_pending_request(
             request_id=request_id,
             session_key=session_key,
             channel=channel,
@@ -78,6 +88,93 @@ class ToolApprovalRuntime:
             now=self._now(),
             ttl=self._approval_ttl,
         )
+        self._record_approval_event_from_record(
+            "tool_approval_requested",
+            record,
+            approval_status="requested",
+            actor="model",
+        )
+        return record
+
+    def expire_pending_requests(self) -> list[ToolApprovalDecision]:
+        decisions = self._store.expire_pending_requests(now=self._now())
+        for decision in decisions:
+            self._record_approval_event_from_decision(
+                "tool_approval_expired",
+                decision,
+                approval_status="expired",
+            )
+        return decisions
+
+    def approve_request(
+        self,
+        *,
+        approval_request_id: str,
+        session_key: str,
+        actor: str,
+    ) -> ToolApprovalDecision:
+        record = self._store.get_request(approval_request_id)
+        if record is None or record.session_key != session_key:
+            return ToolApprovalDecision(
+                action="not_found",
+                reason="approval_request_not_found",
+                approval_request_id=approval_request_id,
+                session_key=session_key,
+            )
+        decision = self._store.approve_request(
+            approval_request_id=record.approval_request_id,
+            request_id=record.request_id,
+            session_key=record.session_key,
+            tool_name=record.tool_name,
+            approval_scope=record.approval_scope,
+            args_hash=record.args_hash,
+            actor=actor,
+            now=self._now(),
+        )
+        if decision.action == "approved":
+            self._record_approval_event_from_decision(
+                "tool_approval_approved",
+                decision,
+                approval_status="approved",
+                actor=actor,
+            )
+        return decision
+
+    def deny_request(
+        self,
+        *,
+        approval_request_id: str,
+        session_key: str,
+        actor: str,
+        reason: str,
+    ) -> ToolApprovalDecision:
+        record = self._store.get_request(approval_request_id)
+        if record is None or record.session_key != session_key:
+            return ToolApprovalDecision(
+                action="not_found",
+                reason="approval_request_not_found",
+                approval_request_id=approval_request_id,
+                session_key=session_key,
+            )
+        decision = self._store.deny_request(
+            approval_request_id=record.approval_request_id,
+            request_id=record.request_id,
+            session_key=record.session_key,
+            tool_name=record.tool_name,
+            approval_scope=record.approval_scope,
+            args_hash=record.args_hash,
+            actor=actor,
+            reason=reason,
+            now=self._now(),
+        )
+        if decision.action == "denied":
+            self._record_approval_event_from_decision(
+                "tool_approval_denied",
+                decision,
+                approval_status="denied",
+                actor=actor,
+            )
+        return decision
 
     def record_managed_side_effect_payload(
         self,
@@ -121,7 +218,7 @@ class ToolApprovalRuntime:
                 approval_scope=approval_scope or "tool_call",
                 args_hash=canonical_args_hash(arguments),
             )
-        return self._store.consume_approved_request(
+        decision = self._store.consume_approved_request(
             approval_request_id=trusted_context.approval_request_id,
             request_id=request_id,
             session_key=session_key,
@@ -131,6 +228,21 @@ class ToolApprovalRuntime:
             actor=trusted_context.actor,
             now=self._now(),
         )
+        if decision.action == "consumed":
+            self._record_approval_event_from_decision(
+                "tool_approval_consumed",
+                decision,
+                approval_status="consumed",
+                actor=trusted_context.actor,
+            )
+        elif decision.action == "expired":
+            self._record_approval_event_from_decision(
+                "tool_approval_expired",
+                decision,
+                approval_status="expired",
+                actor=trusted_context.actor,
+            )
+        return decision
 
     def finalize_execution(
         self,
@@ -143,7 +255,7 @@ class ToolApprovalRuntime:
         arguments: Mapping[str, object],
         execution_status: str,
     ) -> ToolApprovalDecision:
-        return self._store.finalize_consumed_request(
+        decision = self._store.finalize_consumed_request(
             approval_request_id=approval_request_id,
             request_id=request_id,
             session_key=session_key,
@@ -153,6 +265,17 @@ class ToolApprovalRuntime:
             execution_status=execution_status,
             now=self._now(),
         )
+        if decision.action in {"executed", "execution_failed"}:
+            self._record_approval_event_from_decision(
+                (
+                    "tool_approval_executed"
+                    if decision.action == "executed"
+                    else "tool_approval_execution_failed"
+                ),
+                decision,
+                approval_status=decision.action,
+            )
+        return decision
 
     @staticmethod
     def lifecycle_event_from_record(
@@ -205,6 +328,76 @@ class ToolApprovalRuntime:
             decision,
             actor=actor,
         ).to_trace_metadata()
+
+    def _record_approval_event_from_record(
+        self,
+        event_type: str,
+        record: ToolApprovalRequestRecord,
+        *,
+        approval_status: str,
+        actor: str = "",
+    ) -> None:
+        if self._audit_ledger_store is None:
+            return
+        record_tool_audit_event_fail_open(
+            self._audit_ledger_store,
+            ToolAuditLedgerEvent(
+                event_type=event_type,
+                session_key=record.session_key,
+                channel=record.channel,
+                chat_id=record.chat_id,
+                request_id=record.request_id,
+                tool_name=record.tool_name,
+                source=record.source,
+                risk=record.risk,
+                policy_reason=record.policy_reason,
+                approval_request_id=record.approval_request_id,
+                approval_scope=record.approval_scope,
+                approval_status=approval_status,
+                actor=actor,
+                args_hash=record.args_hash,
+            ),
+            logger,
+        )
+
+    def _record_approval_event_from_decision(
+        self,
+        event_type: str,
+        decision: ToolApprovalDecision,
+        *,
+        approval_status: str,
+        actor: str = "",
+    ) -> None:
+        if self._audit_ledger_store is None:
+            return
+        record = (
+            self._store.get_request(decision.approval_request_id)
+            if decision.approval_request_id
+            else None
+        )
+        if record is not None:
+            self._record_approval_event_from_record(
+                event_type,
+                record,
+                approval_status=approval_status,
+                actor=actor,
+            )
+            return
+        record_tool_audit_event_fail_open(
+            self._audit_ledger_store,
+            ToolAuditLedgerEvent(
+                event_type=event_type,
+                session_key=decision.session_key,
+                request_id=decision.request_id,
+                tool_name=decision.tool_name,
+                approval_request_id=decision.approval_request_id,
+                approval_scope=decision.approval_scope,
+                approval_status=approval_status,
+                actor=actor,
+                args_hash=decision.args_hash,
+            ),
+            logger,
+        )
 
     def _now(self) -> datetime:
         value = self._now_factory()

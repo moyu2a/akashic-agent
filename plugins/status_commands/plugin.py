@@ -23,6 +23,7 @@ from agent.policies.shell_sandbox_runner import (
     SandboxRunner,
 )
 from agent.policies.tool_approval_decision import ToolApprovalDecision
+from agent.policies.tool_audit_ledger import ToolAuditLedgerStore
 from agent.policies.tool_approval_runtime import ToolApprovalRuntime
 from agent.policies.tool_approval_store import (
     ToolApprovalRequestRecord,
@@ -176,6 +177,7 @@ class ToolApprovalCommandModule:
         workspace: Path | None = None,
         side_effect_store: ApprovedSideEffectStore | None = None,
         side_effect_vault: SideEffectPayloadVault | None = None,
+        audit_ledger_store: ToolAuditLedgerStore | None = None,
         shell_sandbox_runner: SandboxRunner | None = None,
         task_execution_service: Any = None,
     ) -> None:
@@ -184,6 +186,7 @@ class ToolApprovalCommandModule:
         self._workspace = workspace.expanduser().resolve() if workspace else None
         self._side_effect_store = side_effect_store
         self._side_effect_vault = side_effect_vault
+        self._audit_ledger_store = audit_ledger_store
         self._shell_sandbox_runner = shell_sandbox_runner
         self._task_execution_service = task_execution_service
 
@@ -213,7 +216,8 @@ class ToolApprovalCommandModule:
             self.__class__.__name__,
         )
         now = _approval_now()
-        expired = self._approval_store.expire_pending_requests(now=now)
+        approval_runtime = self._approval_runtime()
+        expired = approval_runtime.expire_pending_requests()
         records = self._approval_store.list_pending_requests(
             session_key=state.session_key,
             now=now,
@@ -371,10 +375,7 @@ class ToolApprovalCommandModule:
         ):
             return None
         return ApprovedSideEffectRuntime(
-            approval_runtime=ToolApprovalRuntime(
-                self._approval_store,
-                side_effect_vault=self._side_effect_vault,
-            ),
+            approval_runtime=self._approval_runtime(),
             side_effect_store=self._side_effect_store,
             task_execution_service=self._task_execution_service,
         )
@@ -387,12 +388,16 @@ class ToolApprovalCommandModule:
         ):
             return None
         return ApprovedShellSideEffectRuntime(
-            approval_runtime=ToolApprovalRuntime(
-                self._approval_store,
-                side_effect_vault=self._side_effect_vault,
-            ),
+            approval_runtime=self._approval_runtime(),
             side_effect_store=self._side_effect_store,
             sandbox_runner=self._shell_sandbox_runner,
+        )
+
+    def _approval_runtime(self) -> ToolApprovalRuntime:
+        return ToolApprovalRuntime(
+            self._approval_store,
+            side_effect_vault=self._side_effect_vault,
+            audit_ledger_store=self._audit_ledger_store,
         )
 
     def _managed_side_effect_runtime(self, approval_request_id: str) -> object | None:
@@ -459,7 +464,7 @@ class ToolApprovalCommandModule:
                 args_hash=record.args_hash,
             )
         if _approval_expired(record, now):
-            self._approval_store.expire_pending_requests(now=now)
+            self._approval_runtime().expire_pending_requests()
             expired = self._approval_store.get_request(approval_request_id)
             if expired is not None:
                 return ToolApprovalDecision(
@@ -473,26 +478,16 @@ class ToolApprovalCommandModule:
                     args_hash=expired.args_hash,
                 )
         if action == "approve":
-            return self._approval_store.approve_request(
+            return self._approval_runtime().approve_request(
                 approval_request_id=record.approval_request_id,
-                request_id=record.request_id,
                 session_key=record.session_key,
-                tool_name=record.tool_name,
-                approval_scope=record.approval_scope,
-                args_hash=record.args_hash,
                 actor="status_command",
-                now=now,
             )
-        return self._approval_store.deny_request(
+        return self._approval_runtime().deny_request(
             approval_request_id=record.approval_request_id,
-            request_id=record.request_id,
             session_key=record.session_key,
-            tool_name=record.tool_name,
-            approval_scope=record.approval_scope,
-            args_hash=record.args_hash,
             actor="status_command",
             reason=reason or "user_denied",
-            now=now,
         )
 
 
@@ -512,6 +507,7 @@ class StatusCommands(Plugin):
         approval_store = None
         side_effect_store = None
         side_effect_vault = None
+        audit_ledger_store = None
         if self.context.workspace is not None:
             db_path = self.context.workspace / "observe" / "observe.db"
             approval_store = ToolApprovalStore(
@@ -526,6 +522,9 @@ class StatusCommands(Plugin):
             )
             side_effect_vault = ToolApprovalRuntime.side_effect_vault_from_workspace(
                 self.context.workspace
+            )
+            audit_ledger_store = ToolAuditLedgerStore(
+                ToolAuditLedgerStore.db_path_from_workspace(self.context.workspace)
             )
         task_execution_service = getattr(
             self.context,
@@ -544,6 +543,7 @@ class StatusCommands(Plugin):
                     workspace=self.context.workspace,
                     side_effect_store=side_effect_store,
                     side_effect_vault=side_effect_vault,
+                    audit_ledger_store=audit_ledger_store,
                     shell_sandbox_runner=DockerPodmanSandboxRunner.find_available(),
                     task_execution_service=task_execution_service,
                 )
