@@ -6,9 +6,9 @@
 
 ## 总结结论
 
-当前工具治理已经完成到 P4c：`policy gate + resource policy + durable approval + managed file side-effect runtime + sandboxed shell + persistent redacted audit ledger`。
+当前工具治理核心能力已经完成到 P4c：`policy gate + resource policy + durable approval + managed file side-effect runtime + sandboxed shell + persistent redacted audit ledger`。P4d 已完成文档和 smoke 收尾，没有新增运行时执行能力。
 
-对本项目当前阶段来说，P4c 已经是一个合适的安全治理停靠点。后续推荐先做一个小的 P4d 运维收尾，然后暂停高风险执行能力扩展；除非出现明确产品需求，不建议马上进入 P5 external API side-effect replay。
+对本项目当前阶段来说，P4d 后的状态已经是一个合适的安全治理停靠点。后续推荐暂停高风险执行能力扩展；除非出现明确产品需求，不建议马上进入 P5 external API side-effect replay。
 
 完成度估算：
 
@@ -439,8 +439,8 @@ pre-hook 机制技术上可以更新参数，因此可以支持参数归一化�
 
 当前最合适的策略：
 
-1. P4c 作为当前主线完成点。
-2. 补一个 P4d 小收尾，增强文档、真实 smoke 和审计运维体验。
+1. P4d 作为当前工具治理阶段完成点。
+2. 保留 P1-P4c 运行时能力边界，并以 P4d 文档和 smoke 作为交接记录。
 3. 暂停高风险能力扩展。
 4. 后续只有出现真实需求时，再进入 P5 external API replay design。
 
@@ -455,6 +455,15 @@ pre-hook 机制技术上可以更新参数，因此可以支持参数归一化�
 - 继续打开 external API 或 destructive 能力会显著提高复杂度和风险。
 
 ## 当前验证
+
+P4d closeout smoke 结果：
+
+```text
+Hook/resource/policy smoke: 111 passed in 2.12s
+File approval/rollback smoke: 20 passed in 1.69s
+Shell sandbox governance smoke: 36 passed in 2.23s
+Audit ledger smoke: 23 passed in 1.47s
+```
 
 最近一次 P4c 验证结果：
 
@@ -471,8 +480,8 @@ git diff --check 7794819..HEAD: no output
 
 如果后续继续工具治理，推荐从这里开始：
 
-1. 先确认是否只是 P4d 运维收尾，还是确实需要 P5 external API replay。
-2. 如果是 P4d，优先做真实 smoke 和 `/tool_audit` 运维体验，不新增执行能力。
+1. 先确认是否只是 P4d 后的文档/运维精进，还是确实需要 P5 external API replay。
+2. 如果只是文档/运维精进，优先改善 `/tool_audit` 查询体验、retention/prune/status 文档或 smoke 脚本化，不新增执行能力。
 3. 如果是 P5，必须先写 design spec，再写 implementation plan，不直接实现 replay。
 4. 无论 P4d/P5，都继续保持这些红线：
    - 不开放 destructive execution。
