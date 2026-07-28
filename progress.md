@@ -2194,3 +2194,56 @@
   - redesign forbidden-boundary presentation so the model can respect boundaries without echoing forbidden ids;
   - then compare governed, rerank-governed, and revised version-governed before combining rerank + version;
   - keep graph/all-on deferred.
+
+## 2026-07-28 P6o-8 safe boundary presentation
+
+- Plan:
+  - `docs/superpowers/plans/2026-07-28-memory-p6o8-p6o10-boundary-rerank-combo.md`.
+- Review revisions:
+  - hide both `forbidden_boundary_ids:` and `deleted_evidence_ids:` from model-visible prompt text;
+  - preserve raw boundary ids in `result.raw["answer_contract"]` for post-check;
+  - count post-check failures from real serialized fields and `retry_reasons`;
+  - enforce privacy, prompt/repeat counts, completed call counts, and infra gates before each next phase;
+  - require P6o-10 no-recall-expansion and rerank-order delta tests before real combo validation.
+- Implementation commits:
+  - `90ab0ce fix: hide forbidden boundary ids from evidence prompt`;
+  - `2a8d84d test: cover p6o8 safe boundary online matrix`.
+- Fake-provider full gate:
+  - report path: `/tmp/akashic-memory-p6o8-safe-boundary/fake-reports/memory_comprehensive_online_eval.json`;
+  - `case_count = 80`;
+  - `unique_case_count = 40`;
+  - `profile_count = 2`;
+  - `provider_error_count = 0`;
+  - `timeout_count = 0`.
+- Real LLM run:
+  - report path: `my_md/memory_optimization/eval_reports/p6o8_version_boundary_safe_presentation_small_online_v1/memory_comprehensive_online_eval.json`;
+  - markdown path: `my_md/memory_optimization/eval_reports/p6o8_version_boundary_safe_presentation_small_online_v1/memory_comprehensive_online_eval.md`;
+  - `case_count = 80`;
+  - `unique_case_count = 40`;
+  - `completed_call_count = 80`;
+  - `profile_count = 2`;
+  - `prompt_variant_count = 1`;
+  - `repeat_count = 1`;
+  - `provider_error_count = 0`;
+  - `timeout_count = 0`;
+  - privacy flags: `raw_query_included = False`, `raw_memory_summary_included = False`, `prompt_included = False`, `session_text_included = False`, `full_answer_included = False`.
+- Per-profile real result:
+  - `chain_tri_governed_answer_contract`: answer `40/40 = 100.0%`, grounding `100.0%`, forbidden `0.0%`, avg tokens `6171.225`;
+  - `chain_tri_version_governed_answer_contract`: answer `39/40 = 97.5%`, grounding `100.0%`, forbidden `0.0%`, avg tokens `6054.025`.
+- Post-check shadow aggregate:
+  - `case_count = 80`;
+  - `enabled_case_count = 80`;
+  - `needs_retry_count = 0`;
+  - `forbidden_boundary_included_count = 0`;
+  - `missing_likely_relevant_context_count = 0`;
+  - `stale_evidence_included_count = 0`;
+  - `conflict_evidence_included_count = 0`;
+  - `insufficient_fallback_missing_count = 0`.
+- Conclusion:
+  - raw forbidden/deleted ids should not be shown to the model; count-only and abstract boundary instructions are safer;
+  - P6o-8 fixed the P6o-7 post-check regression because `needs_retry_count` dropped from `2` to `0`;
+  - version-governed remains within gate: answer delta `-2.5` points versus same-run governed baseline, grounding `100.0%`, forbidden `0.0%`, avg tokens `-117.2`;
+  - this is controlled eval harness evidence, not production natural traffic.
+- Next step:
+  - run P6o-9 same-matrix comparison before adding the rerank + version combo profile;
+  - do not enter P6o-10 unless P6o-9 passes.

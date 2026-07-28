@@ -535,6 +535,68 @@ Interpretation:
 - Token cost decreased by `118.25` average tokens versus the same-run governed baseline, so the failure is not cost or raw answer quality; it is the safety behavior of exposing forbidden boundary ids in the contract.
 - Version-boundary should remain shadow/evidence-contract metadata. The next slice should analyze and redesign forbidden-boundary presentation before combining rerank + version or adding graph/all-on.
 
+### Phase 6o8 Safe Boundary Presentation
+
+P6o-8 fixed the P6o-7 safety-expression failure without changing production
+memory behavior. The model-visible evidence contract no longer renders raw
+`forbidden_boundary_ids:` or `deleted_evidence_ids:` values; it renders only
+boundary counts and an abstract instruction. Raw boundary ids remain in
+`result.raw["answer_contract"]` so post-check shadow can still verify whether
+the generated answer crossed a forbidden boundary.
+
+Report path:
+
+- `my_md/memory_optimization/eval_reports/p6o8_version_boundary_safe_presentation_small_online_v1/memory_comprehensive_online_eval.json`
+- `my_md/memory_optimization/eval_reports/p6o8_version_boundary_safe_presentation_small_online_v1/memory_comprehensive_online_eval.md`
+
+Integrity:
+
+- `real_llm_enabled = True`
+- `case_count = 80`
+- `unique_case_count = 40`
+- `completed_call_count = 80`
+- `profile_count = 2`
+- `prompt_variant_count = 1`
+- `repeat_count = 1`
+- `provider_error_count = 0`
+- `timeout_count = 0`
+- JSON / Markdown privacy checks passed.
+
+| profile | answer_success | answer_rate | grounding_rate | forbidden_rate | avg_tokens |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `chain_tri_governed_answer_contract` | `40/40` | `100.0%` | `100.0%` | `0.0%` | `6171.225` |
+| `chain_tri_version_governed_answer_contract` | `39/40` | `97.5%` | `100.0%` | `0.0%` | `6054.025` |
+
+Delta:
+
+- Answer rate changed by `-2.5` points versus this run's governed baseline, within the `5.0` point gate.
+- Avg tokens changed by `6054.025 - 6171.225 = -117.2` tokens.
+- Grounding and forbidden stayed at `100.0%` and `0.0%`.
+
+Post-check shadow aggregate across both governed profiles:
+
+| metric | value |
+| --- | ---: |
+| `case_count` | `80` |
+| `enabled_case_count` | `80` |
+| `needs_retry_count` | `0` |
+| `forbidden_boundary_included_count` | `0` |
+| `missing_likely_relevant_context_count` | `0` |
+| `stale_evidence_included_count` | `0` |
+| `conflict_evidence_included_count` | `0` |
+| `insufficient_fallback_missing_count` | `0` |
+
+Interpretation:
+
+- The P6o-7 problem was not version-boundary metadata itself; it was the
+  model-visible presentation of forbidden/deleted raw ids.
+- Hiding raw boundary ids while keeping post-check metadata restored the
+  no-rise safety gate: `needs_retry_count` dropped from P6o-7 version-governed
+  `2` to P6o-8 aggregate `0`.
+- P6o-8 passes the gate for moving to P6o-9 same-matrix comparison, but it
+  remains controlled eval/shadow evidence and should not be treated as
+  production natural traffic.
+
 ### Phase 6c-1 已建立的离线 uplift proxy report
 
 Phase 6c-1 不是答案质量评测，而是把现有 shadow trace 转成统一的对照指标。它输出：

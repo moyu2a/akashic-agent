@@ -1993,3 +1993,67 @@ Next step:
 
 - Analyze the two forbidden-boundary mention retries and redesign how forbidden boundary ids are presented or hidden from the model before combining rerank + version.
 - Continue deferring graph/all-on until combined governed-contract signals have targeted evidence.
+
+## 2026-07-28 P6o-8 Safe Boundary Presentation
+
+Goal: fix the P6o-7 forbidden-boundary expression risk by hiding model-visible raw forbidden/deleted ids while preserving raw metadata for post-check.
+
+Plan:
+
+- `docs/superpowers/plans/2026-07-28-memory-p6o8-p6o10-boundary-rerank-combo.md`
+
+Execution status:
+
+1. Write, review, and revise the gated P6o-8/P6o-9/P6o-10 plan - complete.
+2. Hide model-visible `forbidden_boundary_ids:` and `deleted_evidence_ids:` labels/values - complete.
+3. Preserve raw ids in `result.raw["answer_contract"]` for post-check - complete.
+4. Add focused contract, engine, and CLI coverage - complete.
+5. Run P6o-8 fake-provider gate - complete.
+6. Run bounded P6o-8 real LLM matrix - complete.
+7. Update docs and commit locally without push - in progress.
+
+Real report:
+
+- `my_md/memory_optimization/eval_reports/p6o8_version_boundary_safe_presentation_small_online_v1/memory_comprehensive_online_eval.json`
+- `my_md/memory_optimization/eval_reports/p6o8_version_boundary_safe_presentation_small_online_v1/memory_comprehensive_online_eval.md`
+
+Real report integrity:
+
+- `real_llm_enabled = True`;
+- `case_count = 80`;
+- `unique_case_count = 40`;
+- `completed_call_count = 80`;
+- `profile_count = 2`;
+- `prompt_variant_count = 1`;
+- `repeat_count = 1`;
+- `provider_error_count = 0`;
+- `timeout_count = 0`;
+- JSON / Markdown privacy checks passed.
+
+Per-profile real result:
+
+- `chain_tri_governed_answer_contract`: answer `40/40 = 100.0%`, grounding `100.0%`, forbidden `0.0%`, avg tokens `6171.225`.
+- `chain_tri_version_governed_answer_contract`: answer `39/40 = 97.5%`, grounding `100.0%`, forbidden `0.0%`, avg tokens `6054.025`.
+
+Post-check shadow:
+
+- `case_count = 80`;
+- `enabled_case_count = 80`;
+- `needs_retry_count = 0`;
+- `forbidden_boundary_included_count = 0`;
+- `missing_likely_relevant_context_count = 0`;
+- `stale_evidence_included_count = 0`;
+- `conflict_evidence_included_count = 0`;
+- `insufficient_fallback_missing_count = 0`.
+
+Conclusion:
+
+- The P6o-7 failure was caused by unsafe model-visible boundary expression, not by the version-boundary metadata itself.
+- Hiding raw forbidden/deleted ids restored the post-check no-rise gate: aggregate `needs_retry_count` is now `0`.
+- Version-governed answer rate is `2.5` points below the same-run governed baseline, within the `5.0` point gate; grounding and forbidden remain clean, and avg tokens decrease by `117.2`.
+- This remains eval/shadow evidence, not production natural traffic.
+
+Next step:
+
+- Run P6o-9 same-matrix comparison for `chain_tri_governed_answer_contract`, `chain_tri_rerank_governed_answer_contract`, and revised `chain_tri_version_governed_answer_contract`.
+- Only enter P6o-10 combo implementation if P6o-9 passes the same gates.
