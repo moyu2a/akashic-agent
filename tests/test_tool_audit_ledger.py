@@ -94,7 +94,8 @@ def test_ledger_rejects_sensitive_values_even_under_allowlisted_keys(tmp_path) -
             "stdout_hash": "Bearer token-secret",
             "resource_decision": "https://example.test/path?token=secret",
             "resource_type": "credentials/token.txt",
-            "error_code": "ls -la /private",
+            "error_code": "raw stdout account 1234",
+            "sandbox_backend": "printf private data",
             "sandbox_image": "python:3.11",
             "timeout_seconds": 30,
         }
@@ -103,6 +104,50 @@ def test_ledger_rejects_sensitive_values_even_under_allowlisted_keys(tmp_path) -
         "sandbox_image": "python:3.11",
         "timeout_seconds": 30,
     }
+
+
+def test_ledger_sanitizes_unsafe_top_level_fields_and_preserves_safe_refs(
+    tmp_path,
+) -> None:
+    store = ToolAuditLedgerStore(tmp_path / "tool_audit.db")
+
+    store.record_event(
+        ToolAuditLedgerEvent(
+            event_type="tool_approval_requested; cat /tmp/secret",
+            session_key="cli:one",
+            request_id="../payloads/raw-args.json",
+            tool_name="write_file",
+            policy_action="defer",
+            policy_reason="Bearer token-secret",
+            approval_request_id="approval-1",
+            side_effect_status="raw stdout account 1234",
+            execution_status="sandbox_executed",
+            metadata={
+                "stdout_ref": "artifacts/preview-1/stdout.txt",
+                "stderr_ref": "artifacts/preview-1/stderr.txt",
+                "error_code": "raw stdout account 1234",
+                "sandbox_backend": "printf private data",
+                "stdout_hash": "stdout-hash",
+            },
+        )
+    )
+
+    event = store.query_events(ToolAuditLedgerQuery(session_key="cli:one"))[0]
+    raw = store.db_path.read_text(encoding="utf-8", errors="ignore")
+    assert event.event_type == ""
+    assert event.request_id == ""
+    assert event.policy_reason == ""
+    assert event.side_effect_status == ""
+    assert event.metadata == {
+        "stderr_ref": "artifacts/preview-1/stderr.txt",
+        "stdout_hash": "stdout-hash",
+        "stdout_ref": "artifacts/preview-1/stdout.txt",
+    }
+    assert "cat /tmp/secret" not in raw
+    assert "../payloads/raw-args.json" not in raw
+    assert "Bearer token-secret" not in raw
+    assert "raw stdout account" not in raw
+    assert "printf private data" not in raw
 
 
 class _FailingLedger:

@@ -58,6 +58,11 @@ class _FailingLedger:
         raise RuntimeError("ledger down")
 
 
+class FailingExecutionFailedStore(ApprovedSideEffectStore):
+    def mark_execution_failed(self, *args, **kwargs):
+        raise RuntimeError("side effect store down")
+
+
 def _approval_runtime(workspace: Path, audit_ledger_store=None) -> ToolApprovalRuntime:
     return ToolApprovalRuntime(
         ToolApprovalStore(ToolApprovalRuntime.approval_db_path_from_workspace(workspace)),
@@ -237,6 +242,41 @@ def test_shell_side_effect_runtime_records_sandbox_unavailable_and_timeout(
     assert {event.event_type for event in events} >= {
         "approved_shell_sandbox_unavailable",
         "approved_shell_sandbox_timeout",
+    }
+
+
+def test_shell_side_effect_runtime_does_not_record_timeout_before_state_persists(
+    tmp_path: Path,
+) -> None:
+    workspace = tmp_path
+    ledger = ToolAuditLedgerStore(tmp_path / "audit.db")
+    approval_runtime = _approval_runtime(workspace, ledger)
+    approval_id = _approved_shell(
+        approval_runtime, {"command": "sleep 999", "timeout": 1}
+    )
+    store = FailingExecutionFailedStore(
+        ApprovedSideEffectStore.db_path_from_workspace(workspace)
+    )
+    runtime = ApprovedShellSideEffectRuntime(
+        approval_runtime=approval_runtime,
+        side_effect_store=store,
+        sandbox_runner=TimeoutSandboxRunner(),
+        audit_ledger_store=ledger,
+    )
+
+    result = runtime.apply(
+        approval_id,
+        "cli:test",
+        "status_command",
+        workspace,
+        (str(workspace),),
+    )
+
+    events = ledger.query_events(ToolAuditLedgerQuery(approval_request_id=approval_id, limit=20))
+    assert result.ok is False
+    assert result.reason == "shell_execution_state_persistence_failed"
+    assert "approved_shell_sandbox_timeout" not in {
+        event.event_type for event in events
     }
 
 

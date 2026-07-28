@@ -269,34 +269,34 @@ class ApprovedShellSideEffectRuntime:
                 execution_status=exc.execution_status,
             )
         except (FileNotFoundError, PermissionError):
-            self._record_ledger(
+            return self._finalize_failure_and_record_ledger(
                 "approved_shell_sandbox_unavailable",
                 record,
+                payload.arguments,
+                actor,
+                "shell_sandbox_unavailable",
+                side_effect.preview_id,
                 side_effect_status="sandbox_unavailable",
-                execution_status="shell_sandbox_unavailable",
-            )
-            return self._finalize_failure(
-                record, payload.arguments, actor, "shell_sandbox_unavailable", side_effect.preview_id
             )
         except subprocess.TimeoutExpired:
-            self._record_ledger(
+            return self._finalize_failure_and_record_ledger(
                 "approved_shell_sandbox_timeout",
                 record,
+                payload.arguments,
+                actor,
+                "sandbox_timeout",
+                side_effect.preview_id,
                 side_effect_status="sandbox_timeout",
-                execution_status="sandbox_timeout",
-            )
-            return self._finalize_failure(
-                record, payload.arguments, actor, "sandbox_timeout", side_effect.preview_id
             )
         except Exception:
-            self._record_ledger(
+            return self._finalize_failure_and_record_ledger(
                 "approved_shell_sandbox_execution_failed",
                 record,
+                payload.arguments,
+                actor,
+                "sandbox_execution_failed",
+                side_effect.preview_id,
                 side_effect_status="sandbox_execution_failed",
-                execution_status="sandbox_execution_failed",
-            )
-            return self._finalize_failure(
-                record, payload.arguments, actor, "sandbox_execution_failed", side_effect.preview_id
             )
 
         result_reason = _safe_runner_reason(result.reason, result.ok)
@@ -341,11 +341,19 @@ class ApprovedShellSideEffectRuntime:
             )
         except Exception:
             return self._mark_state_persistence_failed(
-                record, actor, side_effect.preview_id
+                record,
+                actor,
+                side_effect.preview_id,
+                execution_succeeded=result.ok,
+                execution_status=result_reason,
             )
         if not _finalized_as(finalize, execution_status):
             return self._mark_state_persistence_failed(
-                record, actor, side_effect.preview_id
+                record,
+                actor,
+                side_effect.preview_id,
+                execution_succeeded=result.ok,
+                execution_status=result_reason,
             )
         if not result.ok:
             self._record_ledger(
@@ -560,15 +568,48 @@ class ApprovedShellSideEffectRuntime:
                 execution_status="execution_failed",
             )
         except Exception:
-            return self._mark_state_persistence_failed(record, actor, preview_id)
+            return self._mark_state_persistence_failed(
+                record,
+                actor,
+                preview_id,
+                execution_succeeded=False,
+                execution_status=reason,
+            )
         if not _finalized_as(finalize, "execution_failed"):
-            return self._mark_state_persistence_failed(record, actor, preview_id)
+            return self._mark_state_persistence_failed(
+                record,
+                actor,
+                preview_id,
+                execution_succeeded=False,
+                execution_status=reason,
+            )
         return self._error(
             record.approval_request_id,
             reason,
             "Approved shell execution failed.",
             preview_id=preview_id,
         )
+
+    def _finalize_failure_and_record_ledger(
+        self,
+        event_type: str,
+        record: ToolApprovalRequestRecord,
+        arguments: dict[str, object],
+        actor: str,
+        reason: str,
+        preview_id: str,
+        *,
+        side_effect_status: str,
+    ) -> ApprovedShellSideEffectResult:
+        result = self._finalize_failure(record, arguments, actor, reason, preview_id)
+        if result.reason == reason:
+            self._record_ledger(
+                event_type,
+                record,
+                side_effect_status=side_effect_status,
+                execution_status=reason,
+            )
+        return result
 
     def _mark_state_persistence_failed(
         self,
@@ -597,6 +638,20 @@ class ApprovedShellSideEffectRuntime:
                 )
             except Exception:
                 pass
+            else:
+                self._record_ledger(
+                    "approved_shell_state_persistence_failed",
+                    record,
+                    side_effect_status="shell_execution_state_persistence_failed",
+                    execution_status=(
+                        execution_status
+                        or (
+                            "sandbox_executed"
+                            if execution_succeeded
+                            else "sandbox_execution_failed"
+                        )
+                    ),
+                )
         return self._error(
             record.approval_request_id,
             "shell_execution_state_persistence_failed",

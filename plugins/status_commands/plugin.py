@@ -27,6 +27,7 @@ from agent.policies.tool_audit_ledger import (
     ToolAuditLedgerEvent,
     ToolAuditLedgerQuery,
     ToolAuditLedgerStore,
+    open_tool_audit_ledger_fail_open,
     sanitize_tool_audit_metadata,
 )
 from agent.policies.tool_approval_runtime import ToolApprovalRuntime
@@ -555,8 +556,9 @@ class StatusCommands(Plugin):
             side_effect_vault = ToolApprovalRuntime.side_effect_vault_from_workspace(
                 self.context.workspace
             )
-            audit_ledger_store = ToolAuditLedgerStore(
-                ToolAuditLedgerStore.db_path_from_workspace(self.context.workspace)
+            audit_ledger_store = open_tool_audit_ledger_fail_open(
+                self.context.workspace,
+                logger,
             )
         task_execution_service = getattr(
             self.context,

@@ -86,7 +86,9 @@ _METADATA_ALLOWLIST = frozenset(
         "background_allowed",
     }
 )
-_REF_METADATA_KEYS = frozenset({"stdout_ref", "stderr_ref", "preview_id", "rollback_id"})
+_ARTIFACT_REF_METADATA_KEYS = frozenset({"stdout_ref", "stderr_ref"})
+_ID_REF_METADATA_KEYS = frozenset({"preview_id", "rollback_id"})
+_REF_METADATA_KEYS = _ARTIFACT_REF_METADATA_KEYS | _ID_REF_METADATA_KEYS
 _HASH_METADATA_KEYS = frozenset(
     {"stdout_hash", "stderr_hash", "target_path_hash", "before_hash", "after_hash", "command_hash"}
 )
@@ -118,6 +120,7 @@ _SENSITIVE_VALUE_MARKERS = (
     "?",
 )
 _REF_RE = re.compile(r"^[A-Za-z0-9._/-]{1,160}$")
+_SAFE_TOKEN_RE = re.compile(r"^[A-Za-z0-9_.:@-]{1,160}$")
 _HEX_RE = re.compile(r"^[0-9a-fA-F]+$")
 _COMMAND_PREFIXES = (
     "awk ",
@@ -195,11 +198,12 @@ class ToolAuditLedgerStore:
         return Path(workspace).expanduser().resolve() / "tool_audit" / "tool_audit.db"
 
     def record_event(self, event: ToolAuditLedgerEvent) -> ToolAuditLedgerEvent:
+        safe_event = _sanitize_event(event)
         recorded = replace(
-            event,
-            event_id=event.event_id or uuid.uuid4().hex,
-            created_at=_to_iso(event.created_at),
-            metadata=sanitize_tool_audit_metadata(event.metadata),
+            safe_event,
+            event_id=safe_event.event_id or uuid.uuid4().hex,
+            created_at=_to_iso(safe_event.created_at),
+            metadata=sanitize_tool_audit_metadata(safe_event.metadata),
         )
         with self._connect() as conn:
             conn.execute(
@@ -320,11 +324,21 @@ def sanitize_tool_audit_metadata(metadata: Mapping[str, object]) -> dict[str, ob
             if isinstance(value, bool):
                 sanitized[key] = value
             continue
-        if not isinstance(value, str) or not _is_safe_string(value):
+        if not isinstance(value, str):
             continue
-        if key in _REF_METADATA_KEYS and not _is_safe_ref(value):
+        if key in _ARTIFACT_REF_METADATA_KEYS:
+            if _is_safe_ref(value):
+                sanitized[key] = value
             continue
-        if key in _HASH_METADATA_KEYS and not _is_safe_hash(value):
+        if key in _ID_REF_METADATA_KEYS:
+            if _safe_token(value):
+                sanitized[key] = value
+            continue
+        if key in _HASH_METADATA_KEYS:
+            if _is_safe_string(value) and _is_safe_hash(value):
+                sanitized[key] = value
+            continue
+        if not _is_safe_token_value(key, value):
             continue
         sanitized[key] = value
     return sanitized
@@ -340,33 +354,74 @@ def record_tool_audit_event_fail_open(
         return None
 
 
+def open_tool_audit_ledger_fail_open(
+    workspace: str | Path, logger: logging.Logger
+) -> ToolAuditLedgerStore | None:
+    try:
+        return ToolAuditLedgerStore(
+            ToolAuditLedgerStore.db_path_from_workspace(workspace)
+        )
+    except Exception:
+        logger.warning("failed to open tool audit ledger", exc_info=True)
+        return None
+
+
 def _event_from_row(row: sqlite3.Row) -> ToolAuditLedgerEvent:
     metadata = json.loads(row["metadata_json"])
-    return ToolAuditLedgerEvent(
-        event_id=row["event_id"],
-        created_at=row["created_at"],
-        event_type=row["event_type"],
-        session_key=row["session_key"],
-        channel=row["channel"],
-        chat_id=row["chat_id"],
-        request_id=row["request_id"],
-        turn_id=row["turn_id"],
-        tool_name=row["tool_name"],
-        source=row["source"],
-        risk=row["risk"],
-        policy_action=row["policy_action"],
-        policy_reason=row["policy_reason"],
-        approval_request_id=row["approval_request_id"],
-        approval_scope=row["approval_scope"],
-        approval_status=row["approval_status"],
-        side_effect_status=row["side_effect_status"],
-        execution_status=row["execution_status"],
-        rollback_status=row["rollback_status"],
-        actor=row["actor"],
-        args_hash=row["args_hash"],
-        invoker_reached=bool(row["invoker_reached"]),
-        invoker_succeeded=bool(row["invoker_succeeded"]),
-        metadata=metadata if isinstance(metadata, dict) else {},
+    return _sanitize_event(
+        ToolAuditLedgerEvent(
+            event_id=row["event_id"],
+            created_at=row["created_at"],
+            event_type=row["event_type"],
+            session_key=row["session_key"],
+            channel=row["channel"],
+            chat_id=row["chat_id"],
+            request_id=row["request_id"],
+            turn_id=row["turn_id"],
+            tool_name=row["tool_name"],
+            source=row["source"],
+            risk=row["risk"],
+            policy_action=row["policy_action"],
+            policy_reason=row["policy_reason"],
+            approval_request_id=row["approval_request_id"],
+            approval_scope=row["approval_scope"],
+            approval_status=row["approval_status"],
+            side_effect_status=row["side_effect_status"],
+            execution_status=row["execution_status"],
+            rollback_status=row["rollback_status"],
+            actor=row["actor"],
+            args_hash=row["args_hash"],
+            invoker_reached=bool(row["invoker_reached"]),
+            invoker_succeeded=bool(row["invoker_succeeded"]),
+            metadata=metadata if isinstance(metadata, dict) else {},
+        )
+    )
+
+
+def _sanitize_event(event: ToolAuditLedgerEvent) -> ToolAuditLedgerEvent:
+    return replace(
+        event,
+        event_id=_safe_token(event.event_id),
+        event_type=_safe_token(event.event_type),
+        session_key=_safe_token(event.session_key),
+        channel=_safe_token(event.channel),
+        chat_id=_safe_token(event.chat_id),
+        request_id=_safe_token(event.request_id),
+        turn_id=_safe_token(event.turn_id),
+        tool_name=_safe_token(event.tool_name),
+        source=_safe_token(event.source),
+        risk=_safe_token(event.risk),
+        policy_action=_safe_token(event.policy_action),
+        policy_reason=_safe_token(event.policy_reason),
+        approval_request_id=_safe_token(event.approval_request_id),
+        approval_scope=_safe_token(event.approval_scope),
+        approval_status=_safe_token(event.approval_status),
+        side_effect_status=_safe_token(event.side_effect_status),
+        execution_status=_safe_token(event.execution_status),
+        rollback_status=_safe_token(event.rollback_status),
+        actor=_safe_token(event.actor),
+        args_hash=_safe_token(event.args_hash),
+        metadata=sanitize_tool_audit_metadata(event.metadata),
     )
 
 
@@ -391,14 +446,38 @@ def _is_safe_string(value: str) -> bool:
         and not any(marker in lower for marker in _SENSITIVE_VALUE_MARKERS)
         and not value.startswith("/")
         and not _looks_like_raw_path(value)
-        and not any(segment in {".", ".."} for segment in value.replace("\\", "/").split("/"))
+        and not any(
+            segment in {".", ".."} for segment in value.replace("\\", "/").split("/")
+        )
         and not lower.startswith(_COMMAND_PREFIXES)
     )
 
 
+def _safe_token(value: str) -> str:
+    if not value:
+        return ""
+    if not _SAFE_TOKEN_RE.fullmatch(value):
+        return ""
+    return value
+
+
+def _is_safe_token_value(key: str, value: str) -> bool:
+    if not _is_safe_string(value):
+        return False
+    if key in {"sandbox_image"}:
+        return bool(_SAFE_TOKEN_RE.fullmatch(value))
+    return bool(_SAFE_TOKEN_RE.fullmatch(value))
+
+
 def _is_safe_ref(value: str) -> bool:
-    return _REF_RE.fullmatch(value) is not None and all(
-        segment not in {".", ".."} for segment in value.split("/")
+    lower = value.lower()
+    return (
+        not value.startswith("/")
+        and len(value) <= 160
+        and not any(marker in lower for marker in _SENSITIVE_VALUE_MARKERS)
+        and not lower.startswith(_COMMAND_PREFIXES)
+        and _REF_RE.fullmatch(value) is not None
+        and all(segment not in {".", ".."} for segment in value.split("/"))
     )
 
 

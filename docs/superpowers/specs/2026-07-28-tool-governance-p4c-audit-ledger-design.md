@@ -25,21 +25,21 @@ P1-P4b 已经完成：
 
 只从 `observe.turns.tool_chain_json` / `tool_calls` 回源。
 
-优点：不新增数据库。  
+优点：不新增数据库。
 缺点：observe 是 turn trace，不是治理账本；status command、approval runtime、side-effect runtime 的生命周期事实并不总是以适合审计查询的粒度出现；retention 和索引也不适合直接叠加。
 
 ### Option B: Add Ledger As Sidecar Store
 
 新增 workspace-scoped `tool_audit/tool_audit.db`，由 executor、approval runtime、side-effect runtime 写入 bounded event。
 
-优点：查询模型清晰，不改现有 approval / side-effect source-of-truth；可以独立做 retention、索引和 status/admin 查询；更适合作为 external API replay 前置安全基础。  
+优点：查询模型清晰，不改现有 approval / side-effect source-of-truth；可以独立做 retention、索引和 status/admin 查询；更适合作为 external API replay 前置安全基础。
 缺点：需要在多个 runtime surface 接入写入点，并处理 ledger 写入失败。
 
 ### Option C: Merge Ledger Into Approval / Side-Effect Stores
 
 扩展 `tool_approval_requests` 和 `approved_side_effects`，把所有事件都塞进现有 SQLite。
 
-优点：少一个数据库文件。  
+优点：少一个数据库文件。
 缺点：普通 read-only deny/allow 没有 approval id；approval store 和 side-effect store 的 ownership 会被混合；外部 API replay 后还会继续膨胀。
 
 ## Selected Approach

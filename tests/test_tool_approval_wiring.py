@@ -12,6 +12,7 @@ from agent.core.passive_turn import (
     _tool_audit_ledger_from_context,
 )
 from agent.policies.tool_audit_ledger import ToolAuditLedgerStore
+from agent.policies.tool_audit_ledger import ToolAuditLedgerQuery
 from agent.policies.tool_approval_runtime import ToolApprovalRuntime
 from agent.policies.tool_approval_store import ToolApprovalStore
 from agent.provider import LLMResponse, ToolCall
@@ -49,6 +50,16 @@ def test_default_reasoner_builds_workspace_tool_audit_ledger(
 
     assert store is not None
     assert store.db_path == ToolAuditLedgerStore.db_path_from_workspace(tmp_path)
+
+
+def test_default_reasoner_tool_audit_ledger_init_fails_open(tmp_path: Path) -> None:
+    workspace_file = tmp_path / "not-a-directory"
+    workspace_file.write_text("file blocks ledger dir", encoding="utf-8")
+
+    class Context:
+        workspace = workspace_file
+
+    assert _tool_audit_ledger_from_context(Context()) is None
 
 
 @pytest.mark.asyncio
@@ -90,6 +101,15 @@ async def test_reasoner_deferred_write_uses_workspace_approval_store(
         pending[0].approval_request_id
     )
     assert payload["approval_request"]["expires_at"] == pending[0].expires_at
+    ledger = ToolAuditLedgerStore(
+        ToolAuditLedgerStore.db_path_from_workspace(tmp_path)
+    )
+    event_types = {
+        event.event_type
+        for event in ledger.query_events(ToolAuditLedgerQuery(session_key="cli:1"))
+    }
+    assert "tool_invocation_policy_decision" in event_types
+    assert "tool_approval_requested" in event_types
 
 
 @pytest.mark.asyncio

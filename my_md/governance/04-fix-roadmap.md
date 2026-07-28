@@ -382,7 +382,7 @@ Task 10 最终复审结果：focused `195 passed`，compatibility `278 passed`�
 - P4 focused 回归已覆盖 payload vault、file snapshot/diff/apply/rollback、side-effect store/runtime、status commands、TaskExecution file resume 和 P4 contract；结果 `21 passed in 1.74s`。
 - P1/P2/P3/P4 focused baseline 结果 `72 passed in 2.86s`；compatibility plus P4 coverage 结果 `270 passed in 8.68s`；compileall 退出码 `0`，`git diff --check` 无输出。
 - P4b focused suite 结果 `61 passed in 3.36s`；P1/P2/P3/P4/P4b focused baseline 结果 `86 passed in 3.52s`；compatibility suite 结果 `275 passed in 9.07s`；compileall 退出码 `0`，`git diff --check` 无输出。
-- P4c focused governance suite 结果 `144 passed in 4.87s`；P1-P4c baseline 结果 `187 passed in 3.39s`；compileall 退出码 `0`，`git diff --check` 无输出。验证命令使用临时测试依赖 `pyyaml/html2text/lxml` 以满足 `tests/test_plugin_manager.py` 的 import 链。
+- P4c final-review fix 后 focused governance suite 结果 `151 passed in 5.40s`；P1-P4c baseline 结果 `193 passed in 3.74s`；compileall 退出码 `0`，`git diff --check` 无输出。验证命令使用临时测试依赖 `pyyaml/html2text/lxml` 以满足 `tests/test_plugin_manager.py` 的 import 链。
 - 回归测试确认 Document RAG、TaskPlan、TaskExecution 现有工具边界不被破坏。
 
 边界：

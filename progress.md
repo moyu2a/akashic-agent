@@ -32,6 +32,13 @@
   - P1-P4c baseline with the same temporary test dependencies -> `187 passed in 3.39s`.
   - compileall for `agent/policies`, `agent/tool_hooks`, `agent/core/passive_turn.py`, `plugins/status_commands`, and `tests/test_tool_audit_ledger.py` exited `0`.
   - `git diff --check` emitted no output.
+- Final whole-branch review found blocking gaps: top-level ledger fields were not sanitized, passive reasoner did not pass the ledger into `ToolApprovalRuntime`, ledger construction could fail closed, shell failure lifecycle events could be written before source-of-truth persistence, and the design spec had range-level trailing whitespace.
+- Final-review fixes added top-level structured field sanitization, key-specific metadata validation, artifact ref preservation, fail-open ledger construction, shared reasoner approval/executor ledger wiring, shell failure ledger ordering after persistence, and design spec whitespace cleanup.
+- Final-review fix verification:
+  - focused regression suite `tests/test_tool_audit_ledger.py tests/test_tool_approval_wiring.py tests/test_approved_shell_side_effect_runtime.py tests/test_status_commands_approved_side_effects.py` -> `52 passed in 3.13s`.
+  - P4c focused governance suite including `tests/test_tool_approval_wiring.py` -> `151 passed in 5.40s`.
+  - P1-P4c baseline including `tests/test_tool_approval_wiring.py` -> `193 passed in 3.74s`.
+  - compileall exited `0`.
 - Current P4c conclusion: first-version queryable persistent redacted ledger is implemented as fail-open audit projection; approval and side-effect stores remain source-of-truth; external API side-effect replay, destructive execution, TaskExecution shell resume, shell rollback, and network-enabled shell sandbox remain closed.
 
 ## 2026-07-27 Tool Governance P4b Documentation and Final Verification
