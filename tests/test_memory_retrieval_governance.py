@@ -10,6 +10,7 @@ from memory2.retrieval_governance import (
     build_retrieval_routing_decision,
     classify_retrieval_scene,
     classify_candidate_risks,
+    classify_candidate_risk_tier,
 )
 
 
@@ -176,6 +177,52 @@ def test_candidate_risk_classifier_flags_source_scope_and_low_confidence() -> No
 
 def test_candidate_risk_classifier_flags_missing_source_ref() -> None:
     assert classify_candidate_risks({"id": "no-source"}) == ("missing_source_ref",)
+
+
+def test_candidate_risk_classifier_flags_insufficient_evidence() -> None:
+    assert "insufficient_evidence" in classify_candidate_risks(
+        {"id": "gap", "source_ref": "telegram:1:1", "insufficient_evidence": True}
+    )
+    assert "insufficient_evidence" in classify_candidate_risks(
+        {"id": "gap-risk", "source_ref": "telegram:1:1", "risk": "evidence_gap"}
+    )
+    assert "insufficient_evidence" in classify_candidate_risks(
+        {
+            "id": "gap-tag",
+            "source_ref": "telegram:1:1",
+            "tags": ["insufficient_evidence"],
+        }
+    )
+
+
+def test_candidate_risk_tier_mapping_is_exact() -> None:
+    assert classify_candidate_risk_tier(
+        _candidate("blocked", forbidden=True, source_ref="telegram:1:1")
+    )["tier"] == "delete"
+    assert classify_candidate_risk_tier(
+        _candidate("old", status="superseded", source_ref="telegram:1:1")
+    )["tier"] == "delete"
+    assert classify_candidate_risk_tier(
+        _candidate("wrong-scope", source_ref="telegram:1:1", scope_match=False)
+    )["tier"] == "delete"
+    assert classify_candidate_risk_tier(
+        _candidate("weak", source_ref="session:telegram:1")
+    )["tier"] == "downgrade"
+    assert classify_candidate_risk_tier(
+        _candidate("low", source_ref="telegram:1:1", confidence=0.3)
+    )["tier"] == "downgrade"
+    assert classify_candidate_risk_tier(
+        _candidate("conflict", source_ref="telegram:1:1", conflict=True)
+    )["tier"] == "requires_review"
+    assert classify_candidate_risk_tier(_candidate("missing-source"))[
+        "tier"
+    ] == "requires_review"
+    assert classify_candidate_risk_tier(
+        _candidate("gap", source_ref="telegram:1:1", insufficient_evidence=True)
+    )["tier"] == "requires_review"
+    assert classify_candidate_risk_tier(
+        _candidate("clean", source_ref="telegram:1:1", confidence=0.9)
+    )["tier"] == "allow"
 
 
 def test_candidate_risk_classifier_does_not_flag_active_conflict_topic_as_conflict() -> None:

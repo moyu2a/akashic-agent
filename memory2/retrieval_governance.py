@@ -16,6 +16,13 @@ _LOW_CONFIDENCE_PHRASES = (
     "未找到",
     "不确定",
 )
+_DELETE_RISKS = ("forbidden_candidate", "superseded_candidate", "scope_mismatch")
+_DOWNGRADE_RISKS = ("weak_source_ref", "low_confidence")
+_REQUIRES_REVIEW_RISKS = (
+    "conflict_candidate",
+    "missing_source_ref",
+    "insufficient_evidence",
+)
 
 
 @dataclass(frozen=True)
@@ -238,7 +245,27 @@ def classify_candidate_risks(candidate: Mapping[str, Any]) -> tuple[str, ...]:
         risks.append("weak_source_ref")
     if _is_low_confidence(candidate):
         risks.append("low_confidence")
+    if _is_insufficient_evidence(candidate):
+        risks.append("insufficient_evidence")
     return tuple(risks)
+
+
+def classify_candidate_risk_tier(candidate: Mapping[str, Any]) -> dict[str, object]:
+    risks = classify_candidate_risks(candidate)
+    if any(risk in _DELETE_RISKS for risk in risks):
+        tier = "delete"
+    elif any(risk in _REQUIRES_REVIEW_RISKS for risk in risks):
+        tier = "requires_review"
+    elif any(risk in _DOWNGRADE_RISKS for risk in risks):
+        tier = "downgrade"
+    else:
+        tier = "allow"
+    return {
+        "candidate_id": _candidate_id(candidate),
+        "tier": tier,
+        "action": tier,
+        "risks": risks,
+    }
 
 
 _SCENE_POLICIES: dict[str, dict[str, object]] = {
@@ -371,6 +398,24 @@ def _is_low_confidence(item: Mapping[str, Any]) -> bool:
         return True
     summary = item.get("summary") or item.get("content") or ""
     return isinstance(summary, str) and _contains_any(summary, _LOW_CONFIDENCE_PHRASES)
+
+
+def _is_insufficient_evidence(item: Mapping[str, Any]) -> bool:
+    if item.get("insufficient_evidence") is True:
+        return True
+    risk = item.get("risk")
+    if isinstance(risk, str) and risk.lower() in {
+        "insufficient_evidence",
+        "evidence_gap",
+        "needs_evidence",
+    }:
+        return True
+    tags = item.get("tags")
+    return isinstance(tags, Sequence) and not isinstance(tags, (str, bytes)) and any(
+        str(tag).lower()
+        in {"insufficient_evidence", "evidence_gap", "needs_evidence"}
+        for tag in tags
+    )
 
 
 def _candidate_key(item: Mapping[str, Any]) -> str:
