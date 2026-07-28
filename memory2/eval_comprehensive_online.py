@@ -85,10 +85,18 @@ ANSWER_QUALITY_PROFILES: tuple[str, ...] = (
 TRI_CANDIDATE_GOVERNANCE_PROFILE = "chain_tri_candidate_governance"
 TRI_ANSWER_CONTRACT_PROFILE = "chain_tri_answer_contract"
 TRI_GOVERNED_ANSWER_CONTRACT_PROFILE = "chain_tri_governed_answer_contract"
+TRI_RERANK_GOVERNED_ANSWER_CONTRACT_PROFILE = (
+    "chain_tri_rerank_governed_answer_contract"
+)
+PRODUCTION_GOVERNED_ANSWER_CONTRACT_PROFILES: tuple[str, ...] = (
+    TRI_GOVERNED_ANSWER_CONTRACT_PROFILE,
+    TRI_RERANK_GOVERNED_ANSWER_CONTRACT_PROFILE,
+)
 OPTIONAL_ANSWER_QUALITY_PROFILES: tuple[str, ...] = (
     TRI_CANDIDATE_GOVERNANCE_PROFILE,
     TRI_ANSWER_CONTRACT_PROFILE,
     TRI_GOVERNED_ANSWER_CONTRACT_PROFILE,
+    TRI_RERANK_GOVERNED_ANSWER_CONTRACT_PROFILE,
 )
 PROFILE_METADATA: dict[str, dict[str, object]] = {
     TRI_CANDIDATE_GOVERNANCE_PROFILE: {
@@ -123,6 +131,23 @@ PROFILE_METADATA: dict[str, dict[str, object]] = {
             "Combines candidate-governed tri ids with a production-safe "
             "evidence contract to test whether input filtering plus evidence "
             "boundaries can preserve answer quality while reducing forbidden risk."
+        ),
+    },
+    TRI_RERANK_GOVERNED_ANSWER_CONTRACT_PROFILE: {
+        "eval_only": True,
+        "oracle_protected": True,
+        "uses_fixture_expected_ids": True,
+        "diagnostic_answer_contract": True,
+        "uses_fixture_answer_expectations": False,
+        "production_safe_evidence_contract": True,
+        "combines_candidate_governance": True,
+        "combines_rerank_injection": True,
+        "does_not_expand_recall": True,
+        "candidate_governance_mode": "tiered",
+        "description": (
+            "Reorders candidate-governed tri ids with the existing "
+            "rerank/injection signal, without adding ids outside governed tri "
+            "evidence, then renders a production-safe evidence contract."
         ),
     },
 }
@@ -215,23 +240,32 @@ class ComprehensiveOnlineMemoryEngine:
         if self.profile_name in {
             TRI_CANDIDATE_GOVERNANCE_PROFILE,
             TRI_GOVERNED_ANSWER_CONTRACT_PROFILE,
+            TRI_RERANK_GOVERNED_ANSWER_CONTRACT_PROFILE,
         }:
-            governed_trace = governed_tri_trace_for_case(self.case)
+            governed_trace = (
+                rerank_governed_tri_trace_for_case(self.case)
+                if self.profile_name == TRI_RERANK_GOVERNED_ANSWER_CONTRACT_PROFILE
+                else governed_tri_trace_for_case(self.case)
+            )
             ids = list(tuple(governed_trace.get("ids", ())))
         else:
             ids = list(evidence_ids_for_profile(self.case, self.profile_name))
-        if self.profile_name in {
-            TRI_ANSWER_CONTRACT_PROFILE,
-            TRI_GOVERNED_ANSWER_CONTRACT_PROFILE,
-        }:
-            if self.profile_name == TRI_GOVERNED_ANSWER_CONTRACT_PROFILE:
+        if (
+            self.profile_name == TRI_ANSWER_CONTRACT_PROFILE
+            or self.profile_name in PRODUCTION_GOVERNED_ANSWER_CONTRACT_PROFILES
+        ):
+            if self.profile_name in PRODUCTION_GOVERNED_ANSWER_CONTRACT_PROFILES:
                 assert governed_trace is not None
                 trace = dict(governed_trace.get("trace", {}))
                 contract = build_production_governed_tri_evidence_contract(
                     self.case,
                     governed_trace,
+                    profile_name=self.profile_name,
                 )
                 combines_candidate_governance = True
+                combines_rerank_injection = (
+                    self.profile_name == TRI_RERANK_GOVERNED_ANSWER_CONTRACT_PROFILE
+                )
                 self.used_memory_ids = list(contract.allowed_evidence_ids)
                 hits = [
                     MemoryHit(
@@ -265,6 +299,8 @@ class ComprehensiveOnlineMemoryEngine:
                         {},
                     ),
                     "candidate_risk_tiers": trace.get("candidate_risk_tiers", []),
+                    "combines_rerank_injection": combines_rerank_injection,
+                    "rerank_signal": trace.get("rerank_signal", {}),
                     "answer_contract": {
                         "diagnostic_eval_only": contract.diagnostic_eval_only,
                         "production_safe": contract.production_safe,
@@ -273,6 +309,7 @@ class ComprehensiveOnlineMemoryEngine:
                             contract.uses_fixture_answer_expectations
                         ),
                         "combines_candidate_governance": combines_candidate_governance,
+                        "combines_rerank_injection": combines_rerank_injection,
                         "candidate_governance_mode": contract.candidate_governance_mode,
                         "allowed_evidence": list(contract.allowed_evidence),
                         "likely_relevant_evidence": list(
@@ -484,6 +521,8 @@ def evidence_ids_for_profile(case: EvalCase, profile_name: str) -> tuple[str, ..
         return tri_answer_contract_evidence_ids(case)
     if profile_name == TRI_GOVERNED_ANSWER_CONTRACT_PROFILE:
         return governed_tri_evidence_ids_for_case(case)
+    if profile_name == TRI_RERANK_GOVERNED_ANSWER_CONTRACT_PROFILE:
+        return tuple(rerank_governed_tri_trace_for_case(case).get("ids", ()))
     if profile_name not in COMPREHENSIVE_CHAIN_PROFILES:
         raise ValueError(f"unknown profile_name: {profile_name}")
     if profile_name == "chain_tri_retrieval":
@@ -543,6 +582,51 @@ def governed_tri_trace_for_case(case: EvalCase) -> dict[str, object]:
     return {"ids": ids, "trace": trace}
 
 
+def rerank_governed_evidence_order(
+    governed_ids: Sequence[str],
+    rerank_ids: Sequence[str],
+) -> tuple[str, ...]:
+    governed = tuple(str(item_id) for item_id in governed_ids if str(item_id))
+    governed_set = set(governed)
+    rerank = tuple(str(item_id) for item_id in rerank_ids if str(item_id))
+    rerank_set = set(rerank)
+    return tuple(
+        [item_id for item_id in rerank if item_id in governed_set]
+        + [item_id for item_id in governed if item_id not in rerank_set]
+    )
+
+
+def rerank_governed_tri_trace_for_case(case: EvalCase) -> dict[str, object]:
+    governed_trace = governed_tri_trace_for_case(case)
+    governed_ids = tuple(str(item) for item in governed_trace.get("ids", ()))
+    if not governed_ids:
+        trace = dict(governed_trace.get("trace", {}))
+        trace["rerank_signal"] = {
+            "rerank_profile": "chain_rerank_injection",
+            "rerank_ids": [],
+            "reranked_governed_ids": [],
+            "recall_expanded": False,
+            "reordered_count": 0,
+        }
+        return {"ids": (), "trace": trace}
+    rerank_ids = tuple(evidence_ids_for_profile(case, "chain_rerank_injection"))
+    governed_set = set(governed_ids)
+    ordered_ids = rerank_governed_evidence_order(governed_ids, rerank_ids)
+    trace = dict(governed_trace.get("trace", {}))
+    trace["rerank_signal"] = {
+        "rerank_profile": "chain_rerank_injection",
+        "rerank_ids": list(rerank_ids),
+        "reranked_governed_ids": list(ordered_ids),
+        "recall_expanded": bool(set(ordered_ids) - governed_set),
+        "reordered_count": sum(
+            1
+            for index, item_id in enumerate(ordered_ids)
+            if index >= len(governed_ids) or governed_ids[index] != item_id
+        ),
+    }
+    return {"ids": ordered_ids, "trace": trace}
+
+
 def _ordered_candidates_for_governed_tri(
     case: EvalCase,
     tri_ids: tuple[str, ...],
@@ -593,6 +677,10 @@ def profile_evidence_source(profile_name: str) -> str:
         TRI_GOVERNED_ANSWER_CONTRACT_PROFILE: (
             "tri_governed_answer_contract.governed_allowed_evidence_ids"
         ),
+        TRI_RERANK_GOVERNED_ANSWER_CONTRACT_PROFILE: (
+            "tri_rerank_governed_answer_contract."
+            "reranked_governed_allowed_evidence_ids"
+        ),
     }
     if profile_name not in sources:
         raise ValueError(f"unknown profile_name: {profile_name}")
@@ -604,8 +692,8 @@ def answer_expectation_for_profile(
     profile_name: str,
 ) -> AnswerExpectation:
     expectation = answer_expectation_from_case(case)
-    if profile_name == TRI_GOVERNED_ANSWER_CONTRACT_PROFILE:
-        governed_ids = governed_tri_evidence_ids_for_case(case)
+    if profile_name in PRODUCTION_GOVERNED_ANSWER_CONTRACT_PROFILES:
+        governed_ids = evidence_ids_for_profile(case, profile_name)
         return AnswerExpectation(
             expected_memory_ids=governed_ids,
             expected_language=expectation.expected_language,
@@ -1033,7 +1121,7 @@ async def _run_comprehensive_case(
     answer_post_check_shadow: dict[str, object] | None = None
     answer_contract = memory.last_raw.get("answer_contract")
     if (
-        spec.profile_name == TRI_GOVERNED_ANSWER_CONTRACT_PROFILE
+        spec.profile_name in PRODUCTION_GOVERNED_ANSWER_CONTRACT_PROFILES
         and isinstance(answer_contract, dict)
     ):
         answer_post_check_shadow = answer_post_check_shadow_to_dict(

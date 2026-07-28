@@ -16,6 +16,7 @@ from memory2.eval_comprehensive_online import (
     evidence_ids_for_profile,
     governed_tri_trace_for_case,
     profile_evidence_source,
+    rerank_governed_evidence_order,
     run_comprehensive_online_eval,
     write_comprehensive_online_markdown,
 )
@@ -883,6 +884,170 @@ def test_governed_answer_contract_report_metadata_marks_no_fixture_answer_expect
     write_comprehensive_online_markdown(report, md_path)
     markdown = md_path.read_text(encoding="utf-8")
     assert "production_safe_evidence_contract" in markdown
+
+
+def test_rerank_governed_evidence_order_reorders_only_within_governed_set() -> None:
+    ordered = rerank_governed_evidence_order(
+        governed_ids=("target", "weak", "tail", "stale"),
+        rerank_ids=("outside", "tail", "target", "outside_2"),
+    )
+
+    assert ordered == ("tail", "target", "weak", "stale")
+
+
+def _case_with_rerank_governed_order_delta():
+    for case in (
+        build_quantitative_eval_cases(case_set="common", limit=20, case_pack="standard")
+        + build_quantitative_eval_cases(case_set="hard", limit=20, case_pack="standard")
+    ):
+        governed_ids = evidence_ids_for_profile(
+            case,
+            "chain_tri_governed_answer_contract",
+        )
+        rerank_ids = evidence_ids_for_profile(case, "chain_rerank_injection")
+        rerank_set = set(rerank_ids)
+        expected_order = tuple(
+            [item_id for item_id in rerank_ids if item_id in set(governed_ids)]
+            + [item_id for item_id in governed_ids if item_id not in rerank_set]
+        )
+        if governed_ids and expected_order != governed_ids:
+            return case, governed_ids, rerank_ids, expected_order
+    raise AssertionError("fixture must include a rerank/governed ordering delta")
+
+
+def test_rerank_governed_profile_reorders_without_expanding_governed_ids() -> None:
+    case, governed_ids, rerank_ids, expected_order = (
+        _case_with_rerank_governed_order_delta()
+    )
+
+    rerank_governed_ids = evidence_ids_for_profile(
+        case,
+        "chain_tri_rerank_governed_answer_contract",
+    )
+
+    assert rerank_governed_ids == expected_order
+    assert set(rerank_governed_ids) == set(governed_ids)
+    assert set(rerank_governed_ids).isdisjoint(
+        set(evidence_ids_for_profile(case, "chain_tri_retrieval")) - set(governed_ids)
+    )
+    assert any(item_id in rerank_ids for item_id in rerank_governed_ids)
+    assert profile_evidence_source(
+        "chain_tri_rerank_governed_answer_contract"
+    ) == "tri_rerank_governed_answer_contract.reranked_governed_allowed_evidence_ids"
+
+
+def test_rerank_governed_profile_never_expands_recall_on_p6o6_slice() -> None:
+    cases = (
+        build_quantitative_eval_cases(case_set="common", limit=20, case_pack="standard")
+        + build_quantitative_eval_cases(case_set="hard", limit=20, case_pack="standard")
+    )
+
+    for case in cases:
+        governed_ids = evidence_ids_for_profile(
+            case,
+            "chain_tri_governed_answer_contract",
+        )
+        rerank_governed_ids = evidence_ids_for_profile(
+            case,
+            "chain_tri_rerank_governed_answer_contract",
+        )
+
+        assert set(rerank_governed_ids) == set(governed_ids)
+        assert len(rerank_governed_ids) == len(governed_ids)
+
+
+def test_rerank_governed_profile_injects_production_safe_contract_block(
+    tmp_path: Path,
+) -> None:
+    case, _governed_ids, _rerank_ids, _expected_order = (
+        _case_with_rerank_governed_order_delta()
+    )
+    engine = ComprehensiveOnlineMemoryEngine(
+        case,
+        profile_name="chain_tri_rerank_governed_answer_contract",
+        prompt_variant="baseline",
+    )
+
+    result = asyncio.run(
+        engine.retrieve(
+            MemoryEngineRetrieveRequest(
+                query=str(case.setup["query"]),
+                mode="explicit",
+                top_k=8,
+            )
+        )
+    )
+
+    assert (
+        "Evidence Contract: chain_tri_rerank_governed_answer_contract"
+        in result.text_block
+    )
+    assert "production_safe=true" in result.text_block
+    assert "allowed_evidence:" in result.text_block
+    assert "forbidden_boundary_ids:" in result.text_block
+    assert result.raw["evidence_source"] == (
+        "tri_rerank_governed_answer_contract.reranked_governed_allowed_evidence_ids"
+    )
+    assert result.raw["answer_contract"]["production_safe_evidence_contract"] is True
+    assert result.raw["answer_contract"]["combines_candidate_governance"] is True
+    assert result.raw["answer_contract"]["combines_rerank_injection"] is True
+    assert result.raw["rerank_signal"]["recall_expanded"] is False
+
+
+def test_rerank_governed_profile_report_metadata_and_post_check_shadow(
+    tmp_path: Path,
+) -> None:
+    case, _governed_ids, _rerank_ids, _expected_order = (
+        _case_with_rerank_governed_order_delta()
+    )
+    specs = build_comprehensive_run_specs(
+        [case],
+        profiles=("chain_tri_rerank_governed_answer_contract",),
+        prompt_variants=("baseline",),
+        repeats=1,
+    )
+
+    report = asyncio.run(
+        run_comprehensive_online_eval(
+            specs,
+            tmp_path / "workspace",
+            ComprehensiveScriptedProvider(),
+            model="scripted",
+            real_llm_enabled=False,
+        )
+    )
+
+    metadata = report.metrics["profile_metadata"][
+        "chain_tri_rerank_governed_answer_contract"
+    ]
+    assert metadata["eval_only"] is True
+    assert metadata["oracle_protected"] is True
+    assert metadata["production_safe_evidence_contract"] is True
+    assert metadata["combines_candidate_governance"] is True
+    assert metadata["combines_rerank_injection"] is True
+    assert metadata["does_not_expand_recall"] is True
+    assert report.metrics["answer_post_check_shadow"]["case_count"] == 1
+    assert report.case_records[0]["answer_post_check_shadow"]["shadow_enabled"] is True
+
+
+def test_rerank_governed_answer_expectation_is_grounding_only_not_oracle_terms() -> None:
+    case, _governed_ids, _rerank_ids, _expected_order = (
+        _case_with_rerank_governed_order_delta()
+    )
+
+    expectation = answer_expectation_for_profile(
+        case,
+        "chain_tri_rerank_governed_answer_contract",
+    )
+
+    assert expectation.expected_answer_contains == ()
+    assert expectation.expected_answer_contains_any == ()
+    assert expectation.forbidden_answer_contains == ()
+    assert expectation.expected_memory_ids == evidence_ids_for_profile(
+        case,
+        "chain_tri_rerank_governed_answer_contract",
+    )
+    assert expectation.grounding_required is True
 
 
 def test_p6o3_governed_contract_fake_provider_smoke_is_private(
