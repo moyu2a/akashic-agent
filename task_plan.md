@@ -2119,3 +2119,69 @@ Next step:
 
 - Add eval-only `chain_tri_rerank_version_governed_answer_contract`.
 - Validate combo ordering, no recall expansion, metadata, fake gate, real gate, and docs before considering graph/all-on.
+
+## 2026-07-28 P6o-10 Rerank + Version Governed Combo
+
+Goal: test whether rerank ordering and safe version-boundary metadata are complementary when combined inside the governed evidence contract without recall expansion.
+
+Plan:
+
+- `docs/superpowers/plans/2026-07-28-memory-p6o8-p6o10-boundary-rerank-combo.md`
+
+Execution status:
+
+1. Add eval-only `chain_tri_rerank_version_governed_answer_contract` - complete.
+2. Prove combo ids equal rerank-governed ids and have the same set as governed ids - complete.
+3. Prove combo contract hides raw forbidden/deleted ids and exposes combined metadata - complete.
+4. Run P6o-10 fake-provider gate - complete.
+5. Run bounded P6o-10 real LLM matrix - complete.
+6. Assert P6o-10 gate - complete.
+7. Update docs and commit locally without push - in progress.
+
+Real report:
+
+- `my_md/memory_optimization/eval_reports/p6o10_rerank_version_governed_combo_small_online_v1/memory_comprehensive_online_eval.json`
+- `my_md/memory_optimization/eval_reports/p6o10_rerank_version_governed_combo_small_online_v1/memory_comprehensive_online_eval.md`
+
+Real report integrity:
+
+- `real_llm_enabled = True`;
+- `case_count = 160`;
+- `unique_case_count = 40`;
+- `completed_call_count = 160`;
+- `profile_count = 4`;
+- `prompt_variant_count = 1`;
+- `repeat_count = 1`;
+- `provider_error_count = 0`;
+- `timeout_count = 0`;
+- JSON / Markdown privacy checks passed.
+
+Per-profile real result:
+
+- `chain_tri_governed_answer_contract`: answer `39/40 = 97.5%`, grounding `100.0%`, forbidden `0.0%`, avg tokens `6130.1`.
+- `chain_tri_rerank_governed_answer_contract`: answer `39/40 = 97.5%`, grounding `100.0%`, forbidden `0.0%`, avg tokens `6131.95`.
+- `chain_tri_version_governed_answer_contract`: answer `40/40 = 100.0%`, grounding `100.0%`, forbidden `0.0%`, avg tokens `6004.95`.
+- `chain_tri_rerank_version_governed_answer_contract`: answer `39/40 = 97.5%`, grounding `100.0%`, forbidden `0.0%`, avg tokens `6036.7`.
+
+Post-check shadow:
+
+- `case_count = 160`;
+- `enabled_case_count = 160`;
+- `needs_retry_count = 0`;
+- `forbidden_boundary_included_count = 0`;
+- `missing_likely_relevant_context_count = 0`;
+- `stale_evidence_included_count = 0`;
+- `conflict_evidence_included_count = 0`;
+- `insufficient_fallback_missing_count = 0`.
+
+Conclusion:
+
+- Combo passes the gate and is safe in this matrix.
+- Combo ties governed answer rate, keeps grounding and forbidden clean, and reduces avg tokens by `93.4` versus governed.
+- Safe version-governed is the strongest profile in this run: `40/40 = 100.0%`, avg tokens `6004.95`.
+- The data does not justify jumping to graph/all-on or production activation; it supports a targeted robustness/failure analysis next.
+
+Next step:
+
+- Compare failure cases and rerun sensitivity for safe version-only vs combo.
+- Keep all profiles eval/shadow-only until robustness holds beyond this 40-case small matrix.

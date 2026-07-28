@@ -2295,3 +2295,58 @@
   - governed remains the strongest standalone setting in this same-run matrix;
   - rerank and safe version are safe but not individually better in answer rate;
   - P6o-10 can test whether rerank ordering and safe version-boundary metadata are complementary when combined without recall expansion.
+
+## 2026-07-28 P6o-10 rerank + version governed combo
+
+- Plan:
+  - `docs/superpowers/plans/2026-07-28-memory-p6o8-p6o10-boundary-rerank-combo.md`.
+- Implementation commit:
+  - `7bb3b06 feat: add rerank version governed answer contract profile`.
+- Implementation detail:
+  - added eval-only `chain_tri_rerank_version_governed_answer_contract`;
+  - combo evidence ids equal rerank-governed ids;
+  - combo evidence id set equals governed ids;
+  - safe version-boundary metadata is attached without model-visible raw forbidden/deleted ids;
+  - metadata marks `combines_rerank_injection = True`, `combines_version_boundary = True`, and `does_not_expand_recall = True`.
+- Fake-provider full gate:
+  - report path: `/tmp/akashic-memory-p6o10-combo/fake-reports/memory_comprehensive_online_eval.json`;
+  - `case_count = 160`;
+  - `unique_case_count = 40`;
+  - `profile_count = 4`;
+  - `provider_error_count = 0`;
+  - `timeout_count = 0`;
+  - `infra_passed = True`.
+- Real LLM run:
+  - report path: `my_md/memory_optimization/eval_reports/p6o10_rerank_version_governed_combo_small_online_v1/memory_comprehensive_online_eval.json`;
+  - markdown path: `my_md/memory_optimization/eval_reports/p6o10_rerank_version_governed_combo_small_online_v1/memory_comprehensive_online_eval.md`;
+  - `case_count = 160`;
+  - `unique_case_count = 40`;
+  - `completed_call_count = 160`;
+  - `profile_count = 4`;
+  - `prompt_variant_count = 1`;
+  - `repeat_count = 1`;
+  - `provider_error_count = 0`;
+  - `timeout_count = 0`;
+  - privacy flags: `raw_query_included = False`, `raw_memory_summary_included = False`, `prompt_included = False`, `session_text_included = False`, `full_answer_included = False`.
+- Per-profile real result:
+  - `chain_tri_governed_answer_contract`: answer `39/40 = 97.5%`, grounding `100.0%`, forbidden `0.0%`, avg tokens `6130.1`;
+  - `chain_tri_rerank_governed_answer_contract`: answer `39/40 = 97.5%`, grounding `100.0%`, forbidden `0.0%`, avg tokens `6131.95`;
+  - `chain_tri_version_governed_answer_contract`: answer `40/40 = 100.0%`, grounding `100.0%`, forbidden `0.0%`, avg tokens `6004.95`;
+  - `chain_tri_rerank_version_governed_answer_contract`: answer `39/40 = 97.5%`, grounding `100.0%`, forbidden `0.0%`, avg tokens `6036.7`.
+- Post-check shadow aggregate:
+  - `case_count = 160`;
+  - `enabled_case_count = 160`;
+  - `needs_retry_count = 0`;
+  - `forbidden_boundary_included_count = 0`;
+  - `missing_likely_relevant_context_count = 0`;
+  - `stale_evidence_included_count = 0`;
+  - `conflict_evidence_included_count = 0`;
+  - `insufficient_fallback_missing_count = 0`.
+- Gate result:
+  - combo passes answer, grounding, forbidden, token, privacy, infra, and post-check gates;
+  - combo ties governed answer rate and lowers avg tokens by `93.4`;
+  - safe version-governed is the best profile in this matrix.
+- Conclusion:
+  - rerank + version combo is safe but not the winner;
+  - safe version-governed is currently the strongest small-matrix answer-level profile;
+  - next work should inspect misses and rerun sensitivity before graph/all-on or production activation.

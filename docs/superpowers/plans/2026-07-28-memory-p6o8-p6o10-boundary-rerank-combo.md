@@ -984,7 +984,7 @@ git commit -m "feat: add rerank version governed answer contract profile"
 - Consumes P6o-10 combo profile from Task 4.
 - Produces P6o-10 real gate result.
 
-- [ ] **Step 1: Run P6o-10 fake gate**
+- [x] **Step 1: Run P6o-10 fake gate**
 
 Run:
 
@@ -1009,7 +1009,7 @@ PYTHONDONTWRITEBYTECODE=1 .venv/bin/python scripts/run_memory_comprehensive_onli
 
 Expected: exits `0`, `case_count = 160`, `profile_count = 4`, provider/timeout `0`.
 
-- [ ] **Step 2: Run P6o-10 real matrix**
+- [x] **Step 2: Run P6o-10 real matrix**
 
 Run:
 
@@ -1033,7 +1033,7 @@ PYTHONDONTWRITEBYTECODE=1 .venv/bin/python scripts/run_memory_comprehensive_onli
 
 Expected: exits `0`.
 
-- [ ] **Step 3: Assert P6o-10 gate**
+- [x] **Step 3: Assert P6o-10 gate**
 
 Run:
 
@@ -1116,7 +1116,7 @@ PY
 
 Expected: prints `gate ok`. If it fails, docs must state which gate failed and P6o-10 must remain eval-only failed evidence.
 
-- [ ] **Step 4: Update docs and commit P6o-10 result**
+- [x] **Step 4: Update docs and commit P6o-10 result**
 
 Record exact P6o-10 data and commit:
 
@@ -1141,7 +1141,7 @@ git commit -m "docs: record p6o10 rerank version governed combo"
 - Consumes all completed tasks.
 - Produces final local branch state.
 
-- [ ] **Step 1: Run full focused verification**
+- [x] **Step 1: Run full focused verification**
 
 Run:
 
