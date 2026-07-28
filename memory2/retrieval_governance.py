@@ -30,6 +30,7 @@ class CandidateGovernancePolicy:
     """可选候选治理策略；默认关闭以保持旧路由行为。"""
 
     enabled: bool = False
+    mode: str = "strict"
     protected_expected_ids: tuple[str, ...] = ()
     drop_risks: tuple[str, ...] = (
         "forbidden_candidate",
@@ -47,9 +48,14 @@ class CandidateGovernancePolicy:
         "scope_mismatch",
     )
 
+    def __post_init__(self) -> None:
+        if self.mode not in {"strict", "tiered"}:
+            raise ValueError(f"unknown candidate governance mode: {self.mode}")
+
     def to_dict(self) -> dict[str, object]:
         return {
             "enabled": self.enabled,
+            "mode": self.mode,
             "protected_expected_ids": list(self.protected_expected_ids),
             "drop_risks": list(self.drop_risks),
             "fatal_risks": list(self.fatal_risks),
@@ -132,6 +138,10 @@ def apply_retrieval_route(
     seen: set[str] = set()
     dropped_risks_by_reason: dict[str, int] = {}
     would_drop_protected_by_reason: dict[str, int] = {}
+    candidate_risk_tier_counts: dict[str, int] = {}
+    accepted_candidate_risk_tier_counts: dict[str, int] = {}
+    tiered_deleted_risks_by_reason: dict[str, int] = {}
+    candidate_risk_tiers: list[dict[str, object]] = []
     protected_risky_candidate_count = 0
     accepted_risky_candidate_count = 0
     protected_expected_ids = set(decision.candidate_governance.protected_expected_ids)
@@ -155,23 +165,43 @@ def apply_retrieval_route(
             protected = _candidate_id(item) in protected_expected_ids
 
             if decision.candidate_governance.enabled:
-                drop_risks = [
-                    risk
-                    for risk in risks
-                    if risk in decision.candidate_governance.drop_risks
-                ]
-                fatal = any(
-                    risk in decision.candidate_governance.fatal_risks
-                    for risk in drop_risks
-                )
-                if drop_risks and (fatal or not protected):
-                    for risk in drop_risks:
-                        _count(dropped_risks_by_reason, risk)
-                    continue
-                if drop_risks and protected:
-                    protected_risky_candidate_count += 1
-                    for risk in drop_risks:
-                        _count(would_drop_protected_by_reason, risk)
+                mode = decision.candidate_governance.mode
+                if mode == "tiered":
+                    tier_record = dict(classify_candidate_risk_tier(item))
+                    tier_record["lane"] = lane
+                    candidate_risk_tiers.append(tier_record)
+                    tier = str(tier_record["tier"])
+                    _count(candidate_risk_tier_counts, tier)
+                    risks = tuple(str(risk) for risk in tier_record["risks"])
+                    if tier == "delete":
+                        for risk in risks:
+                            if risk in _DELETE_RISKS:
+                                _count(tiered_deleted_risks_by_reason, risk)
+                                _count(dropped_risks_by_reason, risk)
+                        continue
+                    item["candidate_risk_tier"] = tier
+                    item["candidate_governance_action"] = tier
+                    item["candidate_risks"] = risks
+                elif mode == "strict":
+                    drop_risks = [
+                        risk
+                        for risk in risks
+                        if risk in decision.candidate_governance.drop_risks
+                    ]
+                    fatal = any(
+                        risk in decision.candidate_governance.fatal_risks
+                        for risk in drop_risks
+                    )
+                    if drop_risks and (fatal or not protected):
+                        for risk in drop_risks:
+                            _count(dropped_risks_by_reason, risk)
+                        continue
+                    if drop_risks and protected:
+                        protected_risky_candidate_count += 1
+                        for risk in drop_risks:
+                            _count(would_drop_protected_by_reason, risk)
+                else:
+                    raise ValueError(f"unknown candidate governance mode: {mode}")
             else:
                 if decision.require_source_ref and "missing_source_ref" in risks:
                     _count(dropped_by_reason, "missing_source_ref")
@@ -192,6 +222,14 @@ def apply_retrieval_route(
             accepted_items_by_lane[lane].append(item)
             accepted_by_lane[lane] += 1
             retained_in_lane += 1
+            if (
+                decision.candidate_governance.enabled
+                and decision.candidate_governance.mode == "tiered"
+            ):
+                _count(
+                    accepted_candidate_risk_tier_counts,
+                    str(item.get("candidate_risk_tier") or "allow"),
+                )
             if risks:
                 accepted_risky_candidate_count += 1
 
@@ -215,12 +253,17 @@ def apply_retrieval_route(
         "accepted_items_by_lane": accepted_items_by_lane,
         "dropped_by_reason": dropped_by_reason,
         "candidate_governance_enabled": decision.candidate_governance.enabled,
+        "candidate_governance_mode": decision.candidate_governance.mode,
         "candidate_governance": decision.candidate_governance.to_dict(),
         "protected_expected_ids": list(
             decision.candidate_governance.protected_expected_ids
         ),
         "dropped_risks_by_reason": dropped_risks_by_reason,
         "would_drop_protected_by_reason": would_drop_protected_by_reason,
+        "candidate_risk_tier_counts": candidate_risk_tier_counts,
+        "accepted_candidate_risk_tier_counts": accepted_candidate_risk_tier_counts,
+        "tiered_deleted_risks_by_reason": tiered_deleted_risks_by_reason,
+        "candidate_risk_tiers": candidate_risk_tiers,
         "protected_risky_candidate_count": protected_risky_candidate_count,
         "accepted_risky_candidate_count": accepted_risky_candidate_count,
         "output_count": output_count,

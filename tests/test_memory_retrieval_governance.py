@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 
+import pytest
+
 from memory2.retrieval_governance import (
     CandidateGovernancePolicy,
     apply_retrieval_route,
@@ -327,3 +329,92 @@ def test_candidate_governance_custom_drop_risks_controls_enabled_filter() -> Non
 
     assert [item["id"] for item in candidates] == ["no-source"]
     assert trace["dropped_risks_by_reason"] == {"forbidden_candidate": 1}
+
+
+def test_tiered_candidate_governance_keeps_review_and_downgrade_candidates() -> None:
+    decision = build_retrieval_routing_decision("上次提到的那个方案是什么？")
+    decision = decision.with_candidate_governance(
+        CandidateGovernancePolicy(enabled=True, mode="tiered")
+    )
+
+    candidates, trace = apply_retrieval_route(
+        decision,
+        {
+            "semantic": [
+                _candidate("good", source_ref="telegram:1:1", confidence=0.9),
+                _candidate("weak", source_ref="session:telegram:1", confidence=0.9),
+                _candidate("conflict", source_ref="telegram:1:2", conflict=True),
+                _candidate("forbidden", source_ref="telegram:1:3", forbidden=True),
+            ]
+        },
+    )
+
+    assert [item["id"] for item in candidates] == ["good", "weak", "conflict"]
+    assert [item["candidate_risk_tier"] for item in candidates] == [
+        "allow",
+        "downgrade",
+        "requires_review",
+    ]
+    assert trace["candidate_governance_mode"] == "tiered"
+    assert trace["candidate_risk_tier_counts"]["delete"] == 1
+    assert trace["accepted_candidate_risk_tier_counts"] == {
+        "allow": 1,
+        "downgrade": 1,
+        "requires_review": 1,
+    }
+    assert trace["tiered_deleted_risks_by_reason"] == {"forbidden_candidate": 1}
+
+
+def test_strict_candidate_governance_remains_default_mode() -> None:
+    policy = CandidateGovernancePolicy(enabled=True)
+    assert policy.mode == "strict"
+
+    decision = build_retrieval_routing_decision("上次提到的那个方案是什么？")
+    decision = decision.with_candidate_governance(policy)
+
+    candidates, trace = apply_retrieval_route(
+        decision,
+        {
+            "semantic": [
+                _candidate("weak", source_ref="session:telegram:1", confidence=0.9),
+                _candidate("conflict", source_ref="telegram:1:2", conflict=True),
+            ]
+        },
+    )
+
+    assert candidates == []
+    assert trace["candidate_governance_mode"] == "strict"
+    assert trace["dropped_risks_by_reason"] == {
+        "weak_source_ref": 1,
+        "conflict_candidate": 1,
+    }
+
+
+def test_strict_candidate_governance_accepts_insufficient_evidence_by_default() -> None:
+    decision = build_retrieval_routing_decision("上次提到的那个方案是什么？")
+    decision = decision.with_candidate_governance(
+        CandidateGovernancePolicy(enabled=True)
+    )
+
+    candidates, trace = apply_retrieval_route(
+        decision,
+        {
+            "semantic": [
+                _candidate(
+                    "needs-review",
+                    source_ref="telegram:1:1",
+                    insufficient_evidence=True,
+                ),
+            ]
+        },
+    )
+
+    assert [item["id"] for item in candidates] == ["needs-review"]
+    assert trace["candidate_governance_mode"] == "strict"
+    assert trace["dropped_risks_by_reason"] == {}
+    assert trace["accepted_risky_candidate_count"] == 1
+
+
+def test_candidate_governance_policy_rejects_unknown_mode() -> None:
+    with pytest.raises(ValueError, match="unknown candidate governance mode"):
+        CandidateGovernancePolicy(enabled=True, mode="mystery")
