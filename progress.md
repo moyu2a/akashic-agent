@@ -16,6 +16,9 @@
 - Self-reviewed the spec for placeholders, contradictions, ambiguity, and scope.
 - `docs/` is ignored by `.gitignore`, so the design spec must be staged with `git add -f`.
 - `git diff --check` emitted no output before committing the design/planning docs.
+- Committed design and planning records: `9cdd0e8 docs: design queryable tool audit ledger`.
+- Wrote implementation plan: `docs/superpowers/plans/2026-07-28-tool-governance-p4c-audit-ledger.md`.
+- Self-reviewed the plan for placeholder text, scope creep, type-name consistency, and a bad limit assertion; fixed the assertion inline.
 
 ## 2026-07-27 Tool Governance P4b Documentation and Final Verification
 

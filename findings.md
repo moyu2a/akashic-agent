@@ -10,6 +10,7 @@
 - Ledger events must be allowlist-based. Raw shell command, raw tool args, raw file content, raw file path, raw output text, payload path, token, cookie and secret values must not enter ledger rows.
 - Ledger write failure should not relabel execution outcome, consume/unconsume approval, or change side-effect runtime status.
 - The design spec lives under ignored `docs/`, so force staging is required for this project if the spec should travel with the branch.
+- The implementation plan should start with the ledger store and only then wire runtimes; this keeps redaction/query/prune behavior testable before touching executor or side-effect execution paths.
 
 ## 2026-07-20 Memory Phase 6k Findings
 
