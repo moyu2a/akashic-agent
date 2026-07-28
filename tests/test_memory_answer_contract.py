@@ -313,4 +313,50 @@ def test_render_production_evidence_contract_is_structured_and_not_oracle_terms(
     assert "ORACLE_TERM" not in text
     assert "ORACLE_GROUP" not in text
     assert "ORACLE_FORBIDDEN" not in text
+
+
+def test_production_governed_contract_accepts_eval_profile_name() -> None:
+    case = _case_with_should_not_in_tri()
+    governed_trace_info = {
+        "ids": ("custom_target",),
+        "trace": {
+            "candidate_governance_mode": "tiered",
+            "candidate_risk_tiers": [
+                {
+                    "candidate_id": "custom_target",
+                    "tier": "allow",
+                    "risks": (),
+                    "lane": "semantic",
+                },
+            ],
+        },
+    }
+    case = replace(
+        case,
+        setup={
+            **case.setup,
+            "memory_items": [
+                {
+                    "id": "custom_target",
+                    "summary": "custom profile evidence",
+                    "status": "active",
+                    "source_ref": "telegram:1:1",
+                }
+            ],
+        },
+    )
+
+    contract = build_production_governed_tri_evidence_contract(
+        case,
+        governed_trace_info,
+        profile_name="chain_tri_rerank_governed_answer_contract",
+    )
+    text = render_production_evidence_contract_block(contract)
+
+    assert contract.profile_name == "chain_tri_rerank_governed_answer_contract"
+    assert "Evidence Contract: chain_tri_rerank_governed_answer_contract" in text
+    assert contract.production_safe is True
+    assert contract.uses_fixture_answer_expectations is False
+    assert contract.required_terms == ()
+    assert contract.forbidden_terms == ()
     assert case.setup["query"] not in text

@@ -85,6 +85,8 @@ def build_governed_tri_answer_contract(
 def build_production_governed_tri_evidence_contract(
     case: EvalCase,
     governed_trace_info: object,
+    *,
+    profile_name: str = GOVERNED_TRI_ANSWER_CONTRACT_PROFILE,
 ) -> ProductionEvidenceContract:
     trace_info = (
         dict(governed_trace_info) if isinstance(governed_trace_info, Mapping) else {}
@@ -139,7 +141,7 @@ def build_production_governed_tri_evidence_contract(
         item_id for item_id in allowed_ids if item_id not in requires_review_ids
     )
     return ProductionEvidenceContract(
-        profile_name=GOVERNED_TRI_ANSWER_CONTRACT_PROFILE,
+        profile_name=profile_name,
         diagnostic_eval_only=True,
         production_safe=True,
         uses_fixture_answer_expectations=False,
