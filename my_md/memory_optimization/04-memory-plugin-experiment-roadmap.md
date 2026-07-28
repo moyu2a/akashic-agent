@@ -270,6 +270,10 @@ MemoryValueScorer
 
 P6o-1 complete criteria now cover the eval-only wiring step before that real A/B: profile registered, governed ids reused as allowed evidence, contract rendered with governed profile name, eval-only metadata visible in JSON and Markdown, and 200-row fake-provider smoke passes. Current fake-provider smoke result is `case_count = 200`, `unique_case_count = 40`, `profile_count = 5`, `real_llm_enabled = False`, `provider_error_count = 0`, and `timeout_count = 0`. Real LLM A/B is intentionally deferred.
 
+P6o-2 complete criteria: strict mode remains compatible, tiered mode records candidate tier counts, eval-only tri profiles use tiered allowed ids, offline report exposes tiered counts, and focused tests pass. P6o-2 is still eval/shadow-only and does not run real LLM. Standard offline report result: `case_count = 80`, `tiered_candidate_risk_tier_counts = {"delete": 324, "downgrade": 896}`, `tiered_accepted_candidate_risk_tier_counts = {"downgrade": 480}`, `tiered_deleted_risks_by_reason = {"forbidden_candidate": 324, "scope_mismatch": 52, "superseded_candidate": 176}`, `protected_expected_hit_loss_count = 0`, and `strict_should_not_kept_count = 0`.
+
+P6o-2 comparison conclusion: strict candidate governance was too coarse because weak source_ref and low confidence are common on useful fixture evidence; deleting them protects forbidden boundaries but can remove answer-useful context. Tiered governance keeps those candidates as `downgrade` or `requires_review` while still deleting forbidden / superseded / scope-mismatch records. P6o-3 should consume these tiers to render production-safe contract fields without fixture answer expectations.
+
 ## Phase 6t：source_ref 写入质量治理
 
 ### 目的

@@ -1762,3 +1762,13 @@ Next real A/B criteria:
 - grounding_rate remains `100.0%`;
 - forbidden_rate below `12.5%`;
 - no obvious token blow-up.
+
+## 2026-07-28 Memory P6o2 Risk-Tiered Candidate Governance
+
+Goal: replace eval-only strict candidate filtering with risk-tiered candidate governance before production-safe evidence contract work.
+
+1. Add pure risk tier classification - complete
+2. Add tiered candidate governance mode while preserving strict mode - complete
+3. Switch eval-only tri candidate/governed profiles to tiered ids - complete
+4. Add offline report tier metrics - complete
+5. Update docs and commit locally without push - pending

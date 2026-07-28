@@ -343,6 +343,25 @@ Fake-provider smoke result: common `20` + hard `20` produced `40` unique cases a
 
 Next real A/B criteria remain: answer_rate close to or above `75.0%`, grounding_rate `100.0%`, forbidden_rate below `12.5%`, and no obvious token blow-up.
 
+### Phase 6o2 Risk-Tiered Candidate Governance
+
+P6o-2 changes the eval-only candidate-governance semantics from a single strict filter into four diagnostic tiers: `delete`, `downgrade`, `requires_review`, and `allow`. The production path remains unchanged. This directly targets the P6n/P6o observation that strict candidate governance can reduce forbidden risk while hurting answer_rate by pruning too much context.
+
+Current verification is offline/fake only. It proves that tier counts and accepted tier counts are observable, not that answer quality improved. Real LLM A/B remains deferred to P6o-5.
+
+Offline standard report facts from `/tmp/akashic-memory-p6o2-risk-tiered-candidate-governance/reports/tri_candidate_governance.json`:
+
+| metric | value |
+| --- | --- |
+| `case_count` | `80` |
+| `tiered_candidate_risk_tier_counts` | `{"delete": 324, "downgrade": 896}` |
+| `tiered_accepted_candidate_risk_tier_counts` | `{"downgrade": 480}` |
+| `tiered_deleted_risks_by_reason` | `{"forbidden_candidate": 324, "scope_mismatch": 52, "superseded_candidate": 176}` |
+| `protected_expected_hit_loss_count` | `0` |
+| `strict_should_not_kept_count` | `0` |
+
+结论：P6o-2 证明了“候选风险分层”能把原本会被 strict 一刀切删除的弱来源 / 低置信候选保留下来，同时继续删除 forbidden、superseded 和 scope mismatch 候选。它还没有证明 answer_rate 提升；它的价值是为 P6o-3 的生产安全 evidence contract 提供非 oracle 的候选风险输入。
+
 ### Phase 6c-1 已建立的离线 uplift proxy report
 
 Phase 6c-1 不是答案质量评测，而是把现有 shadow trace 转成统一的对照指标。它输出：

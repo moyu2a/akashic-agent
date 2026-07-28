@@ -431,6 +431,10 @@ AgentLoop 只继续通过生命周期、事件和工具抽象使用记忆。
 
 P6o-1 implementation boundary: `chain_tri_governed_answer_contract` is still oracle-assisted because candidate governance protects fixture expected ids and the answer contract uses fixture answer expectations. It is useful for testing whether the combined shape can be evaluated, not for production activation. The fake-provider smoke only verifies wiring and report metadata: `case_count = 200`, `unique_case_count = 40`, `profile_count = 5`, `provider_error_count = 0`, `timeout_count = 0`, and `combines_candidate_governance` visible in JSON / Markdown.
 
+P6o-2 design boundary: tiered governance changes the eval/shadow decision record from binary keep/drop to `delete`, `downgrade`, `requires_review`, and `allow`. `delete` is reserved for forbidden, superseded, and scope mismatch candidates; weak source and low confidence are downgraded; conflicts, missing source, and insufficient evidence require review. This is the bridge to P6o-3 evidence contract generation, not a production activation.
+
+P6o-2 offline standard report facts: `case_count = 80`, `tiered_candidate_risk_tier_counts = {"delete": 324, "downgrade": 896}`, `tiered_accepted_candidate_risk_tier_counts = {"downgrade": 480}`, `tiered_deleted_risks_by_reason = {"forbidden_candidate": 324, "scope_mismatch": 52, "superseded_candidate": 176}`, `protected_expected_hit_loss_count = 0`, and `strict_should_not_kept_count = 0`. The strict-mode compatibility result matters as much as the tiered result: existing callers still default to `mode="strict"`, while eval-only tri profiles opt into `mode="tiered"`.
+
 ## 8. 最小可行版本
 
 ### MVP 1：写入门控 trace

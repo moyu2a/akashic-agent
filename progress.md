@@ -1943,3 +1943,14 @@
     `chain_tri_answer_contract`: answer `75.0%`, grounding `100.0%`, forbidden `12.5%`, avg tokens `5698.625`, avg latency `3897.975ms`;
   - P6n success gate: passed for `chain_tri_answer_contract` because answer rate is above `55.0%`, grounding is `100.0%`, and forbidden is `<= 15.0%`;
   - boundary: `chain_tri_answer_contract` is eval-only and diagnostic/oracle-assisted because it uses fixture answer expectations; it is not production-ready behavior.
+
+## 2026-07-28 Memory P6o2 Risk-Tiered Candidate Governance
+
+- Plan path: `docs/superpowers/plans/2026-07-28-memory-p6o2-risk-tiered-candidate-governance.md`.
+- Scope: eval/shadow-only candidate risk tiers, offline report metrics, docs, no real LLM.
+- Production boundary: no AgentLoop, Reasoner, ToolExecutor, memory write, production prompt, or old `Retriever.retrieve()` contract changes.
+- Risk tiers: `delete`, `downgrade`, `requires_review`, `allow`.
+- Strict mode remains the default for `CandidateGovernancePolicy`; eval-only tri candidate/governed answer-contract profiles opt into `mode="tiered"`.
+- Offline standard report facts: `case_count = 80`, `tiered_candidate_risk_tier_counts = {"delete": 324, "downgrade": 896}`, `tiered_accepted_candidate_risk_tier_counts = {"downgrade": 480}`, `tiered_deleted_risks_by_reason = {"forbidden_candidate": 324, "scope_mismatch": 52, "superseded_candidate": 176}`, `protected_expected_hit_loss_count = 0`, `strict_should_not_kept_count = 0`.
+- Conclusion: strict candidate governance is useful for forbidden control but over-prunes weak-source / low-confidence evidence; tiered governance keeps soft-risk candidates visible for answer contracts while still deleting forbidden, superseded, and scope-mismatch candidates.
+- Next handoff: P6o-3 production-safe evidence contract should consume tiered candidate metadata and remove fixture answer expectations.
