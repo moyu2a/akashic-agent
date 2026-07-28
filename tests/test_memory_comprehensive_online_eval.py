@@ -41,6 +41,8 @@ class ComprehensiveScriptedProvider:
         )
         if "memory_id=" not in text:
             answer = "没有可用记忆，无法确认。"
+        elif "Evidence Contract: chain_tri_governed_answer_contract" in text:
+            answer = "根据 production-safe evidence contract，应使用 allowed_evidence，并在证据不足时说明无法确认。"
         elif "Answer Contract: chain_tri_governed_answer_contract" in text:
             answer = "根据 governed Answer Contract，应使用治理后的 allowed_evidence，并避免 forbidden_terms。"
         elif "Answer Contract: chain_tri_answer_contract" in text:
@@ -680,18 +682,86 @@ def test_tri_governed_answer_contract_profile_injects_governed_contract_block(
         )
     )
 
-    assert "Answer Contract: chain_tri_governed_answer_contract" in result.text_block
+    assert "Evidence Contract: chain_tri_governed_answer_contract" in result.text_block
     assert "allowed_evidence:" in result.text_block
-    assert "forbidden_memory_ids:" in result.text_block
-    assert "governance_dropped_memory_ids:" in result.text_block
-    assert result.raw["forbidden_ids"]
+    assert "forbidden_boundary_ids:" in result.text_block
+    assert "deleted_evidence_ids:" in result.text_block
     assert result.raw["candidate_risk_tier_counts"]["delete"] > 0
     assert result.raw["tiered_deleted_risks_by_reason"]
     assert result.raw["evidence_source"] == (
         "tri_governed_answer_contract.governed_allowed_evidence_ids"
     )
     assert result.raw["answer_contract"]["diagnostic_eval_only"] is True
+    assert result.raw["answer_contract"]["production_safe"] is True
+    assert result.raw["answer_contract"]["production_safe_evidence_contract"] is True
+    assert result.raw["answer_contract"]["uses_fixture_answer_expectations"] is False
     assert result.raw["answer_contract"]["combines_candidate_governance"] is True
+
+
+def test_governed_answer_contract_profile_uses_production_safe_contract(
+    tmp_path: Path,
+) -> None:
+    case = _case_with_tiered_tri_candidate()
+    engine = ComprehensiveOnlineMemoryEngine(
+        case,
+        profile_name="chain_tri_governed_answer_contract",
+        prompt_variant="baseline",
+    )
+
+    result = asyncio.run(
+        engine.retrieve(
+            MemoryEngineRetrieveRequest(
+                query=str(case.setup["query"]),
+                mode="explicit",
+                top_k=8,
+            )
+        )
+    )
+
+    assert "Evidence Contract: chain_tri_governed_answer_contract" in result.text_block
+    assert "production_safe=true" in result.text_block
+    assert "allowed_evidence:" in result.text_block
+    assert "likely_relevant_evidence_ids:" in result.text_block
+    assert "forbidden_boundary_ids:" in result.text_block
+    assert "required_terms:" not in result.text_block
+    assert "required_term_groups:" not in result.text_block
+    assert "forbidden_terms:" not in result.text_block
+    assert result.raw["answer_contract"]["production_safe"] is True
+    assert result.raw["answer_contract"]["production_safe_evidence_contract"] is True
+    assert result.raw["answer_contract"]["uses_fixture_answer_expectations"] is False
+    assert "allowed_evidence" in result.raw["answer_contract"]
+    assert "likely_relevant_evidence" in result.raw["answer_contract"]
+    assert "stale_warning" in result.raw["answer_contract"]
+    assert "conflict_warning" in result.raw["answer_contract"]
+    assert "active_version" in result.raw["answer_contract"]
+    assert "forbidden_boundary" in result.raw["answer_contract"]
+    assert "required_terms" not in result.raw["answer_contract"]
+    assert "required_term_groups" not in result.raw["answer_contract"]
+    assert "forbidden_terms" not in result.raw["answer_contract"]
+
+
+def test_governed_answer_contract_scoring_expectation_is_not_oracle_terms() -> None:
+    case = build_quantitative_eval_cases(
+        case_set="common",
+        limit=1,
+        case_pack="standard",
+    )[0]
+    oracle = answer_expectation_for_profile(case, "chain_tri_answer_contract")
+
+    expectation = answer_expectation_for_profile(
+        case,
+        "chain_tri_governed_answer_contract",
+    )
+
+    assert oracle.expected_answer_contains or oracle.expected_answer_contains_any
+    assert expectation.expected_answer_contains == ()
+    assert expectation.expected_answer_contains_any == ()
+    assert expectation.forbidden_answer_contains == ()
+    assert expectation.expected_memory_ids == evidence_ids_for_profile(
+        case,
+        "chain_tri_governed_answer_contract",
+    )
+    assert expectation.grounding_required is True
 
 
 def test_tri_answer_contract_profile_report_records_eval_only_metadata(
@@ -766,7 +836,8 @@ def test_tri_governed_answer_contract_report_records_combined_eval_metadata(
     assert metadata["oracle_protected"] is True
     assert metadata["uses_fixture_expected_ids"] is True
     assert metadata["diagnostic_answer_contract"] is True
-    assert metadata["uses_fixture_answer_expectations"] is True
+    assert metadata["uses_fixture_answer_expectations"] is False
+    assert metadata["production_safe_evidence_contract"] is True
     assert metadata["combines_candidate_governance"] is True
 
     md_path = tmp_path / "report.md"
@@ -774,6 +845,43 @@ def test_tri_governed_answer_contract_report_records_combined_eval_metadata(
     markdown = md_path.read_text(encoding="utf-8")
     assert "chain_tri_governed_answer_contract" in markdown
     assert "combines_candidate_governance" in markdown
+
+
+def test_governed_answer_contract_report_metadata_marks_no_fixture_answer_expectations(
+    tmp_path: Path,
+) -> None:
+    case = build_quantitative_eval_cases(
+        case_set="common",
+        limit=1,
+        case_pack="standard",
+    )[0]
+    specs = build_comprehensive_run_specs(
+        [case],
+        profiles=("chain_tri_governed_answer_contract",),
+        prompt_variants=("baseline",),
+        repeats=1,
+    )
+
+    report = asyncio.run(
+        run_comprehensive_online_eval(
+            specs,
+            tmp_path / "workspace",
+            ComprehensiveScriptedProvider(),
+            model="scripted",
+            real_llm_enabled=False,
+        )
+    )
+
+    metadata = report.metrics["profile_metadata"][
+        "chain_tri_governed_answer_contract"
+    ]
+    assert metadata["production_safe_evidence_contract"] is True
+    assert metadata["uses_fixture_answer_expectations"] is False
+
+    md_path = tmp_path / "report.md"
+    write_comprehensive_online_markdown(report, md_path)
+    markdown = md_path.read_text(encoding="utf-8")
+    assert "production_safe_evidence_contract" in markdown
 
 
 def test_optional_tri_candidate_governance_profile_is_visible_in_markdown(

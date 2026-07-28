@@ -43,9 +43,10 @@ from memory2.eval_llm_sample import (
     write_llm_sample_answer_debug,
 )
 from memory2.eval_answer_contract import (
-    build_governed_tri_answer_contract,
+    build_production_governed_tri_evidence_contract,
     build_tri_answer_contract,
     render_answer_contract_block,
+    render_production_evidence_contract_block,
     tri_answer_contract_evidence_ids,
 )
 from memory2.eval_runner import _baseline_recalled_items
@@ -110,13 +111,14 @@ PROFILE_METADATA: dict[str, dict[str, object]] = {
         "oracle_protected": True,
         "uses_fixture_expected_ids": True,
         "diagnostic_answer_contract": True,
-        "uses_fixture_answer_expectations": True,
+        "uses_fixture_answer_expectations": False,
+        "production_safe_evidence_contract": True,
         "combines_candidate_governance": True,
         "candidate_governance_mode": "tiered",
         "description": (
-            "Combines candidate-governed tri ids with the diagnostic answer "
-            "contract to test whether input filtering plus answer constraints "
-            "can preserve answer quality while reducing forbidden risk."
+            "Combines candidate-governed tri ids with a production-safe "
+            "evidence contract to test whether input filtering plus evidence "
+            "boundaries can preserve answer quality while reducing forbidden risk."
         ),
     },
 }
@@ -218,10 +220,86 @@ class ComprehensiveOnlineMemoryEngine:
         }:
             if self.profile_name == TRI_GOVERNED_ANSWER_CONTRACT_PROFILE:
                 assert governed_trace is not None
-                governed_ids = tuple(governed_trace.get("ids", ()))
                 trace = dict(governed_trace.get("trace", {}))
-                contract = build_governed_tri_answer_contract(self.case, governed_ids)
+                contract = build_production_governed_tri_evidence_contract(
+                    self.case,
+                    governed_trace,
+                )
                 combines_candidate_governance = True
+                self.used_memory_ids = list(contract.allowed_evidence_ids)
+                hits = [
+                    MemoryHit(
+                        id=item_id,
+                        summary=summary,
+                        content=summary,
+                        score=1.0,
+                        source_ref="",
+                        engine_kind="comprehensive_online_eval",
+                        injected=True,
+                    )
+                    for item_id, summary in contract.evidence_summaries
+                ]
+                self.last_text_block = render_production_evidence_contract_block(contract)
+                raw = {
+                    "ids": list(contract.allowed_evidence_ids),
+                    "evidence_source": profile_evidence_source(self.profile_name),
+                    "candidate_governance_mode": trace.get(
+                        "candidate_governance_mode"
+                    ),
+                    "candidate_risk_tier_counts": trace.get(
+                        "candidate_risk_tier_counts",
+                        {},
+                    ),
+                    "accepted_candidate_risk_tier_counts": trace.get(
+                        "accepted_candidate_risk_tier_counts",
+                        {},
+                    ),
+                    "tiered_deleted_risks_by_reason": trace.get(
+                        "tiered_deleted_risks_by_reason",
+                        {},
+                    ),
+                    "candidate_risk_tiers": trace.get("candidate_risk_tiers", []),
+                    "answer_contract": {
+                        "diagnostic_eval_only": contract.diagnostic_eval_only,
+                        "production_safe": contract.production_safe,
+                        "production_safe_evidence_contract": True,
+                        "uses_fixture_answer_expectations": (
+                            contract.uses_fixture_answer_expectations
+                        ),
+                        "combines_candidate_governance": combines_candidate_governance,
+                        "candidate_governance_mode": contract.candidate_governance_mode,
+                        "allowed_evidence": list(contract.allowed_evidence),
+                        "likely_relevant_evidence": list(
+                            contract.likely_relevant_evidence
+                        ),
+                        "stale_warning": list(contract.stale_warning),
+                        "conflict_warning": list(contract.conflict_warning),
+                        "active_version": list(contract.active_version),
+                        "forbidden_boundary": list(contract.forbidden_boundary),
+                        "allowed_evidence_ids": list(contract.allowed_evidence_ids),
+                        "likely_relevant_evidence_ids": list(
+                            contract.likely_relevant_evidence_ids
+                        ),
+                        "downgrade_ids": list(contract.downgrade_ids),
+                        "requires_review_ids": list(contract.requires_review_ids),
+                        "stale_warning_ids": list(contract.stale_warning_ids),
+                        "conflict_warning_ids": list(contract.conflict_warning_ids),
+                        "active_version_ids": list(contract.active_version_ids),
+                        "insufficient_evidence_ids": list(
+                            contract.insufficient_evidence_ids
+                        ),
+                        "insufficient_evidence_fallback": (
+                            contract.insufficient_evidence_fallback
+                        ),
+                        "forbidden_boundary_ids": list(contract.forbidden_boundary_ids),
+                        "deleted_evidence_ids": list(contract.deleted_evidence_ids),
+                    },
+                }
+                return MemoryEngineRetrieveResult(
+                    text_block=self.last_text_block,
+                    hits=hits,
+                    raw=raw,
+                )
             else:
                 trace = {}
                 contract = build_tri_answer_contract(self.case)
@@ -517,6 +595,13 @@ def answer_expectation_for_profile(
     profile_name: str,
 ) -> AnswerExpectation:
     expectation = answer_expectation_from_case(case)
+    if profile_name == TRI_GOVERNED_ANSWER_CONTRACT_PROFILE:
+        governed_ids = governed_tri_evidence_ids_for_case(case)
+        return AnswerExpectation(
+            expected_memory_ids=governed_ids,
+            expected_language=expectation.expected_language,
+            grounding_required=bool(governed_ids),
+        )
     if profile_name == "chain_version_provenance":
         active_ids = tuple(
             str(item_id)
@@ -1887,9 +1972,9 @@ def _profile_metadata_markdown_section(metrics: dict[str, object]) -> list[str]:
         (
             "| profile | eval_only | oracle_protected | uses_fixture_expected_ids | "
             "diagnostic_answer_contract | uses_fixture_answer_expectations | "
-            "combines_candidate_governance |"
+            "production_safe_evidence_contract | combines_candidate_governance |"
         ),
-        "| --- | ---: | ---: | ---: | ---: | ---: | ---: |",
+        "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
     ]
     for profile in sorted(metadata):
         row = metadata.get(profile)
@@ -1905,6 +1990,7 @@ def _profile_metadata_markdown_section(metrics: dict[str, object]) -> list[str]:
                     _fmt(row.get("uses_fixture_expected_ids")),
                     _fmt(row.get("diagnostic_answer_contract")),
                     _fmt(row.get("uses_fixture_answer_expectations")),
+                    _fmt(row.get("production_safe_evidence_contract")),
                     _fmt(row.get("combines_candidate_governance")),
                 ]
             )
