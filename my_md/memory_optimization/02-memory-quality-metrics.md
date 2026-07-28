@@ -597,6 +597,63 @@ Interpretation:
   remains controlled eval/shadow evidence and should not be treated as
   production natural traffic.
 
+### Phase 6o9 Governed/Rerank/Version Same Matrix
+
+P6o-9 reran governed, rerank-governed, and safe version-governed in one real
+LLM matrix. It did not add code. The purpose was to avoid comparing P6o-6,
+P6o-7, and P6o-8 across different stochastic runs before deciding whether to
+combine rerank and version-boundary signals.
+
+Report path:
+
+- `my_md/memory_optimization/eval_reports/p6o9_governed_rerank_version_same_matrix_v1/memory_comprehensive_online_eval.json`
+- `my_md/memory_optimization/eval_reports/p6o9_governed_rerank_version_same_matrix_v1/memory_comprehensive_online_eval.md`
+
+Integrity:
+
+- `real_llm_enabled = True`
+- `case_count = 120`
+- `unique_case_count = 40`
+- `completed_call_count = 120`
+- `profile_count = 3`
+- `prompt_variant_count = 1`
+- `repeat_count = 1`
+- `provider_error_count = 0`
+- `timeout_count = 0`
+- JSON / Markdown privacy checks passed.
+
+| profile | answer_success | answer_rate | grounding_rate | forbidden_rate | avg_tokens |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `chain_tri_governed_answer_contract` | `39/40` | `97.5%` | `100.0%` | `0.0%` | `6156.725` |
+| `chain_tri_rerank_governed_answer_contract` | `38/40` | `95.0%` | `100.0%` | `0.0%` | `6118.475` |
+| `chain_tri_version_governed_answer_contract` | `38/40` | `95.0%` | `100.0%` | `0.0%` | `6021.55` |
+
+Post-check shadow aggregate across all three profiles:
+
+| metric | value |
+| --- | ---: |
+| `case_count` | `120` |
+| `enabled_case_count` | `120` |
+| `needs_retry_count` | `0` |
+| `forbidden_boundary_included_count` | `0` |
+| `missing_likely_relevant_context_count` | `0` |
+| `stale_evidence_included_count` | `0` |
+| `conflict_evidence_included_count` | `0` |
+| `insufficient_fallback_missing_count` | `0` |
+
+Interpretation:
+
+- The same-run governed baseline remains best on answer rate: `97.5%`.
+- Rerank-governed and safe version-governed each trail by `2.5` points, but
+  stay within the `5.0` point gate and keep grounding `100.0%`, forbidden
+  `0.0%`, and post-check risk counts at `0`.
+- Rerank-governed and version-governed both use fewer average tokens than the
+  same-run governed baseline in this matrix.
+- P6o-9 supports entering P6o-10, but it does not prove either signal should
+  replace governed on its own. The next test must verify whether rerank order
+  and safe version-boundary metadata are complementary when combined without
+  recall expansion.
+
 ### Phase 6c-1 已建立的离线 uplift proxy report
 
 Phase 6c-1 不是答案质量评测，而是把现有 shadow trace 转成统一的对照指标。它输出：

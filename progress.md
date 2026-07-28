@@ -2247,3 +2247,51 @@
 - Next step:
   - run P6o-9 same-matrix comparison before adding the rerank + version combo profile;
   - do not enter P6o-10 unless P6o-9 passes.
+
+## 2026-07-28 P6o-9 governed/rerank/version same matrix
+
+- Plan:
+  - `docs/superpowers/plans/2026-07-28-memory-p6o8-p6o10-boundary-rerank-combo.md`.
+- Fake-provider full gate:
+  - report path: `/tmp/akashic-memory-p6o9-same-matrix/fake-reports/memory_comprehensive_online_eval.json`;
+  - `case_count = 120`;
+  - `unique_case_count = 40`;
+  - `profile_count = 3`;
+  - `provider_error_count = 0`;
+  - `timeout_count = 0`;
+  - `infra_passed = True`.
+- Real LLM run:
+  - report path: `my_md/memory_optimization/eval_reports/p6o9_governed_rerank_version_same_matrix_v1/memory_comprehensive_online_eval.json`;
+  - markdown path: `my_md/memory_optimization/eval_reports/p6o9_governed_rerank_version_same_matrix_v1/memory_comprehensive_online_eval.md`;
+  - `case_count = 120`;
+  - `unique_case_count = 40`;
+  - `completed_call_count = 120`;
+  - `profile_count = 3`;
+  - `prompt_variant_count = 1`;
+  - `repeat_count = 1`;
+  - `provider_error_count = 0`;
+  - `timeout_count = 0`;
+  - privacy flags: `raw_query_included = False`, `raw_memory_summary_included = False`, `prompt_included = False`, `session_text_included = False`, `full_answer_included = False`.
+- Per-profile real result:
+  - `chain_tri_governed_answer_contract`: answer `39/40 = 97.5%`, grounding `100.0%`, forbidden `0.0%`, avg tokens `6156.725`;
+  - `chain_tri_rerank_governed_answer_contract`: answer `38/40 = 95.0%`, grounding `100.0%`, forbidden `0.0%`, avg tokens `6118.475`;
+  - `chain_tri_version_governed_answer_contract`: answer `38/40 = 95.0%`, grounding `100.0%`, forbidden `0.0%`, avg tokens `6021.55`.
+- Post-check shadow aggregate:
+  - `case_count = 120`;
+  - `enabled_case_count = 120`;
+  - `needs_retry_count = 0`;
+  - `forbidden_boundary_included_count = 0`;
+  - `missing_likely_relevant_context_count = 0`;
+  - `stale_evidence_included_count = 0`;
+  - `conflict_evidence_included_count = 0`;
+  - `insufficient_fallback_missing_count = 0`.
+- Gate result:
+  - answer-rate deltas for rerank and version are `-2.5` points versus governed, within the `5.0` point gate;
+  - grounding remains `100.0%`;
+  - forbidden remains `0.0%`;
+  - avg tokens do not rise and are lower than governed for rerank and version;
+  - post-check risk counts do not rise.
+- Conclusion:
+  - governed remains the strongest standalone setting in this same-run matrix;
+  - rerank and safe version are safe but not individually better in answer rate;
+  - P6o-10 can test whether rerank ordering and safe version-boundary metadata are complementary when combined without recall expansion.

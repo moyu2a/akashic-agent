@@ -548,7 +548,7 @@ git commit -m "docs: record p6o8 safe boundary presentation"
   - `chain_tri_rerank_governed_answer_contract`
   - `chain_tri_version_governed_answer_contract`
 
-- [ ] **Step 1: Run P6o-9 fake gate**
+- [x] **Step 1: Run P6o-9 fake gate**
 
 Run:
 
@@ -573,7 +573,7 @@ PYTHONDONTWRITEBYTECODE=1 .venv/bin/python scripts/run_memory_comprehensive_onli
 
 Expected: exits `0`, `case_count = 120`, `profile_count = 3`, provider/timeout `0`.
 
-- [ ] **Step 2: Run P6o-9 real matrix**
+- [x] **Step 2: Run P6o-9 real matrix**
 
 Run:
 
@@ -597,7 +597,7 @@ PYTHONDONTWRITEBYTECODE=1 .venv/bin/python scripts/run_memory_comprehensive_onli
 
 Expected: exits `0`.
 
-- [ ] **Step 3: Assert P6o-9 gate**
+- [x] **Step 3: Assert P6o-9 gate**
 
 Run:
 
@@ -679,7 +679,7 @@ PY
 
 Expected: prints `gate ok`. If rerank or version fails the gate, stop before P6o-10.
 
-- [ ] **Step 4: Update docs and commit P6o-9 result**
+- [x] **Step 4: Update docs and commit P6o-9 result**
 
 Record exact P6o-9 data and commit:
 
