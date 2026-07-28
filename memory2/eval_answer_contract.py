@@ -8,6 +8,7 @@ from typing import Any
 
 from memory2.eval_quantitative_cases import EvalCase
 from memory2.eval_quantitative_uplift import _family_trace_for_case
+from memory2.version_chain_experiments import build_version_chain_shadow_result
 
 
 TRI_ANSWER_CONTRACT_PROFILE = "chain_tri_answer_contract"
@@ -63,6 +64,18 @@ class ProductionEvidenceContract:
     raw_answer: str = ""
 
 
+@dataclass(frozen=True)
+class VersionBoundaryInfo:
+    active_version_ids: tuple[str, ...]
+    stale_warning_ids: tuple[str, ...]
+    conflict_warning_ids: tuple[str, ...]
+    forbidden_boundary_ids: tuple[str, ...]
+    rollback_candidate_ids: tuple[str, ...]
+    conflict_chain_count: int
+    stale_recalled_count: int
+    superseded_recalled_count: int
+
+
 def build_tri_answer_contract(case: EvalCase) -> AnswerContract:
     return _build_answer_contract(
         case,
@@ -87,6 +100,7 @@ def build_production_governed_tri_evidence_contract(
     governed_trace_info: object,
     *,
     profile_name: str = GOVERNED_TRI_ANSWER_CONTRACT_PROFILE,
+    version_boundary_info: VersionBoundaryInfo | None = None,
 ) -> ProductionEvidenceContract:
     trace_info = (
         dict(governed_trace_info) if isinstance(governed_trace_info, Mapping) else {}
@@ -137,6 +151,35 @@ def build_production_governed_tri_evidence_contract(
         for item_id in allowed_ids
         if str(by_id.get(item_id, {}).get("status") or "active").lower() == "active"
     )
+    version_active_ids = (
+        version_boundary_info.active_version_ids if version_boundary_info else ()
+    )
+    version_stale_ids = (
+        version_boundary_info.stale_warning_ids if version_boundary_info else ()
+    )
+    version_conflict_ids = (
+        version_boundary_info.conflict_warning_ids if version_boundary_info else ()
+    )
+    version_forbidden_ids = (
+        version_boundary_info.forbidden_boundary_ids if version_boundary_info else ()
+    )
+    merged_conflict_warning_ids = _dedupe_ids(
+        (*conflict_warning_ids, *version_conflict_ids)
+    )
+    merged_stale_warning_ids = _dedupe_ids((*stale_warning_ids, *version_stale_ids))
+    merged_forbidden_boundary_ids = tuple(
+        item_id
+        for item_id in _dedupe_ids((*forbidden_boundary_ids, *version_forbidden_ids))
+        if item_id not in allowed_ids
+    )
+    active_version_source_ids = (
+        version_active_ids if version_boundary_info else active_version_ids
+    )
+    merged_active_version_ids = tuple(
+        item_id
+        for item_id in _dedupe_ids(active_version_source_ids)
+        if item_id in allowed_ids and item_id not in merged_forbidden_boundary_ids
+    )
     likely_relevant_ids = tuple(
         item_id for item_id in allowed_ids if item_id not in requires_review_ids
     )
@@ -148,23 +191,85 @@ def build_production_governed_tri_evidence_contract(
         candidate_governance_mode=str(trace.get("candidate_governance_mode") or "tiered"),
         allowed_evidence=allowed_ids,
         likely_relevant_evidence=likely_relevant_ids,
-        stale_warning=stale_warning_ids,
-        conflict_warning=conflict_warning_ids,
-        active_version=active_version_ids,
-        forbidden_boundary=forbidden_boundary_ids,
+        stale_warning=merged_stale_warning_ids,
+        conflict_warning=merged_conflict_warning_ids,
+        active_version=merged_active_version_ids,
+        forbidden_boundary=merged_forbidden_boundary_ids,
         allowed_evidence_ids=allowed_ids,
         likely_relevant_evidence_ids=likely_relevant_ids,
         downgrade_ids=downgrade_ids,
         requires_review_ids=requires_review_ids,
-        stale_warning_ids=stale_warning_ids,
-        conflict_warning_ids=conflict_warning_ids,
-        active_version_ids=active_version_ids,
+        stale_warning_ids=merged_stale_warning_ids,
+        conflict_warning_ids=merged_conflict_warning_ids,
+        active_version_ids=merged_active_version_ids,
         insufficient_evidence_ids=insufficient_evidence_ids,
         insufficient_evidence_fallback=not allowed_ids
         or bool(insufficient_evidence_ids),
-        forbidden_boundary_ids=forbidden_boundary_ids,
+        forbidden_boundary_ids=merged_forbidden_boundary_ids,
         deleted_evidence_ids=deleted_ids,
         evidence_summaries=_summaries_for_ids(case, allowed_ids),
+    )
+
+
+def build_version_boundary_info(
+    case: EvalCase,
+    governed_trace_info: object,
+) -> VersionBoundaryInfo:
+    trace_info = (
+        dict(governed_trace_info) if isinstance(governed_trace_info, Mapping) else {}
+    )
+    governed_ids = set(_string_tuple(trace_info.get("ids", ())))
+    memory_items = [
+        dict(item)
+        for item in case.setup.get("memory_items", ())
+        if isinstance(item, Mapping)
+    ]
+    replacements = [
+        dict(item)
+        for item in case.setup.get("memory_replacements", ())
+        if isinstance(item, Mapping)
+    ]
+    recalled_items = [
+        item
+        for item in memory_items
+        if str(item.get("id") or item.get("memory_id") or "") in governed_ids
+    ]
+    result = build_version_chain_shadow_result(
+        memory_items=memory_items,
+        replacements=replacements,
+        recalled_items=recalled_items,
+    )
+    experimental = result.experimental_result
+    metrics = result.metrics
+    active_ids = tuple(
+        item_id
+        for item_id in _string_tuple(experimental.get("active_leaf_ids", ()))
+        if item_id in governed_ids
+    )
+    stale_ids = _string_tuple(experimental.get("stale_recalled_ids", ()))
+    rollback_ids = tuple(
+        item_id
+        for item_id in _string_tuple(experimental.get("rollback_candidate_ids", ()))
+        if item_id not in governed_ids and item_id not in active_ids
+    )
+    conflict_ids = _conflict_warning_ids_from_shadow_result(
+        experimental,
+        governed_ids,
+    )
+    forbidden_ids = tuple(
+        item_id
+        for item_id in _dedupe_ids(rollback_ids)
+        if item_id not in governed_ids and item_id not in active_ids
+    )
+    return VersionBoundaryInfo(
+        active_version_ids=active_ids,
+        stale_warning_ids=stale_ids,
+        conflict_warning_ids=conflict_ids,
+        forbidden_boundary_ids=forbidden_ids,
+        rollback_candidate_ids=rollback_ids,
+        conflict_chain_count=int(metrics.get("conflict_chain_count", 0) or 0),
+        stale_recalled_count=int(metrics.get("stale_recalled_count", 0) or 0),
+        superseded_recalled_count=int(metrics.get("superseded_recalled_count", 0) or 0),
     )
 
 
@@ -367,6 +472,34 @@ def _string_tuple(value: object) -> tuple[str, ...]:
     if not isinstance(value, (list, tuple, set)):
         return ()
     return tuple(str(item) for item in value if str(item))
+
+
+def _conflict_warning_ids_from_shadow_result(
+    experimental: Mapping[str, object],
+    governed_ids: set[str],
+) -> tuple[str, ...]:
+    active_ids = set(_string_tuple(experimental.get("active_leaf_ids", ())))
+    chains = experimental.get("chains", ())
+    if not isinstance(chains, (list, tuple)):
+        return ()
+    result: list[str] = []
+    for chain in chains:
+        chain_ids = _string_tuple(chain)
+        if not (set(chain_ids) & governed_ids):
+            continue
+        active_in_chain = [item_id for item_id in chain_ids if item_id in active_ids]
+        if len(active_in_chain) <= 1:
+            continue
+        result.extend(active_in_chain)
+    return _dedupe_ids(tuple(result))
+
+
+def _dedupe_ids(ids: tuple[str, ...]) -> tuple[str, ...]:
+    result: list[str] = []
+    for item_id in ids:
+        if item_id and item_id not in result:
+            result.append(item_id)
+    return tuple(result)
 
 
 def _term_groups(value: object) -> tuple[tuple[str, ...], ...]:

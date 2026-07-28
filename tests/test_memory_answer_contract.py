@@ -6,6 +6,7 @@ from memory2.eval_answer_contract import (
     build_governed_tri_answer_contract,
     build_production_governed_tri_evidence_contract,
     build_tri_answer_contract,
+    build_version_boundary_info,
     render_answer_contract_block,
     render_production_evidence_contract_block,
     tri_governed_answer_contract_evidence_ids,
@@ -360,3 +361,100 @@ def test_production_governed_contract_accepts_eval_profile_name() -> None:
     assert contract.required_terms == ()
     assert contract.forbidden_terms == ()
     assert case.setup["query"] not in text
+
+
+def test_production_governed_contract_merges_version_boundary_fields() -> None:
+    case = _case_with_should_not_in_tri()
+    governed_trace_info = {
+        "ids": ("target", "weak"),
+        "trace": {
+            "candidate_governance_mode": "tiered",
+            "candidate_risk_tiers": [
+                {
+                    "candidate_id": "target",
+                    "tier": "allow",
+                    "risks": (),
+                    "lane": "semantic",
+                },
+                {
+                    "candidate_id": "weak",
+                    "tier": "downgrade",
+                    "risks": ("weak_source_ref",),
+                    "lane": "semantic",
+                },
+            ],
+        },
+    }
+    case = replace(
+        case,
+        setup={
+            **case.setup,
+            "memory_items": [
+                {
+                    "id": "target",
+                    "summary": "active target evidence",
+                    "status": "active",
+                    "source_ref": "telegram:1:1",
+                },
+                {
+                    "id": "weak",
+                    "summary": "weak source evidence",
+                    "status": "active",
+                    "source_ref": "session:telegram:1",
+                },
+                {
+                    "id": "old",
+                    "summary": "old superseded evidence",
+                    "status": "superseded",
+                    "source_ref": "telegram:1:0",
+                },
+                {
+                    "id": "conflict",
+                    "summary": "conflicting active evidence",
+                    "status": "active",
+                    "source_ref": "telegram:1:2",
+                },
+            ],
+            "memory_replacements": [
+                {
+                    "old_item_id": "old",
+                    "new_item_id": "target",
+                    "old_summary": "old superseded evidence",
+                    "new_summary": "active target evidence",
+                    "old_source_ref": "telegram:1:0",
+                    "new_source_ref": "telegram:1:1",
+                },
+                {
+                    "old_item_id": "old",
+                    "new_item_id": "conflict",
+                    "old_summary": "old superseded evidence",
+                    "new_summary": "conflicting active evidence",
+                    "old_source_ref": "telegram:1:0",
+                    "new_source_ref": "telegram:1:2",
+                },
+            ],
+        },
+    )
+
+    boundary = build_version_boundary_info(case, governed_trace_info)
+    contract = build_production_governed_tri_evidence_contract(
+        case,
+        governed_trace_info,
+        profile_name="chain_tri_version_governed_answer_contract",
+        version_boundary_info=boundary,
+    )
+    text = render_production_evidence_contract_block(contract)
+
+    assert contract.profile_name == "chain_tri_version_governed_answer_contract"
+    assert contract.allowed_evidence_ids == ("target", "weak")
+    assert set(contract.active_version_ids) == {"target"}
+    assert "old" in contract.forbidden_boundary_ids
+    assert "conflict" in contract.conflict_warning_ids
+    assert "target" not in contract.forbidden_boundary_ids
+    assert "conflict" not in contract.allowed_evidence_ids
+    assert set(contract.allowed_evidence_ids).isdisjoint(contract.forbidden_boundary_ids)
+    assert set(contract.active_version_ids).isdisjoint(contract.forbidden_boundary_ids)
+    assert contract.uses_fixture_answer_expectations is False
+    assert contract.required_terms == ()
+    assert "active_version_ids: target" in text
+    assert "forbidden_boundary_ids: old" in text
