@@ -420,6 +420,55 @@ Metric interpretation:
 
 This is still a small controlled eval, not production natural traffic. The next quality metric step should check robustness on a slightly larger fresh matrix or targeted failure set before any production activation.
 
+### Phase 6o6 Governed Rerank Signal
+
+P6o-6 tested only one added signal: `chain_tri_rerank_governed_answer_contract`.
+It uses the existing `chain_rerank_injection` signal to reorder
+`chain_tri_governed_answer_contract` evidence, but it does not add evidence ids
+outside the candidate-governed tri set. This is still eval/shadow-only and
+oracle-protected through P6o-2 candidate governance; it is not production
+traffic.
+
+Report path:
+
+- `my_md/memory_optimization/eval_reports/p6o6_governed_rerank_small_online_v1/memory_comprehensive_online_eval.json`
+- `my_md/memory_optimization/eval_reports/p6o6_governed_rerank_small_online_v1/memory_comprehensive_online_eval.md`
+
+Integrity:
+
+- `real_llm_enabled = True`
+- `case_count = 80`
+- `unique_case_count = 40`
+- `completed_call_count = 80`
+- `profile_count = 2`
+- `provider_error_count = 0`
+- `timeout_count = 0`
+
+| profile | answer_success | answer_rate | grounding_rate | forbidden_rate | avg_tokens |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `chain_tri_governed_answer_contract` | `39/40` | `97.5%` | `100.0%` | `0.0%` | `6162.05` |
+| `chain_tri_rerank_governed_answer_contract` | `40/40` | `100.0%` | `100.0%` | `0.0%` | `6209.475` |
+
+Post-check shadow aggregate across both governed profiles:
+
+| metric | value |
+| --- | ---: |
+| `case_count` | `80` |
+| `enabled_case_count` | `80` |
+| `needs_retry_count` | `0` |
+| `forbidden_boundary_included_count` | `0` |
+| `missing_likely_relevant_context_count` | `0` |
+| `stale_evidence_included_count` | `0` |
+| `conflict_evidence_included_count` | `0` |
+| `insufficient_fallback_missing_count` | `0` |
+
+Interpretation:
+
+- Rerank helped only because it was used as an ordering signal inside the governed evidence contract; it did not expand context with new ids.
+- The rerank-governed profile recovered the remaining P6o-5 `1/40` answer miss while keeping grounding and forbidden unchanged.
+- Token cost increased slightly versus the governed baseline in this run: `6209.475 - 6162.05 = 47.425` average tokens, about `0.77%`.
+- This is still a small controlled eval. The next slice should test version-boundary fields separately; graph and all-on remain deferred.
+
 ### Phase 6c-1 已建立的离线 uplift proxy report
 
 Phase 6c-1 不是答案质量评测，而是把现有 shadow trace 转成统一的对照指标。它输出：

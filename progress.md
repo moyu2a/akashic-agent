@@ -2073,3 +2073,64 @@
   - this side conversation only records guidance;
   - no new eval has been run;
   - no code or production behavior has been changed.
+
+## 2026-07-28 Memory P6o6 Governed Rerank Signal
+
+- User asked to call the plan skill, review the plan, revise it, and start execution.
+- Plan created and reviewed:
+  - `docs/superpowers/plans/2026-07-28-memory-p6o6-governed-rerank-signal.md`.
+- Review result:
+  - initial plan needed fixes for inconsistent fake gate counts, missing Markdown metadata columns, unenforced real success criteria, fake-provider profile recognition, stronger no-expansion tests, checkpoint-recovery instructions, and privacy assertions.
+- Plan revision applied:
+  - focused CLI fake gate is `8` rows;
+  - full fake pre-real gate is `80` rows;
+  - optional real matrix is `80` rows;
+  - Markdown metadata now covers `combines_rerank_injection` and `does_not_expand_recall`;
+  - real result gate requires answer rate within `5` points of governed baseline, grounding `100.0%`, forbidden no worse than baseline, avg-token overhead <= `10%`, and post-check risk counts at `0`.
+- Implementation commits:
+  - `85dfcd9 feat: allow governed evidence contract profile name`;
+  - `f4a9dc9 feat: add rerank governed answer contract eval profile`;
+  - `b6f6529 test: cover p6o6 governed rerank online matrix`.
+- Fake-provider full gate:
+  - report path: `/tmp/akashic-memory-p6o6-governed-rerank/fake-reports/memory_comprehensive_online_eval.json`;
+  - `case_count = 80`;
+  - `unique_case_count = 40`;
+  - `profile_count = 2`;
+  - `provider_error_count = 0`;
+  - `timeout_count = 0`;
+  - `answer_post_check_shadow.case_count = 80`.
+- Real LLM run:
+  - first attempt failed before any calls because linked worktree lacked `config.toml`;
+  - reran with `--config /home/jjh/git_work/akashic-agent/config.toml`;
+  - report path: `my_md/memory_optimization/eval_reports/p6o6_governed_rerank_small_online_v1/memory_comprehensive_online_eval.json`;
+  - markdown path: `my_md/memory_optimization/eval_reports/p6o6_governed_rerank_small_online_v1/memory_comprehensive_online_eval.md`;
+  - `case_count = 80`;
+  - `unique_case_count = 40`;
+  - `completed_call_count = 80`;
+  - `profile_count = 2`;
+  - `prompt_variant_count = 1`;
+  - `repeat_count = 1`;
+  - `provider_error_count = 0`;
+  - `timeout_count = 0`;
+  - privacy flags: `raw_query_included = False`, `raw_memory_summary_included = False`, `prompt_included = False`, `session_text_included = False`, `full_answer_included = False`.
+- Per-profile real result:
+  - `chain_tri_governed_answer_contract`: answer `39/40 = 97.5%`, grounding `100.0%`, forbidden `0.0%`, avg tokens `6162.05`;
+  - `chain_tri_rerank_governed_answer_contract`: answer `40/40 = 100.0%`, grounding `100.0%`, forbidden `0.0%`, avg tokens `6209.475`.
+- Post-check shadow aggregate:
+  - `case_count = 80`;
+  - `enabled_case_count = 80`;
+  - `needs_retry_count = 0`;
+  - `forbidden_boundary_included_count = 0`;
+  - `missing_likely_relevant_context_count = 0`;
+  - `stale_evidence_included_count = 0`;
+  - `conflict_evidence_included_count = 0`;
+  - `insufficient_fallback_missing_count = 0`.
+- Conclusion:
+  - rerank is useful in this slice when used only as a governed-contract ordering signal;
+  - it did not expand recall beyond candidate-governed tri ids;
+  - it recovered the remaining P6o-5 `1/40` miss while keeping forbidden at `0.0%`;
+  - avg-token overhead was `47.425` tokens, about `0.77%`;
+  - this is still controlled eval harness evidence, not production natural traffic.
+- Next step:
+  - test version-boundary governed fields separately;
+  - do not add routed graph or all-on until the version-boundary slice has its own result.

@@ -303,6 +303,10 @@ Success criteria for P6o-6:
 
 Interpretation rule: graph, version, and rerank may conflict with the P6o-5 gain if they are added as unconditional extra context. They are more likely to help if they become signals inside the governed evidence contract: graph for relationship recovery, rerank for evidence order and compression, version/provenance for current-vs-stale boundaries, and post-check shadow for future retry/fallback policy.
 
+P6o-6 first slice result: implemented eval-only `chain_tri_rerank_governed_answer_contract`, which reorders `chain_tri_governed_answer_contract` evidence with the existing `chain_rerank_injection` signal but forbids recall expansion outside governed tri ids. The bounded real LLM matrix used common `20` + hard `20`, baseline prompt, repeat `1`, two profiles, and `80` completed calls. Report path is `my_md/memory_optimization/eval_reports/p6o6_governed_rerank_small_online_v1/`. Infra was clean: `provider_error_count = 0`, `timeout_count = 0`. Results: `chain_tri_governed_answer_contract` answer `39/40 = 97.5%`, grounding `100.0%`, forbidden `0.0%`, avg tokens `6162.05`; `chain_tri_rerank_governed_answer_contract` answer `40/40 = 100.0%`, grounding `100.0%`, forbidden `0.0%`, avg tokens `6209.475`.
+
+P6o-6 first slice conclusion: rerank is useful when treated as contract-internal ordering and budget signal, not as unconditional extra context. It recovered the remaining `1/40` miss from the governed baseline with only about `0.77%` avg-token overhead and no post-check risk count increase. The next P6o-6 slice should test version-boundary governed fields separately: active version, stale warning, conflict warning, superseded forbidden boundary, and insufficient evidence fallback. Do not add routed graph or all-on until version-boundary has its own result.
+
 ## Phase 6t：source_ref 写入质量治理
 
 ### 目的

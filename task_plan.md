@@ -1864,3 +1864,67 @@ Boundary:
 - Small controlled eval only, not production natural traffic.
 - No production `AgentLoop`, `Reasoner`, `ToolExecutor`, memory write, production prompt, or old `Retriever.retrieve()` contract changes.
 - Next step should be robustness / targeted failure expansion before productionization.
+
+## 2026-07-28 Memory P6o6 Governed Rerank Signal
+
+Goal: execute the first P6o-6 signal-expansion slice by testing rerank as a governed evidence-contract input, without graph/version/all-on productionization.
+
+Plan:
+
+- `docs/superpowers/plans/2026-07-28-memory-p6o6-governed-rerank-signal.md`
+
+Execution status:
+
+1. Write, review, and revise P6o-6 plan - complete.
+2. Add custom production evidence contract profile name - complete.
+3. Add eval-only `chain_tri_rerank_governed_answer_contract` profile - complete.
+4. Add Markdown metadata / fake-provider / CLI smoke coverage - complete.
+5. Run full fake-provider gate - complete.
+6. Run bounded real LLM matrix - complete.
+7. Update docs and commit locally without push - in progress.
+
+Real report:
+
+- `my_md/memory_optimization/eval_reports/p6o6_governed_rerank_small_online_v1/memory_comprehensive_online_eval.json`
+- `my_md/memory_optimization/eval_reports/p6o6_governed_rerank_small_online_v1/memory_comprehensive_online_eval.md`
+
+Real report integrity:
+
+- `real_llm_enabled = True`;
+- `case_count = 80`;
+- `unique_case_count = 40`;
+- `completed_call_count = 80`;
+- `profile_count = 2`;
+- `prompt_variant_count = 1`;
+- `repeat_count = 1`;
+- `provider_error_count = 0`;
+- `timeout_count = 0`;
+- JSON / Markdown privacy checks passed.
+
+Per-profile result:
+
+- `chain_tri_governed_answer_contract`: answer `39/40 = 97.5%`, grounding `100.0%`, forbidden `0.0%`, avg tokens `6162.05`.
+- `chain_tri_rerank_governed_answer_contract`: answer `40/40 = 100.0%`, grounding `100.0%`, forbidden `0.0%`, avg tokens `6209.475`.
+
+Post-check shadow:
+
+- `case_count = 80`;
+- `enabled_case_count = 80`;
+- `needs_retry_count = 0`;
+- `forbidden_boundary_included_count = 0`;
+- `missing_likely_relevant_context_count = 0`;
+- `stale_evidence_included_count = 0`;
+- `conflict_evidence_included_count = 0`;
+- `insufficient_fallback_missing_count = 0`.
+
+Conclusion:
+
+- Rerank helped only as governed-contract internal ordering; it did not expand recall beyond candidate-governed tri ids.
+- The rerank-governed profile recovered the remaining P6o-5 `1/40` miss while keeping forbidden at `0.0%`.
+- Avg-token overhead versus governed baseline is about `47.425` tokens, roughly `0.77%`.
+- This remains controlled eval harness evidence, not production natural traffic.
+
+Next step:
+
+- Test version-boundary governed fields separately.
+- Do not add graph or all-on until version-boundary has its own controlled result.
