@@ -18,6 +18,90 @@
 
 这个估算不是按文件数量，而是按能力边界：调用前裁决、审批、文件回滚、shell sandbox 和持久审计这些关键安全层已经完成；外部 API replay、跨 session admin audit、TaskExecution shell/external resume 等高风险或产品化能力还没有做。
 
+## 关键结论解释
+
+### `shell_restore` 已关闭
+
+历史上曾考虑通过 `shell_restore` 把 `rm` 自动改写成 `mv` 到恢复目录，形成类似“安全删除”的效果。当前这个机制已经关闭，不再注册生产 pre-hook，也不再执行 `rm -> mv`。
+
+关闭原因是 pre-hook 发生在 policy 前。如果 hook 先把 `rm` 改成 `mv`，后续 `ToolInvocationPolicy` / `ResourcePolicy` 看到的就不再是原始 destructive 意图，而是改写后的移动操作。这会让后续治理层失去判断真实风险的依据。
+
+结论：hook 机制仍然存在，但不再用于静默改变副作用语义。
+
+### destructive shell 当前 hard deny
+
+`rm`、`rmdir`、`unlink`、`shred`、`dd`、`mkfs`、`truncate` 等 destructive shell command 当前直接拒绝。
+
+实际链路是：
+
+```text
+shell request
+  -> ResourcePolicy detects destructive command
+  -> deny
+  -> invoker_reached=false
+```
+
+这类请求不会进入 approval，也不会进入 sandbox。原因是当前没有专门的 destructive preview、restore、rollback 和人工确认体验；在这些能力设计完成前，直接拒绝比“批准后尝试执行”更合适。
+
+### approval 不是裸执行授权
+
+approval 的含义是“允许请求进入受管控执行流程”，不是“绕过所有检查直接执行原始工具”。
+
+以 `write_file` / `edit_file` 为例：
+
+```text
+tool call
+  -> defer / approval request
+  -> user approve
+  -> managed runtime reloads trusted payload
+  -> validate approval/session/tool/scope/args_hash
+  -> rerun policy/resource checks
+  -> prepare preview/diff/snapshot
+  -> run approved tool
+  -> apply
+  -> rollback handle
+```
+
+这样可以防止审批后换参、防模型伪造 approval id，也避免用户在没有 preview/diff 的情况下直接落盘。
+
+### 文件副作用有 preview / apply / rollback
+
+当前可受管控执行并支持 rollback 的文件副作用范围是 approved `write_file` / `edit_file`。
+
+含义：
+
+- `preview`：执行前查看将要修改什么。
+- `apply`：确认后由 managed runtime 落盘。
+- `rollback`：成功 apply 后可以通过 rollback handle 回滚文件变更。
+
+这个 rollback 不覆盖 shell、external API、destructive operation 或任意未受管控宿主副作用。
+
+### shell 有 sandbox，但没有 rollback
+
+approved `shell` 不会回到普通宿主 shell，而是进入 `ApprovedShellSideEffectRuntime` 并通过 Docker/Podman sandbox runner 执行。当前 sandbox 保持 network off、workspace read-only、non-root、read-only rootfs、cap drop、no-new-privileges 和资源限制；sandbox 不可用时 fail closed。
+
+但 shell 没有 rollback。shell 命令可能通过脚本、子进程或工具链产生复杂副作用，系统不能可靠知道所有变更，也不能可靠撤销。因此当前策略是隔离执行，而不是承诺可恢复执行。
+
+### external API side effect 没有 replay / rollback
+
+external API side effect 指发邮件、发消息、支付、删除云资源、修改远端数据库、创建远端 issue 等外部状态变更。
+
+当前没有实现 external API replay，也没有 rollback。原因是外部 API 通常不可逆，且需要单独处理凭证、网络策略、幂等键、第三方超时、未知成功状态和审计脱敏。
+
+结论：在没有单独 P5 design-first 方案前，不应自动重放外部 API 副作用。
+
+### 当前明确不开放的高风险能力
+
+以下能力当前保持关闭：
+
+- destructive execution。
+- shell rollback。
+- network-enabled shell sandbox。
+- TaskExecution shell resume。
+- external API replay。
+
+这些不是临时遗漏，而是当前安全边界的一部分。后续如果确实要开放，必须单独设计产品约束、审批体验、审计记录和恢复策略。
+
 ## 单次工具调用治理链路
 
 当前一个工具调用不是“模型生成就直接执行”，而是按以下链路流转：

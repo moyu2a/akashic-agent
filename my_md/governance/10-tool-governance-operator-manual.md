@@ -29,6 +29,19 @@ LLM tool_call
 - 用户 approval 不是裸执行授权；approved side effect 仍要进入受管控 runtime。
 - 审计记录保持脱敏，不保存 raw command、raw path/content/diff、payload path、stdout/stderr 或凭证。
 
+## 操作含义速查
+
+| 结论 | 操作含义 |
+|---|---|
+| `shell_restore` 已关闭 | 不再把 `rm` 静默改写为 `mv`；hook 不负责改变副作用语义。 |
+| destructive shell hard deny | `rm`、`rmdir`、`unlink`、`shred`、`dd`、`mkfs`、`truncate` 等直接拒绝，不进入 approval 或 sandbox。 |
+| approval 不是裸执行授权 | 用户批准后只是进入 managed runtime；runtime 仍会校验 approval、session、tool、scope、args hash 和 policy。 |
+| 文件副作用有 rollback | 仅 approved `write_file` / `edit_file` 支持 preview、apply 和 rollback。 |
+| shell 有 sandbox | approved `shell` 进入 sandbox，保持 network off、workspace read-only、fail closed。 |
+| shell 没有 rollback | shell 执行后不承诺可撤销；destructive shell 仍直接拒绝。 |
+| external API 没有 replay / rollback | 外部 API 副作用不支持批准后自动重放，也不支持回滚。 |
+| 高风险能力保持关闭 | 不开放 destructive execution、shell rollback、network-enabled shell sandbox、TaskExecution shell resume、external API replay。 |
+
 ## 调用结果
 
 | 结果 | 含义 | 是否触达 invoker |

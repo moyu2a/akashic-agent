@@ -145,3 +145,18 @@ Unresolved risks:
 
 - P4d does not add runtime capability. It intentionally leaves destructive execution, shell rollback, network-enabled shell sandbox, TaskExecution shell resume, and external API replay closed.
 - Boundary search returns negative/historical references to `rm -> mv`; these are expected because they document that `shell_restore` is disabled.
+
+### Post-P4d: Boundary Explanation Record
+
+- **Status:** complete
+- Actions taken:
+  - Added a detailed `关键结论解释` section to `my_md/governance/09-tool-governance-current-state.md`.
+  - Added an `操作含义速查` table to `my_md/governance/10-tool-governance-operator-manual.md`.
+  - Recorded the meaning of:
+    - `shell_restore` disabled and no `rm -> mv`.
+    - destructive shell hard deny.
+    - approval as permission to enter managed runtime, not raw execution.
+    - file side-effect preview/apply/rollback scope.
+    - shell sandbox without rollback.
+    - external API side effect without replay/rollback.
+    - disabled high-risk capabilities: destructive execution, shell rollback, network-enabled shell sandbox, TaskExecution shell resume, external API replay.
