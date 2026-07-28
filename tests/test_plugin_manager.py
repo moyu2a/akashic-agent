@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import importlib
 import json
-import shlex
 import shutil
 import tempfile
 import sqlite3
@@ -51,6 +50,7 @@ class _AllowToolPolicy:
 # ── fixtures ──────────────────────────────────────────────────────────────────
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures" / "plugins"
+REPO_ROOT = Path(__file__).parents[1]
 
 
 @pytest.fixture(autouse=True)
@@ -380,6 +380,17 @@ async def test_no_manifest_uses_class_attributes():
         assert instance.name == "hello"
         assert instance.version == "0.1.0"
         assert instance.context.plugin_id == "hello"
+
+
+@pytest.mark.asyncio
+async def test_production_shell_restore_is_legacy_and_registers_no_hook():
+    bus = EventBus()
+    with tempfile.TemporaryDirectory() as tmp:
+        shutil.copytree(REPO_ROOT / "plugins" / "shell_restore", Path(tmp) / "shell_restore")
+        mgr = _make_manager([Path(tmp)], event_bus=bus)
+        await mgr.load_all()
+
+        assert not any("shell_restore" in hook.name for hook in mgr.tool_hooks)
 
 
 # ── 工具注册测试 ───────────────────────────────────────────────────────────────
@@ -766,19 +777,27 @@ async def test_tool_hooks_fire_through_real_reasoner():
 
 
 @pytest.mark.asyncio
-async def test_on_tool_pre_rewrites_rm_to_mv():
-    """加载 shell_restore 插件，执行 shell rm，断言 arguments 被改写为 mv。"""
+async def test_legacy_shell_restore_fixture_registers_no_tool_hooks():
     bus = EventBus()
-    tools = ToolRegistry()
     with tempfile.TemporaryDirectory() as tmp:
         shutil.copytree(FIXTURES_DIR / "shell_restore", Path(tmp) / "shell_restore")
-        mgr = _make_manager([Path(tmp)], event_bus=bus, tools=tools)
+        mgr = _make_manager([Path(tmp)], event_bus=bus)
         await mgr.load_all()
 
-        from agent.tool_hooks.executor import ToolExecutor
-        from agent.tool_hooks.types import ToolExecutionRequest
+        assert mgr.loaded_count == 1
+        assert mgr.tool_hooks == []
 
-        executor = ToolExecutor(mgr.tool_hooks, policy_engine=_AllowToolPolicy())
+
+@pytest.mark.asyncio
+async def test_shell_rm_is_denied_by_policy_without_restore_rewrite():
+    from agent.tool_hooks.executor import ToolExecutor
+    from agent.tool_hooks.types import ToolExecutionRequest
+
+    bus = EventBus()
+    with tempfile.TemporaryDirectory() as tmp:
+        shutil.copytree(FIXTURES_DIR / "shell_restore", Path(tmp) / "shell_restore")
+        mgr = _make_manager([Path(tmp)], event_bus=bus)
+        await mgr.load_all()
 
         captured: dict[str, Any] = {}
 
@@ -792,226 +811,17 @@ async def test_on_tool_pre_rewrites_rm_to_mv():
             arguments={"command": "rm /tmp/a.txt"},
             source="passive",
             session_key="test:1",
+            registry_risk="read-only",
         )
-        result = await executor.execute(req, fake_invoker)
-        assert result.status == "success"
-        assert "command" in captured
-        # shlex.join 产物：mv -- <targets>... <restore_dir>
-        assert captured["command"].startswith("mv -- /tmp/a.txt ")
-        assert Path(shlex.split(captured["command"])[-1]).name == "restore"
-        # 确认 pre_hook trace 记录了匹配
-        assert any(
-            item.hook_name.startswith("plugin:") and item.matched
-            for item in result.pre_hook_trace
+        result = await ToolExecutor(mgr.tool_hooks).execute(req, fake_invoker)
+
+        assert result.status == "denied"
+        assert result.invoker_reached is False
+        assert captured == {}
+        assert (
+            result.policy_trace["reason"]
+            == "resource_policy_shell_destructive_command_denied"
         )
-
-
-@pytest.mark.asyncio
-async def test_on_tool_pre_skips_non_shell_tool():
-    """非 shell 工具不触发 rm→mv 改写。"""
-    bus = EventBus()
-    with tempfile.TemporaryDirectory() as tmp:
-        shutil.copytree(FIXTURES_DIR / "shell_restore", Path(tmp) / "shell_restore")
-        mgr = _make_manager([Path(tmp)], event_bus=bus)
-        await mgr.load_all()
-
-        from agent.tool_hooks.executor import ToolExecutor
-        from agent.tool_hooks.types import ToolExecutionRequest
-
-        executor = ToolExecutor(mgr.tool_hooks, policy_engine=_AllowToolPolicy())
-
-        captured: dict[str, Any] = {}
-
-        async def fake_invoker(name: str, args: dict[str, Any]) -> str:
-            captured.update(args)
-            return "ok"
-
-        req = ToolExecutionRequest(
-            call_id="c2",
-            tool_name="read",
-            arguments={"file_path": "/tmp/a.txt"},
-            source="passive",
-            session_key="test:1",
-        )
-        result = await executor.execute(req, fake_invoker)
-        assert captured.get("file_path") == "/tmp/a.txt"  # unchanged
-
-
-@pytest.mark.asyncio
-async def test_on_tool_pre_skips_non_rm_command():
-    """shell echo hi 不触发改写。"""
-    bus = EventBus()
-    with tempfile.TemporaryDirectory() as tmp:
-        shutil.copytree(FIXTURES_DIR / "shell_restore", Path(tmp) / "shell_restore")
-        mgr = _make_manager([Path(tmp)], event_bus=bus)
-        await mgr.load_all()
-
-        from agent.tool_hooks.executor import ToolExecutor
-        from agent.tool_hooks.types import ToolExecutionRequest
-
-        executor = ToolExecutor(mgr.tool_hooks, policy_engine=_AllowToolPolicy())
-
-        captured: dict[str, Any] = {}
-
-        async def fake_invoker(name: str, args: dict[str, Any]) -> str:
-            captured.update(args)
-            return "ok"
-
-        req = ToolExecutionRequest(
-            call_id="c3",
-            tool_name="shell",
-            arguments={"command": "echo hi"},
-            source="passive",
-            session_key="test:1",
-        )
-        result = await executor.execute(req, fake_invoker)
-        assert captured.get("command") == "echo hi"  # unchanged
-
-
-@pytest.mark.asyncio
-async def test_on_tool_pre_rewrites_rm_rf():
-    """rm -rf 带选项 → 改写。"""
-    bus = EventBus()
-    with tempfile.TemporaryDirectory() as tmp:
-        shutil.copytree(FIXTURES_DIR / "shell_restore", Path(tmp) / "shell_restore")
-        mgr = _make_manager([Path(tmp)], event_bus=bus)
-        await mgr.load_all()
-
-        from agent.tool_hooks.executor import ToolExecutor
-        from agent.tool_hooks.types import ToolExecutionRequest
-
-        executor = ToolExecutor(mgr.tool_hooks, policy_engine=_AllowToolPolicy())
-
-        captured: dict[str, Any] = {}
-
-        async def fake_invoker(name: str, args: dict[str, Any]) -> str:
-            captured.update(args)
-            return "ok"
-
-        req = ToolExecutionRequest(
-            call_id="c",
-            tool_name="shell",
-            arguments={"command": "rm -rf /tmp/a.txt"},
-            source="passive",
-            session_key="test:1",
-        )
-        await executor.execute(req, fake_invoker)
-        assert captured["command"].startswith("mv -- /tmp/a.txt ")
-        assert Path(shlex.split(captured["command"])[-1]).name == "restore"
-
-
-@pytest.mark.asyncio
-async def test_on_tool_pre_rewrites_sudo_rm():
-    """sudo rm → 保留 sudo 前缀改写。"""
-    bus = EventBus()
-    with tempfile.TemporaryDirectory() as tmp:
-        shutil.copytree(FIXTURES_DIR / "shell_restore", Path(tmp) / "shell_restore")
-        mgr = _make_manager([Path(tmp)], event_bus=bus)
-        await mgr.load_all()
-
-        from agent.tool_hooks.executor import ToolExecutor
-        from agent.tool_hooks.types import ToolExecutionRequest
-
-        executor = ToolExecutor(mgr.tool_hooks, policy_engine=_AllowToolPolicy())
-
-        captured: dict[str, Any] = {}
-
-        async def fake_invoker(name: str, args: dict[str, Any]) -> str:
-            captured.update(args)
-            return "ok"
-
-        req = ToolExecutionRequest(
-            call_id="c",
-            tool_name="shell",
-            arguments={"command": "sudo rm /tmp/b.txt"},
-            source="passive",
-            session_key="test:1",
-        )
-        await executor.execute(req, fake_invoker)
-        assert captured["command"].startswith("sudo mv -- /tmp/b.txt ")
-        assert Path(shlex.split(captured["command"])[-1]).name == "restore"
-
-
-@pytest.mark.asyncio
-async def test_on_tool_pre_fires_through_real_reasoner():
-    """真实 DefaultReasoner 链路：仅用插件 hook 改写 rm→mv。"""
-    from agent.core.passive_turn import DefaultReasoner
-    from agent.core.runtime_support import ToolDiscoveryState
-    from agent.looping.ports import LLMConfig, LLMServices
-    from agent.provider import LLMResponse, ToolCall
-    from agent.tool_hooks.executor import ToolExecutor
-
-    class FakeProvider:
-        _called = False
-
-        async def chat(
-            self, messages, tools, model, max_tokens, **kwargs
-        ) -> LLMResponse:
-            if not self._called:
-                self._called = True
-                return LLMResponse(
-                    content=None,
-                    tool_calls=[
-                        ToolCall(
-                            id="c1",
-                            name="shell",
-                            arguments={"command": "rm /tmp/a.txt"},
-                        )
-                    ],
-                )
-            return LLMResponse(content="done")
-
-    bus = EventBus()
-    tools = ToolRegistry()
-    captured_commands: list[str] = []
-
-    from agent.tools.base import Tool as AgentTool
-
-    class FakeShell(AgentTool):
-        name = "shell"
-        description = "fake shell"
-        parameters = {
-            "type": "object",
-            "properties": {"command": {"type": "string"}},
-            "required": ["command"],
-        }
-
-        async def execute(self, **kwargs: Any) -> str:
-            captured_commands.append(str(kwargs.get("command", "")))
-            return "ok"
-
-    tools.register(FakeShell(), risk="destructive", always_on=True)
-
-    with tempfile.TemporaryDirectory() as tmp:
-        shutil.copytree(FIXTURES_DIR / "shell_restore", Path(tmp) / "shell_restore")
-        mgr = _make_manager([Path(tmp)], event_bus=bus, tools=tools)
-        await mgr.load_all()
-
-        reasoner = DefaultReasoner(
-            llm=LLMServices(provider=FakeProvider(), light_provider=FakeProvider()),  # type: ignore[arg-type]
-            llm_config=LLMConfig(max_iterations=2),
-            tools=tools,
-            discovery=ToolDiscoveryState(),
-            tool_search_enabled=False,
-            memory_window=40,
-            event_bus=bus,
-        )
-        # 替换默认空 hook executor，仅用插件 hook
-        reasoner._tool_executor = ToolExecutor(
-            mgr.tool_hooks,
-            policy_engine=_AllowToolPolicy(),
-        )
-
-        await reasoner.run(
-            [{"role": "user", "content": "delete /tmp/a.txt"}],
-            tool_event_session_key="test:pk",
-            tool_event_channel="cli",
-            tool_event_chat_id="0",
-        )
-
-        assert len(captured_commands) == 1
-        assert captured_commands[0].startswith("mv -- /tmp/a.txt ")
-        assert Path(shlex.split(captured_commands[0])[-1]).name == "restore"
 
 
 @pytest.mark.asyncio
@@ -1024,7 +834,24 @@ async def test_add_tool_hooks_propagates_to_tool_executor():
     bus = EventBus()
     tools = ToolRegistry()
     with tempfile.TemporaryDirectory() as tmp:
-        shutil.copytree(FIXTURES_DIR / "shell_restore", Path(tmp) / "shell_restore")
+        plugin_dir = Path(tmp) / "deny_hook"
+        plugin_dir.mkdir()
+        (plugin_dir / "plugin.py").write_text(
+            """
+from agent.lifecycle.types import PreToolCtx
+from agent.plugins import Plugin, on_tool_pre
+from agent.tool_hooks import HookOutcome
+
+
+class DenyHook(Plugin):
+    name = "deny_hook"
+
+    @on_tool_pre()
+    async def deny(self, event: PreToolCtx) -> HookOutcome:
+        return HookOutcome(decision="deny", reason="blocked")
+""",
+            encoding="utf-8",
+        )
         mgr = _make_manager([Path(tmp)], event_bus=bus, tools=tools)
         await mgr.load_all()
         assert len(mgr.tool_hooks) > 0

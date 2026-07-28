@@ -18,6 +18,38 @@
 
 这个估算不是按文件数量，而是按能力边界：调用前裁决、审批、文件回滚、shell sandbox 和持久审计这些关键安全层已经完成；外部 API replay、跨 session admin audit、TaskExecution shell/external resume 等高风险或产品化能力还没有做。
 
+## 单次工具调用治理链路
+
+当前一个工具调用不是“模型生成就直接执行”，而是按以下链路流转：
+
+```text
+LLM tool_call
+  -> ToolAccessGateway / visibility boundary
+  -> ToolExecutor
+  -> pre-hook
+  -> ToolInvocationPolicy
+  -> ResourcePolicy
+  -> RiskStrategy / approval request
+  -> Managed Runtime
+  -> real invoker / sandbox
+  -> post observation
+  -> audit / observe
+```
+
+每一步目的：
+
+1. `LLM tool_call`：模型提出想调用的工具和参数。它只是请求，不是可信执行事实。
+2. `ToolAccessGateway / visibility boundary`：检查工具是否注册、是否可见、是否被禁用、当前 TaskExecution 阶段是否允许暴露或调用。
+3. `ToolExecutor`：统一执行入口，保证工具调用先经过 hook、policy、approval 和 audit，而不是裸调 `tool.execute(args)`。
+4. `pre-hook`：执行前横切治理。当前生产保留 deny-only / guard-only hook，例如 `shell_safety` 和 `tool_loop_guard`；`shell_restore` 已关闭。pre-hook 机制支持改参，但当前治理边界不允许用它做副作用语义改写。
+5. `ToolInvocationPolicy`：按工具注册状态和风险等级做调用级裁决。未注册工具 deny；`destructive` deny；`read-only` 通常 allow；`write`、`shell`、`external-side-effect`、`unknown` 通常 defer。
+6. `ResourcePolicy`：按具体参数做资源边界检查。覆盖文件路径 workspace scope、shell destructive command、URL/localhost/private IP、runtime protected argument 伪造等。
+7. `RiskStrategy / approval request`：对未被硬拒绝但存在副作用或风险未知的调用生成审批请求。此时不触达真实 invoker，只记录 tool、risk、reason、approval scope、args hash 和脱敏摘要。
+8. `Managed Runtime`：用户批准后仍不裸执行。文件副作用进入 payload 校验、policy 复查、preview/diff、apply、rollback handle；shell 进入 payload 校验、policy 复查、sandbox preview 和 Docker/Podman sandbox 执行。
+9. `real invoker / sandbox`：只有前面所有 gate 通过，才触达真实执行入口。若结果是 deny 或 defer，则 `invoker_reached=false`。
+10. `post observation`：执行后的观察层。`ToolExecutor` 框架支持 `post_tool_use` / `post_tool_error`，但当前生产插件尚未注册真正的 post ToolHook；已有 `@on_tool_result` 事件用于部分工具结果观察。
+11. `audit / observe`：记录 policy trace、audit trace、approval lifecycle、side-effect 状态和 `ToolAuditLedger` 事件。审计层保持脱敏，不保存 raw command、raw path/content/diff、payload path、stdout/stderr 或凭证。
+
 ## 已经新增的能力
 
 ### P1: 统一工具调用裁决
@@ -50,6 +82,32 @@
 价值：
 
 - 不是完整 sandbox，但在 invoker 前阻断最常见的本地路径逃逸、伪造上下文和 SSRF 类参数风险。
+
+### Hook 边界更新
+
+已完成：
+
+- `shell_restore` 降级为 legacy disabled，不再注册 `@on_tool_pre`。
+- 不再支持把 `rm` 自动改写为 `mv` 到恢复目录。
+- `rm`、`rmdir`、`unlink` 等 destructive shell command 由 `ResourcePolicy` 拒绝。
+- 保留 `shell_safety`、`tool_loop_guard` 这类 deny-only / guard-only hook。
+
+结论：
+
+- hook 机制继续存在，但职责收窄为 deny、参数归一化、默认值补全、循环保护和安全拦截。
+- hook 不应静默改变副作用语义，也不应把 destructive 意图改写成另一个看似低风险的副作用。
+- 如果后续需要“移动到回收区”，应做成显式受管控工具，并接入 approval、preview、audit 和 rollback 设计。
+
+当前生产 hook 状态：
+
+| hook / 能力 | 当前状态 | 说明 |
+|---|---|---|
+| `shell_safety` | 可用 | deny-only，拦截交互式 shell、可能等待密码的 sudo、缺少确认参数的包管理器写操作等。 |
+| `tool_loop_guard` | 可用 | deny-only，拦截连续重复工具调用，防止工具循环。 |
+| `shell_restore` | 已关闭 | legacy disabled，不再执行 `rm -> mv`。 |
+| 参数归一化 hook | 机制支持，暂无主要生产实现 | 只适合不改变语义的格式整理。 |
+| 补默认值 hook | 机制支持，暂无主要生产实现 | 只适合补安全默认值。 |
+| 副作用语义改写 hook | 不推荐，当前关闭 | 例如 `rm -> mv` 会隐藏原始 destructive 意图。 |
 
 ### P2: 默认风险策略和审批请求
 
@@ -227,6 +285,78 @@
 - “shell 副作用”已有 sandbox，但没有 rollback。
 - “外部 API 副作用”目前既没有 replay，也没有 rollback。
 
+## 本轮讨论确认的问题和边界
+
+### 1. `rm` 不能通过 hook 自动安全化
+
+当前不再采用 `shell_restore` 的 `rm -> mv` 改写。原因是 pre-hook 在 policy 前运行，若它把 `rm` 改成 `mv`，后续 `ToolInvocationPolicy` / `ResourcePolicy` 看到的是改写后的命令，原始 destructive 意图会丢失。
+
+结论：
+
+- `rm`、`rmdir`、`unlink`、`shred`、`dd`、`mkfs`、`chmod`、`chown`、`truncate` 当前按 destructive shell command 拦截。
+- destructive shell command 直接 deny，不进入 approval，不进入 sandbox，不执行。
+- 如果用户需要“删除”语义，后续应做显式 `move_to_trash` / `managed_delete` 工具，而不是恢复 shell hook 自动改写。
+
+### 2. approval 不是直接执行授权
+
+对 `write_file/edit_file` 这类文件副作用，当前是两段式：
+
+```text
+模型提出工具调用
+  -> defer / approval request
+  -> 用户 approve
+  -> prepare preview / diff
+  -> run approved tool
+  -> apply
+  -> rollback handle
+```
+
+第一段 approval 表示“允许进入受管控执行流程”；第二段 run/apply 才是真正落盘。这样可以防止用户在没有看 preview/diff 的情况下直接写入，也能用 args hash、session、tool、scope 防止审批后换参。
+
+### 3. shell approval 后仍必须走 sandbox
+
+approved shell 不会回到普通宿主 shell。它进入 `ApprovedShellSideEffectRuntime`，重新校验 payload、approval、args hash、session、tool 和 policy，再生成 sandbox preview，并通过 Docker/Podman sandbox 执行。sandbox 不可用时 fail closed。
+
+当前 shell sandbox 没有 rollback，也不支持 network-enabled sandbox。
+
+### 4. post-hook 治理能力还没有生产化
+
+`ToolExecutor` 框架层支持：
+
+- `post_tool_use`
+- `post_tool_error`
+
+但当前生产插件没有注册真正的 post ToolHook。已有的是插件事件层 `@on_tool_result`，例如 `recall_inspector` 用它观察 `recall_memory` 工具结果。
+
+结论：
+
+- “工具结果观察”已有一部分能力。
+- “治理链路 post ToolHook 插件”接口存在，但生产尚未用起来。
+- 它不是当前安全边界的关键层；核心安全边界仍在 pre-hook、policy、resource policy、approval 和 managed runtime。
+
+### 5. 参数归一化和补默认值是机制能力，不是当前主要生产能力
+
+pre-hook 机制技术上可以更新参数，因此可以支持参数归一化和补默认值。但当前生产插件主要只保留 deny/guard：
+
+- 参数归一化：适合把路径、URL、大小写、空白等整理成规范形式，不改变工具语义。
+- 补默认值：适合补 `encoding=utf-8`、`limit=50` 等安全默认值。
+- 不允许借此改变副作用语义，例如删除变移动、外部发送变本地保存。
+
+### 6. 当前安全删除的推荐方向
+
+当前不能“安全执行 `rm`”。更合适的产品化能力是：
+
+- 显式 `move_to_trash(path)` / `managed_delete(path)` 工具。
+- path 必须在 workspace 内。
+- 禁止 glob、parent escape、symlink escape 和系统保护路径。
+- preview 列出将影响的目标。
+- 用户 approval。
+- apply 时移动到 workspace 内 `.trash/` / `.restore/`。
+- 记录 audit ledger。
+- 支持 rollback / restore。
+
+这个能力如果要做，应作为单独 P4d/P5 设计，不应通过 shell pre-hook 静默实现。
+
 ## 仍未开放的能力
 
 这些能力当前没有实现，且属于有意关闭：
@@ -237,6 +367,8 @@
 - TaskExecution external side-effect resume。
 - shell rollback。
 - network-enabled shell sandbox。
+- post ToolHook 生产插件。
+- `move_to_trash` / `managed_delete` 这类安全删除工具。
 - `/tool_audit` 跨 session admin 查询。
 - dashboard/admin audit search UI。
 - 更完整的 retention 运维策略。
