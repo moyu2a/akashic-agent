@@ -684,7 +684,9 @@ def test_tri_governed_answer_contract_profile_injects_governed_contract_block(
     assert "allowed_evidence:" in result.text_block
     assert "forbidden_memory_ids:" in result.text_block
     assert "governance_dropped_memory_ids:" in result.text_block
-    assert result.raw["governance_dropped_ids"]
+    assert result.raw["forbidden_ids"]
+    assert result.raw["candidate_risk_tier_counts"]["delete"] > 0
+    assert result.raw["tiered_deleted_risks_by_reason"]
     assert result.raw["evidence_source"] == (
         "tri_governed_answer_contract.governed_allowed_evidence_ids"
     )
