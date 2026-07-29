@@ -4,6 +4,7 @@ import json
 import subprocess
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 from memory2.eval_quantitative_cases import build_quantitative_eval_cases
 
@@ -113,6 +114,11 @@ def test_system_path_safe_version_cli_fake_provider_writes_sanitized_report(
     assert payload["metrics"]["mode_count"] == 3
     assert payload["metrics"]["case_count"] == 12
     assert payload["metrics"]["fake_provider_enabled"] is True
+    assert payload["metrics"]["real_llm_enabled"] is False
+    assert "answer_rule_pass_rate" in payload["metrics"]
+    assert "memory_grounding_pass_rate" in payload["metrics"]
+    assert "forbidden_violation_rate" in payload["metrics"]
+    assert "token_metrics_available" in payload["metrics"]
     assert payload["metrics"]["raw_query_included"] is False
     assert payload["metrics"]["raw_memory_summary_included"] is False
     assert payload["metrics"]["prompt_included"] is False
@@ -143,6 +149,13 @@ def test_system_path_safe_version_cli_fake_provider_writes_sanitized_report(
         == 0.0
     )
     assert all("post_check_shadow" in row for row in payload["cases"])
+    for row in payload["cases"]:
+        assert "answer_rule_passed" in row
+        assert "memory_grounding_passed" in row
+        assert "expected_memory_used" in row
+        assert "forbidden_contains_violation_count" in row
+        assert "failures" in row
+        assert "answer_passed" not in row
     assert payload["metrics"]["replacement_seeded_count"] > 0
     version_rows = [
         row
@@ -156,3 +169,153 @@ def test_system_path_safe_version_cli_fake_provider_writes_sanitized_report(
         for row in version_rows
     )
     _assert_report_is_private(payload, markdown)
+
+
+def test_system_path_safe_version_cli_rejects_fake_and_real_flags(
+    tmp_path: Path,
+) -> None:
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "scripts/run_memory_system_path_safe_version_eval.py",
+            "--workspace",
+            str(tmp_path / "workspace"),
+            "--out-dir",
+            str(tmp_path / "reports"),
+            "--fake-provider",
+            "--enable-real-llm",
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode != 0
+    assert (
+        "--fake-provider and --enable-real-llm cannot be used together"
+        in completed.stderr
+    )
+
+
+def test_system_path_safe_version_fake_provider_rows_are_answer_scored(
+    tmp_path: Path,
+) -> None:
+    out_dir = tmp_path / "reports"
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "scripts/run_memory_system_path_safe_version_eval.py",
+            "--workspace",
+            str(tmp_path / "workspace"),
+            "--out-dir",
+            str(out_dir),
+            "--fake-provider",
+            "--case-pack",
+            "standard",
+            "--balanced-small",
+            "--common-limit",
+            "2",
+            "--hard-limit",
+            "2",
+            "--modes",
+            "current,safe_version_replace",
+            "--real-memory-workspace",
+            str(tmp_path / "empty-real-workspace"),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    payload = json.loads(
+        (out_dir / "system_path_safe_version_eval.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    metrics = payload["metrics"]
+    assert metrics["fake_provider_enabled"] is True
+    assert metrics["real_llm_enabled"] is False
+    assert "answer_rule_pass_rate" in metrics
+    assert "memory_grounding_pass_rate" in metrics
+    assert "forbidden_violation_rate" in metrics
+    assert "token_metrics_available" in metrics
+    for row in payload["cases"]:
+        assert "answer_rule_passed" in row
+        assert "memory_grounding_passed" in row
+        assert "expected_memory_used" in row
+        assert "forbidden_contains_violation_count" in row
+        assert "failures" in row
+        assert "answer_passed" not in row
+
+
+def test_system_path_safe_version_real_provider_builder_requires_api_key(
+    monkeypatch: object,
+    tmp_path: Path,
+) -> None:
+    import scripts.run_memory_system_path_safe_version_eval as cli
+
+    args = SimpleNamespace(
+        fake_provider=False,
+        enable_real_llm=True,
+        config=str(tmp_path / "config.toml"),
+        timeout_s=60.0,
+    )
+    monkeypatch.setattr(
+        cli,
+        "load_config",
+        lambda path: SimpleNamespace(
+            api_key="",
+            model="real-model",
+            base_url="https://example.invalid",
+            system_prompt="",
+            extra_body={},
+            provider="test-provider",
+        ),
+    )
+
+    provider, model = cli.build_provider_for_system_path_safe_version(args)
+
+    assert provider is None
+    assert model == "real-model"
+
+
+def test_system_path_safe_version_real_provider_builder_uses_config(
+    monkeypatch: object,
+    tmp_path: Path,
+) -> None:
+    import scripts.run_memory_system_path_safe_version_eval as cli
+
+    created: dict[str, object] = {}
+
+    class FakeRealProvider:
+        def __init__(self, **kwargs: object) -> None:
+            created.update(kwargs)
+
+    args = SimpleNamespace(
+        fake_provider=False,
+        enable_real_llm=True,
+        config=str(tmp_path / "config.toml"),
+        timeout_s=12.5,
+    )
+    monkeypatch.setattr(
+        cli,
+        "load_config",
+        lambda path: SimpleNamespace(
+            api_key="secret-key",
+            model="real-model",
+            base_url="https://example.invalid",
+            system_prompt="system",
+            extra_body={"x": 1},
+            provider="test-provider",
+        ),
+    )
+    monkeypatch.setattr(cli.agent_provider, "LLMProvider", FakeRealProvider)
+
+    provider, model = cli.build_provider_for_system_path_safe_version(args)
+
+    assert isinstance(provider, FakeRealProvider)
+    assert model == "real-model"
+    assert created["api_key"] == "secret-key"
+    assert created["request_timeout_s"] == 12.5
+    assert created["provider_name"] == "test-provider"

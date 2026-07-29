@@ -10,6 +10,8 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from agent.config import load_config
+import agent.provider as agent_provider
 from agent.provider import LLMResponse
 from memory2.eval_quantitative_cases import build_quantitative_eval_cases
 from memory2.eval_system_path_safe_version import (
@@ -47,6 +49,29 @@ class ScriptedSystemPathProvider:
         )
 
 
+def build_provider_for_system_path_safe_version(
+    args: argparse.Namespace,
+) -> tuple[object | None, str | None]:
+    if bool(args.fake_provider):
+        return ScriptedSystemPathProvider(), "fake-model"
+    if not bool(args.enable_real_llm):
+        return ScriptedSystemPathProvider(), "scripted"
+    cfg = load_config(args.config)
+    if not cfg.api_key:
+        return None, cfg.model
+    return (
+        agent_provider.LLMProvider(
+            api_key=cfg.api_key,
+            base_url=cfg.base_url,
+            system_prompt=cfg.system_prompt,
+            extra_body=cfg.extra_body,
+            request_timeout_s=float(args.timeout_s),
+            provider_name=cfg.provider,
+        ),
+        cfg.model,
+    )
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--workspace", required=True)
@@ -64,10 +89,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--real-memory-workspace", default="")
     args = parser.parse_args(argv)
 
-    if not args.fake_provider and not args.enable_real_llm:
-        args.fake_provider = True
-    if args.enable_real_llm and not args.fake_provider:
-        raise SystemExit("real LLM provider is not implemented for this eval runner yet")
+    if bool(args.fake_provider) and bool(args.enable_real_llm):
+        parser.error("--fake-provider and --enable-real-llm cannot be used together")
+    provider, model = build_provider_for_system_path_safe_version(args)
+    if provider is None or model is None:
+        raise SystemExit("missing API key for --enable-real-llm")
 
     if args.balanced_small:
         cases = build_quantitative_eval_cases(
@@ -86,15 +112,15 @@ def main(argv: list[str] | None = None) -> int:
             limit=args.limit,
         )
     modes = tuple(mode.strip() for mode in args.modes.split(",") if mode.strip())
-    provider = ScriptedSystemPathProvider()
     report = asyncio.run(
         run_system_path_safe_version_cases(
             cases,
             Path(args.workspace),
             provider,
             modes=modes,
-            model="scripted",
+            model=model,
             timeout_s=args.timeout_s,
+            real_llm_enabled=bool(args.enable_real_llm),
         )
     )
     out_dir = Path(args.out_dir)

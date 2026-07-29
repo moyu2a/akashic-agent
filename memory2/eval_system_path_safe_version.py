@@ -7,7 +7,7 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any, Sequence, cast
+from typing import Any, Iterable, Sequence, cast
 from unittest.mock import MagicMock
 
 from agent.looping.core import AgentLoop
@@ -39,6 +39,12 @@ from memory2.eval_answer_post_check import (
     build_answer_post_check_shadow,
 )
 from memory2.eval_cases import EvalCase
+from memory2.eval_llm_sample import (
+    _RecordingProvider,
+    _extract_token_counts,
+    answer_expectation_from_case,
+    score_answer_text,
+)
 from memory2.store import MemoryStore2
 from plugins.default_memory.engine import DefaultMemoryEngine
 from session.manager import SessionManager
@@ -158,6 +164,7 @@ async def run_system_path_safe_version_cases(
     modes: Sequence[str],
     model: str = "scripted",
     timeout_s: float = 30.0,
+    real_llm_enabled: bool = False,
 ) -> SystemPathSafeVersionReport:
     records: list[dict[str, object]] = []
     for case_index, case in enumerate(cases):
@@ -175,7 +182,12 @@ async def run_system_path_safe_version_cases(
             )
     return SystemPathSafeVersionReport(
         cases=tuple(records),
-        metrics=_build_metrics(records, unique_case_count=len(cases), modes=modes),
+        metrics=_build_metrics(
+            records,
+            unique_case_count=len(cases),
+            modes=modes,
+            real_llm_enabled=real_llm_enabled,
+        ),
     )
 
 
@@ -209,12 +221,13 @@ def write_system_path_safe_version_markdown(
         "本报告使用 system-path fake/provider validation；不包含原始 query、prompt、memory summary 或完整回答。",
         "",
         f"- evaluation_level: `{metrics['evaluation_level']}`",
+        f"- real_llm_enabled: `{metrics['real_llm_enabled']}`",
         f"- unique_case_count: `{metrics['unique_case_count']}`",
         f"- case_count: `{metrics['case_count']}`",
         f"- replacement_seeded_count: `{metrics['replacement_seeded_count']}`",
         "",
-        "| mode | case_count | contract_success | post_check_shadow |",
-        "| --- | ---: | ---: | ---: |",
+        "| mode | cases | answer_success | answer_rate | grounding_rate | forbidden_rate | contract_success | post_check_shadow | avg_tokens |",
+        "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
     ]
     for mode, summary in dict(metrics["mode_summaries"]).items():
         row = cast(dict[str, object], summary)
@@ -224,8 +237,13 @@ def write_system_path_safe_version_markdown(
                 (
                     str(mode),
                     str(row["case_count"]),
+                    str(row["answer_success_count"]),
+                    str(row["answer_rule_pass_rate"]),
+                    str(row["memory_grounding_pass_rate"]),
+                    str(row["forbidden_violation_rate"]),
                     str(row["contract_generation_success_rate"]),
                     str(row["post_check_shadow_enabled_rate"]),
+                    str(row["avg_total_token_count"]),
                 )
             )
             + " |"
@@ -252,13 +270,14 @@ async def _run_case_mode(
     _seed_store(store, memory_items, replacements)
     engine = _build_engine(store=store, items=memory_items)
     recording = RecordingMemoryEngine(engine)
+    recording_provider = _RecordingProvider(provider)
     event_bus = EventBus()
     session_manager = SessionManager(workspace)
     loop = AgentLoop(
         AgentLoopDeps(
             bus=MagicMock(),
-            provider=provider,  # type: ignore[arg-type]
-            light_provider=provider,  # type: ignore[arg-type]
+            provider=recording_provider,  # type: ignore[arg-type]
+            light_provider=recording_provider,  # type: ignore[arg-type]
             tools=ToolRegistry(),
             session_manager=session_manager,
             workspace=workspace,
@@ -276,11 +295,16 @@ async def _run_case_mode(
     answer = ""
     provider_error = False
     timeout = False
+    failures: list[str] = []
     started_at = time.perf_counter()
     try:
+        query = (
+            str(case.setup.get("query") or "").strip()
+            or "system path eval user message"
+        )
         answer = await asyncio.wait_for(
             loop.process_direct(
-                "system path eval user message",
+                query,
                 session_key=str(case.setup.get("scope", {}).get("session_key") or "cli:local"),
                 channel=str(case.setup.get("scope", {}).get("channel") or "cli"),
                 chat_id=str(case.setup.get("scope", {}).get("chat_id") or "local"),
@@ -292,10 +316,15 @@ async def _run_case_mode(
         await event_bus.drain()
     except asyncio.TimeoutError:
         timeout = True
+        failures.append("timeout")
     except Exception:
         provider_error = True
+        failures.append("provider_error")
     finally:
         await event_bus.aclose()
+    if recording_provider.errors and not provider_error:
+        provider_error = True
+        failures.append("provider_error")
 
     latest = recording.latest_retrieve_result
     raw = latest.raw if latest is not None else {}
@@ -314,21 +343,33 @@ async def _run_case_mode(
         post_check = answer_post_check_shadow_to_dict(
             build_answer_post_check_shadow(answer, answer_contract, context_ids)
         )
-    usage = _provider_usage(provider)
+    score = score_answer_text(
+        answer,
+        answer_expectation_from_case(case),
+        context_ids,
+    )
+    failures.extend(score.failures)
+    token_counts = _extract_token_counts(
+        recording_provider.responses[-1] if recording_provider.responses else None
+    )
     return {
         "case_id": case.id,
         "case_index": case_index,
         "category": case.category,
         "mode": mode,
-        "answer_passed": bool(answer) and not provider_error and not timeout,
-        "grounding_passed": True,
-        "forbidden_violation": False,
+        "passed": not failures,
+        "answer_rule_passed": score.answer_rule_passed,
+        "memory_grounding_passed": score.memory_grounding_passed,
+        "expected_memory_used": bool(score.expected_memory_used),
+        "forbidden_contains_violation_count": score.forbidden_contains_violation_count,
+        "failures": tuple(_sanitize_failure(failure) for failure in failures),
         "provider_error": provider_error,
         "timeout": timeout,
         "latency_ms": int((time.perf_counter() - started_at) * 1000),
-        "token_count": usage.get("total_tokens", 0),
-        "prompt_token_count": usage.get("prompt_tokens", 0),
-        "completion_token_count": usage.get("completion_tokens", 0),
+        "token_count": int(token_counts["total_token_count"]),
+        "prompt_token_count": int(token_counts["prompt_token_count"]),
+        "completion_token_count": int(token_counts["completion_token_count"]),
+        "token_metrics_available": bool(token_counts["token_metrics_available"]),
         "replacement_seeded_count": len(replacements),
         "safe_version_metadata": _sanitize_metadata(metadata),
         "safe_version_contract": _sanitize_contract(contract),
@@ -482,10 +523,20 @@ def _build_metrics(
     *,
     unique_case_count: int,
     modes: Sequence[str],
+    real_llm_enabled: bool,
 ) -> dict[str, object]:
     mode_summaries = {}
     for mode in modes:
         rows = [record for record in records if record["mode"] == mode]
+        answer_success_count = sum(1 for row in rows if row["answer_rule_passed"])
+        grounding_success_count = sum(
+            1 for row in rows if row["memory_grounding_passed"]
+        )
+        forbidden_case_count = sum(
+            1
+            for row in rows
+            if int(row.get("forbidden_contains_violation_count", 0) or 0) > 0
+        )
         contract_rows = [
             row
             for row in rows
@@ -505,8 +556,23 @@ def _build_metrics(
         ]
         mode_summaries[mode] = {
             "case_count": len(rows),
+            "answer_success_count": answer_success_count,
+            "grounding_success_count": grounding_success_count,
+            "forbidden_case_count": forbidden_case_count,
+            "answer_rule_pass_rate": _pct(answer_success_count, len(rows)),
+            "memory_grounding_pass_rate": _pct(grounding_success_count, len(rows)),
+            "forbidden_violation_rate": _pct(forbidden_case_count, len(rows)),
             "contract_generation_success_rate": _pct(len(contract_rows), len(rows)),
             "post_check_shadow_enabled_rate": _pct(len(post_rows), len(rows)),
+            "avg_total_token_count": _avg(
+                int(row.get("token_count", 0) or 0) for row in rows
+            ),
+            "avg_latency_ms": _avg(
+                int(row.get("latency_ms", 0) or 0) for row in rows
+            ),
+            "token_metrics_available": any(
+                bool(row.get("token_metrics_available")) for row in rows
+            ),
         }
     replacement_seeded_count = sum(
         int(record.get("replacement_seeded_count", 0) or 0) for record in records
@@ -518,14 +584,37 @@ def _build_metrics(
         .get("version_boundary", {})
         .get("replacement_count", 0)
     )
+    answer_success_count = sum(1 for row in records if row["answer_rule_passed"])
+    grounding_success_count = sum(
+        1 for row in records if row["memory_grounding_passed"]
+    )
+    forbidden_case_count = sum(
+        1
+        for row in records
+        if int(row.get("forbidden_contains_violation_count", 0) or 0) > 0
+    )
     return {
         "evaluation_level": "system_path_safe_version_governed",
         "unique_case_count": unique_case_count,
         "mode_count": len(tuple(modes)),
         "case_count": len(records),
-        "fake_provider_enabled": True,
+        "real_llm_enabled": bool(real_llm_enabled),
+        "fake_provider_enabled": not bool(real_llm_enabled),
         "provider_error_count": sum(1 for row in records if row["provider_error"]),
         "timeout_count": sum(1 for row in records if row["timeout"]),
+        "answer_rule_pass_rate": _pct(answer_success_count, len(records)),
+        "memory_grounding_pass_rate": _pct(grounding_success_count, len(records)),
+        "forbidden_violation_rate": _pct(forbidden_case_count, len(records)),
+        "avg_latency_ms": _avg(int(row.get("latency_ms", 0) or 0) for row in records),
+        "total_token_count": sum(
+            int(row.get("token_count", 0) or 0) for row in records
+        ),
+        "avg_total_token_count": _avg(
+            int(row.get("token_count", 0) or 0) for row in records
+        ),
+        "token_metrics_available": any(
+            bool(row.get("token_metrics_available")) for row in records
+        ),
         "raw_query_included": False,
         "raw_memory_summary_included": False,
         "prompt_included": False,
@@ -541,6 +630,27 @@ def _pct(numerator: int, denominator: int) -> float:
     if denominator <= 0:
         return 0.0
     return round(numerator * 100.0 / denominator, 4)
+
+
+def _avg(values: Iterable[object]) -> float:
+    items = [float(value) for value in values]
+    if not items:
+        return 0.0
+    return round(sum(items) / len(items), 4)
+
+
+def _sanitize_failure(failure: str) -> str:
+    if failure.startswith("missing expected answer term:"):
+        return "missing_expected_answer_term"
+    if failure.startswith("missing expected answer term group:"):
+        return "missing_expected_answer_term_group"
+    if failure.startswith("found forbidden answer term:"):
+        return "found_forbidden_answer_term"
+    if failure.startswith("missing expected memory ids:"):
+        return "missing_expected_memory_ids"
+    if failure == "answer is not detected as Chinese":
+        return "answer_language_not_chinese"
+    return failure
 
 
 def _validate_report_privacy(report: SystemPathSafeVersionReport) -> None:
