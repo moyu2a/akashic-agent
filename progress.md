@@ -2385,3 +2385,27 @@
   - compare per-case pass/fail patterns across P6o-8/P6o-9/P6o-10;
   - identify whether version-only's `40/40` is stable or a one-run effect;
   - only after that run a targeted hard slice and repeat stability gate for safe version-only vs combo.
+
+## 2026-07-29 P6o-11 cross-report synthesis
+
+- User asked to compare graph retrieval data together with P6/P6o-5 through P6o-10 data.
+- Created report-only synthesis:
+  - `my_md/memory_optimization/eval_reports/p6o11_cross_report_synthesis_v1/cross_report_synthesis.md`.
+- No new LLM run was performed.
+- Sources compared:
+  - offline V2 answer/retrieval count report;
+  - route-governance small real LLM matrix;
+  - online failure attribution;
+  - tri retrieval failure attribution;
+  - P6o-5, P6o-8, P6o-9, and P6o-10 real LLM reports.
+- Core finding:
+  - graph retrieval has offline recall value: `1994/2000 = 99.7%`, `+16` recalled vs memory base, `72.7273%` miss reduction;
+  - graph retrieval did not prove global answer-level value: route-governance small matrix stayed at `13/40 = 32.5%`, same as memory base, and online attribution had `236/320` answer failures with `95/320` forbidden failures;
+  - tri retrieval is strongest offline recall path (`2000/2000`) but raw tri answer quality remains weak;
+  - P6o governed/version-governed gains come from candidate governance and evidence contract, not additional recall expansion;
+  - current strongest small-matrix setting remains P6o-10 safe version-governed: `40/40 = 100.0%`, grounding `100.0%`, forbidden `0.0%`, avg tokens `6004.95`.
+- Decision:
+  - do not rerun failure attribution; it already exists;
+  - do not run graph-all-on;
+  - treat graph as a routed graph candidate;
+  - next conservative step is safe version-governed repeat stability, with routed graph designed only if graph-only rescue cases are clear enough.
