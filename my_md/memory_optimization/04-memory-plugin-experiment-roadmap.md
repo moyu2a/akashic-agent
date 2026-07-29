@@ -323,6 +323,8 @@ P6o-10 combo result: added eval-only `chain_tri_rerank_version_governed_answer_c
 
 P6o-10 conclusion: the combination is safe in this matrix and reduces tokens versus governed, but it does not outperform safe version-governed. The current best answer-level setting is safe version-governed, with combo as a safe fallback candidate rather than a clear winner. Do not proceed directly to graph/all-on or production activation; the next step should be targeted robustness/failure analysis around the single misses and whether version-only remains best across reruns or harder version/rerank cases.
 
+Current P6o follow-up assessment: the data is directional but not production-ready. The strongest current profile is safe version-governed from P6o-10 (`40/40`, grounding `100.0%`, forbidden `0.0%`, avg tokens `6004.95`, post-check risk `0`). The combo profile is safe (`39/40`, grounding `100.0%`, forbidden `0.0%`, avg tokens `6036.7`) but does not beat version-only. Remaining problems are small sample size (`40` unique cases), visible run-to-run stochasticity, unstable rerank incremental value, fixture-protected eval-only profile construction, and post-check being shadow-only. The next plan should therefore be P6o-11 failure/sensitivity analysis: compare per-case pass/fail deltas across P6o-8/P6o-9/P6o-10, then run a targeted hard slice and repeat stability gate for safe version-only vs combo before any graph/all-on or production-shadow work.
+
 ## Phase 6t：source_ref 写入质量治理
 
 ### 目的

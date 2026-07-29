@@ -2350,3 +2350,38 @@
   - rerank + version combo is safe but not the winner;
   - safe version-governed is currently the strongest small-matrix answer-level profile;
   - next work should inspect misses and rerun sensitivity before graph/all-on or production activation.
+
+## 2026-07-29 current P6o follow-up assessment
+
+- Current best profile:
+  - `chain_tri_version_governed_answer_contract` in P6o-10;
+  - answer `40/40 = 100.0%`;
+  - grounding `100.0%`;
+  - forbidden `0.0%`;
+  - avg tokens `6004.95`;
+  - post-check risk counts all `0`.
+- Safe fallback candidate:
+  - `chain_tri_rerank_version_governed_answer_contract`;
+  - answer `39/40 = 97.5%`;
+  - grounding `100.0%`;
+  - forbidden `0.0%`;
+  - avg tokens `6036.7`;
+  - post-check risk counts all `0`;
+  - passes gate but does not outperform safe version-governed.
+- Test scheme recorded:
+  - P6o-8: two-profile real validation after hiding raw boundary ids, `80` completed calls;
+  - P6o-9: same-matrix governed/rerank/version comparison, `120` completed calls;
+  - P6o-10: four-profile combo validation, `160` completed calls;
+  - all real runs used standard case pack, common `20` + hard `20`, baseline prompt, repeat `1`, concurrency `2`, and privacy-preserving reports.
+- Current problems:
+  - the matrix is still only `40` unique cases;
+  - stochastic run-to-run variation is visible, especially safe version-governed changing from `38/40` in P6o-9 to `40/40` in P6o-10;
+  - rerank is safe but has not shown stable incremental answer-rate gain in the latest matrix;
+  - combo is safe and cheaper than governed but not better than version-only;
+  - all profiles remain eval/shadow-only and fixture-protected, not production natural traffic;
+  - post-check is observation-only and has no production retry/fallback implementation.
+- Recommended next step:
+  - P6o-11 should be a failure/sensitivity analysis, not a new production feature;
+  - compare per-case pass/fail patterns across P6o-8/P6o-9/P6o-10;
+  - identify whether version-only's `40/40` is stable or a one-run effect;
+  - only after that run a targeted hard slice and repeat stability gate for safe version-only vs combo.

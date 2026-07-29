@@ -1734,7 +1734,7 @@ Current status:
 1. Extend pure answer contract helper for governed allowed ids - complete.
 2. Register governed answer contract profile in comprehensive online eval - complete.
 3. Run fake-provider smoke and metadata regression - complete.
-4. Update docs and commit locally without push - in progress.
+4. Update docs and commit locally without push - complete.
 
 Fake-provider smoke:
 
@@ -1881,7 +1881,7 @@ Execution status:
 4. Add Markdown metadata / fake-provider / CLI smoke coverage - complete.
 5. Run full fake-provider gate - complete.
 6. Run bounded real LLM matrix - complete.
-7. Update docs and commit locally without push - in progress.
+7. Update docs and commit locally without push - complete.
 
 Real report:
 
@@ -2185,3 +2185,20 @@ Next step:
 
 - Compare failure cases and rerun sensitivity for safe version-only vs combo.
 - Keep all profiles eval/shadow-only until robustness holds beyond this 40-case small matrix.
+
+Current issues to resolve before any productionization:
+
+1. Sample size is still small: P6o-8/P6o-9/P6o-10 use common `20` + hard `20`, so the result is useful for direction but not enough for production confidence.
+2. Same profile results still vary across fresh real LLM runs: safe version-governed was `38/40` in P6o-9 and `40/40` in P6o-10, which means stochastic sensitivity must be measured before choosing a winner.
+3. Combo is safe but not clearly better: `chain_tri_rerank_version_governed_answer_contract` ties governed at `39/40` and lowers tokens, but does not beat version-only.
+4. Rerank's incremental value is not stable in the latest matrix: rerank-governed no longer beats governed, so rerank should remain an ordering signal under test rather than a default production layer.
+5. The profiles remain eval/shadow-only and oracle-protected through fixture expected ids; they are not production natural traffic and should not be wired into production `AgentLoop` yet.
+6. Post-check is still shadow-only: it observes retry needs and boundary risk but does not yet implement a production retry/fallback policy.
+
+Recommended next plan:
+
+1. P6o-11 failure/sensitivity analysis: compare pass/fail case ids across P6o-8, P6o-9, and P6o-10 for governed, rerank-governed, safe version-governed, and combo; identify whether misses are random, profile-specific, or case-family-specific.
+2. P6o-12 targeted hard slice: add or select harder version/rerank cases where active version, stale warning, conflict warning, and ordering should matter; keep common `20` + hard `20` plus a small targeted pack instead of jumping to all-on.
+3. P6o-13 repeat stability gate: rerun safe version-governed vs combo with repeats `2` or `3` on the same bounded matrix; require answer/forbidden/post-check stability, not just one lucky `40/40`.
+4. P6o-14 production-shadow design: remove fixture expected-id dependence for the chosen profile path, define real candidate signals, source_ref confidence, active-version source, insufficient evidence fallback, and post-check logging.
+5. Only after those pass, consider a larger real LLM matrix or a production shadow experiment. Graph/all-on should stay deferred until version-only vs combo is stable.
