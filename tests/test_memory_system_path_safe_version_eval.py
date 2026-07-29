@@ -109,6 +109,7 @@ def test_system_path_safe_version_cli_fake_provider_writes_sanitized_report(
     markdown = (out_dir / "system_path_safe_version_eval.md").read_text(
         encoding="utf-8"
     )
+    assert markdown.startswith("# System Path Safe Version Governed")
     assert payload["metrics"]["evaluation_level"] == "system_path_safe_version_governed"
     assert payload["metrics"]["unique_case_count"] == 4
     assert payload["metrics"]["mode_count"] == 3

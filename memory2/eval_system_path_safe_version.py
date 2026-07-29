@@ -216,7 +216,7 @@ def write_system_path_safe_version_markdown(
     path.parent.mkdir(parents=True, exist_ok=True)
     metrics = report.metrics
     lines = [
-        "# P6o-13 System Path Safe Version Governed",
+        "# System Path Safe Version Governed",
         "",
         "本报告使用 system-path fake/provider validation；不包含原始 query、prompt、memory summary 或完整回答。",
         "",
