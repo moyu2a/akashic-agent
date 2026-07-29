@@ -2409,3 +2409,45 @@
   - do not run graph-all-on;
   - treat graph as a routed graph candidate;
   - next conservative step is safe version-governed repeat stability, with routed graph designed only if graph-only rescue cases are clear enough.
+
+## 2026-07-29 P6o-12 safe version repeat stability
+
+- Plan file:
+  - `docs/superpowers/plans/2026-07-29-memory-p6o12-safe-version-repeat-stability.md`.
+- Real report:
+  - `my_md/memory_optimization/eval_reports/p6o12_safe_version_repeat_stability_v1/memory_comprehensive_online_eval.json`;
+  - `my_md/memory_optimization/eval_reports/p6o12_safe_version_repeat_stability_v1/memory_comprehensive_online_eval.md`;
+  - `my_md/memory_optimization/eval_reports/p6o12_safe_version_repeat_stability_v1/repeat_stability_summary.md`.
+- Scope:
+  - no graph/all-on;
+  - no new eval profile;
+  - no production activation;
+  - no production AgentLoop / prompt / write path changes.
+- Matrix:
+  - standard case pack;
+  - common `20` + hard `20`;
+  - baseline prompt;
+  - repeat `3`;
+  - profiles `chain_tri_governed_answer_contract` and `chain_tri_version_governed_answer_contract`;
+  - `240` completed real LLM calls.
+- Infra:
+  - `provider_error_count = 0`;
+  - `timeout_count = 0`;
+  - `infra_passed = True`.
+- Profile totals:
+  - `chain_tri_governed_answer_contract`: answer `119/120 = 99.1667%`, grounding `100.0%`, forbidden `0.0%`, avg tokens `6122.6917`;
+  - `chain_tri_version_governed_answer_contract`: answer `117/120 = 97.5%`, grounding `100.0%`, forbidden `0.0%`, avg tokens `6030.3833`.
+- Per-repeat answer counts:
+  - governed baseline: `40/40`, `39/40`, `40/40`;
+  - safe version-governed: `39/40`, `39/40`, `39/40`.
+- Post-check shadow:
+  - both profiles had `needs_retry = 0`;
+  - forbidden boundary, stale evidence, conflict evidence, missing likely relevant context, and insufficient fallback risk counts were all `0`.
+- Conclusion:
+  - safe version-governed repeat stability gate passed;
+  - P6o-10 `40/40` should not be treated as a fixed 100% guarantee;
+  - better current wording is stable `39/40` to `40/40` band on the current 40-case slice;
+  - safe version-governed remained cheaper than governed baseline by `92.3084` avg tokens.
+- Next step:
+  - targeted hard-slice validation before any routed graph design;
+  - do not run graph-all-on or production activation yet.
