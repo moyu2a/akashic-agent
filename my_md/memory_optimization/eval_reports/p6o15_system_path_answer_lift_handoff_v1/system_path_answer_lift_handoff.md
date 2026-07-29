@@ -259,6 +259,26 @@ shadow 信号：
 
 ### P6o-19：组合验证
 
+目的：
+
+- 把 P6o-16 到 P6o-18 中有效的改动组合起来
+- 和 P6o-14 best (`safe_version_replace`) 做同场比较
+
+建议矩阵：
+
+- `current`
+- `safe_version_replace`
+- `safe_version_replace_guided`
+- `safe_version_replace_guided_with_retry_shadow`
+
+成功门槛：
+
+- answer 明显高于 `52.5%`
+- grounding 保持 `100.0%`
+- forbidden 保持 `0.0%`
+- token 不明显上升
+- post-check 风险不增加
+
 ## P6o-15 执行结果更新
 
 P6o-15 已完成，不再只是计划项。
@@ -282,6 +302,11 @@ P6o-15 已完成，不再只是计划项。
 - checkpoint：`/tmp/akashic-memory-p6o15-system-path-repeat-real/checkpoint.jsonl`
 - memory 数据：fixture-seeded temporary system-path store
 - 生产默认：仍为 `MemoryConfig.safe_version_governed_mode = "off"`
+- review 后 checkpoint 可靠性修复：
+  - resume 跳过 provider_error / timeout rows，以便重试失败调用
+  - checkpoint-report-only 保留 provider_error / timeout rows，避免报告隐藏 partial failure
+  - malformed trailing JSONL 不阻断恢复，并记录 `malformed_checkpoint_line_count`
+  - append 时遇到 partial line 会先补换行
 
 核心数据：
 
@@ -324,25 +349,12 @@ Movement：
 - 当前 remaining miss 主要是 answer-rule required/any-group miss 和少量 language failure；问题仍然是 evidence-to-answer 表达，而不是召回不足。
 - 下一步应进入 P6o-16 system-path answer guidance，不应先打开 graph/all-on，也不应改生产默认 `off`。
 
-目的：
+最终验证：
 
-- 把 P6o-16 到 P6o-18 中有效的改动组合起来
-- 和 P6o-14 best (`safe_version_replace`) 做同场比较
-
-建议矩阵：
-
-- `current`
-- `safe_version_replace`
-- `safe_version_replace_guided`
-- `safe_version_replace_guided_with_retry_shadow`
-
-成功门槛：
-
-- answer 明显高于 `52.5%`
-- grounding 保持 `100.0%`
-- forbidden 保持 `0.0%`
-- token 不明显上升
-- post-check 风险不增加
+- focused safe-version/system-path slice：`30 passed`
+- regression slice：`17 passed`
+- `git diff --check` passed
+- P6o-15 docs/report privacy gate passed
 
 ## 下一步建议
 

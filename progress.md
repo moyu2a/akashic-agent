@@ -2627,10 +2627,15 @@
 - Implementation/report commits completed before docs:
   - `28db4e5 feat: add system path repeat stability eval`;
   - `72fdbac feat: add system path failure attribution`;
-  - `f41b26c test: record p6o15 system path repeat stability`.
+  - `f41b26c test: record p6o15 system path repeat stability`;
+  - `70ce56f docs: record p6o15 system path repeat stability`;
+  - `25ed050 fix: harden system path checkpoint rebuild`.
 - Runner/report changes:
   - `scripts/run_memory_system_path_safe_version_eval.py` now supports `--repeats`, `--checkpoint-jsonl`, `--resume`, and `--checkpoint-report-only`;
   - `memory2/eval_system_path_safe_version.py` records `repeat_index`, repeat summaries, checkpoint metrics, and sanitized scoring counts;
+  - review follow-up split checkpoint semantics: resume skips provider_error/timeout checkpoint rows so they can be retried, while checkpoint-report-only includes infra rows so reports cannot silently hide partial failures;
+  - checkpoint loading now tolerates malformed trailing JSONL and records `malformed_checkpoint_line_count`;
+  - checkpoint append now inserts a newline if the existing checkpoint file ends with a partial line;
   - `memory2/eval_system_path_failure_attribution.py` builds report-only, sanitized heuristic failure attribution from completed system-path rows;
   - committed reports still exclude raw prompt, raw session text, raw user query, raw memory summaries, complete responses, API keys, and authorization values.
 - Fake-provider repeat smoke:
@@ -2710,3 +2715,8 @@
 - Next gate:
   - proceed to P6o-16 system-path answer guidance;
   - P6o-16 should target the remaining answer-rule and language buckets while keeping grounding `100.0%`, forbidden `0.0%`, contract success `100.0%`, and bounded tokens.
+- Final verification after review fix:
+  - focused safe-version/system-path slice: `30 passed`;
+  - regression slice: `17 passed`;
+  - `git diff --check` passed;
+  - P6o-15 docs/report privacy gate passed.
