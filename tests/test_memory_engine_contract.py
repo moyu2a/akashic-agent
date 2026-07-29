@@ -206,6 +206,258 @@ async def test_default_memory_engine_retrieve_falls_back_to_session_scope():
 
 
 @pytest.mark.asyncio
+async def test_default_memory_engine_safe_version_shadow_keeps_text_block(
+    tmp_path: Path,
+) -> None:
+    items = [
+        {
+            "id": "m-current",
+            "summary": "用户偏好使用 pytest。",
+            "score": 0.91,
+            "source_ref": "telegram:1:1",
+            "memory_type": "preference",
+            "status": "active",
+            "extra_json": {},
+        }
+    ]
+    route_trace = {
+        "candidates_by_lane": {
+            "semantic": items,
+            "keyword": [],
+            "provenance": [],
+            "graph": [],
+        }
+    }
+    retriever = SimpleNamespace(
+        retrieve_with_lanes=AsyncMock(return_value=(items, items, [])),
+        retrieve_with_trace=AsyncMock(return_value=(items, route_trace)),
+        build_injection_block=MagicMock(
+            return_value=("baseline memory block", ["m-current"])
+        ),
+    )
+    store = SimpleNamespace(list_replacements=MagicMock(return_value=[]))
+    engine = _make_default_engine(retriever=cast(Any, retriever))
+    engine._v2_store = store
+
+    result = await engine.retrieve(
+        MemoryEngineRetrieveRequest(
+            query="我默认用什么测试框架？",
+            scope=MemoryScope(session_key="s", channel="telegram", chat_id="1"),
+            hints={
+                "require_scope_match": True,
+                "safe_version_governed_mode": "shadow",
+            },
+            top_k=8,
+        )
+    )
+
+    assert result.text_block == "baseline memory block"
+    assert result.raw["safe_version_governed_metadata"]["mode"] == "shadow"
+    assert result.raw["safe_version_governed_metadata"]["replace_applied"] is False
+    assert result.raw["safe_version_governed_shadow"]["production_safe"] is True
+    assert (
+        "Evidence Contract: system_memory_safe_version_governed"
+        not in result.text_block
+    )
+
+
+@pytest.mark.asyncio
+async def test_default_memory_engine_safe_version_replace_uses_contract_text(
+    tmp_path: Path,
+) -> None:
+    items = [
+        {
+            "id": "m-current",
+            "summary": "用户偏好使用 pytest。",
+            "score": 0.91,
+            "source_ref": "telegram:1:1",
+            "memory_type": "preference",
+            "status": "active",
+            "extra_json": {},
+        }
+    ]
+    route_trace = {
+        "candidates_by_lane": {
+            "semantic": items,
+            "keyword": [],
+            "provenance": [],
+            "graph": [],
+        }
+    }
+    retriever = SimpleNamespace(
+        retrieve_with_lanes=AsyncMock(return_value=(items, items, [])),
+        retrieve_with_trace=AsyncMock(return_value=(items, route_trace)),
+        build_injection_block=MagicMock(
+            return_value=("baseline memory block", ["m-current"])
+        ),
+    )
+    store = SimpleNamespace(list_replacements=MagicMock(return_value=[]))
+    engine = _make_default_engine(retriever=cast(Any, retriever))
+    engine._v2_store = store
+
+    result = await engine.retrieve(
+        MemoryEngineRetrieveRequest(
+            query="我默认用什么测试框架？",
+            scope=MemoryScope(session_key="s", channel="telegram", chat_id="1"),
+            hints={
+                "require_scope_match": True,
+                "safe_version_governed_mode": "replace",
+                "safe_version_governed_replace_allowed": True,
+            },
+            top_k=8,
+        )
+    )
+
+    assert "Evidence Contract: system_memory_safe_version_governed" in result.text_block
+    assert "forbidden_boundary_ids:" not in result.text_block
+    assert "deleted_evidence_ids:" not in result.text_block
+    assert result.raw["safe_version_governed_metadata"]["mode"] == "replace"
+    assert result.raw["safe_version_governed_metadata"]["replacement_requested"] is True
+    assert result.raw["safe_version_governed_metadata"]["replace_applied"] is True
+
+
+@pytest.mark.asyncio
+async def test_default_memory_engine_safe_version_replace_requires_allow_gate(
+    tmp_path: Path,
+) -> None:
+    items = [
+        {
+            "id": "m-current",
+            "summary": "用户偏好使用 pytest。",
+            "score": 0.91,
+            "source_ref": "telegram:1:1",
+            "memory_type": "preference",
+            "status": "active",
+            "extra_json": {},
+        }
+    ]
+    route_trace = {
+        "candidates_by_lane": {
+            "semantic": items,
+            "keyword": [],
+            "provenance": [],
+            "graph": [],
+        }
+    }
+    retriever = SimpleNamespace(
+        retrieve_with_lanes=AsyncMock(return_value=(items, items, [])),
+        retrieve_with_trace=AsyncMock(return_value=(items, route_trace)),
+        build_injection_block=MagicMock(
+            return_value=("baseline memory block", ["m-current"])
+        ),
+    )
+    engine = _make_default_engine(retriever=cast(Any, retriever))
+    engine._v2_store = SimpleNamespace(list_replacements=MagicMock(return_value=[]))
+
+    result = await engine.retrieve(
+        MemoryEngineRetrieveRequest(
+            query="我默认用什么测试框架？",
+            scope=MemoryScope(session_key="s", channel="telegram", chat_id="1"),
+            hints={
+                "require_scope_match": True,
+                "safe_version_governed_mode": "replace",
+                "safe_version_governed_replace_allowed": False,
+            },
+            top_k=8,
+        )
+    )
+
+    assert result.text_block == "baseline memory block"
+    assert result.raw["safe_version_governed_metadata"]["mode"] == "shadow"
+    assert result.raw["safe_version_governed_metadata"]["replacement_requested"] is False
+    assert result.raw["safe_version_governed_metadata"]["replace_applied"] is False
+
+
+@pytest.mark.asyncio
+async def test_default_memory_engine_off_adds_no_safe_version_metadata() -> None:
+    items = [
+        {
+            "id": "m-current",
+            "summary": "用户偏好使用 pytest。",
+            "score": 0.91,
+            "source_ref": "telegram:1:1",
+            "memory_type": "preference",
+            "status": "active",
+            "extra_json": {},
+        }
+    ]
+    retriever = SimpleNamespace(
+        retrieve=AsyncMock(return_value=items),
+        retrieve_with_lanes=AsyncMock(return_value=(items, items, [])),
+        build_injection_block=MagicMock(
+            return_value=("baseline memory block", ["m-current"])
+        ),
+    )
+    engine = _make_default_engine(retriever=cast(Any, retriever))
+
+    result = await engine.retrieve(
+        MemoryEngineRetrieveRequest(
+            query="我默认用什么测试框架？",
+            scope=MemoryScope(session_key="s", channel="telegram", chat_id="1"),
+            hints={"require_scope_match": True},
+            top_k=8,
+        )
+    )
+
+    assert result.text_block == "baseline memory block"
+    assert "safe_version_governed_metadata" not in result.raw
+    assert "safe_version_governed_shadow" not in result.raw
+    assert "safe_version_governed_mode" not in result.trace
+
+
+@pytest.mark.asyncio
+async def test_default_memory_engine_replace_contract_failure_is_not_success(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    items = [
+        {
+            "id": "m-current",
+            "summary": "用户偏好使用 pytest。",
+            "score": 0.91,
+            "source_ref": "telegram:1:1",
+            "memory_type": "preference",
+            "status": "active",
+            "extra_json": {},
+        }
+    ]
+    retriever = SimpleNamespace(
+        retrieve=AsyncMock(return_value=items),
+        retrieve_with_lanes=AsyncMock(return_value=(items, items, [])),
+        build_injection_block=MagicMock(
+            return_value=("baseline memory block", ["m-current"])
+        ),
+    )
+    engine = _make_default_engine(retriever=cast(Any, retriever))
+
+    def _raise_contract_error(**kwargs: object) -> object:
+        raise RuntimeError("contract failed")
+
+    monkeypatch.setattr(
+        "plugins.default_memory.engine.build_system_path_safe_version_contract",
+        _raise_contract_error,
+    )
+
+    result = await engine.retrieve(
+        MemoryEngineRetrieveRequest(
+            query="我默认用什么测试框架？",
+            scope=MemoryScope(session_key="s", channel="telegram", chat_id="1"),
+            hints={
+                "safe_version_governed_mode": "replace",
+                "safe_version_governed_replace_allowed": True,
+            },
+            top_k=8,
+        )
+    )
+
+    assert result.text_block == "baseline memory block"
+    metadata = result.raw["safe_version_governed_metadata"]
+    assert metadata["mode"] == "replace"
+    assert metadata["contract_generation_success"] is False
+    assert metadata["replacement_requested"] is True
+    assert metadata["replace_applied"] is False
+
+
+@pytest.mark.asyncio
 async def test_default_memory_engine_records_tri_retrieval_shadow_without_changing_hits() -> (
     None
 ):

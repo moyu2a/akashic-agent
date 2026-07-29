@@ -60,6 +60,10 @@ from memory2.rule_schema import build_procedure_rule_schema
 from memory2.sleep_consolidation_experiments import (
     build_sleep_consolidation_shadow_result,
 )
+from memory2.system_path_safe_version_contract import (
+    build_system_path_safe_version_contract,
+    system_path_contract_to_dict,
+)
 from memory2.store import MemoryStore2
 from memory2.version_chain_experiments import build_version_chain_shadow_result
 from plugins.default_memory.config import DefaultMemoryConfig, resolve_memory_db_path
@@ -748,6 +752,66 @@ class DefaultMemoryEngine:
             scope=scope,
         )
         text_block, injected_ids = self._retriever.build_injection_block(items)
+        safe_mode = _safe_version_governed_mode(
+            request.hints.get("safe_version_governed_mode")
+        )
+        replace_allowed = bool(
+            request.hints.get("safe_version_governed_replace_allowed", False)
+        )
+        if safe_mode == "replace" and not replace_allowed:
+            safe_mode = "shadow"
+        safe_shadow = None
+        safe_metadata: dict[str, object] | None = None
+        if safe_mode in {"shadow", "replace"}:
+            try:
+                safe_result = build_system_path_safe_version_contract(
+                    query=request.query,
+                    baseline_items=items,
+                    route_trace=route_trace,
+                    replacements=(
+                        self._v2_store.list_replacements()
+                        if self._v2_store is not None
+                        else []
+                    ),
+                    top_k=request.top_k or len(items) or 8,
+                )
+                safe_shadow = system_path_contract_to_dict(safe_result.contract)
+                safe_metadata = {
+                    "mode": safe_mode,
+                    "contract_generation_success": True,
+                    "allowed_evidence_count": len(
+                        safe_result.contract.allowed_evidence_ids
+                    ),
+                    "deleted_evidence_count": len(
+                        safe_result.contract.deleted_evidence_ids
+                    ),
+                    "downgrade_count": len(safe_result.contract.downgrade_ids),
+                    "requires_review_count": len(
+                        safe_result.contract.requires_review_ids
+                    ),
+                    "forbidden_boundary_count": len(
+                        safe_result.contract.forbidden_boundary_ids
+                    ),
+                    "replacement_requested": safe_mode == "replace",
+                    "replace_allowed": replace_allowed,
+                    "replace_applied": safe_mode == "replace",
+                }
+                if safe_mode == "replace":
+                    text_block = safe_result.text_block
+                    injected_ids = list(safe_result.contract.allowed_evidence_ids)
+            except Exception as exc:
+                logger.debug(
+                    "safe version governed system-path shadow failed",
+                    exc_info=True,
+                )
+                safe_metadata = {
+                    "mode": safe_mode,
+                    "contract_generation_success": False,
+                    "error_type": type(exc).__name__,
+                    "replacement_requested": safe_mode == "replace",
+                    "replace_allowed": replace_allowed,
+                    "replace_applied": False,
+                }
         self._record_injection_governance_shadow(
             scope=scope,
             baseline_items=items,
@@ -770,8 +834,35 @@ class DefaultMemoryEngine:
                 "profile": self.DESCRIPTOR.profile.value,
                 "mode": request.mode,
                 **route_trace,
+                **(
+                    {
+                        "safe_version_governed_mode": safe_mode,
+                        "safe_version_governed_contract_generation_success": bool(
+                            safe_metadata.get(
+                                "contract_generation_success",
+                                False,
+                            )
+                        ),
+                        "safe_version_governed_replace_applied": bool(
+                            safe_metadata.get("replace_applied", False)
+                        ),
+                    }
+                    if safe_metadata is not None
+                    else {}
+                ),
             },
-            raw={"items": items, "route_trace": route_trace},
+            raw={
+                "items": items,
+                "route_trace": route_trace,
+                **(
+                    {
+                        "safe_version_governed_shadow": safe_shadow,
+                        "safe_version_governed_metadata": safe_metadata,
+                    }
+                    if safe_metadata is not None
+                    else {}
+                ),
+            },
         )
 
     # post-response 摄入入口：外部只提交对话内容，失效判断仍在 engine 内部完成。
@@ -1909,6 +2000,13 @@ def _split_write_result(value: str) -> tuple[str, str]:
         return "new", raw
     status, item_id = raw.split(":", 1)
     return status or "new", item_id
+
+
+def _safe_version_governed_mode(value: object) -> str:
+    mode = str(value or "off")
+    if mode not in {"off", "shadow", "replace"}:
+        return "off"
+    return mode
 
 
 def _dedupe_ids(ids: list[str]) -> list[str]:
