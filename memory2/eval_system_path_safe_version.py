@@ -226,8 +226,8 @@ def write_system_path_safe_version_markdown(
         f"- case_count: `{metrics['case_count']}`",
         f"- replacement_seeded_count: `{metrics['replacement_seeded_count']}`",
         "",
-        "| mode | cases | answer_success | answer_rate | grounding_rate | forbidden_rate | contract_success | post_check_shadow | avg_tokens |",
-        "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+        "| mode | cases | answer_success | answer_rate | grounding_rate | forbidden_rate | contract_success | post_check_shadow | avg_tokens | avg_latency_ms |",
+        "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
     ]
     for mode, summary in dict(metrics["mode_summaries"]).items():
         row = cast(dict[str, object], summary)
@@ -244,6 +244,7 @@ def write_system_path_safe_version_markdown(
                     str(row["contract_generation_success_rate"]),
                     str(row["post_check_shadow_enabled_rate"]),
                     str(row["avg_total_token_count"]),
+                    str(row["avg_latency_ms"]),
                 )
             )
             + " |"
@@ -618,8 +619,8 @@ def _build_metrics(
         "raw_query_included": False,
         "raw_memory_summary_included": False,
         "prompt_included": False,
-        "session_text_included": False,
-        "full_answer_included": False,
+        "conversation_log_included": False,
+        "complete_response_included": False,
         "replacement_seeded_count": replacement_seeded_count,
         "version_boundary_case_count": version_boundary_case_count,
         "mode_summaries": mode_summaries,

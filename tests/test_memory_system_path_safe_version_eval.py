@@ -122,7 +122,8 @@ def test_system_path_safe_version_cli_fake_provider_writes_sanitized_report(
     assert payload["metrics"]["raw_query_included"] is False
     assert payload["metrics"]["raw_memory_summary_included"] is False
     assert payload["metrics"]["prompt_included"] is False
-    assert payload["metrics"]["full_answer_included"] is False
+    assert payload["metrics"]["complete_response_included"] is False
+    assert payload["metrics"]["conversation_log_included"] is False
     assert "safe_version_replace" in payload["metrics"]["mode_summaries"]
     assert (
         payload["metrics"]["mode_summaries"]["safe_version_shadow"][
@@ -148,6 +149,21 @@ def test_system_path_safe_version_cli_fake_provider_writes_sanitized_report(
         ]
         == 0.0
     )
+    current = payload["metrics"]["mode_summaries"]["current"]
+    replace = payload["metrics"]["mode_summaries"]["safe_version_replace"]
+    assert "answer_success_count" in current
+    assert "answer_rule_pass_rate" in current
+    assert "memory_grounding_pass_rate" in current
+    assert "forbidden_violation_rate" in current
+    assert "avg_total_token_count" in current
+    assert "avg_latency_ms" in current
+    assert replace["contract_generation_success_rate"] == 100.0
+    assert replace["post_check_shadow_enabled_rate"] == 100.0
+    assert (
+        "| mode | cases | answer_success | answer_rate | grounding_rate | "
+        "forbidden_rate | contract_success | post_check_shadow | avg_tokens | "
+        "avg_latency_ms |"
+    ) in markdown
     assert all("post_check_shadow" in row for row in payload["cases"])
     for row in payload["cases"]:
         assert "answer_rule_passed" in row
