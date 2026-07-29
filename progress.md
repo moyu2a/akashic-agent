@@ -2472,3 +2472,49 @@
   - P6o-13 production-shadow safe version-governed design;
   - shadow output only first;
   - no direct production activation, no graph-all-on, no fixture expectation copied into production.
+
+## 2026-07-29 P6o-13 system path safe version governed
+
+- Plan file:
+  - `docs/superpowers/plans/2026-07-29-memory-p6o13-system-path-safe-version-governed.md`.
+- Implemented system-path integration:
+  - `memory2/system_path_safe_version_contract.py` builds a production-safe contract from real retrieved memory candidates, route traces, and replacement records;
+  - `MemoryConfig.safe_version_governed_mode` defaults to `off`;
+  - `safe_version_shadow` records contract metadata and post-check shadow while keeping the original memory block;
+  - `safe_version_replace` can replace the memory block only when config mode and a separate replace allow gate are both enabled;
+  - session metadata can request `off` or `shadow`, but cannot grant replace permission.
+- Implementation commits completed before docs:
+  - `fe95ec7 feat: add system path safe version contract builder`;
+  - `43b98ca feat: pass safe version memory mode through retrieval pipeline`;
+  - `4632f5f feat: attach safe version governed memory shadow to engine`;
+  - `8c22cf3 feat: add system path safe version eval runner`.
+- Fake-provider system-path smoke report:
+  - `my_md/memory_optimization/eval_reports/p6o13_system_path_safe_version_governed_v1/system_path_safe_version_eval.json`;
+  - `my_md/memory_optimization/eval_reports/p6o13_system_path_safe_version_governed_v1/system_path_safe_version_eval.md`.
+- Smoke matrix:
+  - standard case pack;
+  - common `20` + hard `20`;
+  - modes `current`, `safe_version_shadow`, `safe_version_replace`;
+  - `unique_case_count = 40`;
+  - `case_count = 120`;
+  - `replacement_seeded_count = 120`;
+  - `version_boundary_case_count = 80`.
+- Smoke gate metrics:
+  - `provider_error_count = 0`;
+  - `timeout_count = 0`;
+  - `current` contract generation `0.0%`, post-check shadow `0.0%`;
+  - `safe_version_shadow` contract generation `100.0%`, post-check shadow `100.0%`;
+  - `safe_version_replace` contract generation `100.0%`, post-check shadow `100.0%`.
+- Boundaries:
+  - default production behavior remains `off`;
+  - no graph/all-on;
+  - no production write, retry, or fallback changes;
+  - committed reports exclude raw prompt, raw session text, raw memory summaries, and full answers;
+  - pre-existing untracked real LLM validation intent directory was left untouched.
+- Conclusion:
+  - P6o-13 proves the current best safe version-governed structure can be mounted on the real system path behind explicit test/eval gates;
+  - this is fake-provider system-path validation, not real LLM answer-quality proof and not production default activation.
+- Next gate:
+  - P6o-14 system-path safe version-governed real LLM A/B;
+  - compare `current` against `safe_version_replace`, with optional `safe_version_shadow` telemetry parity;
+  - success requires clean infra, `100.0%` contract generation in governed modes, no worse answer/grounding/forbidden than current, and sanitized reports.
