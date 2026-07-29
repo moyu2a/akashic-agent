@@ -15,6 +15,7 @@ import agent.provider as agent_provider
 from agent.provider import LLMResponse
 from memory2.eval_quantitative_cases import build_quantitative_eval_cases
 from memory2.eval_system_path_safe_version import (
+    build_system_path_safe_version_report_from_checkpoint,
     run_system_path_safe_version_cases,
     write_system_path_safe_version_json,
     write_system_path_safe_version_markdown,
@@ -74,7 +75,7 @@ def build_provider_for_system_path_safe_version(
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--workspace", required=True)
+    parser.add_argument("--workspace", default="")
     parser.add_argument("--out-dir", required=True)
     parser.add_argument("--config", default="")
     parser.add_argument("--case-pack", default="standard")
@@ -87,42 +88,64 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--enable-real-llm", action="store_true")
     parser.add_argument("--timeout-s", type=float, default=30.0)
     parser.add_argument("--real-memory-workspace", default="")
+    parser.add_argument("--repeats", type=int, default=1)
+    parser.add_argument("--checkpoint-jsonl", default="")
+    parser.add_argument("--resume", action="store_true")
+    parser.add_argument("--checkpoint-report-only", action="store_true")
     args = parser.parse_args(argv)
 
     if bool(args.fake_provider) and bool(args.enable_real_llm):
         parser.error("--fake-provider and --enable-real-llm cannot be used together")
-    provider, model = build_provider_for_system_path_safe_version(args)
-    if provider is None or model is None:
-        raise SystemExit("missing API key for --enable-real-llm")
+    if int(args.repeats) < 1:
+        parser.error("repeats must be at least 1")
+    if bool(args.checkpoint_report_only) and not args.checkpoint_jsonl:
+        parser.error("--checkpoint-report-only requires --checkpoint-jsonl")
+    if not bool(args.checkpoint_report_only) and not args.workspace:
+        parser.error("--workspace is required unless --checkpoint-report-only is set")
 
-    if args.balanced_small:
-        cases = build_quantitative_eval_cases(
-            "common",
-            case_pack=args.case_pack,
-            limit=args.common_limit,
-        ) + build_quantitative_eval_cases(
-            "hard",
-            case_pack=args.case_pack,
-            limit=args.hard_limit,
-        )
-    else:
-        cases = build_quantitative_eval_cases(
-            "all",
-            case_pack=args.case_pack,
-            limit=args.limit,
-        )
-    modes = tuple(mode.strip() for mode in args.modes.split(",") if mode.strip())
-    report = asyncio.run(
-        run_system_path_safe_version_cases(
-            cases,
-            Path(args.workspace),
-            provider,
-            modes=modes,
-            model=model,
-            timeout_s=args.timeout_s,
+    if bool(args.checkpoint_report_only):
+        report = build_system_path_safe_version_report_from_checkpoint(
+            Path(args.checkpoint_jsonl),
             real_llm_enabled=bool(args.enable_real_llm),
         )
-    )
+    else:
+        provider, model = build_provider_for_system_path_safe_version(args)
+        if provider is None or model is None:
+            raise SystemExit("missing API key for --enable-real-llm")
+
+        if args.balanced_small:
+            cases = build_quantitative_eval_cases(
+                "common",
+                case_pack=args.case_pack,
+                limit=args.common_limit,
+            ) + build_quantitative_eval_cases(
+                "hard",
+                case_pack=args.case_pack,
+                limit=args.hard_limit,
+            )
+        else:
+            cases = build_quantitative_eval_cases(
+                "all",
+                case_pack=args.case_pack,
+                limit=args.limit,
+            )
+        modes = tuple(mode.strip() for mode in args.modes.split(",") if mode.strip())
+        report = asyncio.run(
+            run_system_path_safe_version_cases(
+                cases,
+                Path(args.workspace),
+                provider,
+                modes=modes,
+                model=model,
+                timeout_s=args.timeout_s,
+                real_llm_enabled=bool(args.enable_real_llm),
+                repeats=int(args.repeats),
+                checkpoint_jsonl=Path(args.checkpoint_jsonl)
+                if args.checkpoint_jsonl
+                else None,
+                resume=bool(args.resume),
+            )
+        )
     out_dir = Path(args.out_dir)
     write_system_path_safe_version_json(
         report,

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import subprocess
 import sys
@@ -212,6 +213,136 @@ def test_system_path_safe_version_cli_rejects_fake_and_real_flags(
         "--fake-provider and --enable-real-llm cannot be used together"
         in completed.stderr
     )
+
+
+def test_system_path_safe_version_cli_repeats_shape_and_indices(
+    tmp_path: Path,
+) -> None:
+    out_dir = tmp_path / "reports"
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "scripts/run_memory_system_path_safe_version_eval.py",
+            "--workspace",
+            str(tmp_path / "workspace"),
+            "--out-dir",
+            str(out_dir),
+            "--fake-provider",
+            "--case-pack",
+            "standard",
+            "--balanced-small",
+            "--common-limit",
+            "2",
+            "--hard-limit",
+            "2",
+            "--modes",
+            "current,safe_version_replace",
+            "--repeats",
+            "3",
+            "--real-memory-workspace",
+            str(tmp_path / "empty-real-workspace"),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    payload = json.loads(
+        (out_dir / "system_path_safe_version_eval.json").read_text(encoding="utf-8")
+    )
+    metrics = payload["metrics"]
+    assert metrics["unique_case_count"] == 4
+    assert metrics["mode_count"] == 2
+    assert metrics["repeat_count"] == 3
+    assert metrics["case_count"] == 24
+    assert sorted({row["repeat_index"] for row in payload["cases"]}) == [0, 1, 2]
+    assert sorted(metrics["repeat_summaries"]) == ["0", "1", "2"]
+    for summary in metrics["repeat_summaries"].values():
+        assert summary["case_count"] == 8
+        assert "mode_summaries" in summary
+        assert summary["mode_summaries"]["current"]["case_count"] == 4
+        assert summary["mode_summaries"]["safe_version_replace"]["case_count"] == 4
+
+
+def test_system_path_safe_version_cli_rejects_invalid_repeats(
+    tmp_path: Path,
+) -> None:
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "scripts/run_memory_system_path_safe_version_eval.py",
+            "--workspace",
+            str(tmp_path / "workspace"),
+            "--out-dir",
+            str(tmp_path / "reports"),
+            "--fake-provider",
+            "--repeats",
+            "0",
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode != 0
+    assert "repeats must be at least 1" in completed.stderr
+
+
+def test_system_path_safe_version_checkpoint_resume_skips_successes(
+    tmp_path: Path,
+) -> None:
+    from memory2.eval_system_path_safe_version import (
+        build_system_path_safe_version_report_from_checkpoint,
+        run_system_path_safe_version_cases,
+    )
+    from scripts.run_memory_system_path_safe_version_eval import (
+        ScriptedSystemPathProvider,
+    )
+
+    cases = build_quantitative_eval_cases(
+        "common",
+        case_pack="standard",
+        limit=1,
+    )
+    checkpoint = tmp_path / "checkpoint.jsonl"
+    provider = ScriptedSystemPathProvider()
+
+    first = asyncio.run(
+        run_system_path_safe_version_cases(
+            cases,
+            tmp_path / "workspace-first",
+            provider,
+            modes=("current", "safe_version_replace"),
+            checkpoint_jsonl=checkpoint,
+            repeats=1,
+        )
+    )
+    assert first.metrics["case_count"] == 2
+    assert first.metrics["skipped_from_checkpoint_count"] == 0
+
+    original_call_count = len(provider.calls)
+    resumed = asyncio.run(
+        run_system_path_safe_version_cases(
+            cases,
+            tmp_path / "workspace-resume",
+            provider,
+            modes=("current", "safe_version_replace"),
+            checkpoint_jsonl=checkpoint,
+            resume=True,
+            repeats=1,
+        )
+    )
+    assert resumed.metrics["case_count"] == 2
+    assert resumed.metrics["skipped_from_checkpoint_count"] == 2
+    assert len(provider.calls) == original_call_count
+
+    rebuilt = build_system_path_safe_version_report_from_checkpoint(
+        checkpoint,
+        real_llm_enabled=False,
+    )
+    assert rebuilt.metrics["checkpoint_input_count"] == 2
+    assert rebuilt.metrics["case_count"] == 2
 
 
 def test_system_path_safe_version_fake_provider_rows_are_answer_scored(

@@ -165,21 +165,37 @@ async def run_system_path_safe_version_cases(
     model: str = "scripted",
     timeout_s: float = 30.0,
     real_llm_enabled: bool = False,
+    repeats: int = 1,
+    checkpoint_jsonl: Path | None = None,
+    resume: bool = False,
 ) -> SystemPathSafeVersionReport:
     records: list[dict[str, object]] = []
-    for case_index, case in enumerate(cases):
-        for mode in modes:
-            records.append(
-                await _run_case_mode(
+    existing = _load_system_path_checkpoint_records(checkpoint_jsonl) if resume else {}
+    skipped = 0
+    repeat_count = max(1, int(repeats))
+    for repeat_index in range(repeat_count):
+        for case_index, case in enumerate(cases):
+            for mode in modes:
+                key = _system_path_spec_key(case.id, mode, repeat_index)
+                checkpointed = existing.get(key)
+                if checkpointed is not None:
+                    skipped += 1
+                    records.append(checkpointed)
+                    continue
+                record = await _run_case_mode(
                     case=case,
                     case_index=case_index,
+                    repeat_index=repeat_index,
                     mode=mode,
-                    workspace=workspace / f"case-{case_index:03d}-{mode}",
+                    workspace=workspace
+                    / f"repeat-{repeat_index:02d}"
+                    / f"case-{case_index:03d}-{mode}",
                     provider=provider,
                     model=model,
                     timeout_s=timeout_s,
                 )
-            )
+                records.append(record)
+                _append_system_path_checkpoint_record(checkpoint_jsonl, key, record)
     return SystemPathSafeVersionReport(
         cases=tuple(records),
         metrics=_build_metrics(
@@ -187,8 +203,87 @@ async def run_system_path_safe_version_cases(
             unique_case_count=len(cases),
             modes=modes,
             real_llm_enabled=real_llm_enabled,
+            repeats=repeat_count,
+            skipped_from_checkpoint_count=skipped,
         ),
     )
+
+
+def build_system_path_safe_version_report_from_checkpoint(
+    checkpoint_jsonl: Path,
+    *,
+    real_llm_enabled: bool,
+) -> SystemPathSafeVersionReport:
+    checkpoint_input_count = _count_checkpoint_lines(checkpoint_jsonl)
+    records = list(_load_system_path_checkpoint_records(checkpoint_jsonl).values())
+    modes = tuple(
+        sorted({str(record.get("mode") or "") for record in records if record.get("mode")})
+    )
+    repeat_count = 1 + max(
+        (int(record.get("repeat_index", 0) or 0) for record in records),
+        default=0,
+    )
+    return SystemPathSafeVersionReport(
+        cases=tuple(records),
+        metrics=_build_metrics(
+            records,
+            unique_case_count=len({str(record.get("case_id") or "") for record in records}),
+            modes=modes,
+            real_llm_enabled=real_llm_enabled,
+            repeats=repeat_count,
+            checkpoint_input_count=checkpoint_input_count,
+        ),
+    )
+
+
+def _system_path_spec_key(case_id: str, mode: str, repeat_index: int) -> str:
+    return f"{case_id}|{mode}|{repeat_index}"
+
+
+def _load_system_path_checkpoint_records(
+    path: Path | None,
+) -> dict[str, dict[str, object]]:
+    if path is None or not path.exists():
+        return {}
+    records: dict[str, dict[str, object]] = {}
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        row = json.loads(line)
+        key = str(row.get("spec_key") or "")
+        result = row.get("result")
+        if not key or not isinstance(result, dict):
+            continue
+        if bool(result.get("provider_error")) or bool(result.get("timeout")):
+            continue
+        records[key] = dict(result)
+    return records
+
+
+def _append_system_path_checkpoint_record(
+    path: Path | None,
+    spec_key: str,
+    record: dict[str, object],
+) -> None:
+    if path is None:
+        return
+    _validate_report_privacy(SystemPathSafeVersionReport(cases=(record,), metrics={}))
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as handle:
+        handle.write(
+            json.dumps(
+                {"spec_key": spec_key, "result": record},
+                ensure_ascii=False,
+                sort_keys=True,
+            )
+            + "\n"
+        )
+
+
+def _count_checkpoint_lines(path: Path) -> int:
+    if not path.exists():
+        return 0
+    return sum(1 for line in path.read_text(encoding="utf-8").splitlines() if line.strip())
 
 
 def write_system_path_safe_version_json(
@@ -256,6 +351,7 @@ async def _run_case_mode(
     *,
     case: EvalCase,
     case_index: int,
+    repeat_index: int,
     mode: str,
     workspace: Path,
     provider: object,
@@ -356,6 +452,7 @@ async def _run_case_mode(
     return {
         "case_id": case.id,
         "case_index": case_index,
+        "repeat_index": repeat_index,
         "category": case.category,
         "mode": mode,
         "passed": not failures,
@@ -363,6 +460,12 @@ async def _run_case_mode(
         "memory_grounding_passed": score.memory_grounding_passed,
         "expected_memory_used": bool(score.expected_memory_used),
         "forbidden_contains_violation_count": score.forbidden_contains_violation_count,
+        "answer_length": len(answer),
+        "expected_contains_pass_count": score.expected_contains_pass_count,
+        "expected_contains_miss_count": score.expected_contains_miss_count,
+        "expected_any_pass_count": score.expected_any_pass_count,
+        "expected_any_miss_count": score.expected_any_miss_count,
+        "language_passed": score.language_passed,
         "failures": tuple(_sanitize_failure(failure) for failure in failures),
         "provider_error": provider_error,
         "timeout": timeout,
@@ -525,8 +628,107 @@ def _build_metrics(
     unique_case_count: int,
     modes: Sequence[str],
     real_llm_enabled: bool,
+    repeats: int = 1,
+    skipped_from_checkpoint_count: int = 0,
+    checkpoint_input_count: int = 0,
 ) -> dict[str, object]:
-    mode_summaries = {}
+    mode_summaries = _mode_summaries(records, modes)
+    replacement_seeded_count = sum(
+        int(record.get("replacement_seeded_count", 0) or 0) for record in records
+    )
+    version_boundary_case_count = sum(
+        1
+        for record in records
+        if cast(dict[str, object], record.get("safe_version_contract") or {})
+        .get("version_boundary", {})
+        .get("replacement_count", 0)
+    )
+    answer_success_count = sum(1 for row in records if row["answer_rule_passed"])
+    grounding_success_count = sum(
+        1 for row in records if row["memory_grounding_passed"]
+    )
+    forbidden_case_count = sum(
+        1
+        for row in records
+        if int(row.get("forbidden_contains_violation_count", 0) or 0) > 0
+    )
+    return {
+        "evaluation_level": "system_path_safe_version_governed",
+        "unique_case_count": unique_case_count,
+        "mode_count": len(tuple(modes)),
+        "case_count": len(records),
+        "repeat_count": max(1, int(repeats)),
+        "skipped_from_checkpoint_count": int(skipped_from_checkpoint_count),
+        "checkpoint_input_count": int(checkpoint_input_count),
+        "repeat_summaries": _repeat_summaries(records, modes),
+        "real_llm_enabled": bool(real_llm_enabled),
+        "fake_provider_enabled": not bool(real_llm_enabled),
+        "provider_error_count": sum(1 for row in records if row["provider_error"]),
+        "timeout_count": sum(1 for row in records if row["timeout"]),
+        "answer_rule_pass_rate": _pct(answer_success_count, len(records)),
+        "memory_grounding_pass_rate": _pct(grounding_success_count, len(records)),
+        "forbidden_violation_rate": _pct(forbidden_case_count, len(records)),
+        "avg_latency_ms": _avg(int(row.get("latency_ms", 0) or 0) for row in records),
+        "total_token_count": sum(
+            int(row.get("token_count", 0) or 0) for row in records
+        ),
+        "avg_total_token_count": _avg(
+            int(row.get("token_count", 0) or 0) for row in records
+        ),
+        "token_metrics_available": any(
+            bool(row.get("token_metrics_available")) for row in records
+        ),
+        "raw_query_included": False,
+        "raw_memory_summary_included": False,
+        "prompt_included": False,
+        "conversation_log_included": False,
+        "complete_response_included": False,
+        "replacement_seeded_count": replacement_seeded_count,
+        "version_boundary_case_count": version_boundary_case_count,
+        "mode_summaries": mode_summaries,
+    }
+
+
+def _repeat_summaries(
+    records: list[dict[str, object]],
+    modes: Sequence[str],
+) -> dict[str, dict[str, object]]:
+    summaries: dict[str, dict[str, object]] = {}
+    repeat_indices = sorted({int(row.get("repeat_index", 0) or 0) for row in records})
+    for repeat_index in repeat_indices:
+        rows = [
+            row
+            for row in records
+            if int(row.get("repeat_index", 0) or 0) == repeat_index
+        ]
+        summaries[str(repeat_index)] = {
+            "case_count": len(rows),
+            "answer_rule_pass_rate": _pct(
+                sum(1 for row in rows if row["answer_rule_passed"]),
+                len(rows),
+            ),
+            "memory_grounding_pass_rate": _pct(
+                sum(1 for row in rows if row["memory_grounding_passed"]),
+                len(rows),
+            ),
+            "forbidden_violation_rate": _pct(
+                sum(
+                    1
+                    for row in rows
+                    if int(row.get("forbidden_contains_violation_count", 0) or 0) > 0
+                ),
+                len(rows),
+            ),
+            "mode_summaries": _mode_summaries(rows, modes),
+        }
+    return summaries
+
+
+def _mode_summaries(
+    records: list[dict[str, object]],
+    modes: Sequence[str],
+) -> dict[str, dict[str, object]]:
+    mode_summaries: dict[str, dict[str, object]] = {}
     for mode in modes:
         rows = [record for record in records if record["mode"] == mode]
         answer_success_count = sum(1 for row in rows if row["answer_rule_passed"])
@@ -575,56 +777,7 @@ def _build_metrics(
                 bool(row.get("token_metrics_available")) for row in rows
             ),
         }
-    replacement_seeded_count = sum(
-        int(record.get("replacement_seeded_count", 0) or 0) for record in records
-    )
-    version_boundary_case_count = sum(
-        1
-        for record in records
-        if cast(dict[str, object], record.get("safe_version_contract") or {})
-        .get("version_boundary", {})
-        .get("replacement_count", 0)
-    )
-    answer_success_count = sum(1 for row in records if row["answer_rule_passed"])
-    grounding_success_count = sum(
-        1 for row in records if row["memory_grounding_passed"]
-    )
-    forbidden_case_count = sum(
-        1
-        for row in records
-        if int(row.get("forbidden_contains_violation_count", 0) or 0) > 0
-    )
-    return {
-        "evaluation_level": "system_path_safe_version_governed",
-        "unique_case_count": unique_case_count,
-        "mode_count": len(tuple(modes)),
-        "case_count": len(records),
-        "real_llm_enabled": bool(real_llm_enabled),
-        "fake_provider_enabled": not bool(real_llm_enabled),
-        "provider_error_count": sum(1 for row in records if row["provider_error"]),
-        "timeout_count": sum(1 for row in records if row["timeout"]),
-        "answer_rule_pass_rate": _pct(answer_success_count, len(records)),
-        "memory_grounding_pass_rate": _pct(grounding_success_count, len(records)),
-        "forbidden_violation_rate": _pct(forbidden_case_count, len(records)),
-        "avg_latency_ms": _avg(int(row.get("latency_ms", 0) or 0) for row in records),
-        "total_token_count": sum(
-            int(row.get("token_count", 0) or 0) for row in records
-        ),
-        "avg_total_token_count": _avg(
-            int(row.get("token_count", 0) or 0) for row in records
-        ),
-        "token_metrics_available": any(
-            bool(row.get("token_metrics_available")) for row in records
-        ),
-        "raw_query_included": False,
-        "raw_memory_summary_included": False,
-        "prompt_included": False,
-        "conversation_log_included": False,
-        "complete_response_included": False,
-        "replacement_seeded_count": replacement_seeded_count,
-        "version_boundary_case_count": version_boundary_case_count,
-        "mode_summaries": mode_summaries,
-    }
+    return mode_summaries
 
 
 def _pct(numerator: int, denominator: int) -> float:
