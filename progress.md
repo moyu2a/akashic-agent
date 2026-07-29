@@ -2451,3 +2451,24 @@
 - Next step:
   - targeted hard-slice validation before any routed graph design;
   - do not run graph-all-on or production activation yet.
+
+## 2026-07-29 P6o-12 production candidate handoff
+
+- User asked to record the current best scheme's data, test method, conclusions, and test results in docs.
+- Added:
+  - `my_md/memory_optimization/eval_reports/p6o12_safe_version_repeat_stability_v1/best_profile_production_candidate_summary.md`.
+- Updated:
+  - `my_md/memory_optimization/README.md`.
+- Content recorded:
+  - current best candidate is eval-only `chain_tri_version_governed_answer_contract`;
+  - production-migratable structure is `tri retrieval candidate pool + candidate governance + production-safe evidence contract + safe version boundary + answer post-check shadow`;
+  - graph is parked for now and should remain a routed graph candidate, not graph-all-on;
+  - P6o-12 test method: standard case pack, common `20` + hard `20`, baseline prompt, repeat `3`, 2 profiles, `240` completed real LLM calls;
+  - P6o-12 data: governed baseline `119/120 = 99.1667%`, safe version-governed `117/120 = 97.5%`, both grounding `100.0%`, forbidden `0.0%`, post-check risk all `0`;
+  - safe version-governed per-repeat answer counts: `39/40`, `39/40`, `39/40`;
+  - token delta vs governed baseline: `-92.3084` avg tokens;
+  - conclusion: initial eval-only loop is closed, but production default activation is not justified yet.
+- Recommended next step recorded:
+  - P6o-13 production-shadow safe version-governed design;
+  - shadow output only first;
+  - no direct production activation, no graph-all-on, no fixture expectation copied into production.
