@@ -345,6 +345,162 @@ def test_system_path_safe_version_checkpoint_resume_skips_successes(
     assert rebuilt.metrics["case_count"] == 2
 
 
+def _checkpoint_record(
+    *,
+    case_id: str,
+    mode: str,
+    repeat_index: int = 0,
+    answer: bool = True,
+    grounding: bool = True,
+    forbidden_count: int = 0,
+    provider_error: bool = False,
+    timeout: bool = False,
+) -> dict[str, object]:
+    return {
+        "case_id": case_id,
+        "case_index": 0,
+        "repeat_index": repeat_index,
+        "category": "common",
+        "mode": mode,
+        "passed": answer and not provider_error and not timeout,
+        "answer_rule_passed": answer,
+        "memory_grounding_passed": grounding,
+        "expected_memory_used": grounding,
+        "forbidden_contains_violation_count": forbidden_count,
+        "answer_length": 24,
+        "expected_contains_pass_count": 1 if answer else 0,
+        "expected_contains_miss_count": 0 if answer else 1,
+        "expected_any_pass_count": 0,
+        "expected_any_miss_count": 0,
+        "language_passed": True,
+        "failures": ["provider_error"] if provider_error else [],
+        "provider_error": provider_error,
+        "timeout": timeout,
+        "latency_ms": 10,
+        "token_count": 30,
+        "prompt_token_count": 20,
+        "completion_token_count": 10,
+        "token_metrics_available": True,
+        "replacement_seeded_count": 0,
+        "safe_version_metadata": {},
+        "safe_version_contract": {},
+        "post_check_shadow": {"shadow_enabled": False},
+    }
+
+
+def test_system_path_safe_version_checkpoint_report_only_includes_infra_rows(
+    tmp_path: Path,
+) -> None:
+    from memory2.eval_system_path_safe_version import (
+        build_system_path_safe_version_report_from_checkpoint,
+    )
+
+    checkpoint = tmp_path / "checkpoint.jsonl"
+    rows = [
+        {
+            "spec_key": "case-a|current|0",
+            "result": _checkpoint_record(case_id="case-a", mode="current"),
+        },
+        {
+            "spec_key": "case-b|current|0",
+            "result": _checkpoint_record(
+                case_id="case-b",
+                mode="current",
+                answer=False,
+                provider_error=True,
+            ),
+        },
+        {
+            "spec_key": "case-c|safe_version_replace|0",
+            "result": _checkpoint_record(
+                case_id="case-c",
+                mode="safe_version_replace",
+                answer=False,
+                timeout=True,
+            ),
+        },
+    ]
+    checkpoint.write_text(
+        "\n".join(json.dumps(row, ensure_ascii=False) for row in rows) + "\n",
+        encoding="utf-8",
+    )
+
+    report = build_system_path_safe_version_report_from_checkpoint(
+        checkpoint,
+        real_llm_enabled=True,
+    )
+
+    assert report.metrics["checkpoint_input_count"] == 3
+    assert report.metrics["malformed_checkpoint_line_count"] == 0
+    assert report.metrics["case_count"] == 3
+    assert report.metrics["provider_error_count"] == 1
+    assert report.metrics["timeout_count"] == 1
+
+
+def test_system_path_safe_version_checkpoint_loader_tolerates_malformed_tail(
+    tmp_path: Path,
+) -> None:
+    from memory2.eval_system_path_safe_version import (
+        build_system_path_safe_version_report_from_checkpoint,
+        run_system_path_safe_version_cases,
+    )
+    from scripts.run_memory_system_path_safe_version_eval import (
+        ScriptedSystemPathProvider,
+    )
+
+    cases = build_quantitative_eval_cases(
+        "common",
+        case_pack="standard",
+        limit=1,
+    )
+    checkpoint = tmp_path / "checkpoint.jsonl"
+    checkpoint.write_text(
+        "\n".join(
+            [
+                json.dumps(
+                    {
+                        "spec_key": f"{cases[0].id}|current|0",
+                        "result": _checkpoint_record(
+                            case_id=cases[0].id,
+                            mode="current",
+                            answer=False,
+                            provider_error=True,
+                        ),
+                    },
+                    ensure_ascii=False,
+                ),
+                '{"spec_key": "partial"',
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    provider = ScriptedSystemPathProvider()
+    report = asyncio.run(
+        run_system_path_safe_version_cases(
+            cases,
+            tmp_path / "workspace",
+            provider,
+            modes=("current", "safe_version_replace"),
+            checkpoint_jsonl=checkpoint,
+            resume=True,
+            repeats=1,
+        )
+    )
+
+    assert report.metrics["malformed_checkpoint_line_count"] == 1
+    assert report.metrics["skipped_from_checkpoint_count"] == 0
+    assert len(provider.calls) == 2
+
+    rebuilt = build_system_path_safe_version_report_from_checkpoint(
+        checkpoint,
+        real_llm_enabled=False,
+    )
+    assert rebuilt.metrics["checkpoint_input_count"] == 4
+    assert rebuilt.metrics["malformed_checkpoint_line_count"] == 1
+    assert rebuilt.metrics["case_count"] == 2
+
+
 def test_system_path_safe_version_fake_provider_rows_are_answer_scored(
     tmp_path: Path,
 ) -> None:

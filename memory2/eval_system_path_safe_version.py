@@ -170,7 +170,14 @@ async def run_system_path_safe_version_cases(
     resume: bool = False,
 ) -> SystemPathSafeVersionReport:
     records: list[dict[str, object]] = []
-    existing = _load_system_path_checkpoint_records(checkpoint_jsonl) if resume else {}
+    existing, malformed_checkpoint_line_count = (
+        _load_system_path_checkpoint_records(
+            checkpoint_jsonl,
+            include_infra_failures=False,
+        )
+        if resume
+        else ({}, 0)
+    )
     skipped = 0
     repeat_count = max(1, int(repeats))
     for repeat_index in range(repeat_count):
@@ -205,6 +212,7 @@ async def run_system_path_safe_version_cases(
             real_llm_enabled=real_llm_enabled,
             repeats=repeat_count,
             skipped_from_checkpoint_count=skipped,
+            malformed_checkpoint_line_count=malformed_checkpoint_line_count,
         ),
     )
 
@@ -215,7 +223,11 @@ def build_system_path_safe_version_report_from_checkpoint(
     real_llm_enabled: bool,
 ) -> SystemPathSafeVersionReport:
     checkpoint_input_count = _count_checkpoint_lines(checkpoint_jsonl)
-    records = list(_load_system_path_checkpoint_records(checkpoint_jsonl).values())
+    loaded, malformed_checkpoint_line_count = _load_system_path_checkpoint_records(
+        checkpoint_jsonl,
+        include_infra_failures=True,
+    )
+    records = list(loaded.values())
     modes = tuple(
         sorted({str(record.get("mode") or "") for record in records if record.get("mode")})
     )
@@ -232,6 +244,7 @@ def build_system_path_safe_version_report_from_checkpoint(
             real_llm_enabled=real_llm_enabled,
             repeats=repeat_count,
             checkpoint_input_count=checkpoint_input_count,
+            malformed_checkpoint_line_count=malformed_checkpoint_line_count,
         ),
     )
 
@@ -242,22 +255,32 @@ def _system_path_spec_key(case_id: str, mode: str, repeat_index: int) -> str:
 
 def _load_system_path_checkpoint_records(
     path: Path | None,
-) -> dict[str, dict[str, object]]:
+    *,
+    include_infra_failures: bool,
+) -> tuple[dict[str, dict[str, object]], int]:
     if path is None or not path.exists():
-        return {}
+        return {}, 0
     records: dict[str, dict[str, object]] = {}
+    malformed_count = 0
     for line in path.read_text(encoding="utf-8").splitlines():
         if not line.strip():
             continue
-        row = json.loads(line)
+        try:
+            row = json.loads(line)
+        except json.JSONDecodeError:
+            malformed_count += 1
+            continue
         key = str(row.get("spec_key") or "")
         result = row.get("result")
         if not key or not isinstance(result, dict):
             continue
-        if bool(result.get("provider_error")) or bool(result.get("timeout")):
+        if (
+            not include_infra_failures
+            and (bool(result.get("provider_error")) or bool(result.get("timeout")))
+        ):
             continue
         records[key] = dict(result)
-    return records
+    return records, malformed_count
 
 
 def _append_system_path_checkpoint_record(
@@ -269,6 +292,12 @@ def _append_system_path_checkpoint_record(
         return
     _validate_report_privacy(SystemPathSafeVersionReport(cases=(record,), metrics={}))
     path.parent.mkdir(parents=True, exist_ok=True)
+    if path.exists() and path.stat().st_size > 0:
+        with path.open("rb") as existing:
+            existing.seek(-1, 2)
+            if existing.read(1) != b"\n":
+                with path.open("a", encoding="utf-8") as handle:
+                    handle.write("\n")
     with path.open("a", encoding="utf-8") as handle:
         handle.write(
             json.dumps(
@@ -631,6 +660,7 @@ def _build_metrics(
     repeats: int = 1,
     skipped_from_checkpoint_count: int = 0,
     checkpoint_input_count: int = 0,
+    malformed_checkpoint_line_count: int = 0,
 ) -> dict[str, object]:
     mode_summaries = _mode_summaries(records, modes)
     replacement_seeded_count = sum(
@@ -660,6 +690,7 @@ def _build_metrics(
         "repeat_count": max(1, int(repeats)),
         "skipped_from_checkpoint_count": int(skipped_from_checkpoint_count),
         "checkpoint_input_count": int(checkpoint_input_count),
+        "malformed_checkpoint_line_count": int(malformed_checkpoint_line_count),
         "repeat_summaries": _repeat_summaries(records, modes),
         "real_llm_enabled": bool(real_llm_enabled),
         "fake_provider_enabled": not bool(real_llm_enabled),
