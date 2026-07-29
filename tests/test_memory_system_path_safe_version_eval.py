@@ -397,6 +397,51 @@ def test_system_path_safe_version_fake_provider_rows_are_answer_scored(
         assert "answer_passed" not in row
 
 
+def test_system_path_safe_version_rows_include_sanitized_scoring_counts(
+    tmp_path: Path,
+) -> None:
+    out_dir = tmp_path / "reports"
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "scripts/run_memory_system_path_safe_version_eval.py",
+            "--workspace",
+            str(tmp_path / "workspace"),
+            "--out-dir",
+            str(out_dir),
+            "--fake-provider",
+            "--case-pack",
+            "standard",
+            "--balanced-small",
+            "--common-limit",
+            "1",
+            "--hard-limit",
+            "1",
+            "--modes",
+            "current,safe_version_replace",
+            "--real-memory-workspace",
+            str(tmp_path / "empty-real-workspace"),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    payload = json.loads(
+        (out_dir / "system_path_safe_version_eval.json").read_text(encoding="utf-8")
+    )
+    for row in payload["cases"]:
+        assert "answer_length" in row
+        assert "expected_contains_pass_count" in row
+        assert "expected_contains_miss_count" in row
+        assert "expected_any_pass_count" in row
+        assert "expected_any_miss_count" in row
+        assert "language_passed" in row
+        assert not isinstance(row.get("matched_expected_terms"), list)
+        assert not isinstance(row.get("missing_expected_terms"), list)
+
+
 def test_system_path_safe_version_real_provider_builder_requires_api_key(
     monkeypatch: object,
     tmp_path: Path,
