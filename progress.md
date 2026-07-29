@@ -2578,3 +2578,135 @@
   - compare `current` vs `safe_version_replace`;
   - suggested matrix: common `20` + hard `20`, repeat `3`, baseline prompt, `240` real calls;
   - only after repeat stability should production-shadow rollout be considered, still with default `off`.
+
+## 2026-07-29 P6o-15 answer lift handoff
+
+- User asked from side conversation to record enough context so the main thread can continue.
+- Added handoff document:
+  - `my_md/memory_optimization/eval_reports/p6o15_system_path_answer_lift_handoff_v1/system_path_answer_lift_handoff.md`.
+- Recorded P6o-14 method:
+  - real LLM system-path A/B;
+  - standard case pack;
+  - common `20` + hard `20`;
+  - modes `current` and `safe_version_replace`;
+  - `40` unique cases and `80` total calls;
+  - fixture-seeded temporary system-path stores;
+  - no real user memory DB read;
+  - answer scoring via existing answer expectation scorer.
+- Recorded P6o-14 data:
+  - `current`: answer `11/40 = 27.5%`, grounding `100.0%`, forbidden `32.5%`, avg tokens `5488.75`, avg latency `5329.475ms`;
+  - `safe_version_replace`: answer `21/40 = 52.5%`, grounding `100.0%`, forbidden `0.0%`, avg tokens `5414.325`, avg latency `4405.4ms`;
+  - delta: answer `+25.0` points, forbidden `-32.5` points, avg tokens `-74.425`, avg latency `-924.075ms`.
+- Recorded conclusion:
+  - P6o-14 gate passed;
+  - system-path replace is clearly better than current;
+  - but `52.5%` is not enough for production default activation.
+- Recorded explanation for lower score than prior near-100 profiles:
+  - prior P6o-10/P6o-12 results were eval-only / comprehensive profile results with stronger evidence and answer contract presentation;
+  - P6o-14 uses real system path, so prompt composition, memory block format and AgentLoop context reduce answer determinism;
+  - grounding is already `100.0%`, so the bottleneck is evidence-to-answer rather than recall.
+- Recorded next target:
+  - move P6o-14 `safe_version_replace` answer rate from `52.5%` toward P6o-12 eval-only `97.5%`;
+  - keep grounding `100.0%`;
+  - keep forbidden `0.0%`;
+  - avoid token blow-up.
+- Recorded recommended roadmap:
+  - P6o-15 repeat stability + failure attribution;
+  - P6o-16 system-path answer guidance;
+  - P6o-17 post-check retry shadow;
+  - P6o-18 memory block placement / format A/B;
+  - P6o-19 combined validation.
+- Recommended immediate next action:
+  - create formal plan for `P6o-15 to P6o-19 system-path answer lift roadmap`;
+  - execute first only P6o-15 repeat stability + failure attribution.
+
+## 2026-07-29 P6o-15 system path repeat stability and failure attribution
+
+- Plan file:
+  - `docs/superpowers/plans/2026-07-29-memory-p6o15-system-path-repeat-stability-failure-attribution.md`.
+- Implementation/report commits completed before docs:
+  - `28db4e5 feat: add system path repeat stability eval`;
+  - `72fdbac feat: add system path failure attribution`;
+  - `f41b26c test: record p6o15 system path repeat stability`.
+- Runner/report changes:
+  - `scripts/run_memory_system_path_safe_version_eval.py` now supports `--repeats`, `--checkpoint-jsonl`, `--resume`, and `--checkpoint-report-only`;
+  - `memory2/eval_system_path_safe_version.py` records `repeat_index`, repeat summaries, checkpoint metrics, and sanitized scoring counts;
+  - `memory2/eval_system_path_failure_attribution.py` builds report-only, sanitized heuristic failure attribution from completed system-path rows;
+  - committed reports still exclude raw prompt, raw session text, raw user query, raw memory summaries, complete responses, API keys, and authorization values.
+- Fake-provider repeat smoke:
+  - common `2` + hard `2`;
+  - modes `current`, `safe_version_replace`;
+  - repeat `3`;
+  - `unique_case_count = 4`;
+  - `case_count = 24`;
+  - checkpoint rebuild `checkpoint_input_count = 24`;
+  - attribution `paired_run_count = 12`;
+  - privacy gate passed with key-aware JSON/Markdown and fixture-string checks.
+- Real report:
+  - `my_md/memory_optimization/eval_reports/p6o15_system_path_repeat_stability_v1/system_path_safe_version_eval.json`;
+  - `my_md/memory_optimization/eval_reports/p6o15_system_path_repeat_stability_v1/system_path_safe_version_eval.md`;
+  - `my_md/memory_optimization/eval_reports/p6o15_system_path_repeat_stability_v1/system_path_failure_attribution.json`;
+  - `my_md/memory_optimization/eval_reports/p6o15_system_path_repeat_stability_v1/system_path_failure_attribution.md`.
+- Matrix:
+  - standard case pack;
+  - common `20` + hard `20`;
+  - modes `current` and `safe_version_replace`;
+  - repeat `3`;
+  - `unique_case_count = 40`;
+  - `case_count = 240`;
+  - real LLM enabled with config from `/home/jjh/git_work/akashic-agent/config.toml`;
+  - checkpoint used at `/tmp/akashic-memory-p6o15-system-path-repeat-real/checkpoint.jsonl`;
+  - `--real-memory-workspace` remained CLI compatibility only; the runner fixture-seeded temporary system-path stores and did not read real user memory DB.
+- Infra and aggregate metrics:
+  - `provider_error_count = 0`;
+  - `timeout_count = 0`;
+  - `token_metrics_available = True`;
+  - aggregate answer rate `49.5833%`;
+  - aggregate grounding rate `100.0%`;
+  - aggregate forbidden rate `19.5833%`;
+  - `avg_total_token_count = 5504.5417`;
+  - `avg_latency_ms = 3943.4583`.
+- Per-mode result:
+  - `current`: answer `31/120 = 25.8333%`, grounding `120/120 = 100.0%`, forbidden `47/120 = 39.1667%`, avg tokens `5582.0`, avg latency `4627.15ms`, contract generation `0.0%`, post-check shadow `0.0%`;
+  - `safe_version_replace`: answer `88/120 = 73.3333%`, grounding `120/120 = 100.0%`, forbidden `0/120 = 0.0%`, avg tokens `5427.0833`, avg latency `3259.7667ms`, contract generation `100.0%`, post-check shadow `100.0%`.
+- Delta vs `current`:
+  - answer `+47.5` points;
+  - grounding `0.0` points;
+  - forbidden `-39.1667` points;
+  - avg tokens `-154.9167`;
+  - avg latency `-1367.3833ms`.
+- Per-repeat result:
+  - repeat `0`: current answer `10/40 = 25.0%`, forbidden `45.0%`; replace answer `29/40 = 72.5%`, forbidden `0.0%`;
+  - repeat `1`: current answer `14/40 = 35.0%`, forbidden `27.5%`; replace answer `29/40 = 72.5%`, forbidden `0.0%`;
+  - repeat `2`: current answer `7/40 = 17.5%`, forbidden `45.0%`; replace answer `30/40 = 75.0%`, forbidden `0.0%`.
+- Repeat stability gate:
+  - complete matrix gate passed: `240` rows, `40` unique cases, `2` modes, `3` repeats, zero infra failures;
+  - replace answer was higher than current in every repeat;
+  - replace per-repeat answer floor stayed above `45.0%`;
+  - replace answer spread was `2.5` points, below the `25.0` point gate;
+  - grounding stayed `100.0%`;
+  - forbidden stayed `0.0%`;
+  - token and latency did not increase.
+- Failure attribution:
+  - `paired_run_count = 120`;
+  - `unpaired_run_count = 0`;
+  - `baseline_failed_candidate_passed_count = 64`;
+  - `baseline_passed_candidate_failed_count = 7`;
+  - `baseline_passed_candidate_passed_count = 24`;
+  - `baseline_failed_candidate_failed_count = 25`;
+  - candidate buckets: `passed = 88`, `answer_rule_miss_required_terms = 16`, `answer_rule_miss_any_group = 13`, `language_failure = 3`;
+  - bucket semantics are sanitized heuristics, not raw-answer semantic diagnosis.
+- Conclusion:
+  - P6o-14's `safe_version_replace` result was directionally stable and understated the repeat result;
+  - P6o-15 shows system-path replace can reach `73.3333%` answer while keeping grounding `100.0%`, forbidden `0.0%`, contract generation `100.0%`, and post-check shadow `100.0%`;
+  - current system path remains unstable and unsafe in this slice, with `25.8333%` answer and `39.1667%` forbidden;
+  - remaining replace misses are mostly required-term / any-group answer-rule misses plus a small language-failure bucket, so the next bottleneck is still evidence-to-answer expression rather than recall.
+- Boundaries:
+  - this is controlled fixture-seeded system-path repeat stability, not production natural traffic;
+  - default production mode remains `off`;
+  - no graph/all-on;
+  - no production write, retry, fallback, answer guidance, prompt placement, or contract-format production change in P6o-15;
+  - pre-existing untracked P6o-13 intent directory was left untouched.
+- Next gate:
+  - proceed to P6o-16 system-path answer guidance;
+  - P6o-16 should target the remaining answer-rule and language buckets while keeping grounding `100.0%`, forbidden `0.0%`, contract success `100.0%`, and bounded tokens.
