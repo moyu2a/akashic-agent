@@ -1,6 +1,6 @@
 # System Path Safe Version Governed
 
-本报告使用 system-path fake/provider validation；不包含原始 query、prompt、memory summary 或完整回答。
+本报告使用 system-path provider validation；不包含原始 query、prompt、memory summary 或完整回答。
 
 - evaluation_level: `system_path_safe_version_governed`
 - real_llm_enabled: `True`

@@ -2518,3 +2518,63 @@
   - P6o-14 system-path safe version-governed real LLM A/B;
   - compare `current` against `safe_version_replace`, with optional `safe_version_shadow` telemetry parity;
   - success requires clean infra, `100.0%` contract generation in governed modes, no worse answer/grounding/forbidden than current, and sanitized reports.
+
+## 2026-07-29 P6o-14 system path real LLM A/B
+
+- Plan file:
+  - `docs/superpowers/plans/2026-07-29-memory-p6o14-system-path-real-llm-ab.md`.
+- Code/report commits:
+  - `39cf169 docs: add p6o14 system path real llm ab plan`;
+  - `b15f9da feat: score system path safe version ab eval`;
+  - `0c3eec6 test: gate system path safe version ab report shape`;
+  - `64e0515 test: record p6o14 system path real llm ab`.
+- Runner changes:
+  - `scripts/run_memory_system_path_safe_version_eval.py` now has a real LLM provider gate using configured `LLMProvider`;
+  - fake and real provider flags are mutually exclusive;
+  - `memory2/eval_system_path_safe_version.py` now uses fixture query text for execution but excludes it from committed reports;
+  - answer scoring uses existing `answer_expectation_from_case()` and `score_answer_text()`;
+  - provider calls are wrapped with `_RecordingProvider` and token counts are extracted with `_extract_token_counts()`;
+  - JSON/Markdown reports include aggregate and per-mode answer, grounding, forbidden, token, latency, contract, and post-check metrics.
+- Real report:
+  - `my_md/memory_optimization/eval_reports/p6o14_system_path_safe_version_real_llm_ab_v1/system_path_safe_version_eval.json`;
+  - `my_md/memory_optimization/eval_reports/p6o14_system_path_safe_version_real_llm_ab_v1/system_path_safe_version_eval.md`.
+- Matrix:
+  - standard case pack;
+  - common `20` + hard `20`;
+  - modes `current` and `safe_version_replace`;
+  - `unique_case_count = 40`;
+  - `case_count = 80`;
+  - real LLM enabled with config from `/home/jjh/git_work/akashic-agent/config.toml`;
+  - `--real-memory-workspace` remained intentionally unused because the runner seeds fixture memory into temporary system-path stores.
+- Infra and aggregate metrics:
+  - `provider_error_count = 0`;
+  - `timeout_count = 0`;
+  - `token_metrics_available = True`;
+  - aggregate answer rate `40.0%`;
+  - aggregate grounding rate `100.0%`;
+  - aggregate forbidden rate `16.25%`;
+  - `total_token_count = 436123`;
+  - `avg_total_token_count = 5451.5375`;
+  - `avg_latency_ms = 4867.4375`.
+- Per-mode result:
+  - `current`: answer `11/40 = 27.5%`, grounding `40/40 = 100.0%`, forbidden `13/40 = 32.5%`, avg tokens `5488.75`, avg latency `5329.475ms`, contract generation `0.0%`, post-check shadow `0.0%`;
+  - `safe_version_replace`: answer `21/40 = 52.5%`, grounding `40/40 = 100.0%`, forbidden `0/40 = 0.0%`, avg tokens `5414.325`, avg latency `4405.4ms`, contract generation `100.0%`, post-check shadow `100.0%`.
+- Gate result:
+  - P6o-14 real A/B gate passed;
+  - replace answer rate is higher than current by `25.0` points;
+  - grounding stays equal at `100.0%`;
+  - forbidden drops by `32.5` points;
+  - avg tokens drop by `74.425`;
+  - avg latency drops by `924.075ms`.
+- Boundaries:
+  - this is controlled fixture-seeded system-path A/B, not production natural traffic;
+  - default production mode remains `off`;
+  - no graph/all-on;
+  - no production write, retry, or fallback changes;
+  - reports exclude prompt text, conversation logs, memory summaries, complete responses, API keys, and authorization values;
+  - pre-existing untracked P6o-13 real LLM intent directory was left untouched.
+- Next gate:
+  - P6o-15 system-path repeat stability;
+  - compare `current` vs `safe_version_replace`;
+  - suggested matrix: common `20` + hard `20`, repeat `3`, baseline prompt, `240` real calls;
+  - only after repeat stability should production-shadow rollout be considered, still with default `off`.

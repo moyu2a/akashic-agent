@@ -218,7 +218,7 @@ def write_system_path_safe_version_markdown(
     lines = [
         "# System Path Safe Version Governed",
         "",
-        "本报告使用 system-path fake/provider validation；不包含原始 query、prompt、memory summary 或完整回答。",
+        "本报告使用 system-path provider validation；不包含原始 query、prompt、memory summary 或完整回答。",
         "",
         f"- evaluation_level: `{metrics['evaluation_level']}`",
         f"- real_llm_enabled: `{metrics['real_llm_enabled']}`",
