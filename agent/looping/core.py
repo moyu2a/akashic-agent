@@ -298,6 +298,10 @@ class AgentLoop:
         # 3. 最后串 passive prepare / execute / commit 主链。
         retrieval_pipeline = deps.retrieval_pipeline or DefaultMemoryRetrievalPipeline(
             memory=memory_svc,
+            safe_version_governed_mode=config.memory.safe_version_governed_mode,
+            safe_version_governed_replace_allowed=(
+                config.memory.safe_version_governed_replace_allowed
+            ),
         )
         self._retrieval_pipeline = retrieval_pipeline
         passive_context_store = DefaultContextStore(
