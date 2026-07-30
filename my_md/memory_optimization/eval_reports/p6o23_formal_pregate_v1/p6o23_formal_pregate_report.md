@@ -110,3 +110,28 @@ Gate criteria:
 The P6o-22 guard fixed the previous failure mode where timeout-heavy data could be rebuilt into a quality-looking report. This P6o-23 pregate run produced usable answer data for all `30` rows.
 
 The pregate is not large enough to conclude quality uplift. It only validates that the real-LLM eval path is healthy enough to run the formal `40 case * 3 mode` experiment with a fresh checkpoint and the same infra guard.
+
+## Formal Experiment Handoff
+
+P6o-24 should complete the previously errored P6o-20 experiment, not start a new evaluation question.
+
+Required execution rules:
+
+- Use a fresh out-dir and fresh checkpoint.
+- Do not reuse the P6o-20 checkpoint.
+- Keep `--timeout-s 30` unless the provider starts returning timeout rows, in which case the run must be treated as infra-blocked rather than interpreted for quality.
+- Keep the P6o-22 guard: `--early-infra-abort-count 3 --early-infra-abort-rate 0.5`.
+- Preserve the same modes as P6o-20 and P6o-23:
+  - `safe_version_replace`
+  - `safe_version_replace_guided`
+  - `safe_version_replace_guided_with_retry_shadow`
+- Use the intended formal slice: `20` common + `20` hard = `40` unique cases, `120` real rows.
+- Interpret quality only if:
+  - exit code is `0`
+  - no `blocked_status.json` exists
+  - `timeout_count = 0`
+  - `provider_error_count = 0`
+  - `empty_answer_count = 0`
+  - checkpoint line count is `120`
+
+The formal result should be recorded under a new report directory, preserving method, commands, artifacts, primary metrics, mode summaries, movement table, retry-shadow summary, gate decision, and quality conclusion.
