@@ -80,6 +80,28 @@ class SystemPathSafeVersionReport:
     metrics: dict[str, object]
 
 
+class SystemPathInfraAbort(RuntimeError):
+    def __init__(
+        self,
+        *,
+        reason: str,
+        report: SystemPathSafeVersionReport,
+        fresh_case_count: int,
+        fresh_timeout_count: int,
+        fresh_provider_error_count: int,
+        threshold_count: int,
+        threshold_rate: float,
+    ) -> None:
+        super().__init__(reason)
+        self.reason = reason
+        self.report = report
+        self.fresh_case_count = int(fresh_case_count)
+        self.fresh_timeout_count = int(fresh_timeout_count)
+        self.fresh_provider_error_count = int(fresh_provider_error_count)
+        self.threshold_count = int(threshold_count)
+        self.threshold_rate = float(threshold_rate)
+
+
 class FixtureRetriever:
     def __init__(self, items: Sequence[dict[str, object]]) -> None:
         self._items = [dict(item) for item in items]
@@ -185,8 +207,11 @@ async def run_system_path_safe_version_cases(
     repeats: int = 1,
     checkpoint_jsonl: Path | None = None,
     resume: bool = False,
+    early_infra_abort_count: int = 0,
+    early_infra_abort_rate: float = 1.0,
 ) -> SystemPathSafeVersionReport:
     records: list[dict[str, object]] = []
+    fresh_records: list[dict[str, object]] = []
     existing, malformed_checkpoint_line_count = (
         _load_system_path_checkpoint_records(
             checkpoint_jsonl,
@@ -197,6 +222,12 @@ async def run_system_path_safe_version_cases(
     )
     skipped = 0
     repeat_count = max(1, int(repeats))
+    abort_count = int(early_infra_abort_count)
+    abort_rate = float(early_infra_abort_rate)
+    if abort_count < 0:
+        raise ValueError("early_infra_abort_count must be >= 0")
+    if not (0.0 < abort_rate <= 1.0):
+        raise ValueError("early_infra_abort_rate must be > 0.0 and <= 1.0")
     for repeat_index in range(repeat_count):
         for case_index, case in enumerate(cases):
             for mode in modes:
@@ -220,6 +251,44 @@ async def run_system_path_safe_version_cases(
                 )
                 records.append(record)
                 _append_system_path_checkpoint_record(checkpoint_jsonl, key, record)
+                fresh_records.append(record)
+                if abort_count and len(fresh_records) >= abort_count:
+                    infra_count = _infra_failure_count(fresh_records)
+                    observed_rate = infra_count / len(fresh_records)
+                    if observed_rate >= abort_rate:
+                        partial_report = SystemPathSafeVersionReport(
+                            cases=tuple(records),
+                            metrics=_build_metrics(
+                                records,
+                                unique_case_count=len(cases),
+                                modes=modes,
+                                real_llm_enabled=real_llm_enabled,
+                                repeats=repeat_count,
+                                skipped_from_checkpoint_count=skipped,
+                                malformed_checkpoint_line_count=malformed_checkpoint_line_count,
+                            ),
+                        )
+                        raise SystemPathInfraAbort(
+                            reason=_infra_abort_reason(
+                                "early",
+                                observed_rate=observed_rate,
+                                threshold_rate=abort_rate,
+                            ),
+                            report=partial_report,
+                            fresh_case_count=len(fresh_records),
+                            fresh_timeout_count=sum(
+                                1
+                                for item in fresh_records
+                                if bool(item.get("timeout"))
+                            ),
+                            fresh_provider_error_count=sum(
+                                1
+                                for item in fresh_records
+                                if bool(item.get("provider_error"))
+                            ),
+                            threshold_count=abort_count,
+                            threshold_rate=abort_rate,
+                        )
     return SystemPathSafeVersionReport(
         cases=tuple(records),
         metrics=_build_metrics(
@@ -791,6 +860,66 @@ def _build_metrics(
         "version_boundary_case_count": version_boundary_case_count,
         "mode_summaries": mode_summaries,
     }
+
+
+def system_path_report_infra_failure_rate(
+    report: SystemPathSafeVersionReport,
+) -> float:
+    case_count = int(report.metrics.get("case_count", 0) or 0)
+    if case_count <= 0:
+        return 0.0
+    infra_count = int(report.metrics.get("timeout_count", 0) or 0) + int(
+        report.metrics.get("provider_error_count", 0) or 0
+    )
+    return infra_count / case_count
+
+
+def build_system_path_blocked_status(
+    report: SystemPathSafeVersionReport,
+    *,
+    reason: str,
+    checkpoint_jsonl: Path | None = None,
+) -> dict[str, object]:
+    _validate_report_privacy(report)
+    metrics = report.metrics
+    payload: dict[str, object] = {
+        "status": "infra_blocked",
+        "reason": str(reason),
+        "quality_interpretation_allowed": False,
+        "case_count": int(metrics.get("case_count", 0) or 0),
+        "unique_case_count": int(metrics.get("unique_case_count", 0) or 0),
+        "mode_count": int(metrics.get("mode_count", 0) or 0),
+        "repeat_count": int(metrics.get("repeat_count", 1) or 1),
+        "provider_error_count": int(metrics.get("provider_error_count", 0) or 0),
+        "timeout_count": int(metrics.get("timeout_count", 0) or 0),
+        "malformed_checkpoint_line_count": int(
+            metrics.get("malformed_checkpoint_line_count", 0) or 0
+        ),
+    }
+    if checkpoint_jsonl is not None:
+        payload["checkpoint_jsonl"] = str(checkpoint_jsonl)
+        payload["checkpoint_line_count"] = _count_checkpoint_lines(checkpoint_jsonl)
+    return payload
+
+
+def _infra_failure_count(records: Sequence[dict[str, object]]) -> int:
+    return sum(
+        1
+        for item in records
+        if bool(item.get("timeout")) or bool(item.get("provider_error"))
+    )
+
+
+def _infra_abort_reason(
+    label: str,
+    *,
+    observed_rate: float,
+    threshold_rate: float,
+) -> str:
+    return (
+        f"{label} infra failure rate {round(observed_rate * 100.0, 4)}% "
+        f"met or exceeded {round(threshold_rate * 100.0, 4)}%"
+    )
 
 
 def _repeat_summaries(

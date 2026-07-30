@@ -728,6 +728,252 @@ def test_system_path_safe_version_cli_rejects_invalid_repeats(
     assert "repeats must be at least 1" in completed.stderr
 
 
+def test_system_path_safe_version_cli_rejects_invalid_infra_abort_args(
+    tmp_path: Path,
+) -> None:
+    bad_count = subprocess.run(
+        [
+            sys.executable,
+            "scripts/run_memory_system_path_safe_version_eval.py",
+            "--workspace",
+            str(tmp_path / "workspace-count"),
+            "--out-dir",
+            str(tmp_path / "reports-count"),
+            "--fake-provider",
+            "--early-infra-abort-count",
+            "-1",
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    bad_rate = subprocess.run(
+        [
+            sys.executable,
+            "scripts/run_memory_system_path_safe_version_eval.py",
+            "--workspace",
+            str(tmp_path / "workspace-rate"),
+            "--out-dir",
+            str(tmp_path / "reports-rate"),
+            "--fake-provider",
+            "--early-infra-abort-rate",
+            "0",
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert bad_count.returncode != 0
+    assert "--early-infra-abort-count must be >= 0" in bad_count.stderr
+    assert bad_rate.returncode != 0
+    assert "--early-infra-abort-rate must be > 0.0 and <= 1.0" in bad_rate.stderr
+
+
+def test_system_path_blocked_status_marks_quality_interpretation_disallowed() -> None:
+    from memory2.eval_system_path_safe_version import (
+        SystemPathSafeVersionReport,
+        build_system_path_blocked_status,
+        system_path_report_infra_failure_rate,
+    )
+
+    report = SystemPathSafeVersionReport(
+        cases=(
+            {
+                "case_id": "case-a",
+                "mode": "safe_version_replace",
+                "timeout": True,
+                "provider_error": False,
+                "answer_rule_passed": False,
+                "memory_grounding_passed": True,
+                "forbidden_contains_violation_count": 0,
+                "latency_ms": 1000,
+                "token_count": 0,
+                "replacement_seeded_count": 1,
+                "safe_version_contract": {},
+            },
+        ),
+        metrics={
+            "evaluation_level": "system_path_safe_version_governed",
+            "unique_case_count": 1,
+            "mode_count": 1,
+            "case_count": 1,
+            "repeat_count": 1,
+            "provider_error_count": 0,
+            "timeout_count": 1,
+            "malformed_checkpoint_line_count": 0,
+            "checkpoint_input_count": 0,
+            "real_llm_enabled": True,
+            "fake_provider_enabled": False,
+            "raw_query_included": False,
+            "raw_memory_summary_included": False,
+            "prompt_included": False,
+            "conversation_log_included": False,
+            "complete_response_included": False,
+        },
+    )
+
+    status = build_system_path_blocked_status(
+        report,
+        reason="early infra failure rate 100.0% met or exceeded 50.0%",
+        checkpoint_jsonl=Path("checkpoint.jsonl"),
+    )
+
+    assert status["status"] == "infra_blocked"
+    assert status["quality_interpretation_allowed"] is False
+    assert status["reason"] == "early infra failure rate 100.0% met or exceeded 50.0%"
+    assert status["case_count"] == 1
+    assert status["timeout_count"] == 1
+    assert status["provider_error_count"] == 0
+    assert status["checkpoint_jsonl"] == "checkpoint.jsonl"
+    assert system_path_report_infra_failure_rate(report) == 1.0
+
+
+def test_system_path_eval_aborts_when_early_fresh_rows_are_all_timeouts(
+    tmp_path: Path,
+) -> None:
+    from agent.provider import LLMResponse
+    from memory2.eval_system_path_safe_version import (
+        SystemPathInfraAbort,
+        run_system_path_safe_version_cases,
+    )
+
+    class SlowProvider:
+        async def chat(self, **kwargs: object) -> LLMResponse:
+            await asyncio.sleep(1)
+            return LLMResponse(content="too late", tool_calls=[])
+
+    cases = build_quantitative_eval_cases("all", case_pack="standard", limit=2)
+    checkpoint_jsonl = tmp_path / "checkpoint.jsonl"
+
+    try:
+        asyncio.run(
+            run_system_path_safe_version_cases(
+                cases,
+                tmp_path / "workspace",
+                SlowProvider(),
+                modes=("safe_version_replace",),
+                model="slow-model",
+                timeout_s=0.001,
+                real_llm_enabled=True,
+                checkpoint_jsonl=checkpoint_jsonl,
+                early_infra_abort_count=2,
+                early_infra_abort_rate=0.5,
+            )
+        )
+    except SystemPathInfraAbort as exc:
+        assert exc.fresh_case_count == 2
+        assert exc.fresh_timeout_count == 2
+        assert exc.fresh_provider_error_count == 0
+        assert exc.report.metrics["case_count"] == 2
+        assert exc.report.metrics["timeout_count"] == 2
+        assert "early infra failure rate 100.0% met or exceeded 50.0%" in exc.reason
+    else:
+        raise AssertionError("expected SystemPathInfraAbort")
+
+    assert checkpoint_jsonl.exists()
+    assert len(checkpoint_jsonl.read_text(encoding="utf-8").splitlines()) == 2
+
+
+def test_system_path_eval_aborts_when_two_of_three_early_rows_are_infra_failures(
+    tmp_path: Path,
+) -> None:
+    from agent.provider import LLMResponse
+    from memory2.eval_system_path_safe_version import (
+        SystemPathInfraAbort,
+        run_system_path_safe_version_cases,
+    )
+
+    class MostlySlowProvider:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        async def chat(self, **kwargs: object) -> LLMResponse:
+            self.calls += 1
+            if self.calls <= 2:
+                await asyncio.sleep(1)
+            return LLMResponse(content="根据系统路径注入记忆回答。", tool_calls=[])
+
+    cases = build_quantitative_eval_cases("all", case_pack="standard", limit=3)
+
+    try:
+        asyncio.run(
+            run_system_path_safe_version_cases(
+                cases,
+                tmp_path / "workspace",
+                MostlySlowProvider(),
+                modes=("safe_version_replace",),
+                model="mostly-slow-model",
+                timeout_s=0.001,
+                real_llm_enabled=True,
+                early_infra_abort_count=3,
+                early_infra_abort_rate=0.5,
+            )
+        )
+    except SystemPathInfraAbort as exc:
+        assert exc.fresh_case_count == 3
+        assert exc.fresh_timeout_count == 2
+        assert exc.report.metrics["case_count"] == 3
+        assert exc.report.metrics["timeout_count"] == 2
+        assert "66.6667% met or exceeded 50.0%" in exc.reason
+    else:
+        raise AssertionError("expected SystemPathInfraAbort")
+
+
+def test_system_path_safe_version_cli_writes_blocked_status_on_early_abort(
+    tmp_path: Path,
+) -> None:
+    out_dir = tmp_path / "reports"
+    checkpoint_jsonl = tmp_path / "checkpoint.jsonl"
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "scripts/run_memory_system_path_safe_version_eval.py",
+            "--workspace",
+            str(tmp_path / "workspace"),
+            "--out-dir",
+            str(out_dir),
+            "--fake-provider",
+            "--case-pack",
+            "standard",
+            "--limit",
+            "2",
+            "--modes",
+            "safe_version_replace",
+            "--timeout-s",
+            "0.001",
+            "--fake-provider-delay-s",
+            "0.05",
+            "--checkpoint-jsonl",
+            str(checkpoint_jsonl),
+            "--early-infra-abort-count",
+            "1",
+            "--early-infra-abort-rate",
+            "1.0",
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode == 2
+    blocked = json.loads((out_dir / "blocked_status.json").read_text(encoding="utf-8"))
+    payload = json.loads(
+        (out_dir / "system_path_safe_version_eval.json").read_text(encoding="utf-8")
+    )
+    markdown = (out_dir / "system_path_safe_version_eval.md").read_text(
+        encoding="utf-8"
+    )
+    assert blocked["status"] == "infra_blocked"
+    assert blocked["quality_interpretation_allowed"] is False
+    assert blocked["timeout_count"] == 1
+    assert blocked["case_count"] == payload["metrics"]["case_count"]
+    assert blocked["fresh_case_count"] == 1
+    assert blocked["fresh_timeout_count"] == 1
+    assert "early infra failure rate" in blocked["reason"]
+    assert "raw_prompt" not in markdown
+
+
 def test_system_path_safe_version_checkpoint_resume_skips_successes(
     tmp_path: Path,
 ) -> None:
@@ -874,6 +1120,61 @@ def test_system_path_safe_version_checkpoint_report_only_includes_infra_rows(
     assert report.metrics["case_count"] == 3
     assert report.metrics["provider_error_count"] == 1
     assert report.metrics["timeout_count"] == 1
+
+
+def test_system_path_safe_version_cli_report_only_marks_timeout_checkpoint_blocked(
+    tmp_path: Path,
+) -> None:
+    out_dir = tmp_path / "reports"
+    checkpoint_jsonl = tmp_path / "checkpoint.jsonl"
+    record = _checkpoint_record(
+        case_id="case-timeout",
+        mode="safe_version_replace",
+        answer=False,
+        timeout=True,
+    )
+    checkpoint_jsonl.write_text(
+        json.dumps(
+            {
+                "spec_key": "case-timeout|safe_version_replace|0",
+                "result": record,
+            },
+            ensure_ascii=False,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "scripts/run_memory_system_path_safe_version_eval.py",
+            "--out-dir",
+            str(out_dir),
+            "--enable-real-llm",
+            "--checkpoint-jsonl",
+            str(checkpoint_jsonl),
+            "--checkpoint-report-only",
+            "--early-infra-abort-count",
+            "1",
+            "--early-infra-abort-rate",
+            "1.0",
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode == 2
+    blocked = json.loads((out_dir / "blocked_status.json").read_text(encoding="utf-8"))
+    assert blocked["status"] == "infra_blocked"
+    assert blocked["quality_interpretation_allowed"] is False
+    assert blocked["case_count"] == 1
+    assert blocked["timeout_count"] == 1
+    assert (
+        "checkpoint infra failure rate 100.0% met or exceeded 100.0%"
+        in blocked["reason"]
+    )
 
 
 def test_system_path_safe_version_checkpoint_loader_tolerates_malformed_tail(

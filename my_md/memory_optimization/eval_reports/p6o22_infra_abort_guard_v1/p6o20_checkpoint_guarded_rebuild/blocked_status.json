@@ -1,0 +1,14 @@
+{
+  "case_count": 120,
+  "checkpoint_jsonl": "my_md/memory_optimization/eval_reports/p6o20_answer_candidate_retry_shadow_real_small_v1/real_small_ab/checkpoint.jsonl",
+  "checkpoint_line_count": 151,
+  "malformed_checkpoint_line_count": 0,
+  "mode_count": 3,
+  "provider_error_count": 0,
+  "quality_interpretation_allowed": false,
+  "reason": "checkpoint infra failure rate 100.0% met or exceeded 50.0%",
+  "repeat_count": 1,
+  "status": "infra_blocked",
+  "timeout_count": 120,
+  "unique_case_count": 40
+}
