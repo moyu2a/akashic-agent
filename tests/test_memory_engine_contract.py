@@ -369,6 +369,163 @@ async def test_default_memory_engine_safe_version_replace_requires_allow_gate(
 
 
 @pytest.mark.asyncio
+async def test_default_memory_engine_safe_version_guidance_requires_replace_mode() -> None:
+    items = [
+        {
+            "id": "m-current",
+            "summary": "用户偏好使用 pytest。",
+            "score": 0.91,
+            "source_ref": "telegram:1:1",
+            "memory_type": "preference",
+            "status": "active",
+            "extra_json": {},
+        }
+    ]
+    route_trace = {
+        "candidates_by_lane": {
+            "semantic": items,
+            "keyword": [],
+            "provenance": [],
+            "graph": [],
+        }
+    }
+    retriever = SimpleNamespace(
+        retrieve_with_lanes=AsyncMock(return_value=(items, items, [])),
+        retrieve_with_trace=AsyncMock(return_value=(items, route_trace)),
+        build_injection_block=MagicMock(
+            return_value=("baseline memory block", ["m-current"])
+        ),
+    )
+    engine = _make_default_engine(retriever=cast(Any, retriever))
+    engine._v2_store = SimpleNamespace(list_replacements=MagicMock(return_value=[]))
+
+    result = await engine.retrieve(
+        MemoryEngineRetrieveRequest(
+            query="我默认用什么测试框架？",
+            scope=MemoryScope(session_key="s", channel="telegram", chat_id="1"),
+            hints={
+                "safe_version_governed_mode": "shadow",
+                "safe_version_answer_guidance_enabled": True,
+            },
+            top_k=8,
+        )
+    )
+
+    metadata = result.raw["safe_version_governed_metadata"]
+    assert metadata["mode"] == "shadow"
+    assert metadata["answer_guidance_enabled"] is False
+    assert "Answer Guidance:" not in result.text_block
+
+
+@pytest.mark.asyncio
+async def test_default_memory_engine_safe_version_replace_guidance_changes_contract_text() -> None:
+    items = [
+        {
+            "id": "m-current",
+            "summary": "用户偏好使用 pytest。",
+            "score": 0.91,
+            "source_ref": "telegram:1:1",
+            "memory_type": "preference",
+            "status": "active",
+            "extra_json": {},
+        }
+    ]
+    route_trace = {
+        "candidates_by_lane": {
+            "semantic": items,
+            "keyword": [],
+            "provenance": [],
+            "graph": [],
+        }
+    }
+    retriever = SimpleNamespace(
+        retrieve_with_lanes=AsyncMock(return_value=(items, items, [])),
+        retrieve_with_trace=AsyncMock(return_value=(items, route_trace)),
+        build_injection_block=MagicMock(
+            return_value=("baseline memory block", ["m-current"])
+        ),
+    )
+    engine = _make_default_engine(retriever=cast(Any, retriever))
+    engine._v2_store = SimpleNamespace(list_replacements=MagicMock(return_value=[]))
+
+    result = await engine.retrieve(
+        MemoryEngineRetrieveRequest(
+            query="我默认用什么测试框架？",
+            scope=MemoryScope(session_key="s", channel="telegram", chat_id="1"),
+            hints={
+                "safe_version_governed_mode": "replace",
+                "safe_version_governed_replace_allowed": True,
+                "safe_version_answer_guidance_enabled": True,
+            },
+            top_k=8,
+        )
+    )
+
+    metadata = result.raw["safe_version_governed_metadata"]
+    contract = result.raw["safe_version_governed_shadow"]
+    assert metadata["answer_guidance_enabled"] is True
+    assert contract["answer_guidance_enabled"] is True
+    assert "Answer Guidance:" in result.text_block
+    assert "forbidden_boundary_ids:" not in result.text_block
+    assert "deleted_evidence_ids:" not in result.text_block
+
+
+@pytest.mark.asyncio
+async def test_default_memory_engine_safe_version_prompt_variant_changes_contract_text() -> None:
+    items = [
+        {
+            "id": "m-current",
+            "summary": "用户偏好使用 pytest。",
+            "score": 0.91,
+            "source_ref": "telegram:1:1",
+            "memory_type": "preference",
+            "status": "active",
+            "extra_json": {},
+        }
+    ]
+    route_trace = {
+        "candidates_by_lane": {
+            "semantic": items,
+            "keyword": [],
+            "provenance": [],
+            "graph": [],
+        }
+    }
+    retriever = SimpleNamespace(
+        retrieve_with_lanes=AsyncMock(return_value=(items, items, [])),
+        retrieve_with_trace=AsyncMock(return_value=(items, route_trace)),
+        build_injection_block=MagicMock(
+            return_value=("baseline memory block", ["m-current"])
+        ),
+    )
+    engine = _make_default_engine(retriever=cast(Any, retriever))
+    engine._v2_store = SimpleNamespace(list_replacements=MagicMock(return_value=[]))
+
+    result = await engine.retrieve(
+        MemoryEngineRetrieveRequest(
+            query="我默认用什么测试框架？",
+            scope=MemoryScope(session_key="s", channel="telegram", chat_id="1"),
+            hints={
+                "safe_version_governed_mode": "replace",
+                "safe_version_governed_replace_allowed": True,
+                "safe_version_answer_guidance_enabled": True,
+                "safe_version_answer_prompt_variant": "structured_guided",
+            },
+            top_k=8,
+        )
+    )
+
+    metadata = result.raw["safe_version_governed_metadata"]
+    contract = result.raw["safe_version_governed_shadow"]
+    assert metadata["answer_guidance_enabled"] is True
+    assert metadata["answer_prompt_variant"] == "structured_guided"
+    assert contract["answer_guidance_enabled"] is True
+    assert contract["answer_prompt_variant"] == "structured_guided"
+    assert "Structured Answer Guidance:" in result.text_block
+    assert "answer_critical_evidence:" in result.text_block
+
+
+@pytest.mark.asyncio
 async def test_default_memory_engine_off_adds_no_safe_version_metadata() -> None:
     items = [
         {

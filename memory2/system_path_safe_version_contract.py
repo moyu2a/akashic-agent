@@ -13,6 +13,24 @@ from memory2.version_chain_experiments import build_version_chain_shadow_result
 
 
 SYSTEM_SAFE_VERSION_PROFILE = "system_memory_safe_version_governed"
+SAFE_VERSION_ANSWER_PROMPT_VARIANTS = {
+    "standard",
+    "guided",
+    "structured_guided",
+    "near_query_block",
+    "guided_retry_shadow",
+}
+
+
+@dataclass(frozen=True)
+class AnswerCandidateContract:
+    enabled: bool
+    current_truth_ids: tuple[str, ...]
+    current_truth_lines: tuple[str, ...]
+    must_include_term_count: int
+    forbidden_old_value_ids: tuple[str, ...]
+    language_requirement: str
+    candidate_reason: str
 
 
 @dataclass(frozen=True)
@@ -20,6 +38,7 @@ class SystemPathEvidenceContract:
     profile_name: str
     production_safe: bool
     uses_fixture_answer_expectations: bool
+    answer_prompt_variant: str
     candidate_governance_mode: str
     allowed_evidence: tuple[str, ...]
     likely_relevant_evidence: tuple[str, ...]
@@ -42,6 +61,7 @@ class SystemPathEvidenceContract:
     accepted_candidate_risk_tier_counts: dict[str, int]
     tiered_deleted_risks_by_reason: dict[str, int]
     version_boundary: dict[str, object]
+    answer_candidate_contract: AnswerCandidateContract
 
 
 @dataclass(frozen=True)
@@ -59,7 +79,13 @@ def build_system_path_safe_version_contract(
     route_trace: Mapping[str, Any],
     replacements: Sequence[Mapping[str, Any]] = (),
     top_k: int = 8,
+    answer_guidance_enabled: bool = False,
+    answer_prompt_variant: str = "standard",
 ) -> SystemPathSafeVersionResult:
+    prompt_variant = normalize_safe_version_answer_prompt_variant(
+        "" if bool(answer_guidance_enabled) and answer_prompt_variant == "standard" else answer_prompt_variant,
+        answer_guidance_enabled=answer_guidance_enabled,
+    )
     candidates_by_lane = _candidate_lanes(route_trace, baseline_items)
     decision = build_retrieval_routing_decision(query).with_candidate_governance(
         CandidateGovernancePolicy(enabled=True, mode="tiered")
@@ -134,10 +160,19 @@ def build_system_path_safe_version_contract(
         )
     )
     likely_ids = tuple(item_id for item_id in allowed_ids if item_id not in requires_review_ids)
+    answer_candidate_contract = _build_answer_candidate_contract(
+        enabled=prompt_variant == "guided_retry_shadow",
+        active_ids=active_ids,
+        likely_ids=likely_ids,
+        stale_ids=stale_ids,
+        deleted_ids=deleted_ids,
+        items_by_id=items_by_id,
+    )
     contract = SystemPathEvidenceContract(
         profile_name=SYSTEM_SAFE_VERSION_PROFILE,
         production_safe=True,
         uses_fixture_answer_expectations=False,
+        answer_prompt_variant=prompt_variant,
         candidate_governance_mode="tiered",
         allowed_evidence=_evidence_lines(accepted),
         likely_relevant_evidence=_evidence_lines(
@@ -180,18 +215,49 @@ def build_system_path_safe_version_contract(
                 version_boundary.metrics.get("conflict_chain_count", 0) or 0
             ),
         },
+        answer_candidate_contract=answer_candidate_contract,
     )
+    guidance_enabled = bool(answer_guidance_enabled)
     return SystemPathSafeVersionResult(
         contract=contract,
-        text_block=render_system_path_evidence_contract_block(contract),
+        text_block=render_system_path_evidence_contract_block(
+            contract,
+            answer_guidance_enabled=guidance_enabled,
+            answer_prompt_variant=prompt_variant,
+        ),
         accepted_items=tuple(dict(item) for item in accepted),
-        trace={"safe_version_governed": system_path_contract_to_dict(contract)},
+        trace={
+            "safe_version_governed": system_path_contract_to_dict(
+                contract,
+                answer_guidance_enabled=guidance_enabled,
+            )
+        },
     )
+
+
+def normalize_safe_version_answer_prompt_variant(
+    value: object,
+    *,
+    answer_guidance_enabled: bool = False,
+) -> str:
+    variant = str(value or "").strip()
+    if not variant:
+        return "guided" if bool(answer_guidance_enabled) else "standard"
+    if variant not in SAFE_VERSION_ANSWER_PROMPT_VARIANTS:
+        return "guided" if bool(answer_guidance_enabled) else "standard"
+    return variant
 
 
 def render_system_path_evidence_contract_block(
     contract: SystemPathEvidenceContract,
+    *,
+    answer_guidance_enabled: bool = False,
+    answer_prompt_variant: str = "standard",
 ) -> str:
+    variant = normalize_safe_version_answer_prompt_variant(
+        answer_prompt_variant,
+        answer_guidance_enabled=answer_guidance_enabled,
+    )
     lines = [
         f"Evidence Contract: {contract.profile_name}",
         "production_safe=true",
@@ -213,15 +279,83 @@ def render_system_path_evidence_contract_block(
             "use deleted, superseded, cross-scope, or forbidden boundary evidence."
         ),
     ]
+    if variant == "guided":
+        lines.extend(
+            [
+                "Answer Guidance:",
+                "  Use allowed_evidence as the only source for the answer.",
+                "  State concrete facts from allowed_evidence directly.",
+                "  Prefer active versions when active_version_count is greater than 0.",
+                "  If the evidence is insufficient, say the available memory is insufficient.",
+                "  Do not mention deleted, superseded, or forbidden boundary evidence.",
+                "  Answer in the user's language.",
+            ]
+        )
+    elif variant == "structured_guided":
+        lines.extend(
+            [
+                "Structured Answer Guidance:",
+                "answer_critical_evidence:",
+                *_indent_lines(contract.likely_relevant_evidence),
+                "active_allowed_evidence_count: "
+                + str(len(contract.active_version_ids)),
+                "  Use answer_critical_evidence first.",
+                "  Prefer active allowed evidence over downgraded or review evidence.",
+                "  State concrete facts from allowed_evidence directly.",
+                "  If answer_critical_evidence is empty or insufficient, say the available memory is insufficient.",
+                "  Do not mention deleted, superseded, or forbidden boundary evidence.",
+                "  Answer in the user's language.",
+            ]
+        )
+    elif variant == "near_query_block":
+        lines.extend(
+            [
+                "Question-Proximal Memory Evidence:",
+                "  Use this block for the immediately following user request.",
+                "  Select the most direct facts from allowed_evidence before answering.",
+                "  Prefer active versions when active_version_count is greater than 0.",
+                "  If the evidence is insufficient, say the available memory is insufficient.",
+                "  Do not use deleted, superseded, cross-scope, or forbidden boundary evidence.",
+                "  Answer in the user's language.",
+            ]
+        )
+    elif variant == "guided_retry_shadow":
+        candidate = contract.answer_candidate_contract
+        lines.extend(
+            [
+                "Answer Guidance:",
+                "  Use allowed_evidence as the only source for the answer.",
+                "  Use the Answer Candidate Contract to select the final answer.",
+                "  Include the required current facts when they are supported by current_truth.",
+                "  Answer in the user's language.",
+                "Answer Candidate Contract:",
+                "current_truth:",
+                *_indent_lines(candidate.current_truth_lines),
+                "must_include_term_count: " + str(candidate.must_include_term_count),
+                "forbidden_old_value_count: "
+                + str(len(candidate.forbidden_old_value_ids)),
+                "language_requirement: " + candidate.language_requirement,
+            ]
+        )
     return "\n".join(lines)
 
 
-def system_path_contract_to_dict(contract: SystemPathEvidenceContract) -> dict[str, object]:
+def system_path_contract_to_dict(
+    contract: SystemPathEvidenceContract,
+    *,
+    answer_guidance_enabled: bool = False,
+) -> dict[str, object]:
+    prompt_variant = normalize_safe_version_answer_prompt_variant(
+        contract.answer_prompt_variant,
+        answer_guidance_enabled=answer_guidance_enabled,
+    )
     return {
         "profile_name": contract.profile_name,
         "production_safe": contract.production_safe,
         "production_safe_evidence_contract": contract.production_safe,
         "uses_fixture_answer_expectations": contract.uses_fixture_answer_expectations,
+        "answer_guidance_enabled": prompt_variant != "standard",
+        "answer_prompt_variant": prompt_variant,
         "candidate_governance_mode": contract.candidate_governance_mode,
         "allowed_evidence_ids": list(contract.allowed_evidence_ids),
         "likely_relevant_evidence_ids": list(contract.likely_relevant_evidence_ids),
@@ -240,7 +374,55 @@ def system_path_contract_to_dict(contract: SystemPathEvidenceContract) -> dict[s
         ),
         "tiered_deleted_risks_by_reason": dict(contract.tiered_deleted_risks_by_reason),
         "version_boundary": dict(contract.version_boundary),
+        "answer_candidate_contract": {
+            "enabled": contract.answer_candidate_contract.enabled,
+            "current_truth_count": len(contract.answer_candidate_contract.current_truth_ids),
+            "must_include_term_count": contract.answer_candidate_contract.must_include_term_count,
+            "forbidden_old_value_count": len(
+                contract.answer_candidate_contract.forbidden_old_value_ids
+            ),
+            "language_requirement": contract.answer_candidate_contract.language_requirement,
+            "candidate_reason": contract.answer_candidate_contract.candidate_reason,
+        },
     }
+
+
+def _build_answer_candidate_contract(
+    *,
+    enabled: bool,
+    active_ids: Sequence[str],
+    likely_ids: Sequence[str],
+    stale_ids: Sequence[str],
+    deleted_ids: Sequence[str],
+    items_by_id: Mapping[str, Mapping[str, object]],
+) -> AnswerCandidateContract:
+    if not enabled:
+        return AnswerCandidateContract(
+            enabled=False,
+            current_truth_ids=(),
+            current_truth_lines=(),
+            must_include_term_count=0,
+            forbidden_old_value_ids=(),
+            language_requirement="",
+            candidate_reason="disabled",
+        )
+    likely_set = set(likely_ids)
+    current_ids = tuple(item_id for item_id in active_ids if item_id in likely_set)
+    current_lines = tuple(
+        summary
+        for item_id in current_ids
+        if item_id in items_by_id
+        if (summary := str(items_by_id[item_id].get("summary") or "").strip())
+    )
+    return AnswerCandidateContract(
+        enabled=True,
+        current_truth_ids=current_ids,
+        current_truth_lines=current_lines,
+        must_include_term_count=len(current_lines),
+        forbidden_old_value_ids=tuple(_dedupe((*stale_ids, *deleted_ids))),
+        language_requirement="match_user_language",
+        candidate_reason="safe_version_guided_retry_shadow",
+    )
 
 
 def _candidate_lanes(

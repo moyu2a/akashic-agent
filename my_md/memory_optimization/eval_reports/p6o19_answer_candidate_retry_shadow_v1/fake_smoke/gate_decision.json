@@ -1,0 +1,77 @@
+{
+  "answer_delta_vs_guided": 0.0,
+  "case_count": 12,
+  "checkpoint_input_count": 0,
+  "fake_provider_enabled": true,
+  "gate_passed": false,
+  "guided_answer_rate": 0.0,
+  "malformed_checkpoint_line_count": 0,
+  "mode_count": 3,
+  "mode_summaries": {
+    "safe_version_replace": {
+      "answer_candidate_contract_enabled_rate": 0.0,
+      "answer_rule_pass_rate": 0.0,
+      "answer_success_count": 0,
+      "avg_latency_ms": 46.25,
+      "avg_total_token_count": 30.0,
+      "case_count": 4,
+      "contract_generation_success_rate": 100.0,
+      "forbidden_case_count": 0,
+      "forbidden_violation_rate": 0.0,
+      "grounding_success_count": 4,
+      "memory_grounding_pass_rate": 100.0,
+      "post_check_shadow_enabled_rate": 100.0,
+      "retry_reason_counts": {},
+      "token_metrics_available": true,
+      "would_retry_count": 0
+    },
+    "safe_version_replace_guided": {
+      "answer_candidate_contract_enabled_rate": 0.0,
+      "answer_rule_pass_rate": 0.0,
+      "answer_success_count": 0,
+      "avg_latency_ms": 43.0,
+      "avg_total_token_count": 30.0,
+      "case_count": 4,
+      "contract_generation_success_rate": 100.0,
+      "forbidden_case_count": 0,
+      "forbidden_violation_rate": 0.0,
+      "grounding_success_count": 4,
+      "memory_grounding_pass_rate": 100.0,
+      "post_check_shadow_enabled_rate": 100.0,
+      "retry_reason_counts": {},
+      "token_metrics_available": true,
+      "would_retry_count": 0
+    },
+    "safe_version_replace_guided_with_retry_shadow": {
+      "answer_candidate_contract_enabled_rate": 100.0,
+      "answer_rule_pass_rate": 0.0,
+      "answer_success_count": 0,
+      "avg_latency_ms": 47.5,
+      "avg_total_token_count": 30.0,
+      "case_count": 4,
+      "contract_generation_success_rate": 100.0,
+      "forbidden_case_count": 0,
+      "forbidden_violation_rate": 0.0,
+      "grounding_success_count": 4,
+      "memory_grounding_pass_rate": 100.0,
+      "post_check_shadow_enabled_rate": 100.0,
+      "retry_reason_counts": {
+        "answer_choice_group_missing": 4,
+        "required_terms_missing": 4
+      },
+      "token_metrics_available": true,
+      "would_retry_count": 4
+    }
+  },
+  "provider_error_count": 0,
+  "real_llm_enabled": false,
+  "repeat_count": 1,
+  "retry_shadow_answer_rate": 0.0,
+  "retry_shadow_reason_counts": {
+    "answer_choice_group_missing": 4,
+    "required_terms_missing": 4
+  },
+  "retry_shadow_would_retry_count": 4,
+  "timeout_count": 0,
+  "unique_case_count": 4
+}

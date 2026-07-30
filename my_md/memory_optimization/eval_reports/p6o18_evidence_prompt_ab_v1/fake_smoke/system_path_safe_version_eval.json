@@ -1,0 +1,2252 @@
+{
+  "cases": [
+    {
+      "answer_length": 71,
+      "answer_rule_passed": false,
+      "case_id": "common_preference_recall_01",
+      "case_index": 0,
+      "category": "common_preference_recall",
+      "completion_token_count": 10,
+      "expected_any_miss_count": 2,
+      "expected_any_pass_count": 0,
+      "expected_contains_miss_count": 1,
+      "expected_contains_pass_count": 0,
+      "expected_memory_used": true,
+      "failures": [
+        "missing_expected_answer_term",
+        "missing_expected_answer_term_group",
+        "missing_expected_answer_term_group"
+      ],
+      "forbidden_contains_violation_count": 0,
+      "language_passed": true,
+      "latency_ms": 30,
+      "memory_grounding_passed": true,
+      "mode": "safe_version_replace",
+      "passed": false,
+      "post_check_shadow": {
+        "allowed_evidence_included": true,
+        "conflict_evidence_included": false,
+        "forbidden_boundary_included": false,
+        "forbidden_boundary_mentions": [],
+        "included_allowed_evidence_ids": [
+          "common_preference_recall_01_target",
+          "common_preference_recall_01_graph",
+          "common_preference_recall_01_dup_a",
+          "common_preference_recall_01_dup_b"
+        ],
+        "included_conflict_warning_ids": [],
+        "included_forbidden_boundary_ids": [],
+        "included_stale_warning_ids": [],
+        "insufficient_evidence_fallback_expected": false,
+        "insufficient_evidence_fallback_observed": false,
+        "missing_likely_relevant_context_ids": [],
+        "needs_retry": false,
+        "production_safe_evidence_contract": true,
+        "retry_reasons": [],
+        "shadow_enabled": true,
+        "stale_evidence_included": false
+      },
+      "prompt_token_count": 20,
+      "provider_error": false,
+      "repeat_index": 0,
+      "replacement_seeded_count": 1,
+      "safe_version_contract": {
+        "accepted_candidate_risk_tier_counts": {
+          "downgrade": 4
+        },
+        "active_version_ids": [
+          "common_preference_recall_01_target",
+          "common_preference_recall_01_graph",
+          "common_preference_recall_01_dup_a",
+          "common_preference_recall_01_dup_b"
+        ],
+        "allowed_evidence_ids": [
+          "common_preference_recall_01_target",
+          "common_preference_recall_01_graph",
+          "common_preference_recall_01_dup_a",
+          "common_preference_recall_01_dup_b"
+        ],
+        "answer_guidance_enabled": false,
+        "answer_prompt_variant": "standard",
+        "candidate_governance_mode": "tiered",
+        "candidate_risk_tier_counts": {
+          "delete": 1,
+          "downgrade": 4
+        },
+        "conflict_warning_ids": [],
+        "deleted_evidence_ids": [
+          "common_preference_recall_01_old"
+        ],
+        "downgrade_ids": [
+          "common_preference_recall_01_target",
+          "common_preference_recall_01_graph",
+          "common_preference_recall_01_dup_a",
+          "common_preference_recall_01_dup_b"
+        ],
+        "forbidden_boundary_ids": [],
+        "insufficient_evidence_fallback": false,
+        "insufficient_evidence_ids": [],
+        "likely_relevant_evidence_ids": [
+          "common_preference_recall_01_target",
+          "common_preference_recall_01_graph",
+          "common_preference_recall_01_dup_a",
+          "common_preference_recall_01_dup_b"
+        ],
+        "production_safe": true,
+        "production_safe_evidence_contract": true,
+        "profile_name": "system_memory_safe_version_governed",
+        "requires_review_ids": [],
+        "stale_warning_ids": [
+          "common_preference_recall_01_old"
+        ],
+        "tiered_deleted_risks_by_reason": {
+          "superseded_candidate": 1
+        },
+        "uses_fixture_answer_expectations": false,
+        "version_boundary": {
+          "active_leaf_count": 1,
+          "chain_count": 1,
+          "conflict_chain_count": 0,
+          "replacement_count": 1,
+          "rollback_candidate_count": 1,
+          "stale_recalled_count": 0,
+          "superseded_recalled_count": 0
+        }
+      },
+      "safe_version_metadata": {
+        "allowed_evidence_count": 4,
+        "answer_guidance_enabled": false,
+        "answer_prompt_variant": "standard",
+        "contract_generation_success": true,
+        "deleted_evidence_count": 1,
+        "downgrade_count": 4,
+        "forbidden_boundary_count": 0,
+        "mode": "replace",
+        "replace_allowed": true,
+        "replace_applied": true,
+        "replacement_requested": true,
+        "requires_review_count": 0
+      },
+      "timeout": false,
+      "token_count": 30,
+      "token_metrics_available": true
+    },
+    {
+      "answer_length": 71,
+      "answer_rule_passed": false,
+      "case_id": "common_preference_recall_01",
+      "case_index": 0,
+      "category": "common_preference_recall",
+      "completion_token_count": 10,
+      "expected_any_miss_count": 2,
+      "expected_any_pass_count": 0,
+      "expected_contains_miss_count": 1,
+      "expected_contains_pass_count": 0,
+      "expected_memory_used": true,
+      "failures": [
+        "missing_expected_answer_term",
+        "missing_expected_answer_term_group",
+        "missing_expected_answer_term_group"
+      ],
+      "forbidden_contains_violation_count": 0,
+      "language_passed": true,
+      "latency_ms": 33,
+      "memory_grounding_passed": true,
+      "mode": "safe_version_replace_guided",
+      "passed": false,
+      "post_check_shadow": {
+        "allowed_evidence_included": true,
+        "conflict_evidence_included": false,
+        "forbidden_boundary_included": false,
+        "forbidden_boundary_mentions": [],
+        "included_allowed_evidence_ids": [
+          "common_preference_recall_01_target",
+          "common_preference_recall_01_graph",
+          "common_preference_recall_01_dup_a",
+          "common_preference_recall_01_dup_b"
+        ],
+        "included_conflict_warning_ids": [],
+        "included_forbidden_boundary_ids": [],
+        "included_stale_warning_ids": [],
+        "insufficient_evidence_fallback_expected": false,
+        "insufficient_evidence_fallback_observed": false,
+        "missing_likely_relevant_context_ids": [],
+        "needs_retry": false,
+        "production_safe_evidence_contract": true,
+        "retry_reasons": [],
+        "shadow_enabled": true,
+        "stale_evidence_included": false
+      },
+      "prompt_token_count": 20,
+      "provider_error": false,
+      "repeat_index": 0,
+      "replacement_seeded_count": 1,
+      "safe_version_contract": {
+        "accepted_candidate_risk_tier_counts": {
+          "downgrade": 4
+        },
+        "active_version_ids": [
+          "common_preference_recall_01_target",
+          "common_preference_recall_01_graph",
+          "common_preference_recall_01_dup_a",
+          "common_preference_recall_01_dup_b"
+        ],
+        "allowed_evidence_ids": [
+          "common_preference_recall_01_target",
+          "common_preference_recall_01_graph",
+          "common_preference_recall_01_dup_a",
+          "common_preference_recall_01_dup_b"
+        ],
+        "answer_guidance_enabled": true,
+        "answer_prompt_variant": "guided",
+        "candidate_governance_mode": "tiered",
+        "candidate_risk_tier_counts": {
+          "delete": 1,
+          "downgrade": 4
+        },
+        "conflict_warning_ids": [],
+        "deleted_evidence_ids": [
+          "common_preference_recall_01_old"
+        ],
+        "downgrade_ids": [
+          "common_preference_recall_01_target",
+          "common_preference_recall_01_graph",
+          "common_preference_recall_01_dup_a",
+          "common_preference_recall_01_dup_b"
+        ],
+        "forbidden_boundary_ids": [],
+        "insufficient_evidence_fallback": false,
+        "insufficient_evidence_ids": [],
+        "likely_relevant_evidence_ids": [
+          "common_preference_recall_01_target",
+          "common_preference_recall_01_graph",
+          "common_preference_recall_01_dup_a",
+          "common_preference_recall_01_dup_b"
+        ],
+        "production_safe": true,
+        "production_safe_evidence_contract": true,
+        "profile_name": "system_memory_safe_version_governed",
+        "requires_review_ids": [],
+        "stale_warning_ids": [
+          "common_preference_recall_01_old"
+        ],
+        "tiered_deleted_risks_by_reason": {
+          "superseded_candidate": 1
+        },
+        "uses_fixture_answer_expectations": false,
+        "version_boundary": {
+          "active_leaf_count": 1,
+          "chain_count": 1,
+          "conflict_chain_count": 0,
+          "replacement_count": 1,
+          "rollback_candidate_count": 1,
+          "stale_recalled_count": 0,
+          "superseded_recalled_count": 0
+        }
+      },
+      "safe_version_metadata": {
+        "allowed_evidence_count": 4,
+        "answer_guidance_enabled": true,
+        "answer_prompt_variant": "guided",
+        "contract_generation_success": true,
+        "deleted_evidence_count": 1,
+        "downgrade_count": 4,
+        "forbidden_boundary_count": 0,
+        "mode": "replace",
+        "replace_allowed": true,
+        "replace_applied": true,
+        "replacement_requested": true,
+        "requires_review_count": 0
+      },
+      "timeout": false,
+      "token_count": 30,
+      "token_metrics_available": true
+    },
+    {
+      "answer_length": 71,
+      "answer_rule_passed": false,
+      "case_id": "common_preference_recall_01",
+      "case_index": 0,
+      "category": "common_preference_recall",
+      "completion_token_count": 10,
+      "expected_any_miss_count": 2,
+      "expected_any_pass_count": 0,
+      "expected_contains_miss_count": 1,
+      "expected_contains_pass_count": 0,
+      "expected_memory_used": true,
+      "failures": [
+        "missing_expected_answer_term",
+        "missing_expected_answer_term_group",
+        "missing_expected_answer_term_group"
+      ],
+      "forbidden_contains_violation_count": 0,
+      "language_passed": true,
+      "latency_ms": 61,
+      "memory_grounding_passed": true,
+      "mode": "safe_version_replace_structured_guided",
+      "passed": false,
+      "post_check_shadow": {
+        "allowed_evidence_included": true,
+        "conflict_evidence_included": false,
+        "forbidden_boundary_included": false,
+        "forbidden_boundary_mentions": [],
+        "included_allowed_evidence_ids": [
+          "common_preference_recall_01_target",
+          "common_preference_recall_01_graph",
+          "common_preference_recall_01_dup_a",
+          "common_preference_recall_01_dup_b"
+        ],
+        "included_conflict_warning_ids": [],
+        "included_forbidden_boundary_ids": [],
+        "included_stale_warning_ids": [],
+        "insufficient_evidence_fallback_expected": false,
+        "insufficient_evidence_fallback_observed": false,
+        "missing_likely_relevant_context_ids": [],
+        "needs_retry": false,
+        "production_safe_evidence_contract": true,
+        "retry_reasons": [],
+        "shadow_enabled": true,
+        "stale_evidence_included": false
+      },
+      "prompt_token_count": 20,
+      "provider_error": false,
+      "repeat_index": 0,
+      "replacement_seeded_count": 1,
+      "safe_version_contract": {
+        "accepted_candidate_risk_tier_counts": {
+          "downgrade": 4
+        },
+        "active_version_ids": [
+          "common_preference_recall_01_target",
+          "common_preference_recall_01_graph",
+          "common_preference_recall_01_dup_a",
+          "common_preference_recall_01_dup_b"
+        ],
+        "allowed_evidence_ids": [
+          "common_preference_recall_01_target",
+          "common_preference_recall_01_graph",
+          "common_preference_recall_01_dup_a",
+          "common_preference_recall_01_dup_b"
+        ],
+        "answer_guidance_enabled": true,
+        "answer_prompt_variant": "structured_guided",
+        "candidate_governance_mode": "tiered",
+        "candidate_risk_tier_counts": {
+          "delete": 1,
+          "downgrade": 4
+        },
+        "conflict_warning_ids": [],
+        "deleted_evidence_ids": [
+          "common_preference_recall_01_old"
+        ],
+        "downgrade_ids": [
+          "common_preference_recall_01_target",
+          "common_preference_recall_01_graph",
+          "common_preference_recall_01_dup_a",
+          "common_preference_recall_01_dup_b"
+        ],
+        "forbidden_boundary_ids": [],
+        "insufficient_evidence_fallback": false,
+        "insufficient_evidence_ids": [],
+        "likely_relevant_evidence_ids": [
+          "common_preference_recall_01_target",
+          "common_preference_recall_01_graph",
+          "common_preference_recall_01_dup_a",
+          "common_preference_recall_01_dup_b"
+        ],
+        "production_safe": true,
+        "production_safe_evidence_contract": true,
+        "profile_name": "system_memory_safe_version_governed",
+        "requires_review_ids": [],
+        "stale_warning_ids": [
+          "common_preference_recall_01_old"
+        ],
+        "tiered_deleted_risks_by_reason": {
+          "superseded_candidate": 1
+        },
+        "uses_fixture_answer_expectations": false,
+        "version_boundary": {
+          "active_leaf_count": 1,
+          "chain_count": 1,
+          "conflict_chain_count": 0,
+          "replacement_count": 1,
+          "rollback_candidate_count": 1,
+          "stale_recalled_count": 0,
+          "superseded_recalled_count": 0
+        }
+      },
+      "safe_version_metadata": {
+        "allowed_evidence_count": 4,
+        "answer_guidance_enabled": true,
+        "answer_prompt_variant": "structured_guided",
+        "contract_generation_success": true,
+        "deleted_evidence_count": 1,
+        "downgrade_count": 4,
+        "forbidden_boundary_count": 0,
+        "mode": "replace",
+        "replace_allowed": true,
+        "replace_applied": true,
+        "replacement_requested": true,
+        "requires_review_count": 0
+      },
+      "timeout": false,
+      "token_count": 30,
+      "token_metrics_available": true
+    },
+    {
+      "answer_length": 71,
+      "answer_rule_passed": false,
+      "case_id": "common_preference_recall_01",
+      "case_index": 0,
+      "category": "common_preference_recall",
+      "completion_token_count": 10,
+      "expected_any_miss_count": 2,
+      "expected_any_pass_count": 0,
+      "expected_contains_miss_count": 1,
+      "expected_contains_pass_count": 0,
+      "expected_memory_used": true,
+      "failures": [
+        "missing_expected_answer_term",
+        "missing_expected_answer_term_group",
+        "missing_expected_answer_term_group"
+      ],
+      "forbidden_contains_violation_count": 0,
+      "language_passed": true,
+      "latency_ms": 28,
+      "memory_grounding_passed": true,
+      "mode": "safe_version_replace_near_query_block",
+      "passed": false,
+      "post_check_shadow": {
+        "allowed_evidence_included": true,
+        "conflict_evidence_included": false,
+        "forbidden_boundary_included": false,
+        "forbidden_boundary_mentions": [],
+        "included_allowed_evidence_ids": [
+          "common_preference_recall_01_target",
+          "common_preference_recall_01_graph",
+          "common_preference_recall_01_dup_a",
+          "common_preference_recall_01_dup_b"
+        ],
+        "included_conflict_warning_ids": [],
+        "included_forbidden_boundary_ids": [],
+        "included_stale_warning_ids": [],
+        "insufficient_evidence_fallback_expected": false,
+        "insufficient_evidence_fallback_observed": false,
+        "missing_likely_relevant_context_ids": [],
+        "needs_retry": false,
+        "production_safe_evidence_contract": true,
+        "retry_reasons": [],
+        "shadow_enabled": true,
+        "stale_evidence_included": false
+      },
+      "prompt_token_count": 20,
+      "provider_error": false,
+      "repeat_index": 0,
+      "replacement_seeded_count": 1,
+      "safe_version_contract": {
+        "accepted_candidate_risk_tier_counts": {
+          "downgrade": 4
+        },
+        "active_version_ids": [
+          "common_preference_recall_01_target",
+          "common_preference_recall_01_graph",
+          "common_preference_recall_01_dup_a",
+          "common_preference_recall_01_dup_b"
+        ],
+        "allowed_evidence_ids": [
+          "common_preference_recall_01_target",
+          "common_preference_recall_01_graph",
+          "common_preference_recall_01_dup_a",
+          "common_preference_recall_01_dup_b"
+        ],
+        "answer_guidance_enabled": true,
+        "answer_prompt_variant": "near_query_block",
+        "candidate_governance_mode": "tiered",
+        "candidate_risk_tier_counts": {
+          "delete": 1,
+          "downgrade": 4
+        },
+        "conflict_warning_ids": [],
+        "deleted_evidence_ids": [
+          "common_preference_recall_01_old"
+        ],
+        "downgrade_ids": [
+          "common_preference_recall_01_target",
+          "common_preference_recall_01_graph",
+          "common_preference_recall_01_dup_a",
+          "common_preference_recall_01_dup_b"
+        ],
+        "forbidden_boundary_ids": [],
+        "insufficient_evidence_fallback": false,
+        "insufficient_evidence_ids": [],
+        "likely_relevant_evidence_ids": [
+          "common_preference_recall_01_target",
+          "common_preference_recall_01_graph",
+          "common_preference_recall_01_dup_a",
+          "common_preference_recall_01_dup_b"
+        ],
+        "production_safe": true,
+        "production_safe_evidence_contract": true,
+        "profile_name": "system_memory_safe_version_governed",
+        "requires_review_ids": [],
+        "stale_warning_ids": [
+          "common_preference_recall_01_old"
+        ],
+        "tiered_deleted_risks_by_reason": {
+          "superseded_candidate": 1
+        },
+        "uses_fixture_answer_expectations": false,
+        "version_boundary": {
+          "active_leaf_count": 1,
+          "chain_count": 1,
+          "conflict_chain_count": 0,
+          "replacement_count": 1,
+          "rollback_candidate_count": 1,
+          "stale_recalled_count": 0,
+          "superseded_recalled_count": 0
+        }
+      },
+      "safe_version_metadata": {
+        "allowed_evidence_count": 4,
+        "answer_guidance_enabled": true,
+        "answer_prompt_variant": "near_query_block",
+        "contract_generation_success": true,
+        "deleted_evidence_count": 1,
+        "downgrade_count": 4,
+        "forbidden_boundary_count": 0,
+        "mode": "replace",
+        "replace_allowed": true,
+        "replace_applied": true,
+        "replacement_requested": true,
+        "requires_review_count": 0
+      },
+      "timeout": false,
+      "token_count": 30,
+      "token_metrics_available": true
+    },
+    {
+      "answer_length": 71,
+      "answer_rule_passed": false,
+      "case_id": "common_tool_preference_01",
+      "case_index": 1,
+      "category": "common_tool_preference",
+      "completion_token_count": 10,
+      "expected_any_miss_count": 2,
+      "expected_any_pass_count": 0,
+      "expected_contains_miss_count": 1,
+      "expected_contains_pass_count": 0,
+      "expected_memory_used": true,
+      "failures": [
+        "missing_expected_answer_term",
+        "missing_expected_answer_term_group",
+        "missing_expected_answer_term_group"
+      ],
+      "forbidden_contains_violation_count": 0,
+      "language_passed": true,
+      "latency_ms": 30,
+      "memory_grounding_passed": true,
+      "mode": "safe_version_replace",
+      "passed": false,
+      "post_check_shadow": {
+        "allowed_evidence_included": true,
+        "conflict_evidence_included": false,
+        "forbidden_boundary_included": false,
+        "forbidden_boundary_mentions": [],
+        "included_allowed_evidence_ids": [
+          "common_tool_preference_01_target",
+          "common_tool_preference_01_graph",
+          "common_tool_preference_01_dup_a",
+          "common_tool_preference_01_dup_b"
+        ],
+        "included_conflict_warning_ids": [],
+        "included_forbidden_boundary_ids": [],
+        "included_stale_warning_ids": [],
+        "insufficient_evidence_fallback_expected": false,
+        "insufficient_evidence_fallback_observed": false,
+        "missing_likely_relevant_context_ids": [],
+        "needs_retry": false,
+        "production_safe_evidence_contract": true,
+        "retry_reasons": [],
+        "shadow_enabled": true,
+        "stale_evidence_included": false
+      },
+      "prompt_token_count": 20,
+      "provider_error": false,
+      "repeat_index": 0,
+      "replacement_seeded_count": 1,
+      "safe_version_contract": {
+        "accepted_candidate_risk_tier_counts": {
+          "downgrade": 4
+        },
+        "active_version_ids": [
+          "common_tool_preference_01_target",
+          "common_tool_preference_01_graph",
+          "common_tool_preference_01_dup_a",
+          "common_tool_preference_01_dup_b"
+        ],
+        "allowed_evidence_ids": [
+          "common_tool_preference_01_target",
+          "common_tool_preference_01_graph",
+          "common_tool_preference_01_dup_a",
+          "common_tool_preference_01_dup_b"
+        ],
+        "answer_guidance_enabled": false,
+        "answer_prompt_variant": "standard",
+        "candidate_governance_mode": "tiered",
+        "candidate_risk_tier_counts": {
+          "delete": 1,
+          "downgrade": 4
+        },
+        "conflict_warning_ids": [],
+        "deleted_evidence_ids": [
+          "common_tool_preference_01_old"
+        ],
+        "downgrade_ids": [
+          "common_tool_preference_01_target",
+          "common_tool_preference_01_graph",
+          "common_tool_preference_01_dup_a",
+          "common_tool_preference_01_dup_b"
+        ],
+        "forbidden_boundary_ids": [],
+        "insufficient_evidence_fallback": false,
+        "insufficient_evidence_ids": [],
+        "likely_relevant_evidence_ids": [
+          "common_tool_preference_01_target",
+          "common_tool_preference_01_graph",
+          "common_tool_preference_01_dup_a",
+          "common_tool_preference_01_dup_b"
+        ],
+        "production_safe": true,
+        "production_safe_evidence_contract": true,
+        "profile_name": "system_memory_safe_version_governed",
+        "requires_review_ids": [],
+        "stale_warning_ids": [
+          "common_tool_preference_01_old"
+        ],
+        "tiered_deleted_risks_by_reason": {
+          "superseded_candidate": 1
+        },
+        "uses_fixture_answer_expectations": false,
+        "version_boundary": {
+          "active_leaf_count": 1,
+          "chain_count": 1,
+          "conflict_chain_count": 0,
+          "replacement_count": 1,
+          "rollback_candidate_count": 1,
+          "stale_recalled_count": 0,
+          "superseded_recalled_count": 0
+        }
+      },
+      "safe_version_metadata": {
+        "allowed_evidence_count": 4,
+        "answer_guidance_enabled": false,
+        "answer_prompt_variant": "standard",
+        "contract_generation_success": true,
+        "deleted_evidence_count": 1,
+        "downgrade_count": 4,
+        "forbidden_boundary_count": 0,
+        "mode": "replace",
+        "replace_allowed": true,
+        "replace_applied": true,
+        "replacement_requested": true,
+        "requires_review_count": 0
+      },
+      "timeout": false,
+      "token_count": 30,
+      "token_metrics_available": true
+    },
+    {
+      "answer_length": 71,
+      "answer_rule_passed": false,
+      "case_id": "common_tool_preference_01",
+      "case_index": 1,
+      "category": "common_tool_preference",
+      "completion_token_count": 10,
+      "expected_any_miss_count": 2,
+      "expected_any_pass_count": 0,
+      "expected_contains_miss_count": 1,
+      "expected_contains_pass_count": 0,
+      "expected_memory_used": true,
+      "failures": [
+        "missing_expected_answer_term",
+        "missing_expected_answer_term_group",
+        "missing_expected_answer_term_group"
+      ],
+      "forbidden_contains_violation_count": 0,
+      "language_passed": true,
+      "latency_ms": 28,
+      "memory_grounding_passed": true,
+      "mode": "safe_version_replace_guided",
+      "passed": false,
+      "post_check_shadow": {
+        "allowed_evidence_included": true,
+        "conflict_evidence_included": false,
+        "forbidden_boundary_included": false,
+        "forbidden_boundary_mentions": [],
+        "included_allowed_evidence_ids": [
+          "common_tool_preference_01_target",
+          "common_tool_preference_01_graph",
+          "common_tool_preference_01_dup_a",
+          "common_tool_preference_01_dup_b"
+        ],
+        "included_conflict_warning_ids": [],
+        "included_forbidden_boundary_ids": [],
+        "included_stale_warning_ids": [],
+        "insufficient_evidence_fallback_expected": false,
+        "insufficient_evidence_fallback_observed": false,
+        "missing_likely_relevant_context_ids": [],
+        "needs_retry": false,
+        "production_safe_evidence_contract": true,
+        "retry_reasons": [],
+        "shadow_enabled": true,
+        "stale_evidence_included": false
+      },
+      "prompt_token_count": 20,
+      "provider_error": false,
+      "repeat_index": 0,
+      "replacement_seeded_count": 1,
+      "safe_version_contract": {
+        "accepted_candidate_risk_tier_counts": {
+          "downgrade": 4
+        },
+        "active_version_ids": [
+          "common_tool_preference_01_target",
+          "common_tool_preference_01_graph",
+          "common_tool_preference_01_dup_a",
+          "common_tool_preference_01_dup_b"
+        ],
+        "allowed_evidence_ids": [
+          "common_tool_preference_01_target",
+          "common_tool_preference_01_graph",
+          "common_tool_preference_01_dup_a",
+          "common_tool_preference_01_dup_b"
+        ],
+        "answer_guidance_enabled": true,
+        "answer_prompt_variant": "guided",
+        "candidate_governance_mode": "tiered",
+        "candidate_risk_tier_counts": {
+          "delete": 1,
+          "downgrade": 4
+        },
+        "conflict_warning_ids": [],
+        "deleted_evidence_ids": [
+          "common_tool_preference_01_old"
+        ],
+        "downgrade_ids": [
+          "common_tool_preference_01_target",
+          "common_tool_preference_01_graph",
+          "common_tool_preference_01_dup_a",
+          "common_tool_preference_01_dup_b"
+        ],
+        "forbidden_boundary_ids": [],
+        "insufficient_evidence_fallback": false,
+        "insufficient_evidence_ids": [],
+        "likely_relevant_evidence_ids": [
+          "common_tool_preference_01_target",
+          "common_tool_preference_01_graph",
+          "common_tool_preference_01_dup_a",
+          "common_tool_preference_01_dup_b"
+        ],
+        "production_safe": true,
+        "production_safe_evidence_contract": true,
+        "profile_name": "system_memory_safe_version_governed",
+        "requires_review_ids": [],
+        "stale_warning_ids": [
+          "common_tool_preference_01_old"
+        ],
+        "tiered_deleted_risks_by_reason": {
+          "superseded_candidate": 1
+        },
+        "uses_fixture_answer_expectations": false,
+        "version_boundary": {
+          "active_leaf_count": 1,
+          "chain_count": 1,
+          "conflict_chain_count": 0,
+          "replacement_count": 1,
+          "rollback_candidate_count": 1,
+          "stale_recalled_count": 0,
+          "superseded_recalled_count": 0
+        }
+      },
+      "safe_version_metadata": {
+        "allowed_evidence_count": 4,
+        "answer_guidance_enabled": true,
+        "answer_prompt_variant": "guided",
+        "contract_generation_success": true,
+        "deleted_evidence_count": 1,
+        "downgrade_count": 4,
+        "forbidden_boundary_count": 0,
+        "mode": "replace",
+        "replace_allowed": true,
+        "replace_applied": true,
+        "replacement_requested": true,
+        "requires_review_count": 0
+      },
+      "timeout": false,
+      "token_count": 30,
+      "token_metrics_available": true
+    },
+    {
+      "answer_length": 71,
+      "answer_rule_passed": false,
+      "case_id": "common_tool_preference_01",
+      "case_index": 1,
+      "category": "common_tool_preference",
+      "completion_token_count": 10,
+      "expected_any_miss_count": 2,
+      "expected_any_pass_count": 0,
+      "expected_contains_miss_count": 1,
+      "expected_contains_pass_count": 0,
+      "expected_memory_used": true,
+      "failures": [
+        "missing_expected_answer_term",
+        "missing_expected_answer_term_group",
+        "missing_expected_answer_term_group"
+      ],
+      "forbidden_contains_violation_count": 0,
+      "language_passed": true,
+      "latency_ms": 28,
+      "memory_grounding_passed": true,
+      "mode": "safe_version_replace_structured_guided",
+      "passed": false,
+      "post_check_shadow": {
+        "allowed_evidence_included": true,
+        "conflict_evidence_included": false,
+        "forbidden_boundary_included": false,
+        "forbidden_boundary_mentions": [],
+        "included_allowed_evidence_ids": [
+          "common_tool_preference_01_target",
+          "common_tool_preference_01_graph",
+          "common_tool_preference_01_dup_a",
+          "common_tool_preference_01_dup_b"
+        ],
+        "included_conflict_warning_ids": [],
+        "included_forbidden_boundary_ids": [],
+        "included_stale_warning_ids": [],
+        "insufficient_evidence_fallback_expected": false,
+        "insufficient_evidence_fallback_observed": false,
+        "missing_likely_relevant_context_ids": [],
+        "needs_retry": false,
+        "production_safe_evidence_contract": true,
+        "retry_reasons": [],
+        "shadow_enabled": true,
+        "stale_evidence_included": false
+      },
+      "prompt_token_count": 20,
+      "provider_error": false,
+      "repeat_index": 0,
+      "replacement_seeded_count": 1,
+      "safe_version_contract": {
+        "accepted_candidate_risk_tier_counts": {
+          "downgrade": 4
+        },
+        "active_version_ids": [
+          "common_tool_preference_01_target",
+          "common_tool_preference_01_graph",
+          "common_tool_preference_01_dup_a",
+          "common_tool_preference_01_dup_b"
+        ],
+        "allowed_evidence_ids": [
+          "common_tool_preference_01_target",
+          "common_tool_preference_01_graph",
+          "common_tool_preference_01_dup_a",
+          "common_tool_preference_01_dup_b"
+        ],
+        "answer_guidance_enabled": true,
+        "answer_prompt_variant": "structured_guided",
+        "candidate_governance_mode": "tiered",
+        "candidate_risk_tier_counts": {
+          "delete": 1,
+          "downgrade": 4
+        },
+        "conflict_warning_ids": [],
+        "deleted_evidence_ids": [
+          "common_tool_preference_01_old"
+        ],
+        "downgrade_ids": [
+          "common_tool_preference_01_target",
+          "common_tool_preference_01_graph",
+          "common_tool_preference_01_dup_a",
+          "common_tool_preference_01_dup_b"
+        ],
+        "forbidden_boundary_ids": [],
+        "insufficient_evidence_fallback": false,
+        "insufficient_evidence_ids": [],
+        "likely_relevant_evidence_ids": [
+          "common_tool_preference_01_target",
+          "common_tool_preference_01_graph",
+          "common_tool_preference_01_dup_a",
+          "common_tool_preference_01_dup_b"
+        ],
+        "production_safe": true,
+        "production_safe_evidence_contract": true,
+        "profile_name": "system_memory_safe_version_governed",
+        "requires_review_ids": [],
+        "stale_warning_ids": [
+          "common_tool_preference_01_old"
+        ],
+        "tiered_deleted_risks_by_reason": {
+          "superseded_candidate": 1
+        },
+        "uses_fixture_answer_expectations": false,
+        "version_boundary": {
+          "active_leaf_count": 1,
+          "chain_count": 1,
+          "conflict_chain_count": 0,
+          "replacement_count": 1,
+          "rollback_candidate_count": 1,
+          "stale_recalled_count": 0,
+          "superseded_recalled_count": 0
+        }
+      },
+      "safe_version_metadata": {
+        "allowed_evidence_count": 4,
+        "answer_guidance_enabled": true,
+        "answer_prompt_variant": "structured_guided",
+        "contract_generation_success": true,
+        "deleted_evidence_count": 1,
+        "downgrade_count": 4,
+        "forbidden_boundary_count": 0,
+        "mode": "replace",
+        "replace_allowed": true,
+        "replace_applied": true,
+        "replacement_requested": true,
+        "requires_review_count": 0
+      },
+      "timeout": false,
+      "token_count": 30,
+      "token_metrics_available": true
+    },
+    {
+      "answer_length": 71,
+      "answer_rule_passed": false,
+      "case_id": "common_tool_preference_01",
+      "case_index": 1,
+      "category": "common_tool_preference",
+      "completion_token_count": 10,
+      "expected_any_miss_count": 2,
+      "expected_any_pass_count": 0,
+      "expected_contains_miss_count": 1,
+      "expected_contains_pass_count": 0,
+      "expected_memory_used": true,
+      "failures": [
+        "missing_expected_answer_term",
+        "missing_expected_answer_term_group",
+        "missing_expected_answer_term_group"
+      ],
+      "forbidden_contains_violation_count": 0,
+      "language_passed": true,
+      "latency_ms": 31,
+      "memory_grounding_passed": true,
+      "mode": "safe_version_replace_near_query_block",
+      "passed": false,
+      "post_check_shadow": {
+        "allowed_evidence_included": true,
+        "conflict_evidence_included": false,
+        "forbidden_boundary_included": false,
+        "forbidden_boundary_mentions": [],
+        "included_allowed_evidence_ids": [
+          "common_tool_preference_01_target",
+          "common_tool_preference_01_graph",
+          "common_tool_preference_01_dup_a",
+          "common_tool_preference_01_dup_b"
+        ],
+        "included_conflict_warning_ids": [],
+        "included_forbidden_boundary_ids": [],
+        "included_stale_warning_ids": [],
+        "insufficient_evidence_fallback_expected": false,
+        "insufficient_evidence_fallback_observed": false,
+        "missing_likely_relevant_context_ids": [],
+        "needs_retry": false,
+        "production_safe_evidence_contract": true,
+        "retry_reasons": [],
+        "shadow_enabled": true,
+        "stale_evidence_included": false
+      },
+      "prompt_token_count": 20,
+      "provider_error": false,
+      "repeat_index": 0,
+      "replacement_seeded_count": 1,
+      "safe_version_contract": {
+        "accepted_candidate_risk_tier_counts": {
+          "downgrade": 4
+        },
+        "active_version_ids": [
+          "common_tool_preference_01_target",
+          "common_tool_preference_01_graph",
+          "common_tool_preference_01_dup_a",
+          "common_tool_preference_01_dup_b"
+        ],
+        "allowed_evidence_ids": [
+          "common_tool_preference_01_target",
+          "common_tool_preference_01_graph",
+          "common_tool_preference_01_dup_a",
+          "common_tool_preference_01_dup_b"
+        ],
+        "answer_guidance_enabled": true,
+        "answer_prompt_variant": "near_query_block",
+        "candidate_governance_mode": "tiered",
+        "candidate_risk_tier_counts": {
+          "delete": 1,
+          "downgrade": 4
+        },
+        "conflict_warning_ids": [],
+        "deleted_evidence_ids": [
+          "common_tool_preference_01_old"
+        ],
+        "downgrade_ids": [
+          "common_tool_preference_01_target",
+          "common_tool_preference_01_graph",
+          "common_tool_preference_01_dup_a",
+          "common_tool_preference_01_dup_b"
+        ],
+        "forbidden_boundary_ids": [],
+        "insufficient_evidence_fallback": false,
+        "insufficient_evidence_ids": [],
+        "likely_relevant_evidence_ids": [
+          "common_tool_preference_01_target",
+          "common_tool_preference_01_graph",
+          "common_tool_preference_01_dup_a",
+          "common_tool_preference_01_dup_b"
+        ],
+        "production_safe": true,
+        "production_safe_evidence_contract": true,
+        "profile_name": "system_memory_safe_version_governed",
+        "requires_review_ids": [],
+        "stale_warning_ids": [
+          "common_tool_preference_01_old"
+        ],
+        "tiered_deleted_risks_by_reason": {
+          "superseded_candidate": 1
+        },
+        "uses_fixture_answer_expectations": false,
+        "version_boundary": {
+          "active_leaf_count": 1,
+          "chain_count": 1,
+          "conflict_chain_count": 0,
+          "replacement_count": 1,
+          "rollback_candidate_count": 1,
+          "stale_recalled_count": 0,
+          "superseded_recalled_count": 0
+        }
+      },
+      "safe_version_metadata": {
+        "allowed_evidence_count": 4,
+        "answer_guidance_enabled": true,
+        "answer_prompt_variant": "near_query_block",
+        "contract_generation_success": true,
+        "deleted_evidence_count": 1,
+        "downgrade_count": 4,
+        "forbidden_boundary_count": 0,
+        "mode": "replace",
+        "replace_allowed": true,
+        "replace_applied": true,
+        "replacement_requested": true,
+        "requires_review_count": 0
+      },
+      "timeout": false,
+      "token_count": 30,
+      "token_metrics_available": true
+    },
+    {
+      "answer_length": 71,
+      "answer_rule_passed": false,
+      "case_id": "hard_preference_recall_01",
+      "case_index": 2,
+      "category": "hard_preference_recall",
+      "completion_token_count": 10,
+      "expected_any_miss_count": 2,
+      "expected_any_pass_count": 0,
+      "expected_contains_miss_count": 1,
+      "expected_contains_pass_count": 0,
+      "expected_memory_used": true,
+      "failures": [
+        "missing_expected_answer_term",
+        "missing_expected_answer_term_group",
+        "missing_expected_answer_term_group"
+      ],
+      "forbidden_contains_violation_count": 0,
+      "language_passed": true,
+      "latency_ms": 27,
+      "memory_grounding_passed": true,
+      "mode": "safe_version_replace",
+      "passed": false,
+      "post_check_shadow": {
+        "allowed_evidence_included": true,
+        "conflict_evidence_included": false,
+        "forbidden_boundary_included": false,
+        "forbidden_boundary_mentions": [],
+        "included_allowed_evidence_ids": [
+          "hard_preference_recall_01_target",
+          "hard_preference_recall_01_graph",
+          "hard_preference_recall_01_dup_a",
+          "hard_preference_recall_01_dup_b"
+        ],
+        "included_conflict_warning_ids": [],
+        "included_forbidden_boundary_ids": [],
+        "included_stale_warning_ids": [],
+        "insufficient_evidence_fallback_expected": false,
+        "insufficient_evidence_fallback_observed": false,
+        "missing_likely_relevant_context_ids": [],
+        "needs_retry": false,
+        "production_safe_evidence_contract": true,
+        "retry_reasons": [],
+        "shadow_enabled": true,
+        "stale_evidence_included": false
+      },
+      "prompt_token_count": 20,
+      "provider_error": false,
+      "repeat_index": 0,
+      "replacement_seeded_count": 1,
+      "safe_version_contract": {
+        "accepted_candidate_risk_tier_counts": {
+          "downgrade": 4
+        },
+        "active_version_ids": [
+          "hard_preference_recall_01_target",
+          "hard_preference_recall_01_graph",
+          "hard_preference_recall_01_dup_a",
+          "hard_preference_recall_01_dup_b"
+        ],
+        "allowed_evidence_ids": [
+          "hard_preference_recall_01_target",
+          "hard_preference_recall_01_graph",
+          "hard_preference_recall_01_dup_a",
+          "hard_preference_recall_01_dup_b"
+        ],
+        "answer_guidance_enabled": false,
+        "answer_prompt_variant": "standard",
+        "candidate_governance_mode": "tiered",
+        "candidate_risk_tier_counts": {
+          "delete": 1,
+          "downgrade": 4
+        },
+        "conflict_warning_ids": [],
+        "deleted_evidence_ids": [
+          "hard_preference_recall_01_old"
+        ],
+        "downgrade_ids": [
+          "hard_preference_recall_01_target",
+          "hard_preference_recall_01_graph",
+          "hard_preference_recall_01_dup_a",
+          "hard_preference_recall_01_dup_b"
+        ],
+        "forbidden_boundary_ids": [],
+        "insufficient_evidence_fallback": false,
+        "insufficient_evidence_ids": [],
+        "likely_relevant_evidence_ids": [
+          "hard_preference_recall_01_target",
+          "hard_preference_recall_01_graph",
+          "hard_preference_recall_01_dup_a",
+          "hard_preference_recall_01_dup_b"
+        ],
+        "production_safe": true,
+        "production_safe_evidence_contract": true,
+        "profile_name": "system_memory_safe_version_governed",
+        "requires_review_ids": [],
+        "stale_warning_ids": [
+          "hard_preference_recall_01_old"
+        ],
+        "tiered_deleted_risks_by_reason": {
+          "superseded_candidate": 1
+        },
+        "uses_fixture_answer_expectations": false,
+        "version_boundary": {
+          "active_leaf_count": 1,
+          "chain_count": 1,
+          "conflict_chain_count": 0,
+          "replacement_count": 1,
+          "rollback_candidate_count": 1,
+          "stale_recalled_count": 0,
+          "superseded_recalled_count": 0
+        }
+      },
+      "safe_version_metadata": {
+        "allowed_evidence_count": 4,
+        "answer_guidance_enabled": false,
+        "answer_prompt_variant": "standard",
+        "contract_generation_success": true,
+        "deleted_evidence_count": 1,
+        "downgrade_count": 4,
+        "forbidden_boundary_count": 0,
+        "mode": "replace",
+        "replace_allowed": true,
+        "replace_applied": true,
+        "replacement_requested": true,
+        "requires_review_count": 0
+      },
+      "timeout": false,
+      "token_count": 30,
+      "token_metrics_available": true
+    },
+    {
+      "answer_length": 71,
+      "answer_rule_passed": false,
+      "case_id": "hard_preference_recall_01",
+      "case_index": 2,
+      "category": "hard_preference_recall",
+      "completion_token_count": 10,
+      "expected_any_miss_count": 2,
+      "expected_any_pass_count": 0,
+      "expected_contains_miss_count": 1,
+      "expected_contains_pass_count": 0,
+      "expected_memory_used": true,
+      "failures": [
+        "missing_expected_answer_term",
+        "missing_expected_answer_term_group",
+        "missing_expected_answer_term_group"
+      ],
+      "forbidden_contains_violation_count": 0,
+      "language_passed": true,
+      "latency_ms": 30,
+      "memory_grounding_passed": true,
+      "mode": "safe_version_replace_guided",
+      "passed": false,
+      "post_check_shadow": {
+        "allowed_evidence_included": true,
+        "conflict_evidence_included": false,
+        "forbidden_boundary_included": false,
+        "forbidden_boundary_mentions": [],
+        "included_allowed_evidence_ids": [
+          "hard_preference_recall_01_target",
+          "hard_preference_recall_01_graph",
+          "hard_preference_recall_01_dup_a",
+          "hard_preference_recall_01_dup_b"
+        ],
+        "included_conflict_warning_ids": [],
+        "included_forbidden_boundary_ids": [],
+        "included_stale_warning_ids": [],
+        "insufficient_evidence_fallback_expected": false,
+        "insufficient_evidence_fallback_observed": false,
+        "missing_likely_relevant_context_ids": [],
+        "needs_retry": false,
+        "production_safe_evidence_contract": true,
+        "retry_reasons": [],
+        "shadow_enabled": true,
+        "stale_evidence_included": false
+      },
+      "prompt_token_count": 20,
+      "provider_error": false,
+      "repeat_index": 0,
+      "replacement_seeded_count": 1,
+      "safe_version_contract": {
+        "accepted_candidate_risk_tier_counts": {
+          "downgrade": 4
+        },
+        "active_version_ids": [
+          "hard_preference_recall_01_target",
+          "hard_preference_recall_01_graph",
+          "hard_preference_recall_01_dup_a",
+          "hard_preference_recall_01_dup_b"
+        ],
+        "allowed_evidence_ids": [
+          "hard_preference_recall_01_target",
+          "hard_preference_recall_01_graph",
+          "hard_preference_recall_01_dup_a",
+          "hard_preference_recall_01_dup_b"
+        ],
+        "answer_guidance_enabled": true,
+        "answer_prompt_variant": "guided",
+        "candidate_governance_mode": "tiered",
+        "candidate_risk_tier_counts": {
+          "delete": 1,
+          "downgrade": 4
+        },
+        "conflict_warning_ids": [],
+        "deleted_evidence_ids": [
+          "hard_preference_recall_01_old"
+        ],
+        "downgrade_ids": [
+          "hard_preference_recall_01_target",
+          "hard_preference_recall_01_graph",
+          "hard_preference_recall_01_dup_a",
+          "hard_preference_recall_01_dup_b"
+        ],
+        "forbidden_boundary_ids": [],
+        "insufficient_evidence_fallback": false,
+        "insufficient_evidence_ids": [],
+        "likely_relevant_evidence_ids": [
+          "hard_preference_recall_01_target",
+          "hard_preference_recall_01_graph",
+          "hard_preference_recall_01_dup_a",
+          "hard_preference_recall_01_dup_b"
+        ],
+        "production_safe": true,
+        "production_safe_evidence_contract": true,
+        "profile_name": "system_memory_safe_version_governed",
+        "requires_review_ids": [],
+        "stale_warning_ids": [
+          "hard_preference_recall_01_old"
+        ],
+        "tiered_deleted_risks_by_reason": {
+          "superseded_candidate": 1
+        },
+        "uses_fixture_answer_expectations": false,
+        "version_boundary": {
+          "active_leaf_count": 1,
+          "chain_count": 1,
+          "conflict_chain_count": 0,
+          "replacement_count": 1,
+          "rollback_candidate_count": 1,
+          "stale_recalled_count": 0,
+          "superseded_recalled_count": 0
+        }
+      },
+      "safe_version_metadata": {
+        "allowed_evidence_count": 4,
+        "answer_guidance_enabled": true,
+        "answer_prompt_variant": "guided",
+        "contract_generation_success": true,
+        "deleted_evidence_count": 1,
+        "downgrade_count": 4,
+        "forbidden_boundary_count": 0,
+        "mode": "replace",
+        "replace_allowed": true,
+        "replace_applied": true,
+        "replacement_requested": true,
+        "requires_review_count": 0
+      },
+      "timeout": false,
+      "token_count": 30,
+      "token_metrics_available": true
+    },
+    {
+      "answer_length": 71,
+      "answer_rule_passed": false,
+      "case_id": "hard_preference_recall_01",
+      "case_index": 2,
+      "category": "hard_preference_recall",
+      "completion_token_count": 10,
+      "expected_any_miss_count": 2,
+      "expected_any_pass_count": 0,
+      "expected_contains_miss_count": 1,
+      "expected_contains_pass_count": 0,
+      "expected_memory_used": true,
+      "failures": [
+        "missing_expected_answer_term",
+        "missing_expected_answer_term_group",
+        "missing_expected_answer_term_group"
+      ],
+      "forbidden_contains_violation_count": 0,
+      "language_passed": true,
+      "latency_ms": 31,
+      "memory_grounding_passed": true,
+      "mode": "safe_version_replace_structured_guided",
+      "passed": false,
+      "post_check_shadow": {
+        "allowed_evidence_included": true,
+        "conflict_evidence_included": false,
+        "forbidden_boundary_included": false,
+        "forbidden_boundary_mentions": [],
+        "included_allowed_evidence_ids": [
+          "hard_preference_recall_01_target",
+          "hard_preference_recall_01_graph",
+          "hard_preference_recall_01_dup_a",
+          "hard_preference_recall_01_dup_b"
+        ],
+        "included_conflict_warning_ids": [],
+        "included_forbidden_boundary_ids": [],
+        "included_stale_warning_ids": [],
+        "insufficient_evidence_fallback_expected": false,
+        "insufficient_evidence_fallback_observed": false,
+        "missing_likely_relevant_context_ids": [],
+        "needs_retry": false,
+        "production_safe_evidence_contract": true,
+        "retry_reasons": [],
+        "shadow_enabled": true,
+        "stale_evidence_included": false
+      },
+      "prompt_token_count": 20,
+      "provider_error": false,
+      "repeat_index": 0,
+      "replacement_seeded_count": 1,
+      "safe_version_contract": {
+        "accepted_candidate_risk_tier_counts": {
+          "downgrade": 4
+        },
+        "active_version_ids": [
+          "hard_preference_recall_01_target",
+          "hard_preference_recall_01_graph",
+          "hard_preference_recall_01_dup_a",
+          "hard_preference_recall_01_dup_b"
+        ],
+        "allowed_evidence_ids": [
+          "hard_preference_recall_01_target",
+          "hard_preference_recall_01_graph",
+          "hard_preference_recall_01_dup_a",
+          "hard_preference_recall_01_dup_b"
+        ],
+        "answer_guidance_enabled": true,
+        "answer_prompt_variant": "structured_guided",
+        "candidate_governance_mode": "tiered",
+        "candidate_risk_tier_counts": {
+          "delete": 1,
+          "downgrade": 4
+        },
+        "conflict_warning_ids": [],
+        "deleted_evidence_ids": [
+          "hard_preference_recall_01_old"
+        ],
+        "downgrade_ids": [
+          "hard_preference_recall_01_target",
+          "hard_preference_recall_01_graph",
+          "hard_preference_recall_01_dup_a",
+          "hard_preference_recall_01_dup_b"
+        ],
+        "forbidden_boundary_ids": [],
+        "insufficient_evidence_fallback": false,
+        "insufficient_evidence_ids": [],
+        "likely_relevant_evidence_ids": [
+          "hard_preference_recall_01_target",
+          "hard_preference_recall_01_graph",
+          "hard_preference_recall_01_dup_a",
+          "hard_preference_recall_01_dup_b"
+        ],
+        "production_safe": true,
+        "production_safe_evidence_contract": true,
+        "profile_name": "system_memory_safe_version_governed",
+        "requires_review_ids": [],
+        "stale_warning_ids": [
+          "hard_preference_recall_01_old"
+        ],
+        "tiered_deleted_risks_by_reason": {
+          "superseded_candidate": 1
+        },
+        "uses_fixture_answer_expectations": false,
+        "version_boundary": {
+          "active_leaf_count": 1,
+          "chain_count": 1,
+          "conflict_chain_count": 0,
+          "replacement_count": 1,
+          "rollback_candidate_count": 1,
+          "stale_recalled_count": 0,
+          "superseded_recalled_count": 0
+        }
+      },
+      "safe_version_metadata": {
+        "allowed_evidence_count": 4,
+        "answer_guidance_enabled": true,
+        "answer_prompt_variant": "structured_guided",
+        "contract_generation_success": true,
+        "deleted_evidence_count": 1,
+        "downgrade_count": 4,
+        "forbidden_boundary_count": 0,
+        "mode": "replace",
+        "replace_allowed": true,
+        "replace_applied": true,
+        "replacement_requested": true,
+        "requires_review_count": 0
+      },
+      "timeout": false,
+      "token_count": 30,
+      "token_metrics_available": true
+    },
+    {
+      "answer_length": 71,
+      "answer_rule_passed": false,
+      "case_id": "hard_preference_recall_01",
+      "case_index": 2,
+      "category": "hard_preference_recall",
+      "completion_token_count": 10,
+      "expected_any_miss_count": 2,
+      "expected_any_pass_count": 0,
+      "expected_contains_miss_count": 1,
+      "expected_contains_pass_count": 0,
+      "expected_memory_used": true,
+      "failures": [
+        "missing_expected_answer_term",
+        "missing_expected_answer_term_group",
+        "missing_expected_answer_term_group"
+      ],
+      "forbidden_contains_violation_count": 0,
+      "language_passed": true,
+      "latency_ms": 29,
+      "memory_grounding_passed": true,
+      "mode": "safe_version_replace_near_query_block",
+      "passed": false,
+      "post_check_shadow": {
+        "allowed_evidence_included": true,
+        "conflict_evidence_included": false,
+        "forbidden_boundary_included": false,
+        "forbidden_boundary_mentions": [],
+        "included_allowed_evidence_ids": [
+          "hard_preference_recall_01_target",
+          "hard_preference_recall_01_graph",
+          "hard_preference_recall_01_dup_a",
+          "hard_preference_recall_01_dup_b"
+        ],
+        "included_conflict_warning_ids": [],
+        "included_forbidden_boundary_ids": [],
+        "included_stale_warning_ids": [],
+        "insufficient_evidence_fallback_expected": false,
+        "insufficient_evidence_fallback_observed": false,
+        "missing_likely_relevant_context_ids": [],
+        "needs_retry": false,
+        "production_safe_evidence_contract": true,
+        "retry_reasons": [],
+        "shadow_enabled": true,
+        "stale_evidence_included": false
+      },
+      "prompt_token_count": 20,
+      "provider_error": false,
+      "repeat_index": 0,
+      "replacement_seeded_count": 1,
+      "safe_version_contract": {
+        "accepted_candidate_risk_tier_counts": {
+          "downgrade": 4
+        },
+        "active_version_ids": [
+          "hard_preference_recall_01_target",
+          "hard_preference_recall_01_graph",
+          "hard_preference_recall_01_dup_a",
+          "hard_preference_recall_01_dup_b"
+        ],
+        "allowed_evidence_ids": [
+          "hard_preference_recall_01_target",
+          "hard_preference_recall_01_graph",
+          "hard_preference_recall_01_dup_a",
+          "hard_preference_recall_01_dup_b"
+        ],
+        "answer_guidance_enabled": true,
+        "answer_prompt_variant": "near_query_block",
+        "candidate_governance_mode": "tiered",
+        "candidate_risk_tier_counts": {
+          "delete": 1,
+          "downgrade": 4
+        },
+        "conflict_warning_ids": [],
+        "deleted_evidence_ids": [
+          "hard_preference_recall_01_old"
+        ],
+        "downgrade_ids": [
+          "hard_preference_recall_01_target",
+          "hard_preference_recall_01_graph",
+          "hard_preference_recall_01_dup_a",
+          "hard_preference_recall_01_dup_b"
+        ],
+        "forbidden_boundary_ids": [],
+        "insufficient_evidence_fallback": false,
+        "insufficient_evidence_ids": [],
+        "likely_relevant_evidence_ids": [
+          "hard_preference_recall_01_target",
+          "hard_preference_recall_01_graph",
+          "hard_preference_recall_01_dup_a",
+          "hard_preference_recall_01_dup_b"
+        ],
+        "production_safe": true,
+        "production_safe_evidence_contract": true,
+        "profile_name": "system_memory_safe_version_governed",
+        "requires_review_ids": [],
+        "stale_warning_ids": [
+          "hard_preference_recall_01_old"
+        ],
+        "tiered_deleted_risks_by_reason": {
+          "superseded_candidate": 1
+        },
+        "uses_fixture_answer_expectations": false,
+        "version_boundary": {
+          "active_leaf_count": 1,
+          "chain_count": 1,
+          "conflict_chain_count": 0,
+          "replacement_count": 1,
+          "rollback_candidate_count": 1,
+          "stale_recalled_count": 0,
+          "superseded_recalled_count": 0
+        }
+      },
+      "safe_version_metadata": {
+        "allowed_evidence_count": 4,
+        "answer_guidance_enabled": true,
+        "answer_prompt_variant": "near_query_block",
+        "contract_generation_success": true,
+        "deleted_evidence_count": 1,
+        "downgrade_count": 4,
+        "forbidden_boundary_count": 0,
+        "mode": "replace",
+        "replace_allowed": true,
+        "replace_applied": true,
+        "replacement_requested": true,
+        "requires_review_count": 0
+      },
+      "timeout": false,
+      "token_count": 30,
+      "token_metrics_available": true
+    },
+    {
+      "answer_length": 71,
+      "answer_rule_passed": false,
+      "case_id": "hard_tool_preference_01",
+      "case_index": 3,
+      "category": "hard_tool_preference",
+      "completion_token_count": 10,
+      "expected_any_miss_count": 2,
+      "expected_any_pass_count": 0,
+      "expected_contains_miss_count": 1,
+      "expected_contains_pass_count": 0,
+      "expected_memory_used": true,
+      "failures": [
+        "missing_expected_answer_term",
+        "missing_expected_answer_term_group",
+        "missing_expected_answer_term_group"
+      ],
+      "forbidden_contains_violation_count": 0,
+      "language_passed": true,
+      "latency_ms": 34,
+      "memory_grounding_passed": true,
+      "mode": "safe_version_replace",
+      "passed": false,
+      "post_check_shadow": {
+        "allowed_evidence_included": true,
+        "conflict_evidence_included": false,
+        "forbidden_boundary_included": false,
+        "forbidden_boundary_mentions": [],
+        "included_allowed_evidence_ids": [
+          "hard_tool_preference_01_target",
+          "hard_tool_preference_01_graph",
+          "hard_tool_preference_01_dup_a",
+          "hard_tool_preference_01_dup_b"
+        ],
+        "included_conflict_warning_ids": [],
+        "included_forbidden_boundary_ids": [],
+        "included_stale_warning_ids": [],
+        "insufficient_evidence_fallback_expected": false,
+        "insufficient_evidence_fallback_observed": false,
+        "missing_likely_relevant_context_ids": [],
+        "needs_retry": false,
+        "production_safe_evidence_contract": true,
+        "retry_reasons": [],
+        "shadow_enabled": true,
+        "stale_evidence_included": false
+      },
+      "prompt_token_count": 20,
+      "provider_error": false,
+      "repeat_index": 0,
+      "replacement_seeded_count": 1,
+      "safe_version_contract": {
+        "accepted_candidate_risk_tier_counts": {
+          "downgrade": 4
+        },
+        "active_version_ids": [
+          "hard_tool_preference_01_target",
+          "hard_tool_preference_01_graph",
+          "hard_tool_preference_01_dup_a",
+          "hard_tool_preference_01_dup_b"
+        ],
+        "allowed_evidence_ids": [
+          "hard_tool_preference_01_target",
+          "hard_tool_preference_01_graph",
+          "hard_tool_preference_01_dup_a",
+          "hard_tool_preference_01_dup_b"
+        ],
+        "answer_guidance_enabled": false,
+        "answer_prompt_variant": "standard",
+        "candidate_governance_mode": "tiered",
+        "candidate_risk_tier_counts": {
+          "delete": 1,
+          "downgrade": 4
+        },
+        "conflict_warning_ids": [],
+        "deleted_evidence_ids": [
+          "hard_tool_preference_01_old"
+        ],
+        "downgrade_ids": [
+          "hard_tool_preference_01_target",
+          "hard_tool_preference_01_graph",
+          "hard_tool_preference_01_dup_a",
+          "hard_tool_preference_01_dup_b"
+        ],
+        "forbidden_boundary_ids": [],
+        "insufficient_evidence_fallback": false,
+        "insufficient_evidence_ids": [],
+        "likely_relevant_evidence_ids": [
+          "hard_tool_preference_01_target",
+          "hard_tool_preference_01_graph",
+          "hard_tool_preference_01_dup_a",
+          "hard_tool_preference_01_dup_b"
+        ],
+        "production_safe": true,
+        "production_safe_evidence_contract": true,
+        "profile_name": "system_memory_safe_version_governed",
+        "requires_review_ids": [],
+        "stale_warning_ids": [
+          "hard_tool_preference_01_old"
+        ],
+        "tiered_deleted_risks_by_reason": {
+          "superseded_candidate": 1
+        },
+        "uses_fixture_answer_expectations": false,
+        "version_boundary": {
+          "active_leaf_count": 1,
+          "chain_count": 1,
+          "conflict_chain_count": 0,
+          "replacement_count": 1,
+          "rollback_candidate_count": 1,
+          "stale_recalled_count": 0,
+          "superseded_recalled_count": 0
+        }
+      },
+      "safe_version_metadata": {
+        "allowed_evidence_count": 4,
+        "answer_guidance_enabled": false,
+        "answer_prompt_variant": "standard",
+        "contract_generation_success": true,
+        "deleted_evidence_count": 1,
+        "downgrade_count": 4,
+        "forbidden_boundary_count": 0,
+        "mode": "replace",
+        "replace_allowed": true,
+        "replace_applied": true,
+        "replacement_requested": true,
+        "requires_review_count": 0
+      },
+      "timeout": false,
+      "token_count": 30,
+      "token_metrics_available": true
+    },
+    {
+      "answer_length": 71,
+      "answer_rule_passed": false,
+      "case_id": "hard_tool_preference_01",
+      "case_index": 3,
+      "category": "hard_tool_preference",
+      "completion_token_count": 10,
+      "expected_any_miss_count": 2,
+      "expected_any_pass_count": 0,
+      "expected_contains_miss_count": 1,
+      "expected_contains_pass_count": 0,
+      "expected_memory_used": true,
+      "failures": [
+        "missing_expected_answer_term",
+        "missing_expected_answer_term_group",
+        "missing_expected_answer_term_group"
+      ],
+      "forbidden_contains_violation_count": 0,
+      "language_passed": true,
+      "latency_ms": 30,
+      "memory_grounding_passed": true,
+      "mode": "safe_version_replace_guided",
+      "passed": false,
+      "post_check_shadow": {
+        "allowed_evidence_included": true,
+        "conflict_evidence_included": false,
+        "forbidden_boundary_included": false,
+        "forbidden_boundary_mentions": [],
+        "included_allowed_evidence_ids": [
+          "hard_tool_preference_01_target",
+          "hard_tool_preference_01_graph",
+          "hard_tool_preference_01_dup_a",
+          "hard_tool_preference_01_dup_b"
+        ],
+        "included_conflict_warning_ids": [],
+        "included_forbidden_boundary_ids": [],
+        "included_stale_warning_ids": [],
+        "insufficient_evidence_fallback_expected": false,
+        "insufficient_evidence_fallback_observed": false,
+        "missing_likely_relevant_context_ids": [],
+        "needs_retry": false,
+        "production_safe_evidence_contract": true,
+        "retry_reasons": [],
+        "shadow_enabled": true,
+        "stale_evidence_included": false
+      },
+      "prompt_token_count": 20,
+      "provider_error": false,
+      "repeat_index": 0,
+      "replacement_seeded_count": 1,
+      "safe_version_contract": {
+        "accepted_candidate_risk_tier_counts": {
+          "downgrade": 4
+        },
+        "active_version_ids": [
+          "hard_tool_preference_01_target",
+          "hard_tool_preference_01_graph",
+          "hard_tool_preference_01_dup_a",
+          "hard_tool_preference_01_dup_b"
+        ],
+        "allowed_evidence_ids": [
+          "hard_tool_preference_01_target",
+          "hard_tool_preference_01_graph",
+          "hard_tool_preference_01_dup_a",
+          "hard_tool_preference_01_dup_b"
+        ],
+        "answer_guidance_enabled": true,
+        "answer_prompt_variant": "guided",
+        "candidate_governance_mode": "tiered",
+        "candidate_risk_tier_counts": {
+          "delete": 1,
+          "downgrade": 4
+        },
+        "conflict_warning_ids": [],
+        "deleted_evidence_ids": [
+          "hard_tool_preference_01_old"
+        ],
+        "downgrade_ids": [
+          "hard_tool_preference_01_target",
+          "hard_tool_preference_01_graph",
+          "hard_tool_preference_01_dup_a",
+          "hard_tool_preference_01_dup_b"
+        ],
+        "forbidden_boundary_ids": [],
+        "insufficient_evidence_fallback": false,
+        "insufficient_evidence_ids": [],
+        "likely_relevant_evidence_ids": [
+          "hard_tool_preference_01_target",
+          "hard_tool_preference_01_graph",
+          "hard_tool_preference_01_dup_a",
+          "hard_tool_preference_01_dup_b"
+        ],
+        "production_safe": true,
+        "production_safe_evidence_contract": true,
+        "profile_name": "system_memory_safe_version_governed",
+        "requires_review_ids": [],
+        "stale_warning_ids": [
+          "hard_tool_preference_01_old"
+        ],
+        "tiered_deleted_risks_by_reason": {
+          "superseded_candidate": 1
+        },
+        "uses_fixture_answer_expectations": false,
+        "version_boundary": {
+          "active_leaf_count": 1,
+          "chain_count": 1,
+          "conflict_chain_count": 0,
+          "replacement_count": 1,
+          "rollback_candidate_count": 1,
+          "stale_recalled_count": 0,
+          "superseded_recalled_count": 0
+        }
+      },
+      "safe_version_metadata": {
+        "allowed_evidence_count": 4,
+        "answer_guidance_enabled": true,
+        "answer_prompt_variant": "guided",
+        "contract_generation_success": true,
+        "deleted_evidence_count": 1,
+        "downgrade_count": 4,
+        "forbidden_boundary_count": 0,
+        "mode": "replace",
+        "replace_allowed": true,
+        "replace_applied": true,
+        "replacement_requested": true,
+        "requires_review_count": 0
+      },
+      "timeout": false,
+      "token_count": 30,
+      "token_metrics_available": true
+    },
+    {
+      "answer_length": 71,
+      "answer_rule_passed": false,
+      "case_id": "hard_tool_preference_01",
+      "case_index": 3,
+      "category": "hard_tool_preference",
+      "completion_token_count": 10,
+      "expected_any_miss_count": 2,
+      "expected_any_pass_count": 0,
+      "expected_contains_miss_count": 1,
+      "expected_contains_pass_count": 0,
+      "expected_memory_used": true,
+      "failures": [
+        "missing_expected_answer_term",
+        "missing_expected_answer_term_group",
+        "missing_expected_answer_term_group"
+      ],
+      "forbidden_contains_violation_count": 0,
+      "language_passed": true,
+      "latency_ms": 27,
+      "memory_grounding_passed": true,
+      "mode": "safe_version_replace_structured_guided",
+      "passed": false,
+      "post_check_shadow": {
+        "allowed_evidence_included": true,
+        "conflict_evidence_included": false,
+        "forbidden_boundary_included": false,
+        "forbidden_boundary_mentions": [],
+        "included_allowed_evidence_ids": [
+          "hard_tool_preference_01_target",
+          "hard_tool_preference_01_graph",
+          "hard_tool_preference_01_dup_a",
+          "hard_tool_preference_01_dup_b"
+        ],
+        "included_conflict_warning_ids": [],
+        "included_forbidden_boundary_ids": [],
+        "included_stale_warning_ids": [],
+        "insufficient_evidence_fallback_expected": false,
+        "insufficient_evidence_fallback_observed": false,
+        "missing_likely_relevant_context_ids": [],
+        "needs_retry": false,
+        "production_safe_evidence_contract": true,
+        "retry_reasons": [],
+        "shadow_enabled": true,
+        "stale_evidence_included": false
+      },
+      "prompt_token_count": 20,
+      "provider_error": false,
+      "repeat_index": 0,
+      "replacement_seeded_count": 1,
+      "safe_version_contract": {
+        "accepted_candidate_risk_tier_counts": {
+          "downgrade": 4
+        },
+        "active_version_ids": [
+          "hard_tool_preference_01_target",
+          "hard_tool_preference_01_graph",
+          "hard_tool_preference_01_dup_a",
+          "hard_tool_preference_01_dup_b"
+        ],
+        "allowed_evidence_ids": [
+          "hard_tool_preference_01_target",
+          "hard_tool_preference_01_graph",
+          "hard_tool_preference_01_dup_a",
+          "hard_tool_preference_01_dup_b"
+        ],
+        "answer_guidance_enabled": true,
+        "answer_prompt_variant": "structured_guided",
+        "candidate_governance_mode": "tiered",
+        "candidate_risk_tier_counts": {
+          "delete": 1,
+          "downgrade": 4
+        },
+        "conflict_warning_ids": [],
+        "deleted_evidence_ids": [
+          "hard_tool_preference_01_old"
+        ],
+        "downgrade_ids": [
+          "hard_tool_preference_01_target",
+          "hard_tool_preference_01_graph",
+          "hard_tool_preference_01_dup_a",
+          "hard_tool_preference_01_dup_b"
+        ],
+        "forbidden_boundary_ids": [],
+        "insufficient_evidence_fallback": false,
+        "insufficient_evidence_ids": [],
+        "likely_relevant_evidence_ids": [
+          "hard_tool_preference_01_target",
+          "hard_tool_preference_01_graph",
+          "hard_tool_preference_01_dup_a",
+          "hard_tool_preference_01_dup_b"
+        ],
+        "production_safe": true,
+        "production_safe_evidence_contract": true,
+        "profile_name": "system_memory_safe_version_governed",
+        "requires_review_ids": [],
+        "stale_warning_ids": [
+          "hard_tool_preference_01_old"
+        ],
+        "tiered_deleted_risks_by_reason": {
+          "superseded_candidate": 1
+        },
+        "uses_fixture_answer_expectations": false,
+        "version_boundary": {
+          "active_leaf_count": 1,
+          "chain_count": 1,
+          "conflict_chain_count": 0,
+          "replacement_count": 1,
+          "rollback_candidate_count": 1,
+          "stale_recalled_count": 0,
+          "superseded_recalled_count": 0
+        }
+      },
+      "safe_version_metadata": {
+        "allowed_evidence_count": 4,
+        "answer_guidance_enabled": true,
+        "answer_prompt_variant": "structured_guided",
+        "contract_generation_success": true,
+        "deleted_evidence_count": 1,
+        "downgrade_count": 4,
+        "forbidden_boundary_count": 0,
+        "mode": "replace",
+        "replace_allowed": true,
+        "replace_applied": true,
+        "replacement_requested": true,
+        "requires_review_count": 0
+      },
+      "timeout": false,
+      "token_count": 30,
+      "token_metrics_available": true
+    },
+    {
+      "answer_length": 71,
+      "answer_rule_passed": false,
+      "case_id": "hard_tool_preference_01",
+      "case_index": 3,
+      "category": "hard_tool_preference",
+      "completion_token_count": 10,
+      "expected_any_miss_count": 2,
+      "expected_any_pass_count": 0,
+      "expected_contains_miss_count": 1,
+      "expected_contains_pass_count": 0,
+      "expected_memory_used": true,
+      "failures": [
+        "missing_expected_answer_term",
+        "missing_expected_answer_term_group",
+        "missing_expected_answer_term_group"
+      ],
+      "forbidden_contains_violation_count": 0,
+      "language_passed": true,
+      "latency_ms": 29,
+      "memory_grounding_passed": true,
+      "mode": "safe_version_replace_near_query_block",
+      "passed": false,
+      "post_check_shadow": {
+        "allowed_evidence_included": true,
+        "conflict_evidence_included": false,
+        "forbidden_boundary_included": false,
+        "forbidden_boundary_mentions": [],
+        "included_allowed_evidence_ids": [
+          "hard_tool_preference_01_target",
+          "hard_tool_preference_01_graph",
+          "hard_tool_preference_01_dup_a",
+          "hard_tool_preference_01_dup_b"
+        ],
+        "included_conflict_warning_ids": [],
+        "included_forbidden_boundary_ids": [],
+        "included_stale_warning_ids": [],
+        "insufficient_evidence_fallback_expected": false,
+        "insufficient_evidence_fallback_observed": false,
+        "missing_likely_relevant_context_ids": [],
+        "needs_retry": false,
+        "production_safe_evidence_contract": true,
+        "retry_reasons": [],
+        "shadow_enabled": true,
+        "stale_evidence_included": false
+      },
+      "prompt_token_count": 20,
+      "provider_error": false,
+      "repeat_index": 0,
+      "replacement_seeded_count": 1,
+      "safe_version_contract": {
+        "accepted_candidate_risk_tier_counts": {
+          "downgrade": 4
+        },
+        "active_version_ids": [
+          "hard_tool_preference_01_target",
+          "hard_tool_preference_01_graph",
+          "hard_tool_preference_01_dup_a",
+          "hard_tool_preference_01_dup_b"
+        ],
+        "allowed_evidence_ids": [
+          "hard_tool_preference_01_target",
+          "hard_tool_preference_01_graph",
+          "hard_tool_preference_01_dup_a",
+          "hard_tool_preference_01_dup_b"
+        ],
+        "answer_guidance_enabled": true,
+        "answer_prompt_variant": "near_query_block",
+        "candidate_governance_mode": "tiered",
+        "candidate_risk_tier_counts": {
+          "delete": 1,
+          "downgrade": 4
+        },
+        "conflict_warning_ids": [],
+        "deleted_evidence_ids": [
+          "hard_tool_preference_01_old"
+        ],
+        "downgrade_ids": [
+          "hard_tool_preference_01_target",
+          "hard_tool_preference_01_graph",
+          "hard_tool_preference_01_dup_a",
+          "hard_tool_preference_01_dup_b"
+        ],
+        "forbidden_boundary_ids": [],
+        "insufficient_evidence_fallback": false,
+        "insufficient_evidence_ids": [],
+        "likely_relevant_evidence_ids": [
+          "hard_tool_preference_01_target",
+          "hard_tool_preference_01_graph",
+          "hard_tool_preference_01_dup_a",
+          "hard_tool_preference_01_dup_b"
+        ],
+        "production_safe": true,
+        "production_safe_evidence_contract": true,
+        "profile_name": "system_memory_safe_version_governed",
+        "requires_review_ids": [],
+        "stale_warning_ids": [
+          "hard_tool_preference_01_old"
+        ],
+        "tiered_deleted_risks_by_reason": {
+          "superseded_candidate": 1
+        },
+        "uses_fixture_answer_expectations": false,
+        "version_boundary": {
+          "active_leaf_count": 1,
+          "chain_count": 1,
+          "conflict_chain_count": 0,
+          "replacement_count": 1,
+          "rollback_candidate_count": 1,
+          "stale_recalled_count": 0,
+          "superseded_recalled_count": 0
+        }
+      },
+      "safe_version_metadata": {
+        "allowed_evidence_count": 4,
+        "answer_guidance_enabled": true,
+        "answer_prompt_variant": "near_query_block",
+        "contract_generation_success": true,
+        "deleted_evidence_count": 1,
+        "downgrade_count": 4,
+        "forbidden_boundary_count": 0,
+        "mode": "replace",
+        "replace_allowed": true,
+        "replace_applied": true,
+        "replacement_requested": true,
+        "requires_review_count": 0
+      },
+      "timeout": false,
+      "token_count": 30,
+      "token_metrics_available": true
+    }
+  ],
+  "metrics": {
+    "answer_rule_pass_rate": 0.0,
+    "avg_latency_ms": 31.625,
+    "avg_total_token_count": 30.0,
+    "case_count": 16,
+    "checkpoint_input_count": 0,
+    "complete_response_included": false,
+    "conversation_log_included": false,
+    "evaluation_level": "system_path_safe_version_governed",
+    "fake_provider_enabled": true,
+    "forbidden_violation_rate": 0.0,
+    "malformed_checkpoint_line_count": 0,
+    "memory_grounding_pass_rate": 100.0,
+    "mode_count": 4,
+    "mode_summaries": {
+      "safe_version_replace": {
+        "answer_rule_pass_rate": 0.0,
+        "answer_success_count": 0,
+        "avg_latency_ms": 30.25,
+        "avg_total_token_count": 30.0,
+        "case_count": 4,
+        "contract_generation_success_rate": 100.0,
+        "forbidden_case_count": 0,
+        "forbidden_violation_rate": 0.0,
+        "grounding_success_count": 4,
+        "memory_grounding_pass_rate": 100.0,
+        "post_check_shadow_enabled_rate": 100.0,
+        "token_metrics_available": true
+      },
+      "safe_version_replace_guided": {
+        "answer_rule_pass_rate": 0.0,
+        "answer_success_count": 0,
+        "avg_latency_ms": 30.25,
+        "avg_total_token_count": 30.0,
+        "case_count": 4,
+        "contract_generation_success_rate": 100.0,
+        "forbidden_case_count": 0,
+        "forbidden_violation_rate": 0.0,
+        "grounding_success_count": 4,
+        "memory_grounding_pass_rate": 100.0,
+        "post_check_shadow_enabled_rate": 100.0,
+        "token_metrics_available": true
+      },
+      "safe_version_replace_near_query_block": {
+        "answer_rule_pass_rate": 0.0,
+        "answer_success_count": 0,
+        "avg_latency_ms": 29.25,
+        "avg_total_token_count": 30.0,
+        "case_count": 4,
+        "contract_generation_success_rate": 100.0,
+        "forbidden_case_count": 0,
+        "forbidden_violation_rate": 0.0,
+        "grounding_success_count": 4,
+        "memory_grounding_pass_rate": 100.0,
+        "post_check_shadow_enabled_rate": 100.0,
+        "token_metrics_available": true
+      },
+      "safe_version_replace_structured_guided": {
+        "answer_rule_pass_rate": 0.0,
+        "answer_success_count": 0,
+        "avg_latency_ms": 36.75,
+        "avg_total_token_count": 30.0,
+        "case_count": 4,
+        "contract_generation_success_rate": 100.0,
+        "forbidden_case_count": 0,
+        "forbidden_violation_rate": 0.0,
+        "grounding_success_count": 4,
+        "memory_grounding_pass_rate": 100.0,
+        "post_check_shadow_enabled_rate": 100.0,
+        "token_metrics_available": true
+      }
+    },
+    "prompt_included": false,
+    "provider_error_count": 0,
+    "raw_memory_summary_included": false,
+    "raw_query_included": false,
+    "real_llm_enabled": false,
+    "repeat_count": 1,
+    "repeat_summaries": {
+      "0": {
+        "answer_rule_pass_rate": 0.0,
+        "case_count": 16,
+        "forbidden_violation_rate": 0.0,
+        "memory_grounding_pass_rate": 100.0,
+        "mode_summaries": {
+          "safe_version_replace": {
+            "answer_rule_pass_rate": 0.0,
+            "answer_success_count": 0,
+            "avg_latency_ms": 30.25,
+            "avg_total_token_count": 30.0,
+            "case_count": 4,
+            "contract_generation_success_rate": 100.0,
+            "forbidden_case_count": 0,
+            "forbidden_violation_rate": 0.0,
+            "grounding_success_count": 4,
+            "memory_grounding_pass_rate": 100.0,
+            "post_check_shadow_enabled_rate": 100.0,
+            "token_metrics_available": true
+          },
+          "safe_version_replace_guided": {
+            "answer_rule_pass_rate": 0.0,
+            "answer_success_count": 0,
+            "avg_latency_ms": 30.25,
+            "avg_total_token_count": 30.0,
+            "case_count": 4,
+            "contract_generation_success_rate": 100.0,
+            "forbidden_case_count": 0,
+            "forbidden_violation_rate": 0.0,
+            "grounding_success_count": 4,
+            "memory_grounding_pass_rate": 100.0,
+            "post_check_shadow_enabled_rate": 100.0,
+            "token_metrics_available": true
+          },
+          "safe_version_replace_near_query_block": {
+            "answer_rule_pass_rate": 0.0,
+            "answer_success_count": 0,
+            "avg_latency_ms": 29.25,
+            "avg_total_token_count": 30.0,
+            "case_count": 4,
+            "contract_generation_success_rate": 100.0,
+            "forbidden_case_count": 0,
+            "forbidden_violation_rate": 0.0,
+            "grounding_success_count": 4,
+            "memory_grounding_pass_rate": 100.0,
+            "post_check_shadow_enabled_rate": 100.0,
+            "token_metrics_available": true
+          },
+          "safe_version_replace_structured_guided": {
+            "answer_rule_pass_rate": 0.0,
+            "answer_success_count": 0,
+            "avg_latency_ms": 36.75,
+            "avg_total_token_count": 30.0,
+            "case_count": 4,
+            "contract_generation_success_rate": 100.0,
+            "forbidden_case_count": 0,
+            "forbidden_violation_rate": 0.0,
+            "grounding_success_count": 4,
+            "memory_grounding_pass_rate": 100.0,
+            "post_check_shadow_enabled_rate": 100.0,
+            "token_metrics_available": true
+          }
+        }
+      }
+    },
+    "replacement_seeded_count": 16,
+    "skipped_from_checkpoint_count": 0,
+    "timeout_count": 0,
+    "token_metrics_available": true,
+    "total_token_count": 480,
+    "unique_case_count": 4,
+    "version_boundary_case_count": 16
+  }
+}

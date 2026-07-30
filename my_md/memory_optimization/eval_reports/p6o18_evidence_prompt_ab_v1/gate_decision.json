@@ -1,0 +1,76 @@
+{
+  "answer_deltas_vs_guided": {
+    "safe_version_replace": -17.5,
+    "safe_version_replace_near_query_block": -20.0,
+    "safe_version_replace_structured_guided": 0.0
+  },
+  "best_new_mode": "safe_version_replace_structured_guided",
+  "case_count": 160,
+  "checkpoint_input_count": 160,
+  "gate_passed": false,
+  "malformed_checkpoint_line_count": 0,
+  "mode_count": 4,
+  "mode_summaries": {
+    "safe_version_replace": {
+      "answer_rule_pass_rate": 60.0,
+      "answer_success_count": 24,
+      "avg_latency_ms": 3923.425,
+      "avg_total_token_count": 5394.275,
+      "case_count": 40,
+      "contract_generation_success_rate": 100.0,
+      "forbidden_case_count": 0,
+      "forbidden_violation_rate": 0.0,
+      "grounding_success_count": 40,
+      "memory_grounding_pass_rate": 100.0,
+      "post_check_shadow_enabled_rate": 100.0,
+      "token_metrics_available": true
+    },
+    "safe_version_replace_guided": {
+      "answer_rule_pass_rate": 77.5,
+      "answer_success_count": 31,
+      "avg_latency_ms": 3625.4,
+      "avg_total_token_count": 5481.8,
+      "case_count": 40,
+      "contract_generation_success_rate": 100.0,
+      "forbidden_case_count": 0,
+      "forbidden_violation_rate": 0.0,
+      "grounding_success_count": 40,
+      "memory_grounding_pass_rate": 100.0,
+      "post_check_shadow_enabled_rate": 100.0,
+      "token_metrics_available": true
+    },
+    "safe_version_replace_near_query_block": {
+      "answer_rule_pass_rate": 57.5,
+      "answer_success_count": 23,
+      "avg_latency_ms": 3954.9,
+      "avg_total_token_count": 5524.125,
+      "case_count": 40,
+      "contract_generation_success_rate": 100.0,
+      "forbidden_case_count": 0,
+      "forbidden_violation_rate": 0.0,
+      "grounding_success_count": 40,
+      "memory_grounding_pass_rate": 100.0,
+      "post_check_shadow_enabled_rate": 100.0,
+      "token_metrics_available": true
+    },
+    "safe_version_replace_structured_guided": {
+      "answer_rule_pass_rate": 77.5,
+      "answer_success_count": 31,
+      "avg_latency_ms": 4032.775,
+      "avg_total_token_count": 5577.075,
+      "case_count": 40,
+      "contract_generation_success_rate": 100.0,
+      "forbidden_case_count": 0,
+      "forbidden_violation_rate": 0.0,
+      "grounding_success_count": 40,
+      "memory_grounding_pass_rate": 100.0,
+      "post_check_shadow_enabled_rate": 100.0,
+      "token_metrics_available": true
+    }
+  },
+  "provider_error_count": 0,
+  "repeat_count": 1,
+  "timeout_count": 0,
+  "token_limit": 5825.817,
+  "unique_case_count": 40
+}

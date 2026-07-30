@@ -62,6 +62,7 @@ from memory2.sleep_consolidation_experiments import (
 )
 from memory2.system_path_safe_version_contract import (
     build_system_path_safe_version_contract,
+    normalize_safe_version_answer_prompt_variant,
     system_path_contract_to_dict,
 )
 from memory2.store import MemoryStore2
@@ -760,6 +761,17 @@ class DefaultMemoryEngine:
         )
         if safe_mode == "replace" and not replace_allowed:
             safe_mode = "shadow"
+        answer_guidance_enabled = (
+            safe_mode == "replace"
+            and replace_allowed
+            and bool(request.hints.get("safe_version_answer_guidance_enabled", False))
+        )
+        answer_prompt_variant = normalize_safe_version_answer_prompt_variant(
+            request.hints.get("safe_version_answer_prompt_variant"),
+            answer_guidance_enabled=answer_guidance_enabled,
+        )
+        if not answer_guidance_enabled:
+            answer_prompt_variant = "standard"
         safe_shadow = None
         safe_metadata: dict[str, object] | None = None
         if safe_mode in {"shadow", "replace"}:
@@ -774,11 +786,18 @@ class DefaultMemoryEngine:
                         else []
                     ),
                     top_k=request.top_k or len(items) or 8,
+                    answer_guidance_enabled=answer_guidance_enabled,
+                    answer_prompt_variant=answer_prompt_variant,
                 )
-                safe_shadow = system_path_contract_to_dict(safe_result.contract)
+                safe_shadow = system_path_contract_to_dict(
+                    safe_result.contract,
+                    answer_guidance_enabled=answer_guidance_enabled,
+                )
                 safe_metadata = {
                     "mode": safe_mode,
                     "contract_generation_success": True,
+                    "answer_guidance_enabled": answer_guidance_enabled,
+                    "answer_prompt_variant": answer_prompt_variant,
                     "allowed_evidence_count": len(
                         safe_result.contract.allowed_evidence_ids
                     ),
@@ -808,6 +827,8 @@ class DefaultMemoryEngine:
                     "mode": safe_mode,
                     "contract_generation_success": False,
                     "error_type": type(exc).__name__,
+                    "answer_guidance_enabled": False,
+                    "answer_prompt_variant": "standard",
                     "replacement_requested": safe_mode == "replace",
                     "replace_allowed": replace_allowed,
                     "replace_applied": False,

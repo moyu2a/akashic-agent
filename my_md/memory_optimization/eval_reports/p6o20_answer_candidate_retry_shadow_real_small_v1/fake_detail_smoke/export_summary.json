@@ -1,0 +1,23 @@
+{
+  "expected_modes": [
+    "safe_version_replace",
+    "safe_version_replace_guided",
+    "safe_version_replace_guided_with_retry_shadow"
+  ],
+  "forbidden_key_scan_passed": true,
+  "mode_row_counts": {
+    "safe_version_replace": 4,
+    "safe_version_replace_guided": 4,
+    "safe_version_replace_guided_with_retry_shadow": 4
+  },
+  "movement_counts": {
+    "anchor_failed_comparison_passed": 0,
+    "anchor_passed_comparison_failed": 0,
+    "both_failed": 4,
+    "both_passed": 0
+  },
+  "paired_case_count": 4,
+  "source_report_json": "my_md/memory_optimization/eval_reports/p6o19_answer_candidate_retry_shadow_v1/fake_smoke/system_path_safe_version_eval.json",
+  "total_rows": 12,
+  "unpaired_case_count": 0
+}

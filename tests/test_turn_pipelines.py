@@ -465,6 +465,160 @@ async def test_retrieval_pipeline_allows_replace_only_from_config_gate() -> None
     assert engine.requests[-1].hints["safe_version_governed_replace_allowed"] is True
 
 
+@pytest.mark.asyncio
+async def test_retrieval_pipeline_passes_safe_version_guidance_only_from_config() -> None:
+    engine = _RecordingMemoryEngine()
+    pipeline = DefaultMemoryRetrievalPipeline(
+        MemoryServices(engine=engine),
+        safe_version_governed_mode="replace",
+        safe_version_governed_replace_allowed=True,
+        safe_version_answer_guidance_enabled=True,
+    )
+    request = _retrieval_request("我默认用什么测试框架？")
+    request.session_metadata["safe_version_answer_guidance_enabled"] = False
+
+    await pipeline.retrieve(request)
+
+    assert engine.requests[-1].hints["safe_version_governed_mode"] == "replace"
+    assert engine.requests[-1].hints["safe_version_governed_replace_allowed"] is True
+    assert engine.requests[-1].hints["safe_version_answer_guidance_enabled"] is True
+
+
+@pytest.mark.asyncio
+async def test_retrieval_pipeline_ignores_session_guidance_escalation() -> None:
+    engine = _RecordingMemoryEngine()
+    pipeline = DefaultMemoryRetrievalPipeline(
+        MemoryServices(engine=engine),
+        safe_version_governed_mode="replace",
+        safe_version_governed_replace_allowed=True,
+        safe_version_answer_guidance_enabled=False,
+    )
+    request = _retrieval_request("我默认用什么测试框架？")
+    request.session_metadata["safe_version_answer_guidance_enabled"] = True
+
+    await pipeline.retrieve(request)
+
+    assert engine.requests[-1].hints["safe_version_governed_mode"] == "replace"
+    assert "safe_version_answer_guidance_enabled" not in engine.requests[-1].hints
+
+
+@pytest.mark.asyncio
+async def test_retrieval_pipeline_ignores_extra_guidance_escalation() -> None:
+    engine = _RecordingMemoryEngine()
+    pipeline = DefaultMemoryRetrievalPipeline(
+        MemoryServices(engine=engine),
+        safe_version_governed_mode="replace",
+        safe_version_governed_replace_allowed=True,
+        safe_version_answer_guidance_enabled=False,
+    )
+    request = _retrieval_request("我默认用什么测试框架？")
+    request.extra["safe_version_answer_guidance_enabled"] = True
+
+    await pipeline.retrieve(request)
+
+    assert engine.requests[-1].hints["safe_version_governed_mode"] == "replace"
+    assert "safe_version_answer_guidance_enabled" not in engine.requests[-1].hints
+
+
+@pytest.mark.asyncio
+async def test_safe_version_answer_prompt_variant_flows_from_config_only() -> None:
+    engine = _RecordingMemoryEngine()
+    pipeline = DefaultMemoryRetrievalPipeline(
+        MemoryServices(engine=engine),
+        safe_version_governed_mode="replace",
+        safe_version_governed_replace_allowed=True,
+        safe_version_answer_guidance_enabled=True,
+        safe_version_answer_prompt_variant="structured_guided",
+    )
+    request = _retrieval_request("我默认用什么测试框架？")
+
+    await pipeline.retrieve(request)
+
+    assert engine.requests[-1].hints["safe_version_governed_mode"] == "replace"
+    assert engine.requests[-1].hints["safe_version_answer_guidance_enabled"] is True
+    assert (
+        engine.requests[-1].hints["safe_version_answer_prompt_variant"]
+        == "structured_guided"
+    )
+
+
+@pytest.mark.asyncio
+async def test_safe_version_answer_prompt_variant_extra_cannot_escalate() -> None:
+    engine = _RecordingMemoryEngine()
+    pipeline = DefaultMemoryRetrievalPipeline(
+        MemoryServices(engine=engine),
+        safe_version_governed_mode="replace",
+        safe_version_governed_replace_allowed=True,
+        safe_version_answer_guidance_enabled=False,
+        safe_version_answer_prompt_variant="standard",
+    )
+    request = _retrieval_request("我默认用什么测试框架？")
+    request.extra["safe_version_answer_prompt_variant"] = "structured_guided"
+
+    await pipeline.retrieve(request)
+
+    assert engine.requests[-1].hints["safe_version_governed_mode"] == "replace"
+    assert "safe_version_answer_prompt_variant" not in engine.requests[-1].hints
+
+
+@pytest.mark.asyncio
+async def test_safe_version_answer_prompt_variant_session_metadata_cannot_escalate() -> None:
+    engine = _RecordingMemoryEngine()
+    pipeline = DefaultMemoryRetrievalPipeline(
+        MemoryServices(engine=engine),
+        safe_version_governed_mode="replace",
+        safe_version_governed_replace_allowed=True,
+        safe_version_answer_guidance_enabled=False,
+        safe_version_answer_prompt_variant="standard",
+    )
+    request = _retrieval_request("我默认用什么测试框架？")
+    request.session_metadata["safe_version_answer_prompt_variant"] = "structured_guided"
+
+    await pipeline.retrieve(request)
+
+    assert engine.requests[-1].hints["safe_version_governed_mode"] == "replace"
+    assert "safe_version_answer_prompt_variant" not in engine.requests[-1].hints
+
+
+@pytest.mark.asyncio
+async def test_safe_version_answer_prompt_variant_requires_guidance_gate() -> None:
+    engine = _RecordingMemoryEngine()
+    pipeline = DefaultMemoryRetrievalPipeline(
+        MemoryServices(engine=engine),
+        safe_version_governed_mode="replace",
+        safe_version_governed_replace_allowed=True,
+        safe_version_answer_guidance_enabled=False,
+        safe_version_answer_prompt_variant="structured_guided",
+    )
+
+    await pipeline.retrieve(_retrieval_request("我默认用什么测试框架？"))
+
+    assert engine.requests[-1].hints["safe_version_governed_mode"] == "replace"
+    assert "safe_version_answer_guidance_enabled" not in engine.requests[-1].hints
+    assert "safe_version_answer_prompt_variant" not in engine.requests[-1].hints
+
+
+@pytest.mark.asyncio
+async def test_retrieval_pipeline_ignores_extra_safe_version_replace_escalation() -> None:
+    engine = _RecordingMemoryEngine()
+    pipeline = DefaultMemoryRetrievalPipeline(
+        MemoryServices(engine=engine),
+        safe_version_governed_mode="off",
+        safe_version_governed_replace_allowed=False,
+        safe_version_answer_guidance_enabled=True,
+    )
+    request = _retrieval_request("我默认用什么测试框架？")
+    request.extra["safe_version_governed_mode"] = "replace"
+    request.extra["safe_version_governed_replace_allowed"] = True
+    request.extra["safe_version_answer_guidance_enabled"] = True
+
+    await pipeline.retrieve(request)
+
+    assert "safe_version_governed_mode" not in engine.requests[-1].hints
+    assert "safe_version_governed_replace_allowed" not in engine.requests[-1].hints
+    assert "safe_version_answer_guidance_enabled" not in engine.requests[-1].hints
+
+
 def test_agent_loop_passes_safe_version_config_to_default_retrieval_pipeline(
     tmp_path: Path,
 ) -> None:
@@ -486,6 +640,7 @@ def test_agent_loop_passes_safe_version_config_to_default_retrieval_pipeline(
             memory=MemoryConfig(
                 safe_version_governed_mode="replace",
                 safe_version_governed_replace_allowed=True,
+                safe_version_answer_guidance_enabled=True,
             )
         ),
     )
@@ -493,3 +648,4 @@ def test_agent_loop_passes_safe_version_config_to_default_retrieval_pipeline(
     assert isinstance(loop._retrieval_pipeline, DefaultMemoryRetrievalPipeline)
     assert loop._retrieval_pipeline._safe_version_governed_mode == "replace"
     assert loop._retrieval_pipeline._safe_version_governed_replace_allowed is True
+    assert loop._retrieval_pipeline._safe_version_answer_guidance_enabled is True

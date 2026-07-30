@@ -302,6 +302,12 @@ class AgentLoop:
             safe_version_governed_replace_allowed=(
                 config.memory.safe_version_governed_replace_allowed
             ),
+            safe_version_answer_guidance_enabled=(
+                config.memory.safe_version_answer_guidance_enabled
+            ),
+            safe_version_answer_prompt_variant=(
+                config.memory.safe_version_answer_prompt_variant
+            ),
         )
         self._retrieval_pipeline = retrieval_pipeline
         passive_context_store = DefaultContextStore(

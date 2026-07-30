@@ -54,6 +54,23 @@ MODE_TO_SAFE_VERSION = {
     "current": "off",
     "safe_version_shadow": "shadow",
     "safe_version_replace": "replace",
+    "safe_version_replace_guided": "replace",
+    "safe_version_replace_structured_guided": "replace",
+    "safe_version_replace_near_query_block": "replace",
+    "safe_version_replace_guided_with_retry_shadow": "replace",
+}
+
+REPLACE_FAMILY_MODES = {
+    "safe_version_replace",
+    "safe_version_replace_guided",
+    "safe_version_replace_structured_guided",
+    "safe_version_replace_near_query_block",
+    "safe_version_replace_guided_with_retry_shadow",
+}
+
+POST_CHECK_MODES = {
+    "safe_version_shadow",
+    *REPLACE_FAMILY_MODES,
 }
 
 
@@ -414,7 +431,11 @@ async def _run_case_mode(
             llm=LLMConfig(model=model, max_iterations=2),
             memory=MemoryConfig(
                 safe_version_governed_mode=MODE_TO_SAFE_VERSION[mode],
-                safe_version_governed_replace_allowed=(mode == "safe_version_replace"),
+                safe_version_governed_replace_allowed=(mode in REPLACE_FAMILY_MODES),
+                safe_version_answer_guidance_enabled=(
+                    _mode_answer_prompt_variant(mode) != "standard"
+                ),
+                safe_version_answer_prompt_variant=_mode_answer_prompt_variant(mode),
             ),
         ),
     )
@@ -462,18 +483,24 @@ async def _run_case_mode(
         if replace_applied
         else [hit.id for hit in (latest.hits if latest is not None else [])]
     )
-    post_check = {"shadow_enabled": False}
-    if mode in {"safe_version_shadow", "safe_version_replace"} and contract:
-        answer_contract = dict(contract)
-        answer_contract["production_safe_evidence_contract"] = True
-        post_check = answer_post_check_shadow_to_dict(
-            build_answer_post_check_shadow(answer, answer_contract, context_ids)
-        )
     score = score_answer_text(
         answer,
         answer_expectation_from_case(case),
         context_ids,
     )
+    post_check = {"shadow_enabled": False}
+    if mode in POST_CHECK_MODES and contract:
+        answer_contract = dict(contract)
+        answer_contract["production_safe_evidence_contract"] = True
+        if mode == "safe_version_replace_guided_with_retry_shadow":
+            answer_contract["answer_score"] = {
+                "expected_contains_miss_count": score.expected_contains_miss_count,
+                "expected_any_miss_count": score.expected_any_miss_count,
+                "language_passed": score.language_passed,
+            }
+        post_check = answer_post_check_shadow_to_dict(
+            build_answer_post_check_shadow(answer, answer_contract, context_ids)
+        )
     failures.extend(score.failures)
     token_counts = _extract_token_counts(
         recording_provider.responses[-1] if recording_provider.responses else None
@@ -528,6 +555,18 @@ def _build_engine(*, store: MemoryStore2, items: list[dict[str, object]]) -> Def
     engine.closeables = []
     engine._wire_memory2_events()
     return engine
+
+
+def _mode_answer_prompt_variant(mode: str) -> str:
+    if mode == "safe_version_replace_guided":
+        return "guided"
+    if mode == "safe_version_replace_structured_guided":
+        return "structured_guided"
+    if mode == "safe_version_replace_near_query_block":
+        return "near_query_block"
+    if mode == "safe_version_replace_guided_with_retry_shadow":
+        return "guided_retry_shadow"
+    return "standard"
 
 
 def _seed_store(
@@ -610,6 +649,8 @@ def _sanitize_metadata(metadata: dict[str, object]) -> dict[str, object]:
     allowed = {
         "mode",
         "contract_generation_success",
+        "answer_guidance_enabled",
+        "answer_prompt_variant",
         "allowed_evidence_count",
         "deleted_evidence_count",
         "downgrade_count",
@@ -631,6 +672,8 @@ def _sanitize_contract(contract: dict[str, object]) -> dict[str, object]:
         "production_safe",
         "production_safe_evidence_contract",
         "uses_fixture_answer_expectations",
+        "answer_guidance_enabled",
+        "answer_prompt_variant",
         "candidate_governance_mode",
         "allowed_evidence_ids",
         "likely_relevant_evidence_ids",
@@ -648,7 +691,37 @@ def _sanitize_contract(contract: dict[str, object]) -> dict[str, object]:
         "tiered_deleted_risks_by_reason",
         "version_boundary",
     }
-    return {key: value for key, value in contract.items() if key in allowed}
+    sanitized = {key: value for key, value in contract.items() if key in allowed}
+    candidate = contract.get("answer_candidate_contract")
+    if isinstance(candidate, dict):
+        sanitized["answer_candidate_contract"] = {
+            "enabled": bool(candidate.get("enabled")),
+            "current_truth_count": int(candidate.get("current_truth_count") or 0),
+            "must_include_term_count": int(
+                candidate.get("must_include_term_count") or 0
+            ),
+            "forbidden_old_value_count": int(
+                candidate.get("forbidden_old_value_count") or 0
+            ),
+            "language_requirement": str(candidate.get("language_requirement") or ""),
+            "candidate_reason": str(candidate.get("candidate_reason") or ""),
+        }
+    return sanitized
+
+
+def _retry_reason_counts(rows: Sequence[dict[str, object]]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for row in rows:
+        post_check = cast(dict[str, object], row.get("post_check_shadow") or {})
+        reasons = post_check.get("retry_reasons", ())
+        if not isinstance(reasons, (list, tuple)):
+            continue
+        for reason in reasons:
+            key = str(reason)
+            if not key:
+                continue
+            counts[key] = counts.get(key, 0) + 1
+    return dict(sorted(counts.items()))
 
 
 def _build_metrics(
@@ -788,16 +861,42 @@ def _mode_summaries(
             )
             is True
         ]
+        retry_rows = [
+            row
+            for row in rows
+            if cast(dict[str, object], row.get("post_check_shadow") or {}).get(
+                "needs_retry"
+            )
+            is True
+        ]
+        candidate_rows = [
+            row
+            for row in rows
+            if cast(
+                dict[str, object],
+                cast(dict[str, object], row.get("safe_version_contract") or {}).get(
+                    "answer_candidate_contract"
+                )
+                or {},
+            ).get("enabled")
+            is True
+        ]
         mode_summaries[mode] = {
             "case_count": len(rows),
             "answer_success_count": answer_success_count,
             "grounding_success_count": grounding_success_count,
             "forbidden_case_count": forbidden_case_count,
+            "would_retry_count": len(retry_rows),
+            "retry_reason_counts": _retry_reason_counts(rows),
             "answer_rule_pass_rate": _pct(answer_success_count, len(rows)),
             "memory_grounding_pass_rate": _pct(grounding_success_count, len(rows)),
             "forbidden_violation_rate": _pct(forbidden_case_count, len(rows)),
             "contract_generation_success_rate": _pct(len(contract_rows), len(rows)),
             "post_check_shadow_enabled_rate": _pct(len(post_rows), len(rows)),
+            "answer_candidate_contract_enabled_rate": _pct(
+                len(candidate_rows),
+                len(rows),
+            ),
             "avg_total_token_count": _avg(
                 int(row.get("token_count", 0) or 0) for row in rows
             ),

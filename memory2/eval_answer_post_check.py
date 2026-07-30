@@ -22,6 +22,10 @@ class AnswerPostCheckShadow:
     forbidden_boundary_mentions: tuple[str, ...]
     needs_retry: bool
     retry_reasons: tuple[str, ...]
+    answer_candidate_contract_enabled: bool = False
+    required_terms_missing: bool = False
+    answer_choice_group_missing: bool = False
+    language_requirement_failed: bool = False
     raw_prompt: str = ""
     raw_answer: str = ""
 
@@ -50,6 +54,10 @@ def build_answer_post_check_shadow(
             forbidden_boundary_mentions=(),
             needs_retry=False,
             retry_reasons=(),
+            answer_candidate_contract_enabled=False,
+            required_terms_missing=False,
+            answer_choice_group_missing=False,
+            language_requirement_failed=False,
         )
 
     context_ids = _string_tuple(context_memory_ids)
@@ -59,6 +67,26 @@ def build_answer_post_check_shadow(
     stale = _string_tuple(answer_contract.get("stale_warning_ids", ()))
     conflict = _string_tuple(answer_contract.get("conflict_warning_ids", ()))
     expected_fallback = bool(answer_contract.get("insufficient_evidence_fallback"))
+    candidate_contract = answer_contract.get("answer_candidate_contract")
+    candidate_enabled = (
+        isinstance(candidate_contract, Mapping)
+        and bool(candidate_contract.get("enabled"))
+    )
+    answer_score = answer_contract.get("answer_score")
+    score_map = answer_score if isinstance(answer_score, Mapping) else {}
+    required_terms_missing = (
+        candidate_enabled
+        and int(score_map.get("expected_contains_miss_count", 0) or 0) > 0
+    )
+    answer_choice_group_missing = (
+        candidate_enabled
+        and int(score_map.get("expected_any_miss_count", 0) or 0) > 0
+    )
+    language_requirement_failed = (
+        candidate_enabled
+        and "language_passed" in score_map
+        and not bool(score_map.get("language_passed"))
+    )
 
     included_allowed = _intersection_in_order(context_ids, allowed)
     context_set = set(context_ids)
@@ -84,6 +112,12 @@ def build_answer_post_check_shadow(
         retry_reasons.append("conflict_evidence_included")
     if expected_fallback and not fallback_observed:
         retry_reasons.append("insufficient_evidence_fallback_missing")
+    if required_terms_missing:
+        retry_reasons.append("required_terms_missing")
+    if answer_choice_group_missing:
+        retry_reasons.append("answer_choice_group_missing")
+    if language_requirement_failed:
+        retry_reasons.append("language_requirement_failed")
 
     return AnswerPostCheckShadow(
         shadow_enabled=True,
@@ -102,6 +136,10 @@ def build_answer_post_check_shadow(
         forbidden_boundary_mentions=boundary_mentions,
         needs_retry=bool(retry_reasons),
         retry_reasons=tuple(retry_reasons),
+        answer_candidate_contract_enabled=candidate_enabled,
+        required_terms_missing=required_terms_missing,
+        answer_choice_group_missing=answer_choice_group_missing,
+        language_requirement_failed=language_requirement_failed,
     )
 
 
@@ -131,6 +169,10 @@ def answer_post_check_shadow_to_dict(
         "forbidden_boundary_mentions": list(shadow.forbidden_boundary_mentions),
         "needs_retry": shadow.needs_retry,
         "retry_reasons": list(shadow.retry_reasons),
+        "answer_candidate_contract_enabled": shadow.answer_candidate_contract_enabled,
+        "required_terms_missing": shadow.required_terms_missing,
+        "answer_choice_group_missing": shadow.answer_choice_group_missing,
+        "language_requirement_failed": shadow.language_requirement_failed,
     }
 
 

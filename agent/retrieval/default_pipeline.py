@@ -12,6 +12,9 @@ from core.memory.engine import (
     MemoryEngineRetrieveResult,
     MemoryScope,
 )
+from memory2.system_path_safe_version_contract import (
+    normalize_safe_version_answer_prompt_variant,
+)
 
 
 class DefaultMemoryRetrievalPipeline(MemoryRetrievalPipeline):
@@ -20,6 +23,8 @@ class DefaultMemoryRetrievalPipeline(MemoryRetrievalPipeline):
         memory: MemoryServices,
         safe_version_governed_mode: str = "off",
         safe_version_governed_replace_allowed: bool = False,
+        safe_version_answer_guidance_enabled: bool = False,
+        safe_version_answer_prompt_variant: str = "standard",
     ) -> None:
         self._memory = memory
         self._safe_version_governed_mode = _safe_version_mode(
@@ -27,6 +32,14 @@ class DefaultMemoryRetrievalPipeline(MemoryRetrievalPipeline):
         )
         self._safe_version_governed_replace_allowed = bool(
             safe_version_governed_replace_allowed
+        )
+        self._safe_version_answer_guidance_enabled = bool(
+            safe_version_answer_guidance_enabled
+        )
+        self._safe_version_answer_prompt_variant = (
+            normalize_safe_version_answer_prompt_variant(
+                safe_version_answer_prompt_variant
+            )
         )
 
     # 被动预检索入口：只转换请求形状，检索语义统一交给 MemoryEngine。
@@ -56,11 +69,25 @@ class DefaultMemoryRetrievalPipeline(MemoryRetrievalPipeline):
         if safe_mode == "replace" and not replace_allowed:
             safe_mode = "shadow"
         hints = dict(request.extra or {})
+        hints.pop("safe_version_governed_mode", None)
+        hints.pop("safe_version_governed_replace_allowed", None)
+        hints.pop("safe_version_answer_guidance_enabled", None)
+        hints.pop("safe_version_answer_prompt_variant", None)
         if safe_mode in {"shadow", "replace"}:
             hints["safe_version_governed_mode"] = safe_mode
             hints["safe_version_governed_replace_allowed"] = (
                 replace_allowed and safe_mode == "replace"
             )
+            if (
+                safe_mode == "replace"
+                and replace_allowed
+                and self._safe_version_answer_guidance_enabled
+            ):
+                hints["safe_version_answer_guidance_enabled"] = True
+                if self._safe_version_answer_prompt_variant != "standard":
+                    hints["safe_version_answer_prompt_variant"] = (
+                        self._safe_version_answer_prompt_variant
+                    )
 
         result = await self._memory.engine.retrieve(
             MemoryEngineRetrieveRequest(

@@ -205,3 +205,248 @@ def test_system_path_contract_retains_downgrade_and_requires_review_candidates()
     assert result.contract.candidate_risk_tier_counts["requires_review"] == 1
     assert result.contract.accepted_candidate_risk_tier_counts["downgrade"] == 1
     assert result.contract.accepted_candidate_risk_tier_counts["requires_review"] == 1
+
+
+def test_system_path_answer_guidance_is_default_off() -> None:
+    result = build_system_path_safe_version_contract(
+        query="测试偏好是什么？",
+        baseline_items=[_item("m-current", "用户偏好使用 pytest。")],
+        route_trace={
+            "candidates_by_lane": {
+                "semantic": [_item("m-current", "用户偏好使用 pytest。")],
+                "keyword": [],
+                "provenance": [],
+                "graph": [],
+            }
+        },
+        replacements=[],
+        top_k=8,
+    )
+
+    assert "Answer Guidance:" not in result.text_block
+    assert system_path_contract_to_dict(result.contract)["answer_guidance_enabled"] is False
+
+
+def test_system_path_answer_guidance_is_production_safe_and_private() -> None:
+    result = build_system_path_safe_version_contract(
+        query="测试偏好是什么？",
+        baseline_items=[_item("m-current", "用户偏好使用 pytest。")],
+        route_trace={
+            "candidates_by_lane": {
+                "semantic": [
+                    _item("m-current", "用户偏好使用 pytest。"),
+                    _item("blocked-id", "禁止使用 nose。", forbidden=True),
+                ],
+                "keyword": [],
+                "provenance": [],
+                "graph": [],
+            }
+        },
+        replacements=[],
+        top_k=8,
+        answer_guidance_enabled=True,
+    )
+
+    text = result.text_block
+    payload = system_path_contract_to_dict(
+        result.contract,
+        answer_guidance_enabled=True,
+    )
+
+    assert "Answer Guidance:" in text
+    assert "Use allowed_evidence as the only source for the answer." in text
+    assert "State concrete facts from allowed_evidence directly." in text
+    assert "Answer in the user's language." in text
+    assert "blocked-id" not in text
+
+
+def test_answer_candidate_contract_extracts_current_truth_and_counts() -> None:
+    current = _item("m-current", "用户当前默认测试框架是 pytest。")
+    old = _item("m-old", "用户旧测试框架是 nose。", status="superseded")
+
+    result = build_system_path_safe_version_contract(
+        query="我现在默认用什么测试框架？",
+        baseline_items=[old, current],
+        route_trace={
+            "candidates_by_lane": {
+                "semantic": [old, current],
+                "keyword": [],
+                "provenance": [],
+                "graph": [],
+            }
+        },
+        replacements=[
+            {
+                "old_item_id": "m-old",
+                "new_item_id": "m-current",
+                "old_memory_type": "preference",
+                "new_memory_type": "preference",
+                "old_summary": "用户旧测试框架是 nose。",
+                "new_summary": "用户当前默认测试框架是 pytest。",
+                "old_source_ref": "telegram:1:old",
+                "new_source_ref": "telegram:1:new",
+            }
+        ],
+        top_k=8,
+        answer_guidance_enabled=True,
+        answer_prompt_variant="guided_retry_shadow",
+    )
+
+    candidate = result.contract.answer_candidate_contract
+    assert candidate.enabled is True
+    assert candidate.current_truth_ids == ("m-current",)
+    assert candidate.current_truth_lines == ("用户当前默认测试框架是 pytest。",)
+    assert candidate.must_include_term_count == 1
+    assert candidate.forbidden_old_value_ids == ("m-old",)
+    assert candidate.language_requirement == "match_user_language"
+    assert candidate.candidate_reason == "safe_version_guided_retry_shadow"
+
+
+def test_guided_retry_shadow_renders_prompt_contract_with_safe_report_counts() -> None:
+    result = build_system_path_safe_version_contract(
+        query="测试偏好是什么？",
+        baseline_items=[
+            _item("m-current", "用户当前偏好使用 pytest。"),
+            _item("m-old", "用户旧偏好使用 nose。", status="superseded"),
+        ],
+        route_trace={
+            "candidates_by_lane": {
+                "semantic": [
+                    _item("m-current", "用户当前偏好使用 pytest。"),
+                    _item("m-old", "用户旧偏好使用 nose。", status="superseded"),
+                ],
+                "keyword": [],
+                "provenance": [],
+                "graph": [],
+            }
+        },
+        replacements=[
+            {
+                "old_item_id": "m-old",
+                "new_item_id": "m-current",
+                "old_memory_type": "preference",
+                "new_memory_type": "preference",
+                "old_summary": "用户旧偏好使用 nose。",
+                "new_summary": "用户当前偏好使用 pytest。",
+                "old_source_ref": "telegram:1:old",
+                "new_source_ref": "telegram:1:new",
+            }
+        ],
+        answer_guidance_enabled=True,
+        answer_prompt_variant="guided_retry_shadow",
+    )
+
+    text = result.text_block
+    payload = system_path_contract_to_dict(
+        result.contract,
+        answer_guidance_enabled=True,
+    )
+
+    assert "Answer Candidate Contract:" in text
+    assert "current_truth:" in text
+    assert "must_include_term_count: 1" in text
+    assert "用户当前偏好使用 pytest。" in text
+    assert "m-current" not in text
+    assert "m-old" not in text
+    assert payload["answer_candidate_contract"]["enabled"] is True
+    assert payload["answer_candidate_contract"]["current_truth_count"] == 1
+    assert payload["answer_candidate_contract"]["must_include_term_count"] == 1
+    assert "current_truth_lines" not in payload["answer_candidate_contract"]
+    assert "must_include_terms" not in payload["answer_candidate_contract"]
+    assert "raw_prompt" not in payload
+    assert "raw_answer" not in payload
+    assert "forbidden_boundary_ids:" not in text
+    assert "deleted_evidence_ids:" not in text
+    assert payload["answer_guidance_enabled"] is True
+    assert payload["uses_fixture_answer_expectations"] is False
+
+
+def test_system_path_structured_guided_variant_groups_answer_critical_evidence() -> None:
+    result = build_system_path_safe_version_contract(
+        query="测试偏好是什么？",
+        baseline_items=[
+            _item("m-current", "用户偏好使用 pytest。"),
+            _item("blocked-id", "禁止使用 nose。", forbidden=True),
+        ],
+        route_trace={
+            "candidates_by_lane": {
+                "semantic": [
+                    _item("m-current", "用户偏好使用 pytest。"),
+                    _item("blocked-id", "禁止使用 nose。", forbidden=True),
+                ],
+                "keyword": [],
+                "provenance": [],
+                "graph": [],
+            }
+        },
+        replacements=[],
+        top_k=8,
+        answer_prompt_variant="structured_guided",
+    )
+
+    text = result.text_block
+    payload = system_path_contract_to_dict(result.contract)
+
+    assert "Structured Answer Guidance:" in text
+    assert "answer_critical_evidence:" in text
+    assert "用户偏好使用 pytest。" in text
+    assert "禁止使用 nose。" not in text
+    assert "active_allowed_evidence_count: 1" in text
+    assert "Use answer_critical_evidence first." in text
+    assert payload["answer_guidance_enabled"] is True
+    assert payload["answer_prompt_variant"] == "structured_guided"
+    assert "m-current" not in text
+    assert "blocked-id" not in text
+
+
+def test_system_path_near_query_variant_marks_next_user_message_scope() -> None:
+    result = build_system_path_safe_version_contract(
+        query="测试偏好是什么？",
+        baseline_items=[_item("m-current", "用户偏好使用 pytest。")],
+        route_trace={
+            "candidates_by_lane": {
+                "semantic": [_item("m-current", "用户偏好使用 pytest。")],
+                "keyword": [],
+                "provenance": [],
+                "graph": [],
+            }
+        },
+        replacements=[],
+        top_k=8,
+        answer_prompt_variant="near_query_block",
+    )
+
+    text = result.text_block
+    assert "Question-Proximal Memory Evidence:" in text
+    assert "Use this block for the immediately following user request." in text
+    assert (
+        "Do not use deleted, superseded, cross-scope, or forbidden boundary evidence."
+        in text
+    )
+    assert (
+        system_path_contract_to_dict(result.contract)["answer_prompt_variant"]
+        == "near_query_block"
+    )
+
+
+def test_system_path_standard_variant_keeps_p6o17_baseline_text() -> None:
+    result = build_system_path_safe_version_contract(
+        query="测试偏好是什么？",
+        baseline_items=[_item("m-current", "用户偏好使用 pytest。")],
+        route_trace={
+            "candidates_by_lane": {
+                "semantic": [_item("m-current", "用户偏好使用 pytest。")],
+                "keyword": [],
+                "provenance": [],
+                "graph": [],
+            }
+        },
+        replacements=[],
+        top_k=8,
+        answer_prompt_variant="standard",
+    )
+
+    assert "Answer Guidance:" not in result.text_block
+    assert "Structured Answer Guidance:" not in result.text_block
+    assert "Question-Proximal Memory Evidence:" not in result.text_block
+    assert system_path_contract_to_dict(result.contract)["answer_prompt_variant"] == "standard"
