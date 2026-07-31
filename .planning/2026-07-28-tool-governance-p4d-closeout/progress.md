@@ -160,3 +160,35 @@ Unresolved risks:
     - shell sandbox without rollback.
     - external API side effect without replay/rollback.
     - disabled high-risk capabilities: destructive execution, shell rollback, network-enabled shell sandbox, TaskExecution shell resume, external API replay.
+
+### Post-P4d: Governance Evolution Evidence Record
+
+- **Status:** complete
+- Actions taken:
+  - Added `演进原因与测试证据` to `my_md/governance/09-tool-governance-current-state.md`.
+  - Recorded the evolution from initial hook governance to loop/cost control, turn-level access/boundary governance, and the current P1-P4d safety protocol.
+  - Included offline trace evidence:
+    - Offline Trace Eval: `20` scored cases, `17 pass`, `3 partial`, `0 fail`, average `0.90`.
+    - Tool correctness `13/16 pass`; safety `3/4 pass`.
+    - `python -i` gap, simple-answer over-exploration, and `tool_count` evidence that motivated broader governance.
+  - Included later automation and smoke evidence:
+    - P10a/P10a.1/P10a.2/P10a.3/P10a.4a/P10a.4b tool boundary and cost-control results.
+    - P1-P4d staged verification counts, including P4d smoke groups.
+  - Final recorded conclusion: hook remains useful for deny/guard, but full tool governance requires policy, resource boundaries, approval, managed runtime, sandbox, rollback, and redacted audit.
+
+### Post-P4d: Governance Chain Coherence Record
+
+- **Status:** complete
+- Actions taken:
+  - Added `当前链路融洽性判断` to `my_md/governance/09-tool-governance-current-state.md`.
+  - Recorded that the current chain is coherent enough to serve as the stable tool governance mainline.
+  - Clarified layer ownership:
+    - `ToolAccessGateway`: turn-local visibility and tool-space control.
+    - `pre-hook`: deny/guard and non-semantic normalization only.
+    - `ToolInvocationPolicy`: tool-level allow/defer/deny.
+    - `ResourcePolicy`: parameter-level resource gate, not sandbox.
+    - `RiskStrategy / approval`: human authorization into managed runtime, not raw execution.
+    - `Managed Runtime`: file preview/apply/rollback and shell sandbox.
+    - `ToolAuditLedger / observe`: redacted audit projection, not state source-of-truth.
+  - Recorded why disabling `shell_restore` semantic rewrite made the chain cleaner.
+  - Recorded recommendation: do not reopen destructive execution, shell rollback, network-enabled shell sandbox, TaskExecution shell resume, or external API replay without a separate design-first plan.
