@@ -10,6 +10,7 @@ from types import SimpleNamespace
 from typing import Any, Iterable, Sequence, cast
 from unittest.mock import MagicMock
 
+from agent.context import ContextBuilder
 from agent.looping.core import AgentLoop
 from agent.looping.ports import (
     AgentLoopConfig,
@@ -19,6 +20,7 @@ from agent.looping.ports import (
     MemoryServices,
 )
 from agent.tools.registry import ToolRegistry
+from agent.persona import PersonaMode
 from bus.event_bus import EventBus
 from core.memory.engine import (
     ExplicitRetrievalRequest,
@@ -58,6 +60,7 @@ MODE_TO_SAFE_VERSION = {
     "safe_version_replace_structured_guided": "replace",
     "safe_version_replace_near_query_block": "replace",
     "safe_version_replace_guided_with_retry_shadow": "replace",
+    "safe_version_replace_schema_first_shadow": "replace",
 }
 
 REPLACE_FAMILY_MODES = {
@@ -66,6 +69,7 @@ REPLACE_FAMILY_MODES = {
     "safe_version_replace_structured_guided",
     "safe_version_replace_near_query_block",
     "safe_version_replace_guided_with_retry_shadow",
+    "safe_version_replace_schema_first_shadow",
 }
 
 POST_CHECK_MODES = {
@@ -209,6 +213,7 @@ async def run_system_path_safe_version_cases(
     resume: bool = False,
     early_infra_abort_count: int = 0,
     early_infra_abort_rate: float = 1.0,
+    persona_mode: PersonaMode = "casual",
 ) -> SystemPathSafeVersionReport:
     records: list[dict[str, object]] = []
     fresh_records: list[dict[str, object]] = []
@@ -248,6 +253,7 @@ async def run_system_path_safe_version_cases(
                     provider=provider,
                     model=model,
                     timeout_s=timeout_s,
+                    persona_mode=persona_mode,
                 )
                 records.append(record)
                 _append_system_path_checkpoint_record(checkpoint_jsonl, key, record)
@@ -472,6 +478,7 @@ async def _run_case_mode(
     provider: object,
     model: str,
     timeout_s: float,
+    persona_mode: PersonaMode = "casual",
 ) -> dict[str, object]:
     if mode not in MODE_TO_SAFE_VERSION:
         raise ValueError(f"unknown system path mode: {mode}")
@@ -485,6 +492,11 @@ async def _run_case_mode(
     recording_provider = _RecordingProvider(provider)
     event_bus = EventBus()
     session_manager = SessionManager(workspace)
+    context = ContextBuilder(
+        workspace,
+        memory=recording,
+        persona_mode=persona_mode,
+    )
     loop = AgentLoop(
         AgentLoopDeps(
             bus=MagicMock(),
@@ -494,6 +506,7 @@ async def _run_case_mode(
             session_manager=session_manager,
             workspace=workspace,
             event_bus=event_bus,
+            context=context,
             memory_services=MemoryServices(engine=recording),  # type: ignore[arg-type]
         ),
         AgentLoopConfig(
@@ -561,7 +574,10 @@ async def _run_case_mode(
     if mode in POST_CHECK_MODES and contract:
         answer_contract = dict(contract)
         answer_contract["production_safe_evidence_contract"] = True
-        if mode == "safe_version_replace_guided_with_retry_shadow":
+        if mode in {
+            "safe_version_replace_guided_with_retry_shadow",
+            "safe_version_replace_schema_first_shadow",
+        }:
             answer_contract["answer_score"] = {
                 "expected_contains_miss_count": score.expected_contains_miss_count,
                 "expected_any_miss_count": score.expected_any_miss_count,
@@ -635,6 +651,8 @@ def _mode_answer_prompt_variant(mode: str) -> str:
         return "near_query_block"
     if mode == "safe_version_replace_guided_with_retry_shadow":
         return "guided_retry_shadow"
+    if mode == "safe_version_replace_schema_first_shadow":
+        return "schema_first_shadow"
     return "standard"
 
 

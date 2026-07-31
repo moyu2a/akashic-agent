@@ -4,7 +4,7 @@ import platform
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from agent.persona import AKASHIC_IDENTITY, PERSONALITY_RULES
+from agent.persona import AKASHIC_IDENTITY, PersonaMode, get_personality_rules
 
 
 def _normalize_timestamp(message_timestamp: datetime | None = None) -> datetime:
@@ -21,8 +21,13 @@ def _weekday_cn(ts: datetime) -> str:
 
 
 # ─── 静态身份层：工作区路径 + 文件索引 ──────────────────────────────────────────
-def build_agent_static_identity_prompt(*, workspace: Path) -> str:
+def build_agent_static_identity_prompt(
+    *,
+    workspace: Path,
+    persona_mode: PersonaMode = "casual",
+) -> str:
     workspace_path = str(workspace.expanduser().resolve())
+    personality_rules = get_personality_rules(persona_mode)
 
     return f"""# Akashic
 
@@ -30,7 +35,7 @@ def build_agent_static_identity_prompt(*, workspace: Path) -> str:
 
 ## 性格
 
-{PERSONALITY_RULES}
+{personality_rules}
 
 ## 工作区
 - 根目录：{workspace_path}

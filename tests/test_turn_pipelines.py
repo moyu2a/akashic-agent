@@ -520,15 +520,21 @@ async def test_retrieval_pipeline_ignores_extra_guidance_escalation() -> None:
     assert "safe_version_answer_guidance_enabled" not in engine.requests[-1].hints
 
 
+@pytest.mark.parametrize(
+    "prompt_variant",
+    ["structured_guided", "schema_first_shadow"],
+)
 @pytest.mark.asyncio
-async def test_safe_version_answer_prompt_variant_flows_from_config_only() -> None:
+async def test_safe_version_answer_prompt_variant_flows_from_config_only(
+    prompt_variant: str,
+) -> None:
     engine = _RecordingMemoryEngine()
     pipeline = DefaultMemoryRetrievalPipeline(
         MemoryServices(engine=engine),
         safe_version_governed_mode="replace",
         safe_version_governed_replace_allowed=True,
         safe_version_answer_guidance_enabled=True,
-        safe_version_answer_prompt_variant="structured_guided",
+        safe_version_answer_prompt_variant=prompt_variant,
     )
     request = _retrieval_request("我默认用什么测试框架？")
 
@@ -536,10 +542,7 @@ async def test_safe_version_answer_prompt_variant_flows_from_config_only() -> No
 
     assert engine.requests[-1].hints["safe_version_governed_mode"] == "replace"
     assert engine.requests[-1].hints["safe_version_answer_guidance_enabled"] is True
-    assert (
-        engine.requests[-1].hints["safe_version_answer_prompt_variant"]
-        == "structured_guided"
-    )
+    assert engine.requests[-1].hints["safe_version_answer_prompt_variant"] == prompt_variant
 
 
 @pytest.mark.asyncio
@@ -553,7 +556,7 @@ async def test_safe_version_answer_prompt_variant_extra_cannot_escalate() -> Non
         safe_version_answer_prompt_variant="standard",
     )
     request = _retrieval_request("我默认用什么测试框架？")
-    request.extra["safe_version_answer_prompt_variant"] = "structured_guided"
+    request.extra["safe_version_answer_prompt_variant"] = "schema_first_shadow"
 
     await pipeline.retrieve(request)
 
@@ -572,7 +575,7 @@ async def test_safe_version_answer_prompt_variant_session_metadata_cannot_escala
         safe_version_answer_prompt_variant="standard",
     )
     request = _retrieval_request("我默认用什么测试框架？")
-    request.session_metadata["safe_version_answer_prompt_variant"] = "structured_guided"
+    request.session_metadata["safe_version_answer_prompt_variant"] = "schema_first_shadow"
 
     await pipeline.retrieve(request)
 

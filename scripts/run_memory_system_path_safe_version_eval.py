@@ -105,6 +105,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--checkpoint-report-only", action="store_true")
     parser.add_argument("--early-infra-abort-count", type=int, default=0)
     parser.add_argument("--early-infra-abort-rate", type=float, default=1.0)
+    parser.add_argument("--persona-mode", choices=("casual", "work"), default="casual")
     parser.add_argument("--allow-infra-blocked-exit-zero", action="store_true")
     args = parser.parse_args(argv)
 
@@ -187,6 +188,7 @@ def main(argv: list[str] | None = None) -> int:
                     resume=bool(args.resume),
                     early_infra_abort_count=int(args.early_infra_abort_count),
                     early_infra_abort_rate=float(args.early_infra_abort_rate),
+                    persona_mode=args.persona_mode,
                 )
             )
         except SystemPathInfraAbort as exc:

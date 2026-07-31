@@ -17,6 +17,12 @@ from agent.core.prompt_block import (
     SystemPromptBuilder,
     TurnContext,
 )
+from agent.persona import (
+    CASUAL_PERSONALITY_RULES,
+    PERSONALITY_RULES,
+    WORK_PERSONALITY_RULES,
+    get_personality_rules,
+)
 from prompts.agent import build_agent_static_identity_prompt
 
 
@@ -92,6 +98,57 @@ def test_static_identity_prompt_is_not_hardcoded_to_specific_user(tmp_path: Path
 
     assert "花月的长期 AI 伙伴" not in prompt
     assert "用户的长期 AI 伙伴" in prompt
+
+
+def test_personality_rules_alias_keeps_casual_default():
+    assert PERSONALITY_RULES == CASUAL_PERSONALITY_RULES
+    assert get_personality_rules() == CASUAL_PERSONALITY_RULES
+
+
+def test_work_personality_rules_define_task_boundaries():
+    assert get_personality_rules("work") == WORK_PERSONALITY_RULES
+    assert "工作模式" in WORK_PERSONALITY_RULES
+    assert "任务正确性优先" in WORK_PERSONALITY_RULES
+    assert "关键术语" in WORK_PERSONALITY_RULES
+    assert "<read_file>" in WORK_PERSONALITY_RULES
+    assert "<search>" in WORK_PERSONALITY_RULES
+    assert "<tool>" in WORK_PERSONALITY_RULES
+
+
+def test_static_identity_prompt_defaults_to_casual_persona(tmp_path: Path):
+    prompt = build_agent_static_identity_prompt(workspace=tmp_path)
+
+    assert "先接住，再展开" in prompt
+    assert "## 工作模式" not in prompt
+
+
+def test_static_identity_prompt_can_render_work_persona(tmp_path: Path):
+    prompt = build_agent_static_identity_prompt(workspace=tmp_path, persona_mode="work")
+
+    assert "## 工作模式" in prompt
+    assert "任务正确性优先" in prompt
+    assert "不要写成工具调用占位" in prompt
+    assert "<read_file>" in prompt
+    assert "先接住，再展开" not in prompt
+
+
+def test_identity_prompt_block_can_render_work_persona(tmp_path: Path):
+    block = IdentityPromptBlock(persona_mode="work")
+    ctx = TurnContext(
+        workspace=tmp_path,
+        memory=cast(Any, _Memory()),
+        skills=cast(Any, _Skills()),
+        skill_names=[],
+        channel=None,
+        chat_id=None,
+        retrieved_memory_block="retrieved",
+    )
+
+    prompt = block.render(ctx)
+
+    assert prompt is not None
+    assert "## 工作模式" in prompt
+    assert "先接住，再展开" not in prompt
 
 
 def test_prompt_block_priorities_leave_spacing_for_future_inserts():

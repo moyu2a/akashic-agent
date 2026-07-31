@@ -344,6 +344,10 @@ def test_guided_retry_shadow_renders_prompt_contract_with_safe_report_counts() -
 
     assert "Answer Candidate Contract:" in text
     assert "current_truth:" in text
+    assert "Directly answer the user's question first." in text
+    assert "Restate at least one concrete current_truth fact in the answer." in text
+    assert "Do not answer with only an acknowledgement" in text
+    assert "Do not output code blocks" in text
     assert "must_include_term_count: 1" in text
     assert "用户当前偏好使用 pytest。" in text
     assert "m-current" not in text
@@ -359,6 +363,66 @@ def test_guided_retry_shadow_renders_prompt_contract_with_safe_report_counts() -
     assert "deleted_evidence_ids:" not in text
     assert payload["answer_guidance_enabled"] is True
     assert payload["uses_fixture_answer_expectations"] is False
+
+
+def test_schema_first_shadow_renders_structured_selection_then_natural_answer() -> None:
+    result = build_system_path_safe_version_contract(
+        query="测试偏好是什么？",
+        baseline_items=[
+            _item("m-current", "用户当前偏好使用 pytest。"),
+            _item("m-old", "用户旧偏好使用 nose。", status="superseded"),
+        ],
+        route_trace={
+            "candidates_by_lane": {
+                "semantic": [
+                    _item("m-current", "用户当前偏好使用 pytest。"),
+                    _item("m-old", "用户旧偏好使用 nose。", status="superseded"),
+                ],
+                "keyword": [],
+                "provenance": [],
+                "graph": [],
+            }
+        },
+        replacements=[
+            {
+                "old_item_id": "m-old",
+                "new_item_id": "m-current",
+                "old_memory_type": "preference",
+                "new_memory_type": "preference",
+                "old_summary": "用户旧偏好使用 nose。",
+                "new_summary": "用户当前偏好使用 pytest。",
+                "old_source_ref": "telegram:1:old",
+                "new_source_ref": "telegram:1:new",
+            }
+        ],
+        answer_guidance_enabled=True,
+        answer_prompt_variant="schema_first_shadow",
+    )
+
+    text = result.text_block
+    payload = system_path_contract_to_dict(
+        result.contract,
+        answer_guidance_enabled=True,
+    )
+
+    assert payload["answer_prompt_variant"] == "schema_first_shadow"
+    assert payload["answer_candidate_contract"]["enabled"] is True
+    assert (
+        payload["answer_candidate_contract"]["candidate_reason"]
+        == "safe_version_schema_first_shadow"
+    )
+    assert payload["answer_candidate_contract"]["current_truth_count"] == 1
+    assert payload["answer_candidate_contract"]["must_include_term_count"] == 1
+    assert "must_include_terms" not in payload["answer_candidate_contract"]
+    assert "Schema-First Answer Shadow:" in text
+    assert "First select the answer facts internally" in text
+    assert "Then write only the final natural-language answer" in text
+    assert "selected_facts" in text
+    assert "ignored_superseded_or_stale" in text
+    assert "Do not expose JSON" in text
+    assert "用户当前偏好使用 pytest。" in text
+    assert "m-current" not in text
+    assert "m-old" not in text
 
 
 def test_system_path_structured_guided_variant_groups_answer_critical_evidence() -> None:

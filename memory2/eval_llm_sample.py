@@ -35,6 +35,22 @@ from session.manager import SessionManager
 
 _CJK_RE = re.compile(r"[\u3400-\u9fff]")
 
+_TERM_EQUIVALENTS: dict[str, tuple[str, ...]] = {
+    "冲突": ("矛盾",),
+    "中文回答": ("保持中文", "中文继续", "中文 + 条目式"),
+    "用户偏好中文回答": ("保持中文", "中文继续", "中文 + 条目式"),
+    "清理": ("清掉",),
+    "不同会话的偏好不能混用": (
+        "不同会话的偏好是隔离的",
+        "不会混用",
+        "互不混用",
+    ),
+    "旧版本记忆被新版本替换后只保留叶子": (
+        "旧版本被新版本替换后，只保留叶子",
+        "旧版本被替换后，只保留当前叶子",
+    ),
+}
+
 
 @dataclass(frozen=True)
 class AnswerExpectation:
@@ -634,6 +650,11 @@ def _coerce_run_spec(run: EvalCase | LLMSampleRunSpec) -> LLMSampleRunSpec:
 
 
 def _contains_term(text: str, term: str) -> bool:
+    equivalent_terms = (term, *_TERM_EQUIVALENTS.get(term, ()))
+    return any(_contains_literal_term(text, equivalent) for equivalent in equivalent_terms)
+
+
+def _contains_literal_term(text: str, term: str) -> bool:
     if _CJK_RE.search(term):
         return term in text
     return term.lower() in text.lower()

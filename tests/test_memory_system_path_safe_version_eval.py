@@ -470,6 +470,77 @@ def test_system_path_safe_version_cli_supports_guided_retry_shadow_mode(
     )
 
 
+def test_system_path_safe_version_cli_supports_schema_first_shadow_mode(
+    tmp_path: Path,
+) -> None:
+    out_dir = tmp_path / "out"
+    workspace = tmp_path / "workspace"
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "scripts/run_memory_system_path_safe_version_eval.py",
+            "--workspace",
+            str(workspace),
+            "--out-dir",
+            str(out_dir),
+            "--fake-provider",
+            "--balanced-small",
+            "--common-limit",
+            "1",
+            "--hard-limit",
+            "1",
+            "--modes",
+            "safe_version_replace,safe_version_replace_guided,safe_version_replace_schema_first_shadow",
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    payload = json.loads(
+        (out_dir / "system_path_safe_version_eval.json").read_text(encoding="utf-8")
+    )
+    schema = payload["metrics"]["mode_summaries"][
+        "safe_version_replace_schema_first_shadow"
+    ]
+    assert schema["case_count"] == 2
+    assert schema["answer_candidate_contract_enabled_rate"] == 100.0
+    assert schema["would_retry_count"] == 2
+    assert schema["retry_reason_counts"]["required_terms_missing"] == 2
+    assert schema["retry_reason_counts"]["answer_choice_group_missing"] == 2
+    rows = [
+        row
+        for row in payload["cases"]
+        if row["mode"] == "safe_version_replace_schema_first_shadow"
+    ]
+    assert rows
+    assert all(
+        row["safe_version_contract"]["answer_prompt_variant"] == "schema_first_shadow"
+        for row in rows
+    )
+    assert all(
+        row["safe_version_contract"]["answer_candidate_contract"]["enabled"] is True
+        for row in rows
+    )
+    assert all(
+        "current_truth_lines"
+        not in row["safe_version_contract"]["answer_candidate_contract"]
+        for row in rows
+    )
+    assert all(
+        row["post_check_shadow"]["required_terms_missing"] is True for row in rows
+    )
+    assert all(
+        row["post_check_shadow"]["answer_choice_group_missing"] is True for row in rows
+    )
+    _assert_report_is_private(
+        payload,
+        (out_dir / "system_path_safe_version_eval.md").read_text(encoding="utf-8"),
+    )
+
+
 def test_p6o19_gate_writes_retry_shadow_decision(tmp_path: Path) -> None:
     report_json = tmp_path / "system_path_safe_version_eval.json"
     out_dir = tmp_path / "gate"
@@ -873,6 +944,49 @@ def test_system_path_eval_aborts_when_early_fresh_rows_are_all_timeouts(
 
     assert checkpoint_jsonl.exists()
     assert len(checkpoint_jsonl.read_text(encoding="utf-8").splitlines()) == 2
+
+
+def test_system_path_eval_can_render_work_persona(
+    tmp_path: Path,
+) -> None:
+    from agent.provider import LLMResponse
+    from memory2.eval_system_path_safe_version import (
+        run_system_path_safe_version_cases,
+    )
+
+    class CapturingProvider:
+        def __init__(self) -> None:
+            self.messages: list[list[dict[str, object]]] = []
+
+        async def chat(self, **kwargs: object) -> LLMResponse:
+            self.messages.append(list(kwargs["messages"]))  # type: ignore[index]
+            return LLMResponse(
+                content="旧方案回滚要沿版本链使用当前叶子和回滚候选。",
+                tool_calls=[],
+            )
+
+    provider = CapturingProvider()
+    cases = build_quantitative_eval_cases("all", case_pack="standard", limit=1)
+
+    asyncio.run(
+        run_system_path_safe_version_cases(
+            cases,
+            tmp_path / "workspace",
+            provider,
+            modes=("safe_version_replace_guided_with_retry_shadow",),
+            model="capture-model",
+            persona_mode="work",
+        )
+    )
+
+    rendered = "\n".join(
+        str(message.get("content") or "")
+        for message in provider.messages[0]
+        if message.get("role") == "system"
+    )
+    assert "## 工作模式" in rendered
+    assert "任务正确性优先" in rendered
+    assert "先接住，再展开" not in rendered
 
 
 def test_system_path_eval_aborts_when_two_of_three_early_rows_are_infra_failures(

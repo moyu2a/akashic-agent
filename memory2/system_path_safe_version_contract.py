@@ -19,6 +19,7 @@ SAFE_VERSION_ANSWER_PROMPT_VARIANTS = {
     "structured_guided",
     "near_query_block",
     "guided_retry_shadow",
+    "schema_first_shadow",
 }
 
 
@@ -161,7 +162,8 @@ def build_system_path_safe_version_contract(
     )
     likely_ids = tuple(item_id for item_id in allowed_ids if item_id not in requires_review_ids)
     answer_candidate_contract = _build_answer_candidate_contract(
-        enabled=prompt_variant == "guided_retry_shadow",
+        enabled=prompt_variant in {"guided_retry_shadow", "schema_first_shadow"},
+        prompt_variant=prompt_variant,
         active_ids=active_ids,
         likely_ids=likely_ids,
         stale_ids=stale_ids,
@@ -326,9 +328,37 @@ def render_system_path_evidence_contract_block(
                 "Answer Guidance:",
                 "  Use allowed_evidence as the only source for the answer.",
                 "  Use the Answer Candidate Contract to select the final answer.",
+                "  Directly answer the user's question first.",
+                "  Restate at least one concrete current_truth fact in the answer.",
                 "  Include the required current facts when they are supported by current_truth.",
+                "  Do not answer with only an acknowledgement, meta action, or clarification question.",
+                "  Do not output code blocks unless the user explicitly asks for code.",
                 "  Answer in the user's language.",
                 "Answer Candidate Contract:",
+                "current_truth:",
+                *_indent_lines(candidate.current_truth_lines),
+                "must_include_term_count: " + str(candidate.must_include_term_count),
+                "forbidden_old_value_count: "
+                + str(len(candidate.forbidden_old_value_ids)),
+                "language_requirement: " + candidate.language_requirement,
+            ]
+        )
+    elif variant == "schema_first_shadow":
+        candidate = contract.answer_candidate_contract
+        lines.extend(
+            [
+                "Schema-First Answer Shadow:",
+                "  Use allowed_evidence as the only source for the answer.",
+                "  First select the answer facts internally using this schema:",
+                "  selected_facts: concrete current facts that answer the user.",
+                "  active_version_used: true when an active/current version supports the answer.",
+                "  ignored_superseded_or_stale: evidence ignored because it is old, stale, or superseded.",
+                "  insufficient_evidence: true only when allowed_evidence cannot answer.",
+                "  Then write only the final natural-language answer for the user.",
+                "  Do not expose JSON, schema fields, memory ids, or internal selection notes.",
+                "  Prefer current_truth facts when available.",
+                "  Do not answer with only an acknowledgement, meta action, or clarification question.",
+                "  Answer in the user's language.",
                 "current_truth:",
                 *_indent_lines(candidate.current_truth_lines),
                 "must_include_term_count: " + str(candidate.must_include_term_count),
@@ -390,6 +420,7 @@ def system_path_contract_to_dict(
 def _build_answer_candidate_contract(
     *,
     enabled: bool,
+    prompt_variant: str,
     active_ids: Sequence[str],
     likely_ids: Sequence[str],
     stale_ids: Sequence[str],
@@ -421,7 +452,11 @@ def _build_answer_candidate_contract(
         must_include_term_count=len(current_lines),
         forbidden_old_value_ids=tuple(_dedupe((*stale_ids, *deleted_ids))),
         language_requirement="match_user_language",
-        candidate_reason="safe_version_guided_retry_shadow",
+        candidate_reason=(
+            "safe_version_schema_first_shadow"
+            if prompt_variant == "schema_first_shadow"
+            else "safe_version_guided_retry_shadow"
+        ),
     )
 
 
