@@ -1,0 +1,15 @@
+# System Path Safe Version Governed
+
+本报告使用 system-path provider validation；不包含原始 query、prompt、memory summary 或完整回答。
+
+- evaluation_level: `system_path_safe_version_governed`
+- real_llm_enabled: `False`
+- unique_case_count: `40`
+- case_count: `120`
+- replacement_seeded_count: `120`
+
+| mode | cases | answer_success | answer_rate | grounding_rate | forbidden_rate | contract_success | post_check_shadow | avg_tokens | avg_latency_ms |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| safe_version_replace | 40 | 26 | 65.0 | 100.0 | 0.0 | 100.0 | 100.0 | 5470.85 | 3671.025 |
+| safe_version_replace_guided | 40 | 31 | 77.5 | 100.0 | 0.0 | 100.0 | 100.0 | 5514.45 | 3204.425 |
+| safe_version_replace_guided_with_retry_shadow | 40 | 34 | 85.0 | 100.0 | 0.0 | 100.0 | 100.0 | 5631.95 | 2786.55 |

@@ -3226,3 +3226,52 @@
   - do not compare guided vs guided-with-retry-shadow answer quality from this run;
   - the useful result is the complete scoring export pipeline and artifacts;
   - to get answer-quality data, rerun P6o-20 with a working provider and a fresh or deliberately cleaned checkpoint.
+
+## 2026-07-30 P6o-26 schema-first answer shadow
+
+- Goal:
+  - test whether a schema-first / natural-language two-stage shadow can improve system-path answer correctness when evidence recall and grounding are already correct but answer selection still fails.
+- Implementation:
+  - added `schema_first_shadow` prompt variant;
+  - added `safe_version_replace_schema_first_shadow` eval mode;
+  - kept the change eval/config/shadow only, with production default still `off`;
+  - added boundary coverage for config-only sourcing and privilege escalation guards.
+- Verification:
+  - focused regression: `70 passed`;
+  - fake-provider gate: `16` rows, `4` modes, `answer_candidate_contract_enabled_rate = 100.0%`, `would_retry_count = 4`, retry reasons `required_terms_missing = 4` and `answer_choice_group_missing = 4`;
+  - real pregate: `40` rows, `10` unique cases, `4` modes, `provider_error_count = 0`, `timeout_count = 0`, `memory_grounding_pass_rate = 100.0%`, `forbidden_violation_rate = 0.0%`;
+  - mode results: `safe_version_replace = 80.0%`, `safe_version_replace_guided = 90.0%`, `safe_version_replace_guided_with_retry_shadow = 100.0%`, `safe_version_replace_schema_first_shadow = 50.0%`.
+- Conclusion:
+  - schema-first shadow kept the safety boundary but did not improve answer quality;
+  - it regressed below guided and should stay shadow-only;
+  - the strongest signal remains guided retry-shadow, but it still should not be promoted to a production default.
+- Review follow-up:
+  - fixed schema-first telemetry so sanitized report rows use `candidate_reason = safe_version_schema_first_shadow` instead of the guided retry-shadow reason;
+  - restored parallel config-only boundary coverage for both `structured_guided` and `schema_first_shadow`;
+  - updated the answer-correctness history intro to include P6o-26.
+
+## 2026-07-31 P6o-27 best shadow medium real validation
+
+- Goal:
+  - validate the current small-sample best `safe_version_replace_guided_with_retry_shadow` on a medium real LLM matrix against `safe_version_replace` and `safe_version_replace_guided`.
+- Fake smoke:
+  - command used `/tmp/akashic-p6o27-best-shadow-fake-workspace` and `/tmp/akashic-p6o27-best-shadow-fake-report`;
+  - `case_count = 12`, `unique_case_count = 4`, `mode_count = 3`, `provider_error_count = 0`, `timeout_count = 0`, `malformed_checkpoint_line_count = 0`;
+  - privacy flags were false and `rg` found no forbidden raw prompt/answer/session/secret patterns.
+- Real medium run:
+  - primary report: `my_md/memory_optimization/eval_reports/p6o27_best_shadow_medium_real_v1/real_balanced_40/system_path_safe_version_eval.json`;
+  - checkpoint rebuild: `my_md/memory_optimization/eval_reports/p6o27_best_shadow_medium_real_v1/checkpoint_rebuild/system_path_safe_version_eval.json`;
+  - matrix: standard common `20` + hard `20`, 3 modes, repeat `1`, `120` real LLM calls;
+  - `case_count = 120`, `unique_case_count = 40`, `mode_count = 3`, `repeat_count = 1`, checkpoint rows `120`;
+  - `provider_error_count = 0`, `timeout_count = 0`, `malformed_checkpoint_line_count = 0`, `memory_grounding_pass_rate = 100.0%`, `forbidden_violation_rate = 0.0%`, token metrics available;
+  - primary/rebuild top-level and mode metrics match exactly.
+- Mode results:
+  - `safe_version_replace`: `26/40 = 65.0%`, grounding `100.0%`, forbidden `0.0%`, avg tokens `5470.85`, avg latency `3671.025ms`;
+  - `safe_version_replace_guided`: `31/40 = 77.5%`, grounding `100.0%`, forbidden `0.0%`, avg tokens `5514.45`, avg latency `3204.425ms`;
+  - `safe_version_replace_guided_with_retry_shadow`: `34/40 = 85.0%`, grounding `100.0%`, forbidden `0.0%`, avg tokens `5631.95`, avg latency `2786.55ms`, would-retry `6/40`;
+  - retry-shadow reasons: `answer_choice_group_missing = 5`, `required_terms_missing = 5`.
+- Conclusion:
+  - P6o-27 is a clean medium real LLM run and supports retry-shadow as positive in this run: `+7.5` points over guided with only about `+2.13%` average token increase;
+  - because P6o-24 showed retry-shadow below guided on another 40-case run, this is not yet stable-best proof;
+  - keep retry-shadow shadow-only, with no real retry and no production default change;
+  - next confidence step should be repeat `2` or `3` stability validation before any rollout decision.
