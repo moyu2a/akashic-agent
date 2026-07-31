@@ -26,6 +26,10 @@ class AnswerPostCheckShadow:
     required_terms_missing: bool = False
     answer_choice_group_missing: bool = False
     language_requirement_failed: bool = False
+    tool_markup_in_final_answer: bool = False
+    dsml_tool_markup_in_final_answer: bool = False
+    meta_action_final_answer: bool = False
+    answerable_evidence_contract_ignored: bool = False
     raw_prompt: str = ""
     raw_answer: str = ""
 
@@ -58,6 +62,10 @@ def build_answer_post_check_shadow(
             required_terms_missing=False,
             answer_choice_group_missing=False,
             language_requirement_failed=False,
+            tool_markup_in_final_answer=False,
+            dsml_tool_markup_in_final_answer=False,
+            meta_action_final_answer=False,
+            answerable_evidence_contract_ignored=False,
         )
 
     context_ids = _string_tuple(context_memory_ids)
@@ -71,6 +79,11 @@ def build_answer_post_check_shadow(
     candidate_enabled = (
         isinstance(candidate_contract, Mapping)
         and bool(candidate_contract.get("enabled"))
+    )
+    current_truth_count = (
+        int(candidate_contract.get("current_truth_count", 0) or 0)
+        if isinstance(candidate_contract, Mapping)
+        else 0
     )
     answer_score = answer_contract.get("answer_score")
     score_map = answer_score if isinstance(answer_score, Mapping) else {}
@@ -98,6 +111,15 @@ def build_answer_post_check_shadow(
     boundary_mentions = tuple(
         item_id for item_id in forbidden if item_id and item_id in answer
     )
+    dsml_tool_markup_in_final_answer = _contains_dsml_tool_markup(answer)
+    tool_markup_in_final_answer = _contains_tool_markup(answer)
+    meta_action_final_answer = _is_meta_action_final_answer(answer)
+    answerable_evidence_contract_ignored = (
+        candidate_enabled
+        and not expected_fallback
+        and current_truth_count > 0
+        and (tool_markup_in_final_answer or meta_action_final_answer)
+    )
 
     retry_reasons: list[str] = []
     if included_forbidden:
@@ -118,6 +140,14 @@ def build_answer_post_check_shadow(
         retry_reasons.append("answer_choice_group_missing")
     if language_requirement_failed:
         retry_reasons.append("language_requirement_failed")
+    if dsml_tool_markup_in_final_answer:
+        retry_reasons.append("dsml_tool_markup_in_final_answer")
+    if tool_markup_in_final_answer:
+        retry_reasons.append("tool_markup_in_final_answer")
+    if meta_action_final_answer:
+        retry_reasons.append("meta_action_final_answer")
+    if answerable_evidence_contract_ignored:
+        retry_reasons.append("answerable_evidence_contract_ignored")
 
     return AnswerPostCheckShadow(
         shadow_enabled=True,
@@ -140,6 +170,10 @@ def build_answer_post_check_shadow(
         required_terms_missing=required_terms_missing,
         answer_choice_group_missing=answer_choice_group_missing,
         language_requirement_failed=language_requirement_failed,
+        tool_markup_in_final_answer=tool_markup_in_final_answer,
+        dsml_tool_markup_in_final_answer=dsml_tool_markup_in_final_answer,
+        meta_action_final_answer=meta_action_final_answer,
+        answerable_evidence_contract_ignored=answerable_evidence_contract_ignored,
     )
 
 
@@ -173,6 +207,10 @@ def answer_post_check_shadow_to_dict(
         "required_terms_missing": shadow.required_terms_missing,
         "answer_choice_group_missing": shadow.answer_choice_group_missing,
         "language_requirement_failed": shadow.language_requirement_failed,
+        "tool_markup_in_final_answer": shadow.tool_markup_in_final_answer,
+        "dsml_tool_markup_in_final_answer": shadow.dsml_tool_markup_in_final_answer,
+        "meta_action_final_answer": shadow.meta_action_final_answer,
+        "answerable_evidence_contract_ignored": shadow.answerable_evidence_contract_ignored,
     }
 
 
@@ -187,6 +225,48 @@ def _intersection_in_order(
 def _mentions_insufficient_evidence(answer: str) -> bool:
     markers = ("证据不足", "无法确认", "不能确认", "insufficient evidence")
     return any(marker.lower() in answer.lower() for marker in markers)
+
+
+def _contains_dsml_tool_markup(answer: str) -> bool:
+    lowered = answer.lower()
+    return "dsml" in lowered and ("tool_calls" in lowered or "invoke" in lowered)
+
+
+def _contains_tool_markup(answer: str) -> bool:
+    lowered = answer.lower()
+    markers = (
+        "<read_file",
+        "</read_file",
+        "<tool",
+        "</tool",
+        "<search",
+        "</search",
+        "tool_calls",
+        "invoke name=",
+        "read_file>",
+    )
+    return any(marker in lowered for marker in markers) or _contains_dsml_tool_markup(answer)
+
+
+def _is_meta_action_final_answer(answer: str) -> bool:
+    stripped = answer.strip()
+    if not stripped:
+        return False
+    markers = (
+        "我先查",
+        "先查",
+        "我先翻",
+        "先翻",
+        "我需要先查",
+        "需要先查",
+        "核实一下",
+        "先核实",
+        "确认一下",
+        "看一下记忆",
+        "查一下记忆",
+        "翻一下记忆",
+    )
+    return any(marker in stripped for marker in markers)
 
 
 def _string_tuple(value: object) -> tuple[str, ...]:

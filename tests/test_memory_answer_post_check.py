@@ -153,3 +153,100 @@ def test_post_check_retry_shadow_flags_language_failure() -> None:
     assert payload["language_requirement_failed"] is True
     assert payload["needs_retry"] is True
     assert "language_requirement_failed" in payload["retry_reasons"]
+
+
+def test_post_check_retry_shadow_flags_dsml_tool_markup_and_meta_action() -> None:
+    shadow = build_answer_post_check_shadow(
+        "我先查一下。<｜｜DSML｜｜tool_calls><｜｜DSML｜｜invoke name=\"read_file\">",
+        {
+            "production_safe_evidence_contract": True,
+            "allowed_evidence_ids": ["m-current"],
+            "likely_relevant_evidence_ids": ["m-current"],
+            "insufficient_evidence_fallback": False,
+            "answer_candidate_contract": {
+                "enabled": True,
+                "current_truth_count": 1,
+                "must_include_term_count": 1,
+                "forbidden_old_value_count": 0,
+                "language_requirement": "match_user_language",
+            },
+            "answer_score": {
+                "expected_contains_miss_count": 1,
+                "expected_any_miss_count": 0,
+                "language_passed": True,
+            },
+        },
+        ["m-current"],
+    )
+
+    payload = answer_post_check_shadow_to_dict(shadow)
+    assert payload["dsml_tool_markup_in_final_answer"] is True
+    assert payload["tool_markup_in_final_answer"] is True
+    assert payload["meta_action_final_answer"] is True
+    assert payload["answerable_evidence_contract_ignored"] is True
+    assert "dsml_tool_markup_in_final_answer" in payload["retry_reasons"]
+    assert "tool_markup_in_final_answer" in payload["retry_reasons"]
+    assert "meta_action_final_answer" in payload["retry_reasons"]
+    assert "answerable_evidence_contract_ignored" in payload["retry_reasons"]
+
+
+def test_post_check_retry_shadow_flags_plain_meta_action_without_scorer_dependence() -> None:
+    shadow = build_answer_post_check_shadow(
+        "先翻一下记忆文件核实“上次的回答方式”具体指什么。",
+        {
+            "production_safe_evidence_contract": True,
+            "allowed_evidence_ids": ["m-current"],
+            "likely_relevant_evidence_ids": ["m-current"],
+            "insufficient_evidence_fallback": False,
+            "answer_candidate_contract": {
+                "enabled": True,
+                "current_truth_count": 1,
+                "must_include_term_count": 1,
+                "forbidden_old_value_count": 0,
+                "language_requirement": "match_user_language",
+            },
+            "answer_score": {
+                "expected_contains_miss_count": 0,
+                "expected_any_miss_count": 0,
+                "language_passed": True,
+            },
+        },
+        ["m-current"],
+    )
+
+    payload = answer_post_check_shadow_to_dict(shadow)
+    assert payload["meta_action_final_answer"] is True
+    assert payload["answerable_evidence_contract_ignored"] is True
+    assert "meta_action_final_answer" in payload["retry_reasons"]
+    assert "answerable_evidence_contract_ignored" in payload["retry_reasons"]
+
+
+def test_post_check_does_not_mark_contract_ignored_without_current_truth() -> None:
+    shadow = build_answer_post_check_shadow(
+        "先查一下记忆文件。",
+        {
+            "production_safe_evidence_contract": True,
+            "allowed_evidence_ids": ["m-current"],
+            "likely_relevant_evidence_ids": ["m-current"],
+            "insufficient_evidence_fallback": False,
+            "answer_candidate_contract": {
+                "enabled": True,
+                "current_truth_count": 0,
+                "must_include_term_count": 0,
+                "forbidden_old_value_count": 0,
+                "language_requirement": "match_user_language",
+            },
+            "answer_score": {
+                "expected_contains_miss_count": 0,
+                "expected_any_miss_count": 0,
+                "language_passed": True,
+            },
+        },
+        ["m-current"],
+    )
+
+    payload = answer_post_check_shadow_to_dict(shadow)
+    assert payload["meta_action_final_answer"] is True
+    assert payload["answerable_evidence_contract_ignored"] is False
+    assert "meta_action_final_answer" in payload["retry_reasons"]
+    assert "answerable_evidence_contract_ignored" not in payload["retry_reasons"]

@@ -145,6 +145,7 @@ def build_agent_behavior_rules_prompt(*, workspace: Path) -> str:
 禁止因为用户措辞温和（如"其实还好""并不反感"）就跳过纠错流程；禁止只口头承认错误而不清除记忆。
 
 ### 历史检索协议
+- 例外边界：普通记忆摘要和 `RECENT_CONTEXT.md` 只是候选上下文；但当本轮系统提示中存在明确的 Evidence Contract / allowed_evidence / current_truth / Answer Candidate Contract，且 `insufficient_evidence_fallback=false`、证据直接回答用户问题时，表示已完成本轮召回和治理，应直接基于该 contract 回答，不要重新启动历史检索。
 遇到”你还记得/忘了吗/我们讨论过/当时发生了什么/具体内容”等历史类问题，按以下瀑布执行：
 1. 先调 `recall_memory`（语义层）：query 写成陈述句，如”用户在三月完成了 akashic 重构”
 2. 评估结果：

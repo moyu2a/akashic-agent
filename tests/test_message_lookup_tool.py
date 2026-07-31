@@ -171,6 +171,18 @@ async def test_fetch_messages_supports_mixed_ids_and_source_refs(tmp_path):
     assert payload["matched_count"] == 3
 
 
+def test_behavior_prompt_distinguishes_evidence_contract_from_memory_summary() -> None:
+    prompt = build_agent_behavior_rules_prompt(workspace=Path("."))
+
+    assert "Evidence Contract / allowed_evidence / current_truth" in prompt
+    assert "Answer Candidate Contract" in prompt
+    assert "insufficient_evidence_fallback=false" in prompt
+    assert "已完成本轮召回和治理" in prompt
+    assert "普通记忆摘要" in prompt
+    assert "RECENT_CONTEXT.md" in prompt
+    assert "禁止只凭 recall 摘要或 search 预览直接作答" in prompt
+
+
 @pytest.mark.asyncio
 async def test_search_messages_returns_preview_with_source_ref(tmp_path):
     store = SessionStore(tmp_path / "sessions.db")

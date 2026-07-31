@@ -328,6 +328,7 @@ def render_system_path_evidence_contract_block(
                 "Answer Guidance:",
                 "  Use allowed_evidence as the only source for the answer.",
                 "  Use the Answer Candidate Contract to select the final answer.",
+                *_answerable_contract_completion_guidance(contract),
                 "  Directly answer the user's question first.",
                 "  Restate at least one concrete current_truth fact in the answer.",
                 "  Include the required current facts when they are supported by current_truth.",
@@ -349,6 +350,7 @@ def render_system_path_evidence_contract_block(
             [
                 "Schema-First Answer Shadow:",
                 "  Use allowed_evidence as the only source for the answer.",
+                *_answerable_contract_completion_guidance(contract),
                 "  First select the answer facts internally using this schema:",
                 "  selected_facts: concrete current facts that answer the user.",
                 "  active_version_used: true when an active/current version supports the answer.",
@@ -558,3 +560,20 @@ def _replacement_ids(replacements: Sequence[Mapping[str, Any]]) -> set[str]:
 
 def _indent_lines(lines: Sequence[str]) -> list[str]:
     return ["  " + line for line in lines]
+
+
+def _answerable_contract_completion_guidance(
+    contract: SystemPathEvidenceContract,
+) -> list[str]:
+    if (
+        contract.insufficient_evidence_fallback
+        or not contract.answer_candidate_contract.current_truth_lines
+    ):
+        return []
+    return [
+        "  Because insufficient_evidence_fallback=false and current_truth is present, retrieval and governance for this turn are already complete.",
+        "  When insufficient_evidence_fallback=false and current_truth or allowed_evidence answers the user, answer directly from this contract.",
+        "  Do not restart recall, search, fetch, or read memory files such as MEMORY.md, HISTORY.md, or RECENT_CONTEXT.md.",
+        "  Do not output pseudo tool calls, DSML markup, tool-call placeholders, or internal action plans as the final answer.",
+        "  Do not answer with \"先查\", \"先翻\", or \"核实\" when the contract already contains the answer.",
+    ]

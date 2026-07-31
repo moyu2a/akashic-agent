@@ -425,6 +425,82 @@ def test_schema_first_shadow_renders_structured_selection_then_natural_answer() 
     assert "m-old" not in text
 
 
+def test_guided_retry_shadow_marks_contract_retrieval_complete_when_answerable() -> None:
+    result = build_system_path_safe_version_contract(
+        query="上次那个回答方式怎么说？",
+        baseline_items=[_item("m-current", "用户偏好中文回答。")],
+        route_trace={
+            "candidates_by_lane": {
+                "semantic": [_item("m-current", "用户偏好中文回答。")],
+                "keyword": [],
+                "provenance": [],
+                "graph": [],
+            }
+        },
+        replacements=[],
+        top_k=8,
+        answer_guidance_enabled=True,
+        answer_prompt_variant="guided_retry_shadow",
+    )
+
+    text = result.text_block
+    assert "retrieval and governance for this turn are already complete" in text
+    assert "insufficient_evidence_fallback=false" in text
+    assert "Do not restart recall, search, fetch, or read memory files" in text
+    assert "Do not output pseudo tool calls, DSML markup" in text
+    assert "Do not answer with \"先查\", \"先翻\", or \"核实\"" in text
+    assert "用户偏好中文回答。" in text
+
+
+def test_schema_first_shadow_marks_contract_retrieval_complete_when_answerable() -> None:
+    result = build_system_path_safe_version_contract(
+        query="那个旧方案怎么回滚？",
+        baseline_items=[_item("m-current", "版本链只保留当前叶子并记录回滚候选。")],
+        route_trace={
+            "candidates_by_lane": {
+                "semantic": [_item("m-current", "版本链只保留当前叶子并记录回滚候选。")],
+                "keyword": [],
+                "provenance": [],
+                "graph": [],
+            }
+        },
+        replacements=[],
+        top_k=8,
+        answer_guidance_enabled=True,
+        answer_prompt_variant="schema_first_shadow",
+    )
+
+    text = result.text_block
+    assert "retrieval and governance for this turn are already complete" in text
+    assert "Do not restart recall, search, fetch, or read memory files" in text
+    assert "Then write only the final natural-language answer" in text
+
+
+def test_guided_retry_shadow_does_not_mark_retrieval_complete_when_insufficient() -> None:
+    result = build_system_path_safe_version_contract(
+        query="这个有没有证据？",
+        baseline_items=[],
+        route_trace={
+            "candidates_by_lane": {
+                "semantic": [],
+                "keyword": [],
+                "provenance": [],
+                "graph": [],
+            }
+        },
+        replacements=[],
+        top_k=8,
+        answer_guidance_enabled=True,
+        answer_prompt_variant="guided_retry_shadow",
+    )
+
+    assert result.contract.insufficient_evidence_fallback is True
+    assert (
+        "retrieval and governance for this turn are already complete"
+        not in result.text_block
+    )
+
+
 def test_system_path_structured_guided_variant_groups_answer_critical_evidence() -> None:
     result = build_system_path_safe_version_contract(
         query="测试偏好是什么？",
