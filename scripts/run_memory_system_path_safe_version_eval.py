@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import hashlib
 import json
 from pathlib import Path
+import subprocess
 import sys
 from typing import Any
 
@@ -107,6 +109,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--early-infra-abort-rate", type=float, default=1.0)
     parser.add_argument("--persona-mode", choices=("casual", "work"), default="casual")
     parser.add_argument("--allow-infra-blocked-exit-zero", action="store_true")
+    parser.add_argument("--answer-debug-dir", default="")
     args = parser.parse_args(argv)
 
     if bool(args.fake_provider) and bool(args.enable_real_llm):
@@ -189,6 +192,10 @@ def main(argv: list[str] | None = None) -> int:
                     early_infra_abort_count=int(args.early_infra_abort_count),
                     early_infra_abort_rate=float(args.early_infra_abort_rate),
                     persona_mode=args.persona_mode,
+                    answer_debug_dir=Path(args.answer_debug_dir)
+                    if args.answer_debug_dir
+                    else None,
+                    run_metadata=_build_run_metadata(args, model=model),
                 )
             )
         except SystemPathInfraAbort as exc:
@@ -232,6 +239,42 @@ def main(argv: list[str] | None = None) -> int:
             encoding="utf-8",
         )
     return exit_code
+
+
+def _build_run_metadata(args: argparse.Namespace, *, model: str) -> dict[str, object]:
+    config_hash = ""
+    if args.config:
+        config_path = Path(args.config)
+        if config_path.exists():
+            config_hash = hashlib.sha256(config_path.read_bytes()).hexdigest()
+    return {
+        "git_commit": _git_commit(),
+        "config_hash": config_hash,
+        "model": model,
+        "real_llm_enabled": bool(args.enable_real_llm),
+        "fake_provider_enabled": bool(args.fake_provider) or not bool(args.enable_real_llm),
+        "persona_mode": args.persona_mode,
+        "modes": args.modes,
+        "repeats": int(args.repeats),
+        "case_pack": args.case_pack,
+        "balanced_small": bool(args.balanced_small),
+        "common_limit": int(args.common_limit),
+        "hard_limit": int(args.hard_limit),
+        "timeout_s": float(args.timeout_s),
+    }
+
+
+def _git_commit() -> str:
+    try:
+        completed = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except Exception:
+        return ""
+    return completed.stdout.strip()
 
 
 if __name__ == "__main__":

@@ -214,6 +214,8 @@ async def run_system_path_safe_version_cases(
     early_infra_abort_count: int = 0,
     early_infra_abort_rate: float = 1.0,
     persona_mode: PersonaMode = "casual",
+    answer_debug_dir: Path | None = None,
+    run_metadata: dict[str, object] | None = None,
 ) -> SystemPathSafeVersionReport:
     records: list[dict[str, object]] = []
     fresh_records: list[dict[str, object]] = []
@@ -254,6 +256,8 @@ async def run_system_path_safe_version_cases(
                     model=model,
                     timeout_s=timeout_s,
                     persona_mode=persona_mode,
+                    answer_debug_dir=answer_debug_dir,
+                    run_metadata=run_metadata or {},
                 )
                 records.append(record)
                 _append_system_path_checkpoint_record(checkpoint_jsonl, key, record)
@@ -479,6 +483,8 @@ async def _run_case_mode(
     model: str,
     timeout_s: float,
     persona_mode: PersonaMode = "casual",
+    answer_debug_dir: Path | None = None,
+    run_metadata: dict[str, object] | None = None,
 ) -> dict[str, object]:
     if mode not in MODE_TO_SAFE_VERSION:
         raise ValueError(f"unknown system path mode: {mode}")
@@ -590,7 +596,7 @@ async def _run_case_mode(
     token_counts = _extract_token_counts(
         recording_provider.responses[-1] if recording_provider.responses else None
     )
-    return {
+    record = {
         "case_id": case.id,
         "case_index": case_index,
         "repeat_index": repeat_index,
@@ -620,6 +626,74 @@ async def _run_case_mode(
         "safe_version_contract": _sanitize_contract(contract),
         "post_check_shadow": post_check,
     }
+    if answer_debug_dir is not None:
+        _write_system_path_answer_debug(
+            answer_debug_dir,
+            record=record,
+            query=query,
+            answer=answer,
+            model=model,
+            run_metadata=run_metadata or {},
+        )
+    return record
+
+
+def _write_system_path_answer_debug(
+    answer_debug_dir: Path,
+    *,
+    record: dict[str, object],
+    query: str,
+    answer: str,
+    model: str,
+    run_metadata: dict[str, object],
+) -> None:
+    answer_debug_dir.mkdir(parents=True, exist_ok=True)
+    case_index = int(record.get("case_index", 0) or 0)
+    repeat_index = int(record.get("repeat_index", 0) or 0)
+    mode = str(record.get("mode") or "unknown")
+    case_id = str(record.get("case_id") or "unknown")
+    payload = {
+        "run_metadata": dict(run_metadata),
+        "case_id": case_id,
+        "case_index": case_index,
+        "repeat_index": repeat_index,
+        "category": record.get("category"),
+        "mode": mode,
+        "model": model,
+        "query": query,
+        "answer_text": answer,
+        "answer_length": len(answer),
+        "answer_rule_passed": bool(record.get("answer_rule_passed")),
+        "memory_grounding_passed": bool(record.get("memory_grounding_passed")),
+        "forbidden_contains_violation_count": int(
+            record.get("forbidden_contains_violation_count", 0) or 0
+        ),
+        "failures": list(record.get("failures") or []),
+        "safe_version_metadata": dict(record.get("safe_version_metadata") or {}),
+        "safe_version_contract": dict(record.get("safe_version_contract") or {}),
+        "post_check_shadow": dict(record.get("post_check_shadow") or {}),
+        "latency_ms": int(record.get("latency_ms", 0) or 0),
+        "prompt_token_count": int(record.get("prompt_token_count", 0) or 0),
+        "completion_token_count": int(record.get("completion_token_count", 0) or 0),
+        "token_count": int(record.get("token_count", 0) or 0),
+        "token_metrics_available": bool(record.get("token_metrics_available")),
+        "provider_error": bool(record.get("provider_error")),
+        "timeout": bool(record.get("timeout")),
+    }
+    filename = (
+        f"{case_index:04d}-repeat-{repeat_index:02d}-"
+        f"{_safe_debug_name(mode)}-{_safe_debug_name(case_id)}.json"
+    )
+    (answer_debug_dir / filename).write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+
+
+def _safe_debug_name(value: str) -> str:
+    return "".join(ch if ch.isalnum() or ch in {"-", "_"} else "_" for ch in value)[
+        :120
+    ]
 
 
 def _build_engine(*, store: MemoryStore2, items: list[dict[str, object]]) -> DefaultMemoryEngine:

@@ -180,6 +180,177 @@ def _p6o19_gate_payload(
     }
 
 
+def _p6o33_incremental_payload(
+    *,
+    replace_answer_rate: float,
+    guided_answer_rate: float,
+    retry_shadow_answer_rate: float,
+) -> dict[str, object]:
+    cases: list[dict[str, object]] = []
+    modes = (
+        ("safe_version_replace", replace_answer_rate, "standard"),
+        ("safe_version_replace_guided", guided_answer_rate, "guided"),
+        (
+            "safe_version_replace_guided_with_retry_shadow",
+            retry_shadow_answer_rate,
+            "guided_retry_shadow",
+        ),
+    )
+    for mode, answer_rate, variant in modes:
+        for index in range(4):
+            passed = index < int(round(answer_rate / 25.0))
+            cases.append(
+                {
+                    "case_id": f"case-{index}",
+                    "case_index": index,
+                    "repeat_index": 0,
+                    "category": "common" if index < 2 else "hard",
+                    "mode": mode,
+                    "passed": passed,
+                    "answer_rule_passed": passed,
+                    "memory_grounding_passed": True,
+                    "expected_memory_used": True,
+                    "forbidden_contains_violation_count": 0,
+                    "answer_length": 8,
+                    "expected_contains_pass_count": 1 if passed else 0,
+                    "expected_contains_miss_count": 0 if passed else 1,
+                    "expected_any_pass_count": 1 if passed else 0,
+                    "expected_any_miss_count": 0 if passed else 1,
+                    "language_passed": True,
+                    "failures": [] if passed else ["missing_expected_answer_term"],
+                    "provider_error": False,
+                    "timeout": False,
+                    "latency_ms": 100,
+                    "token_count": 200,
+                    "prompt_token_count": 120,
+                    "completion_token_count": 80,
+                    "token_metrics_available": True,
+                    "replacement_seeded_count": 1,
+                    "safe_version_metadata": {
+                        "contract_generation_success": True,
+                        "answer_guidance_enabled": variant != "standard",
+                        "answer_prompt_variant": variant,
+                    },
+                    "safe_version_contract": {
+                        "profile_name": "system_path_safe_version_governed",
+                        "production_safe": True,
+                        "production_safe_evidence_contract": True,
+                        "uses_fixture_answer_expectations": False,
+                        "answer_guidance_enabled": variant != "standard",
+                        "answer_prompt_variant": variant,
+                        "candidate_governance_mode": "replace",
+                        "allowed_evidence_ids": ["m1"],
+                        "likely_relevant_evidence_ids": ["m1"],
+                        "downgrade_ids": [],
+                        "requires_review_ids": [],
+                        "stale_warning_ids": [],
+                        "conflict_warning_ids": [],
+                        "active_version_ids": ["m1"],
+                        "insufficient_evidence_ids": [],
+                        "insufficient_evidence_fallback": False,
+                        "forbidden_boundary_ids": [],
+                        "deleted_evidence_ids": [],
+                        "candidate_risk_tier_counts": {},
+                        "accepted_candidate_risk_tier_counts": {},
+                        "tiered_deleted_risks_by_reason": {},
+                        "version_boundary": {"replacement_count": 1},
+                        "answer_candidate_contract": {
+                            "enabled": mode
+                            == "safe_version_replace_guided_with_retry_shadow",
+                            "current_truth_count": 1
+                            if mode
+                            == "safe_version_replace_guided_with_retry_shadow"
+                            else 0,
+                            "must_include_term_count": 1
+                            if mode
+                            == "safe_version_replace_guided_with_retry_shadow"
+                            else 0,
+                            "forbidden_old_value_count": 1
+                            if mode
+                            == "safe_version_replace_guided_with_retry_shadow"
+                            else 0,
+                        },
+                    },
+                    "post_check_shadow": {
+                        "shadow_enabled": mode
+                        == "safe_version_replace_guided_with_retry_shadow",
+                        "needs_retry": False,
+                        "retry_reasons": [],
+                    },
+                }
+            )
+    metrics = {
+        "evaluation_level": "system_path_safe_version_governed",
+        "unique_case_count": 4,
+        "mode_count": 3,
+        "case_count": 12,
+        "repeat_count": 1,
+        "provider_error_count": 0,
+        "timeout_count": 0,
+        "checkpoint_input_count": 0,
+        "malformed_checkpoint_line_count": 0,
+        "real_llm_enabled": True,
+        "fake_provider_enabled": False,
+        "answer_rule_pass_rate": 100.0,
+        "memory_grounding_pass_rate": 100.0,
+        "forbidden_violation_rate": 0.0,
+        "mode_summaries": {
+            "safe_version_replace": {
+                "case_count": 4,
+                "answer_success_count": 3,
+                "grounding_success_count": 4,
+                "forbidden_case_count": 0,
+                "would_retry_count": 0,
+                "retry_reason_counts": {},
+                "answer_rule_pass_rate": replace_answer_rate,
+                "memory_grounding_pass_rate": 100.0,
+                "forbidden_violation_rate": 0.0,
+                "contract_generation_success_rate": 100.0,
+                "post_check_shadow_enabled_rate": 100.0,
+                "answer_candidate_contract_enabled_rate": 0.0,
+                "avg_total_token_count": 200.0,
+                "avg_latency_ms": 100.0,
+                "token_metrics_available": True,
+            },
+            "safe_version_replace_guided": {
+                "case_count": 4,
+                "answer_success_count": 3,
+                "grounding_success_count": 4,
+                "forbidden_case_count": 0,
+                "would_retry_count": 0,
+                "retry_reason_counts": {},
+                "answer_rule_pass_rate": guided_answer_rate,
+                "memory_grounding_pass_rate": 100.0,
+                "forbidden_violation_rate": 0.0,
+                "contract_generation_success_rate": 100.0,
+                "post_check_shadow_enabled_rate": 100.0,
+                "answer_candidate_contract_enabled_rate": 0.0,
+                "avg_total_token_count": 200.0,
+                "avg_latency_ms": 100.0,
+                "token_metrics_available": True,
+            },
+            "safe_version_replace_guided_with_retry_shadow": {
+                "case_count": 4,
+                "answer_success_count": 4,
+                "grounding_success_count": 4,
+                "forbidden_case_count": 0,
+                "would_retry_count": 1,
+                "retry_reason_counts": {"answer_choice_group_missing": 1},
+                "answer_rule_pass_rate": retry_shadow_answer_rate,
+                "memory_grounding_pass_rate": 100.0,
+                "forbidden_violation_rate": 0.0,
+                "contract_generation_success_rate": 100.0,
+                "post_check_shadow_enabled_rate": 100.0,
+                "answer_candidate_contract_enabled_rate": 100.0,
+                "avg_total_token_count": 200.0,
+                "avg_latency_ms": 100.0,
+                "token_metrics_available": True,
+            },
+        },
+    }
+    return {"cases": cases, "metrics": metrics}
+
+
 def test_system_path_safe_version_cli_fake_provider_writes_sanitized_report(
     tmp_path: Path,
 ) -> None:
@@ -458,15 +629,69 @@ def test_system_path_safe_version_cli_supports_guided_retry_shadow_mode(
         row["safe_version_contract"]["answer_candidate_contract"]["enabled"] is True
         for row in rows
     )
+
+
+def test_system_path_safe_version_cli_writes_answer_debug_only_when_requested(
+    tmp_path: Path,
+) -> None:
+    out_dir = tmp_path / "out"
+    debug_dir = out_dir / "answer_debug"
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "scripts/run_memory_system_path_safe_version_eval.py",
+            "--workspace",
+            str(tmp_path / "workspace"),
+            "--out-dir",
+            str(out_dir),
+            "--fake-provider",
+            "--balanced-small",
+            "--common-limit",
+            "1",
+            "--hard-limit",
+            "0",
+            "--modes",
+            "safe_version_replace_guided_with_retry_shadow",
+            "--answer-debug-dir",
+            str(debug_dir),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    payload = json.loads(
+        (out_dir / "system_path_safe_version_eval.json").read_text(encoding="utf-8")
+    )
+    markdown = (out_dir / "system_path_safe_version_eval.md").read_text(
+        encoding="utf-8"
+    )
+    _assert_report_is_private(payload, markdown)
+    debug_files = sorted(debug_dir.glob("*.json"))
+    assert len(debug_files) == len(payload["cases"])
+    debug_payload = json.loads(debug_files[0].read_text(encoding="utf-8"))
+    assert debug_payload["case_id"] == payload["cases"][0]["case_id"]
+    assert debug_payload["mode"] == "safe_version_replace_guided_with_retry_shadow"
+    assert debug_payload["repeat_index"] == 0
+    assert debug_payload["query"]
+    assert debug_payload["answer_text"]
+    assert debug_payload["safe_version_contract"]["answer_prompt_variant"] == "guided_retry_shadow"
+    assert debug_payload["post_check_shadow"]["shadow_enabled"] is True
+    assert "raw_answer" not in _walk_report_keys(payload)
+    debug_rows = [
+        json.loads(path.read_text(encoding="utf-8")) for path in debug_files
+    ]
     assert all(
         "current_truth_lines"
         not in row["safe_version_contract"]["answer_candidate_contract"]
-        for row in rows
+        for row in debug_rows
     )
     assert all(
         "must_include_terms"
         not in row["safe_version_contract"]["answer_candidate_contract"]
-        for row in rows
+        for row in debug_rows
     )
 
 
@@ -580,6 +805,179 @@ def test_p6o19_gate_writes_retry_shadow_decision(tmp_path: Path) -> None:
     assert decision["retry_shadow_would_retry_count"] == 1
     assert decision["retry_shadow_reason_counts"] == {"required_terms_missing": 1}
     assert "# P6o-19 Answer Candidate Retry Shadow" in markdown
+
+
+def test_p6o33_incremental_analysis_writes_uplift_and_failure_tables(
+    tmp_path: Path,
+) -> None:
+    report_json = tmp_path / "system_path_safe_version_eval.json"
+    out_dir = tmp_path / "analysis"
+    report_json.write_text(
+        json.dumps(
+            _p6o33_incremental_payload(
+                replace_answer_rate=50.0,
+                guided_answer_rate=75.0,
+                retry_shadow_answer_rate=100.0,
+            ),
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "scripts/analyze_memory_p6o33_incremental_eval.py",
+            "--report-json",
+            str(report_json),
+            "--out-dir",
+            str(out_dir),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    analysis = json.loads(
+        (out_dir / "p6o33_incremental_analysis.json").read_text(encoding="utf-8")
+    )
+    markdown = (out_dir / "p6o33_incremental_analysis.md").read_text(
+        encoding="utf-8"
+    )
+    assert analysis["gate_passed"] is True
+    assert analysis["target_reached"] is True
+    assert analysis["answer_delta_a_to_b_pp"] == 25.0
+    assert analysis["answer_delta_b_to_c_pp"] == 25.0
+    assert analysis["paired_comparison"]["b_to_c"]["wins"] == 1
+    assert analysis["paired_comparison"]["b_to_c"]["losses"] == 0
+    assert analysis["category_summaries"]["common"]["safe_version_replace"]["case_count"] == 2
+    assert analysis["failure_reason_counts"]["safe_version_replace"] == {
+        "missing_expected_answer_term": 2
+    }
+    assert "retry shadow 不是真实 retry" in markdown
+    assert "| safe_version_replace_guided_with_retry_shadow |" in markdown
+
+
+def test_p6o33_incremental_analysis_rejects_wrong_mode_set(tmp_path: Path) -> None:
+    report_json = tmp_path / "system_path_safe_version_eval.json"
+    payload = _p6o33_incremental_payload(
+        replace_answer_rate=50.0,
+        guided_answer_rate=75.0,
+        retry_shadow_answer_rate=100.0,
+    )
+    payload["metrics"]["mode_summaries"].pop("safe_version_replace")
+    report_json.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "scripts/analyze_memory_p6o33_incremental_eval.py",
+            "--report-json",
+            str(report_json),
+            "--out-dir",
+            str(tmp_path / "analysis"),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode != 0
+    assert "mode set must match P6o33 expected modes" in completed.stderr
+
+
+def test_p6o33_incremental_analysis_rejects_truncated_case_rows(
+    tmp_path: Path,
+) -> None:
+    report_json = tmp_path / "system_path_safe_version_eval.json"
+    payload = _p6o33_incremental_payload(
+        replace_answer_rate=50.0,
+        guided_answer_rate=75.0,
+        retry_shadow_answer_rate=100.0,
+    )
+    payload["cases"] = payload["cases"][:-1]
+    report_json.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "scripts/analyze_memory_p6o33_incremental_eval.py",
+            "--report-json",
+            str(report_json),
+            "--out-dir",
+            str(tmp_path / "analysis"),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode != 0
+    assert "report case rows must match metrics case_count" in completed.stderr
+
+
+def test_p6o33_incremental_analysis_rejects_unpaired_case_sets(
+    tmp_path: Path,
+) -> None:
+    report_json = tmp_path / "system_path_safe_version_eval.json"
+    payload = _p6o33_incremental_payload(
+        replace_answer_rate=50.0,
+        guided_answer_rate=75.0,
+        retry_shadow_answer_rate=100.0,
+    )
+    for row in payload["cases"]:
+        if row["mode"] == "safe_version_replace_guided_with_retry_shadow":
+            row["case_id"] = f"other-{row['case_index']}"
+            break
+    report_json.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "scripts/analyze_memory_p6o33_incremental_eval.py",
+            "--report-json",
+            str(report_json),
+            "--out-dir",
+            str(tmp_path / "analysis"),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode != 0
+    assert "paired mode case sets must match" in completed.stderr
+
+
+def test_system_path_safe_version_run_metadata_records_git_and_config_hash(
+    tmp_path: Path,
+) -> None:
+    config = tmp_path / "config.toml"
+    config.write_text("[agent]\nsystem_prompt = 'x'\n", encoding="utf-8")
+
+    import scripts.run_memory_system_path_safe_version_eval as cli
+
+    args = SimpleNamespace(
+        config=str(config),
+        enable_real_llm=True,
+        fake_provider=False,
+        persona_mode="work",
+        modes="safe_version_replace",
+        repeats=1,
+        case_pack="standard",
+        balanced_small=True,
+        common_limit=40,
+        hard_limit=40,
+        timeout_s=60.0,
+    )
+
+    metadata = cli._build_run_metadata(args, model="test-model")
+
+    assert metadata["git_commit"]
+    assert len(str(metadata["git_commit"])) == 40
+    assert metadata["config_hash"]
+    assert len(str(metadata["config_hash"])) == 64
 
 
 def test_p6o19_gate_rejects_infra_and_checkpoint_abnormalities(
