@@ -1,0 +1,157 @@
+{
+  "answer_length": 76,
+  "answer_rule_passed": true,
+  "answer_text": "能。NetworkX 实体图谱可以辅助第三路召回，而且实体图谱会把第三路召回和 source_ref 连起来，相当于给第三路召回补了一条可回源的线索链。",
+  "case_id": "common_graph_bridge_04",
+  "case_index": 34,
+  "category": "common_graph_bridge",
+  "completion_token_count": 252,
+  "failures": [],
+  "forbidden_contains_violation_count": 0,
+  "latency_ms": 3259,
+  "memory_grounding_passed": true,
+  "mode": "safe_version_replace_guided_with_retry_shadow",
+  "model": "deepseek-v4-flash",
+  "post_check_shadow": {
+    "allowed_evidence_included": true,
+    "answer_candidate_contract_enabled": true,
+    "answer_choice_group_missing": false,
+    "answerable_evidence_contract_ignored": false,
+    "conflict_evidence_included": false,
+    "dsml_tool_markup_in_final_answer": false,
+    "forbidden_boundary_included": false,
+    "forbidden_boundary_mentions": [],
+    "included_allowed_evidence_ids": [
+      "common_graph_bridge_04_target",
+      "common_graph_bridge_04_graph",
+      "common_graph_bridge_04_dup_a",
+      "common_graph_bridge_04_dup_b"
+    ],
+    "included_conflict_warning_ids": [],
+    "included_forbidden_boundary_ids": [],
+    "included_stale_warning_ids": [],
+    "insufficient_evidence_fallback_expected": false,
+    "insufficient_evidence_fallback_observed": false,
+    "language_requirement_failed": false,
+    "meta_action_final_answer": false,
+    "missing_likely_relevant_context_ids": [],
+    "needs_retry": false,
+    "production_safe_evidence_contract": true,
+    "required_terms_missing": false,
+    "retry_if_needed_blocked_reasons": [],
+    "retry_if_needed_eligible": false,
+    "retry_if_needed_reasons": [],
+    "retry_if_needed_shadow_enabled": true,
+    "retry_reasons": [],
+    "shadow_enabled": true,
+    "stale_evidence_included": false,
+    "tool_markup_in_final_answer": false
+  },
+  "prompt_token_count": 5648,
+  "provider_error": false,
+  "query": "图谱能辅助第三路召回吗？",
+  "repeat_index": 2,
+  "run_metadata": {
+    "balanced_small": true,
+    "case_pack": "standard",
+    "common_limit": 40,
+    "config_hash": "a688ec69aff2669f86b6f073d0430c4d7dcfc664de7691257bad399bbcfb9a38",
+    "fake_provider_enabled": false,
+    "git_commit": "0b5d296a7cfb8604df66183331140f218c51e2c2",
+    "hard_limit": 40,
+    "model": "deepseek-v4-flash",
+    "modes": "safe_version_replace_guided_with_retry_shadow",
+    "persona_mode": "work",
+    "real_llm_enabled": true,
+    "repeats": 3,
+    "timeout_s": 60.0
+  },
+  "safe_version_contract": {
+    "accepted_candidate_risk_tier_counts": {
+      "downgrade": 4
+    },
+    "active_version_ids": [
+      "common_graph_bridge_04_target",
+      "common_graph_bridge_04_graph",
+      "common_graph_bridge_04_dup_a",
+      "common_graph_bridge_04_dup_b"
+    ],
+    "allowed_evidence_ids": [
+      "common_graph_bridge_04_target",
+      "common_graph_bridge_04_graph",
+      "common_graph_bridge_04_dup_a",
+      "common_graph_bridge_04_dup_b"
+    ],
+    "answer_candidate_contract": {
+      "candidate_reason": "safe_version_guided_retry_shadow",
+      "current_truth_count": 4,
+      "enabled": true,
+      "forbidden_old_value_count": 1,
+      "language_requirement": "match_user_language",
+      "must_include_term_count": 4
+    },
+    "answer_guidance_enabled": true,
+    "answer_prompt_variant": "guided_retry_shadow",
+    "candidate_governance_mode": "tiered",
+    "candidate_risk_tier_counts": {
+      "delete": 1,
+      "downgrade": 4
+    },
+    "conflict_warning_ids": [],
+    "deleted_evidence_ids": [
+      "common_graph_bridge_04_old"
+    ],
+    "downgrade_ids": [
+      "common_graph_bridge_04_target",
+      "common_graph_bridge_04_graph",
+      "common_graph_bridge_04_dup_a",
+      "common_graph_bridge_04_dup_b"
+    ],
+    "forbidden_boundary_ids": [],
+    "insufficient_evidence_fallback": false,
+    "insufficient_evidence_ids": [],
+    "likely_relevant_evidence_ids": [
+      "common_graph_bridge_04_target",
+      "common_graph_bridge_04_graph",
+      "common_graph_bridge_04_dup_a",
+      "common_graph_bridge_04_dup_b"
+    ],
+    "production_safe": true,
+    "production_safe_evidence_contract": true,
+    "profile_name": "system_memory_safe_version_governed",
+    "requires_review_ids": [],
+    "stale_warning_ids": [
+      "common_graph_bridge_04_old"
+    ],
+    "tiered_deleted_risks_by_reason": {
+      "superseded_candidate": 1
+    },
+    "uses_fixture_answer_expectations": false,
+    "version_boundary": {
+      "active_leaf_count": 1,
+      "chain_count": 1,
+      "conflict_chain_count": 0,
+      "replacement_count": 1,
+      "rollback_candidate_count": 1,
+      "stale_recalled_count": 0,
+      "superseded_recalled_count": 0
+    }
+  },
+  "safe_version_metadata": {
+    "allowed_evidence_count": 4,
+    "answer_guidance_enabled": true,
+    "answer_prompt_variant": "guided_retry_shadow",
+    "contract_generation_success": true,
+    "deleted_evidence_count": 1,
+    "downgrade_count": 4,
+    "forbidden_boundary_count": 0,
+    "mode": "replace",
+    "replace_allowed": true,
+    "replace_applied": true,
+    "replacement_requested": true,
+    "requires_review_count": 0
+  },
+  "timeout": false,
+  "token_count": 5900,
+  "token_metrics_available": true
+}

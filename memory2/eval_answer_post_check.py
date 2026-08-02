@@ -30,6 +30,10 @@ class AnswerPostCheckShadow:
     dsml_tool_markup_in_final_answer: bool = False
     meta_action_final_answer: bool = False
     answerable_evidence_contract_ignored: bool = False
+    retry_if_needed_shadow_enabled: bool = False
+    retry_if_needed_eligible: bool = False
+    retry_if_needed_reasons: tuple[str, ...] = ()
+    retry_if_needed_blocked_reasons: tuple[str, ...] = ()
     raw_prompt: str = ""
     raw_answer: str = ""
 
@@ -66,6 +70,10 @@ def build_answer_post_check_shadow(
             dsml_tool_markup_in_final_answer=False,
             meta_action_final_answer=False,
             answerable_evidence_contract_ignored=False,
+            retry_if_needed_shadow_enabled=False,
+            retry_if_needed_eligible=False,
+            retry_if_needed_reasons=(),
+            retry_if_needed_blocked_reasons=(),
         )
 
     context_ids = _string_tuple(context_memory_ids)
@@ -99,6 +107,10 @@ def build_answer_post_check_shadow(
         candidate_enabled
         and "language_passed" in score_map
         and not bool(score_map.get("language_passed"))
+    )
+    forbidden_answer_term_found = (
+        candidate_enabled
+        and int(score_map.get("forbidden_contains_violation_count", 0) or 0) > 0
     )
 
     included_allowed = _intersection_in_order(context_ids, allowed)
@@ -140,6 +152,8 @@ def build_answer_post_check_shadow(
         retry_reasons.append("answer_choice_group_missing")
     if language_requirement_failed:
         retry_reasons.append("language_requirement_failed")
+    if forbidden_answer_term_found:
+        retry_reasons.append("forbidden_answer_term_found")
     if dsml_tool_markup_in_final_answer:
         retry_reasons.append("dsml_tool_markup_in_final_answer")
     if tool_markup_in_final_answer:
@@ -148,6 +162,37 @@ def build_answer_post_check_shadow(
         retry_reasons.append("meta_action_final_answer")
     if answerable_evidence_contract_ignored:
         retry_reasons.append("answerable_evidence_contract_ignored")
+
+    actionable_retry_reasons = {
+        "required_terms_missing",
+        "answer_choice_group_missing",
+        "language_requirement_failed",
+        "dsml_tool_markup_in_final_answer",
+        "tool_markup_in_final_answer",
+        "meta_action_final_answer",
+        "answerable_evidence_contract_ignored",
+    }
+    blocked_retry_reasons = {
+        "forbidden_answer_term_found",
+        "forbidden_boundary_included",
+        "forbidden_boundary_mentioned",
+        "missing_likely_relevant_context",
+        "stale_evidence_included",
+        "conflict_evidence_included",
+        "insufficient_evidence_fallback_missing",
+    }
+    retry_if_needed_reasons = tuple(
+        reason for reason in retry_reasons if reason in actionable_retry_reasons
+    )
+    retry_if_needed_blocked_reasons = tuple(
+        reason for reason in retry_reasons if reason in blocked_retry_reasons
+    )
+    retry_if_needed_shadow_enabled = candidate_enabled
+    retry_if_needed_eligible = (
+        retry_if_needed_shadow_enabled
+        and bool(retry_if_needed_reasons)
+        and not bool(retry_if_needed_blocked_reasons)
+    )
 
     return AnswerPostCheckShadow(
         shadow_enabled=True,
@@ -174,6 +219,10 @@ def build_answer_post_check_shadow(
         dsml_tool_markup_in_final_answer=dsml_tool_markup_in_final_answer,
         meta_action_final_answer=meta_action_final_answer,
         answerable_evidence_contract_ignored=answerable_evidence_contract_ignored,
+        retry_if_needed_shadow_enabled=retry_if_needed_shadow_enabled,
+        retry_if_needed_eligible=retry_if_needed_eligible,
+        retry_if_needed_reasons=retry_if_needed_reasons,
+        retry_if_needed_blocked_reasons=retry_if_needed_blocked_reasons,
     )
 
 
@@ -211,6 +260,12 @@ def answer_post_check_shadow_to_dict(
         "dsml_tool_markup_in_final_answer": shadow.dsml_tool_markup_in_final_answer,
         "meta_action_final_answer": shadow.meta_action_final_answer,
         "answerable_evidence_contract_ignored": shadow.answerable_evidence_contract_ignored,
+        "retry_if_needed_shadow_enabled": shadow.retry_if_needed_shadow_enabled,
+        "retry_if_needed_eligible": shadow.retry_if_needed_eligible,
+        "retry_if_needed_reasons": list(shadow.retry_if_needed_reasons),
+        "retry_if_needed_blocked_reasons": list(
+            shadow.retry_if_needed_blocked_reasons
+        ),
     }
 
 

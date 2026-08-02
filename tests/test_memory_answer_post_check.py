@@ -221,6 +221,79 @@ def test_post_check_retry_shadow_flags_plain_meta_action_without_scorer_dependen
     assert "answerable_evidence_contract_ignored" in payload["retry_reasons"]
 
 
+def test_post_check_retry_if_needed_marks_actionable_answer_misses() -> None:
+    shadow = build_answer_post_check_shadow(
+        "我先查一下。<｜｜DSML｜｜tool_calls><｜｜DSML｜｜invoke name=\"read_file\">",
+        {
+            "production_safe_evidence_contract": True,
+            "allowed_evidence_ids": ["m-current"],
+            "likely_relevant_evidence_ids": ["m-current"],
+            "insufficient_evidence_fallback": False,
+            "answer_candidate_contract": {
+                "enabled": True,
+                "current_truth_count": 1,
+                "must_include_term_count": 1,
+                "forbidden_old_value_count": 0,
+                "language_requirement": "match_user_language",
+            },
+            "answer_score": {
+                "expected_contains_miss_count": 1,
+                "expected_any_miss_count": 1,
+                "language_passed": True,
+                "forbidden_contains_violation_count": 0,
+            },
+        },
+        ["m-current"],
+    )
+
+    payload = answer_post_check_shadow_to_dict(shadow)
+    assert payload["retry_if_needed_shadow_enabled"] is True
+    assert payload["retry_if_needed_eligible"] is True
+    assert payload["retry_if_needed_reasons"] == [
+        "required_terms_missing",
+        "answer_choice_group_missing",
+        "dsml_tool_markup_in_final_answer",
+        "tool_markup_in_final_answer",
+        "meta_action_final_answer",
+        "answerable_evidence_contract_ignored",
+    ]
+    assert payload["retry_if_needed_blocked_reasons"] == []
+
+
+def test_post_check_retry_if_needed_blocks_forbidden_answer_term() -> None:
+    shadow = build_answer_post_check_shadow(
+        "用户旧偏好 unittest。",
+        {
+            "production_safe_evidence_contract": True,
+            "allowed_evidence_ids": ["m-current"],
+            "likely_relevant_evidence_ids": ["m-current"],
+            "insufficient_evidence_fallback": False,
+            "answer_candidate_contract": {
+                "enabled": True,
+                "current_truth_count": 1,
+                "must_include_term_count": 1,
+                "forbidden_old_value_count": 1,
+                "language_requirement": "match_user_language",
+            },
+            "answer_score": {
+                "expected_contains_miss_count": 0,
+                "expected_any_miss_count": 0,
+                "language_passed": True,
+                "forbidden_contains_violation_count": 1,
+            },
+        },
+        ["m-current"],
+    )
+
+    payload = answer_post_check_shadow_to_dict(shadow)
+    assert payload["retry_if_needed_shadow_enabled"] is True
+    assert payload["retry_if_needed_eligible"] is False
+    assert payload["retry_if_needed_reasons"] == []
+    assert payload["retry_if_needed_blocked_reasons"] == [
+        "forbidden_answer_term_found"
+    ]
+
+
 def test_post_check_does_not_mark_contract_ignored_without_current_truth() -> None:
     shadow = build_answer_post_check_shadow(
         "先查一下记忆文件。",

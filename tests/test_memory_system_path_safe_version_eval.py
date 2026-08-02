@@ -629,6 +629,43 @@ def test_system_path_safe_version_cli_supports_guided_retry_shadow_mode(
         row["safe_version_contract"]["answer_candidate_contract"]["enabled"] is True
         for row in rows
     )
+    for row in rows:
+        post = row["post_check_shadow"]
+        assert "retry_if_needed_shadow_enabled" in post
+        assert "retry_if_needed_eligible" in post
+        assert "retry_if_needed_reasons" in post
+        assert "retry_if_needed_blocked_reasons" in post
+        assert "raw_answer" not in str(post)
+        assert "raw_prompt" not in str(post)
+
+
+def test_system_path_safe_version_guided_retry_shadow_stays_single_call(
+    tmp_path: Path,
+) -> None:
+    from memory2.eval_quantitative_cases import build_quantitative_eval_cases
+    from memory2.eval_system_path_safe_version import run_system_path_safe_version_cases
+    from scripts.run_memory_system_path_safe_version_eval import (
+        ScriptedSystemPathProvider,
+    )
+
+    cases = build_quantitative_eval_cases("common", case_pack="standard", limit=1)
+    provider = ScriptedSystemPathProvider()
+
+    report = asyncio.run(
+        run_system_path_safe_version_cases(
+            cases,
+            tmp_path / "workspace",
+            provider,
+            modes=("safe_version_replace_guided_with_retry_shadow",),
+            model="fake-model",
+            repeats=1,
+        )
+    )
+
+    assert report.metrics["case_count"] == 1
+    assert len(provider.calls) == 1
+    assert report.cases[0]["post_check_shadow"]["retry_if_needed_shadow_enabled"] is True
+    assert report.cases[0]["post_check_shadow"]["retry_if_needed_eligible"] in {True, False}
 
 
 def test_system_path_safe_version_cli_writes_answer_debug_only_when_requested(

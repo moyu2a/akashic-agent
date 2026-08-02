@@ -588,6 +588,9 @@ async def _run_case_mode(
                 "expected_contains_miss_count": score.expected_contains_miss_count,
                 "expected_any_miss_count": score.expected_any_miss_count,
                 "language_passed": score.language_passed,
+                "forbidden_contains_violation_count": (
+                    score.forbidden_contains_violation_count
+                ),
             }
         post_check = answer_post_check_shadow_to_dict(
             build_answer_post_check_shadow(answer, answer_contract, context_ids)
