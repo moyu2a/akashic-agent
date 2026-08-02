@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import json
 import re
 import sqlite3
 from datetime import UTC, datetime
@@ -22,6 +23,8 @@ from agent.policies.shell_sandbox_runner import (
     DockerPodmanSandboxRunner,
     SandboxRunner,
 )
+from agent.policies.side_effect_payload_vault import MANAGED_SIDE_EFFECT_TOOLS
+from agent.policies.tool_approval_context import trusted_approval_from_runtime
 from agent.policies.tool_approval_decision import ToolApprovalDecision
 from agent.policies.tool_audit_ledger import (
     ToolAuditLedgerEvent,
@@ -35,6 +38,7 @@ from agent.policies.tool_approval_store import (
     ToolApprovalRequestRecord,
     ToolApprovalStore,
 )
+from agent.tool_hooks import ToolExecutionRequest, ToolExecutor
 from agent.plugins import Plugin
 from agent.prompting import is_context_frame
 
@@ -143,7 +147,9 @@ class KVCacheCommandModule:
 
         overall_prompt = sum(r[2] or 0 for r in rows)
         overall_hit = sum(r[3] or 0 for r in rows)
-        overall_pct = (overall_hit / overall_prompt * 100) if overall_prompt > 0 else 0.0
+        overall_pct = (
+            (overall_hit / overall_prompt * 100) if overall_prompt > 0 else 0.0
+        )
 
         lines = [
             f"⚡ KVCache · 最近 {len(rows)} 轮",
@@ -186,6 +192,7 @@ class ToolApprovalCommandModule:
         audit_ledger_store: ToolAuditLedgerStore | None = None,
         shell_sandbox_runner: SandboxRunner | None = None,
         task_execution_service: Any = None,
+        tool_registry: Any = None,
     ) -> None:
         self._plugin_name = plugin_name
         self._approval_store = approval_store
@@ -195,6 +202,7 @@ class ToolApprovalCommandModule:
         self._audit_ledger_store = audit_ledger_store
         self._shell_sandbox_runner = shell_sandbox_runner
         self._task_execution_service = task_execution_service
+        self._tool_registry = tool_registry
 
     async def run(self, frame) -> object:
         if _CTX_SLOT in frame.slots:
@@ -210,7 +218,7 @@ class ToolApprovalCommandModule:
         if command == "/prepare_tool":
             return self._handle_prepare(frame, state)
         if command == "/run_approved_tool":
-            return self._handle_run_approved(frame, state)
+            return await self._handle_run_approved(frame, state)
         if command == "/rollback_tool":
             return self._handle_rollback(frame, state)
         if command == "/tool_audit":
@@ -323,16 +331,13 @@ class ToolApprovalCommandModule:
         )
         return frame
 
-    def _handle_run_approved(self, frame, state: TurnState) -> object:
+    async def _handle_run_approved(self, frame, state: TurnState) -> object:
         approval_request_id = _approval_command_id(state.msg.content)
         runtime = self._managed_side_effect_runtime(approval_request_id)
         if runtime is None:
-            frame.slots[_CTX_SLOT] = _abort_ctx(
-                state,
-                "status: error\nreason: "
-                f"{self._managed_side_effect_unavailable_reason(approval_request_id)}",
+            return await self._handle_run_approved_deferred_tool(
+                frame, state, approval_request_id
             )
-            return frame
         result = runtime.apply(
             approval_request_id=approval_request_id,
             session_key=state.session_key,
@@ -346,6 +351,90 @@ class ToolApprovalCommandModule:
             approved_side_effect_lifecycle=self._side_effect_lifecycle(
                 approval_request_id
             ),
+        )
+        return frame
+
+    async def _handle_run_approved_deferred_tool(
+        self,
+        frame,
+        state: TurnState,
+        approval_request_id: str,
+    ) -> object:
+        record = self._approval_store.get_request(approval_request_id)
+        reason = self._approved_tool_unavailable_reason(record, state.session_key)
+        if reason:
+            frame.slots[_CTX_SLOT] = _abort_ctx(
+                state,
+                f"status: error\nreason: {reason}",
+            )
+            return frame
+        assert record is not None
+        assert self._side_effect_vault is not None
+        payload = self._side_effect_vault.get_deferred_tool_payload(approval_request_id)
+        if payload is None or not _payload_matches_approval_record(payload, record):
+            frame.slots[_CTX_SLOT] = _abort_ctx(
+                state,
+                "status: error\nreason: approved_tool_payload_unavailable",
+            )
+            return frame
+        registry = self._tool_registry
+        metadata_getter = getattr(registry, "get_invocation_metadata", None)
+        executor_getter = getattr(registry, "execute", None)
+        if not callable(metadata_getter) or not callable(executor_getter):
+            frame.slots[_CTX_SLOT] = _abort_ctx(
+                state,
+                "status: error\nreason: approved_tool_registry_unavailable",
+            )
+            return frame
+        metadata = cast(dict[str, object], metadata_getter(record.tool_name))
+        if not bool(metadata.get("registered")):
+            frame.slots[_CTX_SLOT] = _abort_ctx(
+                state,
+                "status: error\nreason: approved_tool_not_registered",
+            )
+            return frame
+        registry_risk = str(metadata.get("registry_risk") or "unknown")
+        if registry_risk != record.risk:
+            frame.slots[_CTX_SLOT] = _abort_ctx(
+                state,
+                "status: error\nreason: approved_tool_risk_mismatch",
+            )
+            return frame
+        trusted = trusted_approval_from_runtime(
+            approval_request_id=record.approval_request_id,
+            actor="status_command",
+            source="status_command",
+        )
+
+        async def invoke(tool_name: str, arguments: dict[str, Any]) -> object:
+            return await executor_getter(tool_name, arguments)
+
+        result = await ToolExecutor(
+            approval_runtime=self._approval_runtime(),
+            audit_ledger_store=self._audit_ledger_store,
+        ).execute(
+            ToolExecutionRequest(
+                call_id=record.request_id,
+                tool_name=record.tool_name,
+                arguments=dict(payload.arguments),
+                source=_tool_source_from_record(record.source),
+                session_key=record.session_key,
+                channel=record.channel,
+                chat_id=record.chat_id,
+                registered=True,
+                registry_risk=registry_risk,
+                registry_capabilities=_registry_capabilities(
+                    metadata.get("registry_capabilities")
+                ),
+                resource_roots=(str(self._workspace),) if self._workspace else (),
+                trusted_approval_context=trusted,
+            ),
+            invoke,
+        )
+        frame.slots[_CTX_SLOT] = _abort_ctx(
+            state,
+            _format_approved_tool_execution_result(result),
+            approval_lifecycle=result.approval_lifecycle,
         )
         return frame
 
@@ -382,9 +471,7 @@ class ToolApprovalCommandModule:
             self.__class__.__name__,
         )
         if self._audit_ledger_store is None:
-            frame.slots[_CTX_SLOT] = _abort_ctx(
-                state, "Tool audit ledger unavailable."
-            )
+            frame.slots[_CTX_SLOT] = _abort_ctx(state, "Tool audit ledger unavailable.")
             return frame
         query = _tool_audit_query_from_command(
             state.msg.content,
@@ -451,6 +538,25 @@ class ToolApprovalCommandModule:
         }:
             return "managed_side_effect_tool_unsupported"
         return "approved_side_effect_runtime_unavailable"
+
+    def _approved_tool_unavailable_reason(
+        self,
+        record: ToolApprovalRequestRecord | None,
+        session_key: str,
+    ) -> str:
+        if record is None:
+            return "approval_request_not_found"
+        if record.session_key != session_key:
+            return "approval_request_not_found"
+        if record.status != "approved":
+            return f"approval_status_{record.status}"
+        if record.tool_name in MANAGED_SIDE_EFFECT_TOOLS:
+            return "approved_side_effect_runtime_unavailable"
+        if record.risk != "write":
+            return "approved_tool_risk_unsupported"
+        if self._side_effect_vault is None:
+            return "approved_tool_payload_vault_unavailable"
+        return ""
 
     def _side_effect_lifecycle(
         self, approval_request_id: str
@@ -549,9 +655,7 @@ class StatusCommands(Plugin):
                 )
             )
             side_effect_store = ApprovedSideEffectStore(
-                ApprovedSideEffectStore.db_path_from_workspace(
-                    self.context.workspace
-                )
+                ApprovedSideEffectStore.db_path_from_workspace(self.context.workspace)
             )
             side_effect_vault = ToolApprovalRuntime.side_effect_vault_from_workspace(
                 self.context.workspace
@@ -580,6 +684,7 @@ class StatusCommands(Plugin):
                     audit_ledger_store=audit_ledger_store,
                     shell_sandbox_runner=DockerPodmanSandboxRunner.find_available(),
                     task_execution_service=task_execution_service,
+                    tool_registry=self.context.tool_registry,
                 )
             )
         return cast(
@@ -646,6 +751,73 @@ def _approval_expired(record: ToolApprovalRequestRecord, now: datetime) -> bool:
     if expires_at.tzinfo is None:
         expires_at = expires_at.replace(tzinfo=UTC)
     return expires_at <= now.astimezone(UTC)
+
+
+def _payload_matches_approval_record(
+    payload: Any,
+    record: ToolApprovalRequestRecord,
+) -> bool:
+    payload_record = getattr(payload, "record", None)
+    if payload_record is None:
+        return False
+    return (
+        getattr(payload_record, "approval_request_id", "") == record.approval_request_id
+        and getattr(payload_record, "request_id", "") == record.request_id
+        and getattr(payload_record, "session_key", "") == record.session_key
+        and getattr(payload_record, "tool_name", "") == record.tool_name
+        and getattr(payload_record, "approval_scope", "") == record.approval_scope
+        and getattr(payload_record, "args_hash", "") == record.args_hash
+    )
+
+
+def _registry_capabilities(value: object) -> frozenset[str]:
+    if isinstance(value, str):
+        return frozenset({value}) if value else frozenset()
+    if isinstance(value, (list, tuple, set, frozenset)):
+        return frozenset(item for item in value if isinstance(item, str) and item)
+    return frozenset()
+
+
+def _tool_source_from_record(value: str) -> str:
+    if value in {"passive", "proactive", "subagent"}:
+        return value
+    return "passive"
+
+
+def _format_approved_tool_execution_result(result: Any) -> str:
+    lines = [
+        f"status: {result.status}",
+        (
+            "message: approved tool execution completed"
+            if result.status == "success"
+            else "message: approved tool execution did not complete"
+        ),
+        f"invoker_reached: {str(result.invoker_reached).lower()}",
+        f"invoker_succeeded: {str(result.invoker_succeeded).lower()}",
+    ]
+    result_status = _safe_tool_result_status(result.output)
+    if result_status:
+        lines.append(f"tool_result_status: {result_status}")
+    return "\n".join(lines)
+
+
+def _safe_tool_result_status(output: object) -> str:
+    parsed: object
+    if isinstance(output, dict):
+        parsed = output
+    else:
+        try:
+            parsed = json.loads(str(output))
+        except TypeError, ValueError:
+            return ""
+    if not isinstance(parsed, dict):
+        return ""
+    value = parsed.get("status")
+    if not isinstance(value, str):
+        return ""
+    if not re.fullmatch(r"[A-Za-z0-9_.:-]{1,80}", value):
+        return ""
+    return value
 
 
 def _format_approval_record(record: ToolApprovalRequestRecord) -> str:
@@ -916,7 +1088,9 @@ def _format_memory_status_reply(messages: list[dict], last_consolidated: int) ->
     else:
         lines.append(f"上次整理到 {pending_user} 条用户消息之前。")
     if last_user_message:
-        lines.extend(["", "最后已整理的用户消息：", f"“{_preview_text(last_user_message)}”"])
+        lines.extend(
+            ["", "最后已整理的用户消息：", f"“{_preview_text(last_user_message)}”"]
+        )
     lines.extend(
         [
             "",

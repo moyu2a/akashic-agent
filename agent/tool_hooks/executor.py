@@ -284,7 +284,7 @@ class ToolExecutor:
                 )
                 approval_request_id = record.approval_request_id
                 expires_at = record.expires_at
-                self._approval_runtime.record_managed_side_effect_payload(
+                self._approval_runtime.record_deferred_tool_payload(
                     record,
                     arguments=final_arguments,
                 )

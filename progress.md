@@ -1,3 +1,36 @@
+## 2026-08-02 普通插件写工具审批恢复
+
+- User request: record the current issue, create a conservative plan, review/revise it, then execute.
+- Investigation:
+  - read `agent/tool_hooks/executor.py`;
+  - read `agent/policies/tool_approval_runtime.py`;
+  - read `agent/policies/tool_approval_store.py`;
+  - read `agent/policies/side_effect_payload_vault.py`;
+  - read `plugins/status_commands/plugin.py`;
+  - read approval/status command tests and content library plugin code.
+- Confirmed root cause:
+  - the ordinary plugin write approval request can be created and approved;
+  - raw arguments are not recoverable from approval DB by design;
+  - `/run_approved_tool` has no path for non-managed plugin write tools.
+- Plan reviewed and revised conservatively:
+  - keep `save_content_item` as `risk="write"`;
+  - persist raw approved write args only in private payload vault;
+  - execute only current-session, approved, non-managed `risk="write"` registered tools through `ToolExecutor` with trusted approval context;
+  - keep external API replay and destructive execution unsupported.
+- Implementation:
+  - extended `SideEffectPayloadVault` with deferred non-managed tool payload storage/readback while preserving managed file/shell defaults;
+  - added `ToolApprovalRuntime.record_deferred_tool_payload()` and made `ToolExecutor` call it for deferred approvals;
+  - extended `ToolApprovalCommandModule` with `tool_registry` and an approved non-managed write execution path under `/run_approved_tool`;
+  - added a regression test that defers, approves, and runs a fake `save_content_item` plugin write tool through status command.
+- Verification:
+  - RED test initially failed with `ToolApprovalCommandModule.__init__() got an unexpected keyword argument 'tool_registry'`;
+  - targeted test after implementation: `1 passed`;
+  - status command suite: `14 passed`;
+  - focused approval/content suite: `45 passed`;
+  - compileall over edited files: passed;
+  - black check over edited files: passed;
+  - `git diff --check`: passed.
+
 # Document RAG P10a Progress
 
 ## 2026-07-28 Memory P6o1 Governed Answer Contract Plan

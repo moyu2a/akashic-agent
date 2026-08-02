@@ -1,3 +1,16 @@
+## 2026-08-02 普通插件写工具审批恢复 Findings
+
+- `save_content_item` 已注册为 `risk="write"`，阻塞行为来自治理策略，不是插件未加载。
+- runtime 日志中的 `risk_strategy_write_requires_approval` 和 `invoker_reached=false` 说明真实工具没有进入 `ContentLibrary.save_content_item()`。
+- `ToolApprovalStore` 当前只持久化 `args_summary_json`，不会保存原始 URL/note/tags；这是正确的脱敏边界。
+- `ToolExecutor` 已支持带 `TrustedApprovalContext` 的 approved 普通工具消费和执行，但需要调用方提供原始参数、同一个 request id、同一个 session、同一个 tool、同一个 approval scope 和匹配的 args hash。
+- `SideEffectPayloadVault` 已有私有目录、0600 文件、hash 校验、非 symlink 读取/写入等安全基础，但当前限制为 `write_file/edit_file/shell`。
+- `plugins/status_commands/plugin.py` 的 `/run_approved_tool` 当前只路由受管 file/shell side-effect runtime；普通插件 write 工具返回 `managed_side_effect_tool_unsupported`。
+- `PluginContext` 已向插件提供 `tool_registry`，状态命令可以通过真实 registry 执行工具；这能让 content library 继续使用 runtime registry context 绑定 `channel/chat_id`，避免模型传 scope。
+- 保守实现应只开放普通非受管 `risk="write"` 工具恢复执行；`external-side-effect`、`destructive`、未注册工具、跨 session、payload 缺失、hash 不匹配继续拒绝。
+- 实现后，普通插件 write 工具恢复执行复用 `ToolExecutor`，因此 approval 会经历 `approved -> consumed -> executed/execution_failed`，而不是由 status command 绕过治理状态机直接调用工具。
+- 状态命令回复只暴露执行状态、invoker 状态和工具结果中的安全 `status` 标量，不回显工具原始 output，避免 content item 的 URL/note/tag 等内容从审批恢复命令中泄露。
+
 # Document RAG P10a Findings
 
 ## 2026-07-28 Tool Governance P4c/P5a Findings

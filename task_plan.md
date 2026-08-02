@@ -1,3 +1,61 @@
+## 2026-08-02 普通插件写工具审批恢复计划
+
+Goal: 修复 `save_content_item` 这类普通插件 `risk="write"` 工具在用户审批后无法真正执行的问题，同时保留工具治理边界。
+
+Current problem:
+
+- 用户发送 B 站链接后，模型正确调用 `save_content_item`。
+- `ToolExecutor` 按 `risk="write"` 延迟执行并创建 approval request，`invoker_reached=false`。
+- 用户再说“批准保存”只会触发模型再次调用工具并产生新的 pending approval，不会消费旧 approval。
+- `/approve_tool <approval_id>` 只改变审批状态；`/run_approved_tool <approval_id>` 当前只支持 `write_file/edit_file/shell` 的受管副作用运行时。
+- 审批表只保存脱敏 `args_summary_json`，不能也不应该从审批表恢复原始 URL、备注、标签。
+
+Root cause:
+
+- 普通非受管插件写工具缺少“私有原始参数保存 + 受信任状态命令恢复执行”的链路。
+- 现有 `ToolExecutor.consume_for_execution()` 已能在有 `TrustedApprovalContext` 且 request/tool/session/args_hash 匹配时执行普通工具，但没有 CLI/TUI 可用的恢复入口。
+
+Conservative route:
+
+1. 不把 `save_content_item` 降级为 `read-only`。
+2. 不把原始参数写入 approval DB 或 audit ledger。
+3. 复用私有 payload vault 保存待审批普通 write 工具参数。
+4. 扩展 `/run_approved_tool <approval_id>`：受管工具仍走原有 file/shell runtime；普通非受管 `risk="write"` 工具走受信任恢复执行。
+5. 外部副作用、destructive、未注册、跨 session、hash 不匹配、payload 缺失全部 fail closed。
+
+Tasks:
+
+1. Add RED tests for approved ordinary plugin write tool execution through status command - complete.
+2. Persist non-managed write approval payloads in private vault without leaking raw values to approval DB or command replies - complete.
+3. Execute approved non-managed write tools via `ToolExecutor` + `TrustedApprovalContext` + real `ToolRegistry.execute` - complete.
+4. Verify content-library save after approval path and focused governance regressions - complete.
+5. Record result and commit if verification passes - complete.
+
+Verification targets:
+
+- `tests/test_status_commands_approved_side_effects.py`
+- `tests/test_tool_executor_approval_workflow.py`
+- `tests/test_tool_approval_runtime.py`
+- `tests/test_content_library_plugin.py`
+- `compileall` for edited runtime/plugin files
+- `git diff --check`
+
+Current result:
+
+- Non-managed approved `risk="write"` plugin tools can now be executed through `/run_approved_tool <approval_id>`.
+- Managed file/shell tools still use their original side-effect runtimes.
+- External side-effect and destructive replay remain unsupported.
+- Raw plugin arguments are stored only in the private payload vault and are not written to approval DB or status command replies.
+
+Verification:
+
+- Targeted RED test failed before implementation with missing `tool_registry` status command support.
+- `tests/test_status_commands_approved_side_effects.py::test_run_approved_tool_executes_approved_non_managed_write_plugin_tool` -> passed after implementation.
+- `tests/test_tool_executor_approval_workflow.py tests/test_tool_approval_runtime.py tests/test_content_library_plugin.py tests/test_status_commands_approved_side_effects.py` -> `45 passed`.
+- `compileall` over edited files -> passed.
+- `black --check` over edited files -> passed.
+- `git diff --check` -> passed.
+
 # Document RAG P10a Intent Preload Plan
 
 ## 2026-07-28 Memory Tri Answer Contract Implementation Plan

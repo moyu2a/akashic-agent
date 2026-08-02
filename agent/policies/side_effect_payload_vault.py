@@ -57,7 +57,9 @@ class SideEffectPayloadVault:
             if stat.S_ISLNK(current_stat.st_mode):
                 raise ValueError("side-effect payload vault root contains symlink")
             if not stat.S_ISDIR(current_stat.st_mode):
-                raise ValueError("side-effect payload vault root contains non-directory")
+                raise ValueError(
+                    "side-effect payload vault root contains non-directory"
+                )
         return resolved_workspace / "tool_side_effects" / "payloads"
 
     def put_payload(
@@ -75,6 +77,68 @@ class SideEffectPayloadVault:
     ) -> SideEffectPayloadRecord:
         if tool_name not in MANAGED_SIDE_EFFECT_TOOLS:
             raise ValueError(f"unsupported managed side-effect tool: {tool_name}")
+        return self._put_payload(
+            approval_request_id=approval_request_id,
+            request_id=request_id,
+            session_key=session_key,
+            tool_name=tool_name,
+            approval_scope=approval_scope,
+            args_hash=args_hash,
+            arguments=arguments,
+            created_at=created_at,
+            expires_at=expires_at,
+        )
+
+    def put_deferred_tool_payload(
+        self,
+        *,
+        approval_request_id: str,
+        request_id: str,
+        session_key: str,
+        tool_name: str,
+        approval_scope: str,
+        args_hash: str,
+        arguments: dict[str, Any],
+        created_at: datetime,
+        expires_at: str,
+    ) -> SideEffectPayloadRecord:
+        if tool_name in MANAGED_SIDE_EFFECT_TOOLS:
+            return self.put_payload(
+                approval_request_id=approval_request_id,
+                request_id=request_id,
+                session_key=session_key,
+                tool_name=tool_name,
+                approval_scope=approval_scope,
+                args_hash=args_hash,
+                arguments=arguments,
+                created_at=created_at,
+                expires_at=expires_at,
+            )
+        return self._put_payload(
+            approval_request_id=approval_request_id,
+            request_id=request_id,
+            session_key=session_key,
+            tool_name=tool_name,
+            approval_scope=approval_scope,
+            args_hash=args_hash,
+            arguments=arguments,
+            created_at=created_at,
+            expires_at=expires_at,
+        )
+
+    def _put_payload(
+        self,
+        *,
+        approval_request_id: str,
+        request_id: str,
+        session_key: str,
+        tool_name: str,
+        approval_scope: str,
+        args_hash: str,
+        arguments: dict[str, Any],
+        created_at: datetime,
+        expires_at: str,
+    ) -> SideEffectPayloadRecord:
         if canonical_args_hash(arguments) != args_hash:
             raise ValueError("side-effect payload args hash mismatch")
         payload_path = self._payload_path(approval_request_id)
@@ -105,10 +169,20 @@ class SideEffectPayloadVault:
         return record
 
     def get_payload(self, approval_request_id: str) -> SideEffectPayload | None:
+        return self._get_payload(approval_request_id, managed_only=True)
+
+    def get_deferred_tool_payload(
+        self, approval_request_id: str
+    ) -> SideEffectPayload | None:
+        return self._get_payload(approval_request_id, managed_only=False)
+
+    def _get_payload(
+        self, approval_request_id: str, *, managed_only: bool
+    ) -> SideEffectPayload | None:
         path = self._payload_path(approval_request_id)
         try:
             raw = json.loads(self._read_private_file(path).decode("utf-8"))
-        except (OSError, ValueError):
+        except OSError, ValueError:
             return None
         if not isinstance(raw, dict):
             return None
@@ -119,7 +193,7 @@ class SideEffectPayloadVault:
         if canonical_args_hash(arguments) != args_hash:
             return None
         tool_name = str(raw.get("tool_name") or "")
-        if tool_name not in MANAGED_SIDE_EFFECT_TOOLS:
+        if managed_only and tool_name not in MANAGED_SIDE_EFFECT_TOOLS:
             return None
         record = SideEffectPayloadRecord(
             approval_request_id=str(raw.get("approval_request_id") or ""),
@@ -175,7 +249,9 @@ class SideEffectPayloadVault:
             if stat.S_ISLNK(cursor_stat.st_mode):
                 raise ValueError("side-effect payload vault root contains symlink")
             if not stat.S_ISDIR(cursor_stat.st_mode):
-                raise ValueError("side-effect payload vault root contains non-directory")
+                raise ValueError(
+                    "side-effect payload vault root contains non-directory"
+                )
             break
         for directory in reversed(missing):
             os.mkdir(directory, 0o700)

@@ -45,16 +45,18 @@ class ToolApprovalRuntime:
     @staticmethod
     def approval_db_path_from_workspace(workspace: str | Path) -> Path:
         path = (
-            Path(workspace).expanduser().resolve()
-            / "tool_approvals"
-            / "approvals.db"
+            Path(workspace).expanduser().resolve() / "tool_approvals" / "approvals.db"
         )
         path.parent.mkdir(parents=True, exist_ok=True)
         return path
 
     @staticmethod
-    def side_effect_vault_from_workspace(workspace: str | Path) -> SideEffectPayloadVault:
-        return SideEffectPayloadVault(SideEffectPayloadVault.root_for_workspace(workspace))
+    def side_effect_vault_from_workspace(
+        workspace: str | Path,
+    ) -> SideEffectPayloadVault:
+        return SideEffectPayloadVault(
+            SideEffectPayloadVault.root_for_workspace(workspace)
+        )
 
     @property
     def store(self) -> ToolApprovalStore:
@@ -187,6 +189,31 @@ class ToolApprovalRuntime:
         if record.tool_name not in MANAGED_SIDE_EFFECT_TOOLS:
             return
         self.side_effect_vault.put_payload(
+            approval_request_id=record.approval_request_id,
+            request_id=record.request_id,
+            session_key=record.session_key,
+            tool_name=record.tool_name,
+            approval_scope=record.approval_scope,
+            args_hash=record.args_hash,
+            arguments=dict(arguments),
+            created_at=self._now(),
+            expires_at=record.expires_at,
+        )
+
+    def record_deferred_tool_payload(
+        self,
+        record: ToolApprovalRequestRecord,
+        *,
+        arguments: Mapping[str, object],
+    ) -> None:
+        if self.side_effect_vault is None:
+            return
+        if record.tool_name in MANAGED_SIDE_EFFECT_TOOLS:
+            self.record_managed_side_effect_payload(record, arguments=arguments)
+            return
+        if record.risk != "write":
+            return
+        self.side_effect_vault.put_deferred_tool_payload(
             approval_request_id=record.approval_request_id,
             request_id=record.request_id,
             session_key=record.session_key,

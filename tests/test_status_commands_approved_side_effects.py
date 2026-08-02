@@ -20,6 +20,9 @@ from agent.policies.tool_audit_ledger import (
 )
 from agent.policies.tool_approval_runtime import ToolApprovalRuntime
 from agent.policies.tool_approval_store import ToolApprovalStore
+from agent.tool_hooks import ToolExecutionRequest, ToolExecutor
+from agent.tools.base import Tool
+from agent.tools.registry import ToolRegistry
 from bus.events import InboundMessage
 from plugins.status_commands.plugin import StatusCommands, ToolApprovalCommandModule
 
@@ -49,9 +52,34 @@ class RecordingSandboxRunner:
         )
 
 
+class RecordingPluginWriteTool(Tool):
+    name = "save_content_item"
+    description = "save a content item"
+    parameters = {
+        "type": "object",
+        "properties": {
+            "url": {"type": "string"},
+            "note": {"type": "string"},
+        },
+        "required": ["url"],
+    }
+
+    def __init__(self) -> None:
+        self.calls: list[dict[str, object]] = []
+
+    async def execute(self, **kwargs):
+        self.calls.append(dict(kwargs))
+        return json.dumps(
+            {"status": "created", "url": kwargs.get("url", "")},
+            ensure_ascii=False,
+        )
+
+
 def _approval_runtime(workspace: Path) -> ToolApprovalRuntime:
     return ToolApprovalRuntime(
-        ToolApprovalStore(ToolApprovalRuntime.approval_db_path_from_workspace(workspace)),
+        ToolApprovalStore(
+            ToolApprovalRuntime.approval_db_path_from_workspace(workspace)
+        ),
         side_effect_vault=SideEffectPayloadVault(
             SideEffectPayloadVault.root_for_workspace(workspace)
         ),
@@ -257,6 +285,81 @@ async def test_run_approved_tool_shell_uses_sandbox_runtime_without_raw_command(
 
 
 @pytest.mark.asyncio
+async def test_run_approved_tool_executes_approved_non_managed_write_plugin_tool(
+    tmp_path: Path,
+) -> None:
+    workspace = tmp_path
+    runtime = _approval_runtime(workspace)
+    registry = ToolRegistry()
+    tool = RecordingPluginWriteTool()
+    registry.register(tool, risk="write")
+    registry.set_context(channel="cli", chat_id="local", session_key="cli:local")
+    arguments = {
+        "url": "https://www.bilibili.com/video/BV1DEgZ6rE6y/",
+        "note": "raw-secret-content",
+    }
+    metadata = registry.get_invocation_metadata("save_content_item")
+
+    async def invoke(tool_name: str, args: dict[str, object]) -> object:
+        return await registry.execute(tool_name, args)
+
+    deferred = await ToolExecutor(approval_runtime=runtime).execute(
+        ToolExecutionRequest(
+            call_id="call-plugin-write",
+            tool_name="save_content_item",
+            arguments=arguments,
+            source="passive",
+            session_key="cli:local",
+            channel="cli",
+            chat_id="local",
+            registered=bool(metadata["registered"]),
+            registry_risk=str(metadata["registry_risk"]),
+            registry_capabilities=metadata["registry_capabilities"],
+        ),
+        invoke,
+    )
+    approval_id = json.loads(deferred.output)["approval_request"]["approval_request_id"]
+    runtime.store.approve_request(
+        approval_request_id=approval_id,
+        request_id="call-plugin-write",
+        session_key="cli:local",
+        tool_name="save_content_item",
+        approval_scope="tool_call",
+        args_hash=runtime.store.get_request(approval_id).args_hash,
+        actor="status_command",
+        now=runtime._now(),
+    )
+    module = ToolApprovalCommandModule(
+        "status_commands",
+        runtime.store,
+        workspace=workspace,
+        side_effect_store=ApprovedSideEffectStore(
+            ApprovedSideEffectStore.db_path_from_workspace(workspace)
+        ),
+        side_effect_vault=runtime.side_effect_vault,
+        tool_registry=registry,
+    )
+
+    ran = await _run_command(module, f"/run_approved_tool {approval_id}")
+
+    assert "created" in ran.abort_reply
+    assert tool.calls == [
+        {
+            "channel": "cli",
+            "chat_id": "local",
+            "session_key": "cli:local",
+            "url": "https://www.bilibili.com/video/BV1DEgZ6rE6y/",
+            "note": "raw-secret-content",
+        }
+    ]
+    assert runtime.store.get_request(approval_id).status == "executed"
+    assert "raw-secret-content" not in ran.abort_reply
+    assert b"raw-secret-content" not in (
+        ToolApprovalRuntime.approval_db_path_from_workspace(workspace).read_bytes()
+    )
+
+
+@pytest.mark.asyncio
 async def test_prepare_tool_shell_routes_to_sandbox_runtime_without_raw_command(
     tmp_path: Path,
 ) -> None:
@@ -455,7 +558,9 @@ async def test_tool_audit_command_never_prints_credential_prefix_metadata(
         audit_ledger_store=ledger,
     )
 
-    ctx = await _run_command(module, "/tool_audit tool write_file 5", session_key="cli:s")
+    ctx = await _run_command(
+        module, "/tool_audit tool write_file 5", session_key="cli:s"
+    )
     reply = ctx.abort_reply
 
     assert "approved_side_effect_preview_ready" in reply
