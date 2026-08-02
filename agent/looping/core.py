@@ -1,7 +1,7 @@
 import asyncio
 import logging
 import time
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import replace
 from datetime import datetime
 from typing import TYPE_CHECKING, TypeAlias, cast
@@ -99,7 +99,9 @@ def _item_content(item: InboundItem) -> str:
         event = item.event
         label = event.description or event.command or event.task_id
         return f"[后台 shell 完成] {label}"
-    return f"[后台任务完成] {item.event.label or item.event.status or item.event.job_id}"
+    return (
+        f"[后台任务完成] {item.event.label or item.event.status or item.event.job_id}"
+    )
 
 
 class AgentLoop:
@@ -230,8 +232,12 @@ class AgentLoop:
                     session_key=session_key,
                     channel=channel,
                     chat_id=chat_id,
-                    content_delta=content_delta if isinstance(content_delta, str) else "",
-                    thinking_delta=thinking_delta if isinstance(thinking_delta, str) else "",
+                    content_delta=(
+                        content_delta if isinstance(content_delta, str) else ""
+                    ),
+                    thinking_delta=(
+                        thinking_delta if isinstance(thinking_delta, str) else ""
+                    ),
                 )
             )
 
@@ -632,8 +638,9 @@ class AgentLoop:
         skip_post_memory: bool = False,
         stream_events: bool = False,
         disabled_tools: list[str] | None = None,
+        turn_metadata: Mapping[str, object] | None = None,
     ) -> str:
-        metadata: dict[str, object] = {}
+        metadata: dict[str, object] = dict(turn_metadata or {})
         if omit_user_turn:
             metadata["omit_user_turn"] = True
         if skip_post_memory:

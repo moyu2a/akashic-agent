@@ -86,6 +86,7 @@ async def test_soft_calls_process_direct_not_push_directly(
     assert call_kwargs.kwargs["chat_id"] == "123"
     assert call_kwargs.kwargs["skip_post_memory"] is True
     assert call_kwargs.kwargs["disabled_tools"] == ["message_push"]
+    assert call_kwargs.kwargs["turn_metadata"] == {"_scheduler_soft_job": True}
 
 
 async def test_soft_sends_ai_response_via_push(

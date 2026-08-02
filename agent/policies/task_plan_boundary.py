@@ -66,6 +66,8 @@ class TaskPlanAccessPolicy:
     name = "TaskPlanAccessPolicy"
 
     def build_plan(self, context: ToolAccessContext) -> ToolAccessPlan:
+        if context.turn_metadata.get("_scheduler_soft_job") is True:
+            return ToolAccessPlan()
         context = resolve_task_control_context(context)
         background_mode = context.turn_metadata.get("_task_control_background_mode")
         contract = context.turn_metadata.get("task_plan_contract")

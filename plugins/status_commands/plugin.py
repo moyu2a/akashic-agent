@@ -213,6 +213,8 @@ class ToolApprovalCommandModule:
             return self._handle_list(frame, state)
         if command == "/approve_tool":
             return self._handle_approve(frame, state)
+        if command == "/approve_last":
+            return await self._handle_approve_last(frame, state)
         if command == "/deny_tool":
             return self._handle_deny(frame, state)
         if command == "/prepare_tool":
@@ -277,6 +279,98 @@ class ToolApprovalCommandModule:
             ),
         )
         return frame
+
+    async def _handle_approve_last(self, frame, state: TurnState) -> object:
+        logger.info(
+            "[%s:%s] 命中命令: /approve_last",
+            self._plugin_name,
+            self.__class__.__name__,
+        )
+        pending = self._approval_store.list_pending_requests(
+            session_key=state.session_key,
+            now=_approval_now(),
+        )
+        if not pending:
+            frame.slots[_CTX_SLOT] = _abort_ctx(
+                state,
+                "status: not_found\nreason: pending_approval_not_found",
+            )
+            return frame
+        record = pending[-1]
+        unsupported_reason = self._approve_last_unsupported_reason(record)
+        if unsupported_reason:
+            frame.slots[_CTX_SLOT] = _abort_ctx(
+                state,
+                "\n".join(
+                    [
+                        "status: error",
+                        f"reason: {unsupported_reason}",
+                        f"id: {record.approval_request_id}",
+                        f"tool: {record.tool_name}",
+                        "next: use /approve_tool <id> then /run_approved_tool <id>",
+                    ]
+                ),
+            )
+            return frame
+        decision = self._approve_or_reject(
+            state=state,
+            approval_request_id=record.approval_request_id,
+            action="approve",
+        )
+        if decision.action != "approved":
+            frame.slots[_CTX_SLOT] = _abort_ctx(
+                state,
+                _format_approval_decision(decision),
+                approval_lifecycle=_approval_lifecycle_from_decisions(
+                    self._approval_store,
+                    [decision],
+                    actor="status_command",
+                ),
+            )
+            return frame
+        await self._handle_run_approved_deferred_tool(
+            frame,
+            state,
+            record.approval_request_id,
+        )
+        ctx = frame.slots.get(_CTX_SLOT)
+        if ctx is not None:
+            ctx.abort_reply = "\n".join(
+                [
+                    f"tool: {record.tool_name}",
+                    f"id: {record.approval_request_id}",
+                    ctx.abort_reply,
+                ]
+            )
+        return frame
+
+    def _approve_last_unsupported_reason(
+        self,
+        record: ToolApprovalRequestRecord,
+    ) -> str:
+        if record.tool_name in MANAGED_SIDE_EFFECT_TOOLS:
+            return "approve_last_unsupported_tool"
+        if record.risk != "write":
+            return "approve_last_unsupported_risk"
+        if self._side_effect_vault is None:
+            return "approve_last_payload_vault_unavailable"
+        payload = self._side_effect_vault.get_deferred_tool_payload(
+            record.approval_request_id
+        )
+        if payload is None or not _payload_matches_approval_record(payload, record):
+            return "approve_last_payload_unavailable"
+        registry = self._tool_registry
+        metadata_getter = getattr(registry, "get_invocation_metadata", None)
+        executor_getter = getattr(registry, "execute", None)
+        if not callable(metadata_getter) or not callable(executor_getter):
+            return "approve_last_tool_registry_unavailable"
+        metadata = cast(dict[str, object], metadata_getter(record.tool_name))
+        if not bool(metadata.get("registered")):
+            return "approve_last_tool_not_registered"
+        registry_risk = str(metadata.get("registry_risk") or "unknown")
+        if registry_risk != record.risk:
+            return "approve_last_tool_risk_mismatch"
+        return ""
 
     def _handle_deny(self, frame, state: TurnState) -> object:
         logger.info(

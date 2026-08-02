@@ -9,6 +9,7 @@ from agent.policies.task_plan_boundary import (
 )
 from agent.policies.tool_access import ToolAccessGateway
 from agent.policies.tool_access_types import ToolAccessContext
+from plugins.content_library.daily_review import build_daily_review_prompt
 
 
 def _ctx(
@@ -18,6 +19,7 @@ def _ctx(
     lru: set[str] | None = None,
     disabled: set[str] | None = None,
     capabilities: dict[str, frozenset[str]] | None = None,
+    metadata: dict[str, object] | None = None,
 ) -> ToolAccessContext:
     registered = {
         "tool_search",
@@ -53,7 +55,7 @@ def _ctx(
         ),
         lru_preloaded_tools=frozenset(lru or set()),
         disabled_tools=frozenset(disabled or set()),
-        turn_metadata={"has_active_task": has_active_task},
+        turn_metadata={"has_active_task": has_active_task, **(metadata or {})},
         registered_tools=frozenset(registered),
         tool_capabilities=tool_capabilities,
     )
@@ -174,9 +176,7 @@ def test_active_create_allows_optional_inspect() -> None:
         _ctx("制定一个三步计划", has_active_task=True)
     )
 
-    assert plan.visible_add == frozenset(
-        {"create_task_plan", "inspect_task_plan"}
-    )
+    assert plan.visible_add == frozenset({"create_task_plan", "inspect_task_plan"})
     assert plan.strict_capability_scope is True
 
 
@@ -242,9 +242,9 @@ def test_disabled_optional_retrieval_degrades_to_required_scope() -> None:
 
     assert gateway.compute_visible_names(ctx, plan) == {"create_task_plan"}
     assert plan.context_retrieval_tools == frozenset()
-    assert plan.policy_metadata["task_plan"][
-        "optional_capability_unavailable"
-    ] == ["memory.recall"]
+    assert plan.policy_metadata["task_plan"]["optional_capability_unavailable"] == [
+        "memory.recall"
+    ]
 
 
 def test_disabled_required_provider_fails_closed() -> None:
@@ -326,6 +326,20 @@ def test_trace_metadata_cannot_replace_typed_contract() -> None:
     assert tampered.task_plan_contract is plan.task_plan_contract
     assert tampered.task_plan_contract is not None
     assert tampered.task_plan_contract.action == "plan_create"
+
+
+def test_scheduler_soft_job_metadata_bypasses_task_plan_lockdown() -> None:
+    plan = TaskPlanAccessPolicy().build_plan(
+        _ctx(
+            build_daily_review_prompt(24),
+            metadata={"_scheduler_soft_job": True},
+        )
+    )
+
+    assert plan.reason == "no_tool_access_policy"
+    assert plan.tool_search_block == frozenset()
+    assert plan.execution_block == frozenset()
+    assert plan.task_plan_contract is None
 
 
 def test_inspect_scope_block_message_only_recommends_inspect() -> None:

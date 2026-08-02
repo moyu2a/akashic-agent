@@ -26,6 +26,7 @@ async def start_channels(
 
     ipc = IPCServerChannel(bus, config.channels.socket)
     await ipc.start()
+    push_tool.register_channel("cli", text=ipc.send)
     print(f"Agent 已启动  |  CLI 连接地址: {config.channels.socket}")
 
     tg_channel = None

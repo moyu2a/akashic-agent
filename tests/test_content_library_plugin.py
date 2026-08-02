@@ -4,12 +4,17 @@ import json
 import shutil
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
+from agent.lifecycle.types import TurnState
 from agent.plugins.manager import PluginManager
+from agent.plugins.context import PluginContext, PluginKVStore
 from agent.plugins.registry import plugin_registry
+from agent.tools.base import Tool
 from agent.tools.registry import ToolRegistry
+from bus.events import InboundMessage
 from bus.event_bus import EventBus
 
 
@@ -185,6 +190,123 @@ def test_daily_review_prompt_requires_push_safe_recent_items() -> None:
     assert "list_recent_content_items(hours=24, for_push=true)" in prompt
     assert "count=0" in prompt
     assert "不要调用 message_push" in prompt
+
+
+class RecordingScheduleTool(Tool):
+    name = "schedule"
+    description = "record schedule calls"
+    parameters = {
+        "type": "object",
+        "properties": {},
+    }
+
+    def __init__(self) -> None:
+        self.calls: list[dict[str, object]] = []
+
+    async def execute(self, **kwargs):
+        self.calls.append(dict(kwargs))
+        return "已注册定时任务 「content_daily_review」"
+
+
+async def _run_content_command(module, content: str):
+    msg = InboundMessage(
+        channel="cli",
+        sender="user",
+        chat_id="local",
+        content=content,
+        timestamp=datetime(2026, 8, 2, 21, 0, tzinfo=timezone.utc),
+    )
+    state = TurnState(msg=msg, session_key="cli:local", dispatch_outbound=True)
+    frame = SimpleNamespace(slots={}, input=state)
+    await module.run(frame)
+    ctx = frame.slots["session:ctx"]
+    assert ctx.abort is True
+    return ctx
+
+
+@pytest.mark.asyncio
+async def test_content_review_now_command_summarizes_recent_push_safe_items(
+    tmp_path: Path,
+) -> None:
+    from plugins.content_library.plugin import ContentLibrary
+
+    plugin = ContentLibrary()
+    plugin.context = PluginContext(
+        event_bus=EventBus(),
+        tool_registry=ToolRegistry(),
+        plugin_id="content_library",
+        plugin_dir=tmp_path / "plugins" / "content_library",
+        kv_store=PluginKVStore(tmp_path / "kv.json"),
+        workspace=tmp_path,
+    )
+    await plugin.initialize()
+    store = plugin._require_store()
+    store.save_item(
+        channel="cli",
+        chat_id="local",
+        url="https://www.bilibili.com/video/BV123/",
+        title="英雄联盟 TheShy 视频",
+        note="晚点看",
+        tags=["英雄联盟", "TheShy"],
+        captured_at=datetime.now(timezone.utc) - timedelta(hours=1),
+    )
+    module = plugin.before_turn_modules()[0]
+
+    ctx = await _run_content_command(module, "/content_review_now 24")
+
+    assert "最近 24 小时内容回顾" in ctx.abort_reply
+    assert "英雄联盟 TheShy 视频" in ctx.abort_reply
+    assert "bilibili" in ctx.abort_reply
+    assert "晚点看" in ctx.abort_reply
+    assert "https://bilibili.com/video/BV123" in ctx.abort_reply
+
+
+@pytest.mark.asyncio
+async def test_content_review_daily_command_registers_soft_schedule(
+    tmp_path: Path,
+) -> None:
+    from plugins.content_library.plugin import ContentLibrary
+
+    registry = ToolRegistry()
+    schedule = RecordingScheduleTool()
+    registry.register(schedule, risk="write")
+    registry.set_context(channel="cli", chat_id="local", session_key="cli:local")
+    plugin = ContentLibrary()
+    plugin.context = PluginContext(
+        event_bus=EventBus(),
+        tool_registry=registry,
+        plugin_id="content_library",
+        plugin_dir=tmp_path / "plugins" / "content_library",
+        kv_store=PluginKVStore(tmp_path / "kv.json"),
+        workspace=tmp_path,
+    )
+    await plugin.initialize()
+    module = plugin.before_turn_modules()[0]
+
+    ctx = await _run_content_command(module, "/content_review_daily 21:30")
+
+    assert "已注册定时任务" in ctx.abort_reply
+    assert schedule.calls == [
+        {
+            "tier": "soft",
+            "trigger": "every",
+            "when": "30 21 * * *",
+            "prompt": (
+                "这是个人内容收藏每日回顾任务。\n"
+                "必须先调用 list_recent_content_items(hours=24, for_push=true)。\n"
+                "如果返回 count=0，直接返回空文本，不要发送或编造内容。\n"
+                "如果有内容，只根据工具返回的事实生成简短中文摘要：按主题分组，"
+                "列出平台、标题、备注和链接；不要声称看过视频本体。\n"
+                "不要调用 message_push；当前任务由调度器负责发送最终文本。\n"
+                "不要因为本次摘要自动写入长期记忆。"
+            ),
+            "channel": "cli",
+            "chat_id": "local",
+            "timezone": "Asia/Shanghai",
+            "name": "content_daily_review",
+            "session_key": "cli:local",
+        }
+    ]
 
 
 @pytest.mark.asyncio

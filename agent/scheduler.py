@@ -491,6 +491,7 @@ class SchedulerService:
                 omit_user_turn=True,
                 skip_post_memory=True,
                 disabled_tools=["message_push"],
+                turn_metadata={"_scheduler_soft_job": True},
             )
             elapsed = time.monotonic() - t0
             self.tracker.record(elapsed)
@@ -508,7 +509,11 @@ class SchedulerService:
                 logger.warning(f"[scheduler] soft AI 返回空内容 {label!r}，跳过推送")
 
     def _get_agent_loop(self) -> Any:
-        loop = self._agent_loop_provider() if self._agent_loop_provider else self.agent_loop
+        loop = (
+            self._agent_loop_provider()
+            if self._agent_loop_provider
+            else self.agent_loop
+        )
         if loop is None:
             raise RuntimeError("scheduler soft job requires agent_loop")
         return loop

@@ -360,6 +360,128 @@ async def test_run_approved_tool_executes_approved_non_managed_write_plugin_tool
 
 
 @pytest.mark.asyncio
+async def test_approve_last_approves_and_executes_latest_plugin_write_tool(
+    tmp_path: Path,
+) -> None:
+    workspace = tmp_path
+    runtime = _approval_runtime(workspace)
+    registry = ToolRegistry()
+    tool = RecordingPluginWriteTool()
+    registry.register(tool, risk="write")
+    registry.set_context(channel="cli", chat_id="local", session_key="cli:local")
+    metadata = registry.get_invocation_metadata("save_content_item")
+
+    async def invoke(tool_name: str, args: dict[str, object]) -> object:
+        return await registry.execute(tool_name, args)
+
+    first = await ToolExecutor(approval_runtime=runtime).execute(
+        ToolExecutionRequest(
+            call_id="call-plugin-write-1",
+            tool_name="save_content_item",
+            arguments={
+                "url": "https://www.bilibili.com/video/BV111/",
+                "note": "first-secret-content",
+            },
+            source="passive",
+            session_key="cli:local",
+            channel="cli",
+            chat_id="local",
+            registered=bool(metadata["registered"]),
+            registry_risk=str(metadata["registry_risk"]),
+            registry_capabilities=metadata["registry_capabilities"],
+        ),
+        invoke,
+    )
+    second = await ToolExecutor(approval_runtime=runtime).execute(
+        ToolExecutionRequest(
+            call_id="call-plugin-write-2",
+            tool_name="save_content_item",
+            arguments={
+                "url": "https://www.bilibili.com/video/BV222/",
+                "note": "latest-secret-content",
+            },
+            source="passive",
+            session_key="cli:local",
+            channel="cli",
+            chat_id="local",
+            registered=bool(metadata["registered"]),
+            registry_risk=str(metadata["registry_risk"]),
+            registry_capabilities=metadata["registry_capabilities"],
+        ),
+        invoke,
+    )
+    first_id = json.loads(first.output)["approval_request"]["approval_request_id"]
+    second_id = json.loads(second.output)["approval_request"]["approval_request_id"]
+    module = ToolApprovalCommandModule(
+        "status_commands",
+        runtime.store,
+        workspace=workspace,
+        side_effect_store=ApprovedSideEffectStore(
+            ApprovedSideEffectStore.db_path_from_workspace(workspace)
+        ),
+        side_effect_vault=runtime.side_effect_vault,
+        tool_registry=registry,
+    )
+
+    ran = await _run_command(module, "/approve_last")
+
+    assert "save_content_item" in ran.abort_reply
+    assert "created" in ran.abort_reply
+    assert tool.calls == [
+        {
+            "channel": "cli",
+            "chat_id": "local",
+            "session_key": "cli:local",
+            "url": "https://www.bilibili.com/video/BV222/",
+            "note": "latest-secret-content",
+        }
+    ]
+    assert runtime.store.get_request(first_id).status == "pending"
+    assert runtime.store.get_request(second_id).status == "executed"
+    assert "latest-secret-content" not in ran.abort_reply
+
+
+@pytest.mark.asyncio
+async def test_approve_last_refuses_managed_file_write_without_raw_content(
+    tmp_path: Path,
+) -> None:
+    workspace = tmp_path
+    runtime = _approval_runtime(workspace)
+    record = runtime.record_defer_request(
+        request_id="call-file-write",
+        session_key="cli:local",
+        channel="cli",
+        chat_id="local",
+        source="passive",
+        tool_name="write_file",
+        risk="write",
+        approval_scope="tool_call",
+        policy_reason="risk_strategy_write_requires_approval",
+        arguments={"path": "notes.md", "content": "raw-secret-content"},
+    )
+    runtime.record_managed_side_effect_payload(
+        record, arguments={"path": "notes.md", "content": "raw-secret-content"}
+    )
+    module = ToolApprovalCommandModule(
+        "status_commands",
+        runtime.store,
+        workspace=workspace,
+        side_effect_store=ApprovedSideEffectStore(
+            ApprovedSideEffectStore.db_path_from_workspace(workspace)
+        ),
+        side_effect_vault=runtime.side_effect_vault,
+    )
+
+    ran = await _run_command(module, "/approve_last")
+
+    assert "approve_last_unsupported_tool" in ran.abort_reply
+    assert "/approve_tool" in ran.abort_reply
+    assert "/run_approved_tool" in ran.abort_reply
+    assert "raw-secret-content" not in ran.abort_reply
+    assert runtime.store.get_request(record.approval_request_id).status == "pending"
+
+
+@pytest.mark.asyncio
 async def test_prepare_tool_shell_routes_to_sandbox_runtime_without_raw_command(
     tmp_path: Path,
 ) -> None:

@@ -88,7 +88,9 @@ class IPCServerChannel:
             return
 
         if not hasattr(asyncio, "start_unix_server"):
-            raise RuntimeError("Unix sockets are unavailable on this platform; use a host:port endpoint instead.")
+            raise RuntimeError(
+                "Unix sockets are unavailable on this platform; use a host:port endpoint instead."
+            )
         Path(self._socket_path).unlink(missing_ok=True)
         self._server = await asyncio.start_unix_server(
             self._handle_connection,
@@ -108,6 +110,19 @@ class IPCServerChannel:
     def set_proactive_loop(self, proactive_loop: "ProactiveLoop") -> None:
         self._proactive_loop = proactive_loop
         logger.info("[cli] ProactiveLoop attached")
+
+    async def send(self, chat_id: str, message: str) -> None:
+        state = self._writers.get(chat_id)
+        if state is None or state.writer.is_closing():
+            raise RuntimeError(f"cli session not connected: {chat_id}")
+        payload = build_cli_outbound_payload(message, {})
+        data = (
+            encode_frame(payload)
+            if state.protocol == 2
+            else encode_legacy_line(payload)
+        )
+        state.writer.write(data)
+        await state.writer.drain()
 
     async def _handle_connection(
         self,
@@ -154,7 +169,9 @@ class IPCServerChannel:
                     except asyncio.IncompleteReadError:
                         break
                     except (ProtocolError, json.JSONDecodeError) as exc:
-                        logger.warning("[cli] protocol error session=%s: %s", chat_id, exc)
+                        logger.warning(
+                            "[cli] protocol error session=%s: %s", chat_id, exc
+                        )
                         break
                 if not data:
                     break
@@ -261,7 +278,9 @@ class IPCServerChannel:
         protocol: int,
     ) -> None:
         payload = {"type": "command_result", "ok": ok, "message": message}
-        writer.write(encode_frame(payload) if protocol == 2 else encode_legacy_line(payload))
+        writer.write(
+            encode_frame(payload) if protocol == 2 else encode_legacy_line(payload)
+        )
         await writer.drain()
 
     async def _on_response(self, msg: OutboundMessage) -> None:
@@ -272,6 +291,10 @@ class IPCServerChannel:
         if writer.is_closing():
             return
         payload = build_cli_outbound_payload(msg.content, msg.metadata or {})
-        data = encode_frame(payload) if state.protocol == 2 else encode_legacy_line(payload)
+        data = (
+            encode_frame(payload)
+            if state.protocol == 2
+            else encode_legacy_line(payload)
+        )
         writer.write(data)
         await writer.drain()

@@ -107,8 +107,7 @@ api_key = "test-key"
 
 [agent]
 system_prompt = "test"
-""".strip()
-        + "\n",
+""".strip() + "\n",
         encoding="utf-8",
     )
 
@@ -227,12 +226,12 @@ def test_init_workspace_creates_expected_assets(tmp_path):
     assert (workspace / "memory" / "consolidation_writes.db").exists()
     assert (workspace / "memory" / "journal").is_dir()
     assert (workspace / "memory" / "memory2.db").exists()
-    assert "Proactive Context" in (
-        workspace / "PROACTIVE_CONTEXT.md"
-    ).read_text(encoding="utf-8")
-    assert json.loads(
-        (workspace / "mcp_servers.json").read_text(encoding="utf-8")
-    ) == {"servers": {}}
+    assert "Proactive Context" in (workspace / "PROACTIVE_CONTEXT.md").read_text(
+        encoding="utf-8"
+    )
+    assert json.loads((workspace / "mcp_servers.json").read_text(encoding="utf-8")) == {
+        "servers": {}
+    }
     assert json.loads(
         (workspace / "proactive_sources.json").read_text(encoding="utf-8")
     ) == {"sources": []}
@@ -289,6 +288,9 @@ async def test_start_channels_wires_telegram_and_qq(monkeypatch, tmp_path):
 
         async def stop(self) -> None:
             starts.append("ipc.stop")
+
+        async def send(self, *args, **kwargs):
+            return None
 
     class _TelegramChannel:
         def __init__(self, **kwargs):
@@ -352,7 +354,9 @@ async def test_start_channels_wires_telegram_and_qq(monkeypatch, tmp_path):
     fake_qq_channel.QQChannel = _QQChannel  # type: ignore[attr-defined]
     fake_qqbot_channel.QQBotChannel = _QQBotChannel  # type: ignore[attr-defined]
     monkeypatch.setitem(sys.modules, "infra.channels.ipc_server", fake_ipc_server)
-    monkeypatch.setitem(sys.modules, "infra.channels.telegram_channel", fake_telegram_channel)
+    monkeypatch.setitem(
+        sys.modules, "infra.channels.telegram_channel", fake_telegram_channel
+    )
     monkeypatch.setitem(sys.modules, "infra.channels.qq_channel", fake_qq_channel)
     monkeypatch.setitem(sys.modules, "infra.channels.qqbot_channel", fake_qqbot_channel)
 
@@ -403,6 +407,7 @@ async def test_start_channels_wires_telegram_and_qq(monkeypatch, tmp_path):
     assert qqbot is not None
     assert starts == ["ipc", "telegram", "qq", "qqbot"]
     assert registrations == [
+        ("cli", ["text"]),
         ("telegram", ["file", "image", "stream_text", "text"]),
         ("qq", ["file", "image", "text"]),
         ("qqbot", ["stream_text", "text"]),
@@ -433,6 +438,9 @@ async def test_start_channels_skips_unfilled_optional_channels(monkeypatch, tmp_
         async def stop(self) -> None:
             starts.append("ipc.stop")
 
+        async def send(self, *args, **kwargs):
+            return None
+
     class _TelegramChannel:
         async def start(self) -> None:
             starts.append("telegram")
@@ -445,12 +453,16 @@ async def test_start_channels_skips_unfilled_optional_channels(monkeypatch, tmp_
     fake_telegram_channel.TelegramChannel = _TelegramChannel  # type: ignore[attr-defined]
     fake_qq_channel.QQChannel = _QQChannel  # type: ignore[attr-defined]
     monkeypatch.setitem(sys.modules, "infra.channels.ipc_server", fake_ipc_server)
-    monkeypatch.setitem(sys.modules, "infra.channels.telegram_channel", fake_telegram_channel)
+    monkeypatch.setitem(
+        sys.modules, "infra.channels.telegram_channel", fake_telegram_channel
+    )
     monkeypatch.setitem(sys.modules, "infra.channels.qq_channel", fake_qq_channel)
+
+    registrations: list[tuple[str, list[str]]] = []
 
     class _PushTool:
         def register_channel(self, name: str, **kwargs) -> None:
-            raise AssertionError(f"unexpected channel registration: {name}")
+            registrations.append((name, sorted(kwargs)))
 
     config = Config(
         provider="openai",
@@ -481,3 +493,4 @@ async def test_start_channels_skips_unfilled_optional_channels(monkeypatch, tmp_
     assert qq is None
     assert qqbot is None
     assert starts == ["ipc"]
+    assert registrations == [("cli", ["text"])]

@@ -126,6 +126,27 @@ Agent 根据电量模型自适应调整轮询频率——你刚聊完时不烦�
 
 见 [Proactive 配置指南](./_handbook/proactive-guide.md)。
 
+## 个人内容收藏 Demo
+
+这是“个人 AI 伙伴”的一个小场景：你把 B 站/小红书/抖音内容链接发给 agent，它会通过 `save_content_item` 记录标题、来源、备注和兴趣标签；写入类工具需要审批，推荐在本地 CLI 使用 `/approve_last` 批准最近一次内容保存。
+
+之后可以直接问：
+
+```text
+我之前收藏过哪些装修视频？
+我最近保存了哪些 B 站内容？
+我收藏过哪些英雄联盟 / AI / 游戏内容？
+```
+
+也可以使用本地回顾命令：
+
+```text
+/content_review_now 24
+/content_review_daily 21:30
+```
+
+前者立即回顾最近 24 小时保存的内容；后者注册每日 21:30 的 soft schedule，触发时调用 `list_recent_content_items(..., for_push=true)`，再通过本地 CLI 推送摘要。这个 demo 复用记忆、工具治理、调度器和 `message_push`，业务逻辑保留在 `content_library` 插件里，不绑定主循环。
+
 ## 记忆系统
 
 对话通过 **consolidation** 自动提取为结构化事实：HISTORY.md（时间线事件） + PENDING.md（待归档缓冲） + RECENT_CONTEXT.md（近期上下文摘要）。**Optimizer** 定时将 PENDING 归档到 MEMORY.md——中间隔一层是为了保护 prompt cache（MEMORY.md 全文注入 system prompt，高频修改会破坏缓存）。同时 `memory2.db`（向量层）提供语义检索。

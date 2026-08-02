@@ -88,7 +88,9 @@ def _writer(writes: list[bytes]):
 
 
 class _Proc:
-    def __init__(self, stdout_lines: list[bytes], stderr_lines: list[bytes] | None = None) -> None:
+    def __init__(
+        self, stdout_lines: list[bytes], stderr_lines: list[bytes] | None = None
+    ) -> None:
         self.stdin = _Pipe()
         self.stdout = _Pipe(stdout_lines)
         self.stderr = _Pipe(stderr_lines)
@@ -108,7 +110,9 @@ def _as_text(value: str | ToolResult) -> str:
 
 
 @pytest.mark.asyncio
-async def test_filesystem_tools_cover_core_paths(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
+async def test_filesystem_tools_cover_core_paths(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+):
     base = tmp_path / "base"
     base.mkdir()
     text_file = base / "a.txt"
@@ -170,12 +174,15 @@ async def test_filesystem_tools_cover_core_paths(monkeypatch: pytest.MonkeyPatch
     # 验证行号前缀格式（改动九）
     full_content = await reader.execute("a.txt")
     full_content = _as_text(full_content)
-    assert "     1\u2192line1" in full_content, "read_file 应输出 '     1→line1' 格式的行号前缀"
+    assert (
+        "     1\u2192line1" in full_content
+    ), "read_file 应输出 '     1→line1' 格式的行号前缀"
     assert "     2\u2192line2" in full_content
     assert "     3\u2192line3" in full_content
 
     # 验证字节截断后提示语包含 limit 分页引导
     from agent.tools import filesystem as _fs_mod
+
     orig_max_bytes = _fs_mod._READ_MAX_BYTES
     _fs_mod._READ_MAX_BYTES = 25  # 强制触发普通字节截断，但不触发首行超长分支
     truncated = await reader.execute("a.txt")
@@ -228,7 +235,9 @@ async def test_filesystem_tools_cover_core_paths(monkeypatch: pytest.MonkeyPatch
 
     def _guard_read_bytes(self: Path):
         if self == text_no_read_bytes:
-            raise AssertionError("text path should stream via open(), not Path.read_bytes()")
+            raise AssertionError(
+                "text path should stream via open(), not Path.read_bytes()"
+            )
         return orig_read_bytes(self)
 
     monkeypatch.setattr(Path, "read_bytes", _guard_read_bytes)
@@ -419,7 +428,7 @@ async def test_ipc_server_channel_covers_connection_command_and_response(
             b'{"content":"hello"}\n',
             b'{"type":"command","command":"noop"}\n',
             b'{"type":"command","command":"unknown"}\n',
-            b'not json\n',
+            b"not json\n",
         ]
     )
     writes: list[bytes] = []
@@ -444,7 +453,9 @@ async def test_ipc_server_channel_covers_connection_command_and_response(
     await channel._on_response(msg)
     chat_id = next(iter(channel._writers.keys()), None)
     if chat_id:
-        await channel._on_response(OutboundMessage(channel="cli", chat_id=chat_id, content="hi"))
+        await channel._on_response(
+            OutboundMessage(channel="cli", chat_id=chat_id, content="hi")
+        )
 
 
 @pytest.mark.asyncio
@@ -545,9 +556,7 @@ async def test_ipc_server_omits_overlong_v2_request_id_metadata() -> None:
     reader = _FrameReader(
         [
             encode_frame(build_hello_payload("client-a", "default")),
-            encode_frame(
-                {"type": "user", "request_id": "a" * 33, "content": "hello"}
-            ),
+            encode_frame({"type": "user", "request_id": "a" * 33, "content": "hello"}),
         ]
     )
 
@@ -571,7 +580,9 @@ async def test_ipc_server_omits_non_string_v2_request_id_metadata(
     reader = _FrameReader(
         [
             encode_frame(build_hello_payload("client-a", "default")),
-            encode_frame({"type": "user", "request_id": request_id, "content": "hello"}),
+            encode_frame(
+                {"type": "user", "request_id": request_id, "content": "hello"}
+            ),
         ]
     )
 
@@ -675,9 +686,7 @@ async def test_ipc_server_legacy_outbound_projects_large_tool_chain() -> None:
             chat_id="cli-legacy",
             content="answer",
             metadata={
-                "tool_chain": [
-                    {"calls": [{"name": "shell", "result": "R" * 100000}]}
-                ]
+                "tool_chain": [{"calls": [{"name": "shell", "result": "R" * 100000}]}]
             },
         )
     )
@@ -685,6 +694,33 @@ async def test_ipc_server_legacy_outbound_projects_large_tool_chain() -> None:
     assert payload["metadata"]["tool_summary"]["names"] == ["shell"]
     assert "tool_chain" not in payload["metadata"]
     assert len(writes[0]) < 64 * 1024
+
+
+@pytest.mark.asyncio
+async def test_ipc_server_send_writes_text_to_connected_cli() -> None:
+    bus = MessageBus()
+    channel = IPCServerChannel(bus, "/tmp/unused.sock", None)
+    writes: list[bytes] = []
+    writer = _writer(writes)
+    channel._writers["cli-client-a-default"] = _ClientState(
+        writer=cast(asyncio.StreamWriter, writer),
+        protocol=2,
+    )
+
+    await channel.send("cli-client-a-default", "daily review")
+
+    decoded = await read_frame(_FrameReader(writes))  # type: ignore[arg-type]
+    assert decoded["type"] == "assistant"
+    assert decoded["content"] == "daily review"
+
+
+@pytest.mark.asyncio
+async def test_ipc_server_send_fails_for_disconnected_cli() -> None:
+    bus = MessageBus()
+    channel = IPCServerChannel(bus, "/tmp/unused.sock", None)
+
+    with pytest.raises(RuntimeError, match="cli session not connected"):
+        await channel.send("missing-chat", "daily review")
 
 
 @pytest.mark.asyncio
@@ -696,12 +732,16 @@ async def test_ipc_server_uses_tcp_for_explicit_host_port_on_all_platforms(
 
     server = SimpleNamespace(close=MagicMock(), wait_closed=AsyncMock())
     start_server = AsyncMock(return_value=server)
-    start_unix_server = AsyncMock(side_effect=AssertionError("explicit TCP endpoint should not use unix sockets"))
+    start_unix_server = AsyncMock(
+        side_effect=AssertionError("explicit TCP endpoint should not use unix sockets")
+    )
     chmod = MagicMock()
 
     monkeypatch.setattr("infra.channels.ipc_server.asyncio.start_server", start_server)
     if hasattr(asyncio, "start_unix_server"):
-        monkeypatch.setattr("infra.channels.ipc_server.asyncio.start_unix_server", start_unix_server)
+        monkeypatch.setattr(
+            "infra.channels.ipc_server.asyncio.start_unix_server", start_unix_server
+        )
     monkeypatch.setattr("infra.channels.ipc_server.os.chmod", chmod)
 
     await channel.start()
@@ -735,11 +775,7 @@ async def test_ipc_v2_large_response_survives_roundtrip(tmp_path: Path) -> None:
                 content="answer",
                 metadata={
                     "tool_chain": [
-                        {
-                            "calls": [
-                                {"name": "read_file", "result": "R" * 200000}
-                            ]
-                        }
+                        {"calls": [{"name": "read_file", "result": "R" * 200000}]}
                     ]
                 },
             )
@@ -791,12 +827,14 @@ async def test_mcp_client_and_loop_factory_cover_core_paths(
             b'{"jsonrpc":"2.0","id":1,"result":{}}\n',
             b'{"jsonrpc":"2.0","method":"note"}\n',
             b'{"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"tool1","description":"desc","inputSchema":{"type":"object"}}]}}\n',
-            b'not json\n',
+            b"not json\n",
             b'{"jsonrpc":"2.0","id":3,"result":{"content":[{"text":"ok"}]}}\n',
         ],
         [b"warn\n", b""],
     )
-    monkeypatch.setattr("agent.mcp.client.asyncio.create_subprocess_exec", AsyncMock(return_value=proc))
+    monkeypatch.setattr(
+        "agent.mcp.client.asyncio.create_subprocess_exec", AsyncMock(return_value=proc)
+    )
     client = McpClient("docs", ["python", str(script)], env={"X": "1"})
     infos = await client.connect()
     assert infos[0].name == "tool1"
@@ -806,7 +844,9 @@ async def test_mcp_client_and_loop_factory_cover_core_paths(
     assert proc.terminated is True
 
     proc = _Proc([b""])
-    monkeypatch.setattr("agent.mcp.client.asyncio.create_subprocess_exec", AsyncMock(return_value=proc))
+    monkeypatch.setattr(
+        "agent.mcp.client.asyncio.create_subprocess_exec", AsyncMock(return_value=proc)
+    )
     client = McpClient("docs", ["python", str(script)])
     client._process = proc
     with pytest.raises(ConnectionError):
