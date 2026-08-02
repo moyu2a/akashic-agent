@@ -490,6 +490,33 @@ Goal: turn the approved LA-002 design into a complete, TDD-oriented, file-level 
 4. Self-review spec coverage, placeholders, and type consistency - complete
 5. Run plan checks and commit the approved design plus implementation plan - complete
 
+## 2026-07-16 Memory Optimization Documentation
+
+Goal: create a first-class `my_md` topic for memory-system optimization, linked from existing architecture, interview, and governance docs.
+
+1. Inspect existing `my_md` directory conventions and memory docs - complete
+2. Create `my_md/memory_optimization/` README, roadmap, metrics, and governance design docs - complete
+3. Link the new topic from root README, architecture README, memory architecture, interview architecture, and governance evolution docs - complete
+4. Run markdown/diff checks - complete
+
+## 2026-07-16 Memory Plugin Experiment Roadmap Documentation
+
+Goal: preserve this session's memory-plugin extension design so future sessions can continue from the documented switchable experiment plan.
+
+1. Recover interrupted-session context and current memory optimization docs - complete
+2. Add the experiment roadmap doc for version chains, value scoring, tri-retrieval, sleep consolidation, provenance, and data switches - complete
+3. Update indexes, roadmap, metrics, governance design, and domain evolution docs - complete
+4. Run markdown/diff checks - complete
+
+## 2026-07-20 Memory Real LLM Evaluation Documentation
+
+Goal: record the phase6k real LLM core matrix and keep the evidence boundary explicit.
+
+1. Summarize the real provider run, checkpoint resume flow, and target-metric projection - complete
+2. Create a dedicated memory evaluation results document under `my_md/memory_optimization/` - complete
+3. Update roadmap, metrics, governance, progress, findings, and task-plan records with the measured boundary - complete
+4. Keep the raw `/tmp` reports referenced but not wholesale promoted into the repository - complete
+
 ## LA-002 Task 10 Verification and Documentation
 
 Goal: verify the reviewed LA-002 implementation end to end with an isolated Agent, preserve exact evidence, update facts-only documentation, and commit only Task 10 verification/documentation files.

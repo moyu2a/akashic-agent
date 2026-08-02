@@ -8,6 +8,7 @@
 - [architecture/](./architecture/): 项目架构、被动链路、记忆/工具/插件、主动链路。
 - [interview/](./interview/): 求职表达、模块设计模拟面试问答。
 - [rag/](./rag/): Document RAG、GraphRAG、LLM Wiki、LoRA/RAG 延伸计划。
+- [memory_optimization/](./memory_optimization/): 记忆系统优化路线、质量指标和治理设计。
 - [local_agent/](./local_agent/): 本地个人数字员工 / 本地开发工作台 Agent 的产品和架构演进路线。
 - [test_docs/](./test_docs/): 项目分链路测试方案、自动评估集、测试记录和回归清单。
 - [governance/](./governance/): 统一管理问题、演进、修复路线、设计决策和 STAR 复盘。
@@ -33,6 +34,10 @@
 - [rag/17-document-rag-p7-tools-plan.md](./rag/17-document-rag-p7-tools-plan.md): Document RAG 工具接入计划。
 - [rag/18-document-rag-p9-citation-plan.md](./rag/18-document-rag-p9-citation-plan.md): Document RAG 回答引用规则实现计划。
 - [rag/19-document-rag-p10-intent-preload-plan.md](./rag/19-document-rag-p10-intent-preload-plan.md): Document RAG 强文档意图 turn-local 工具预加载计划。
+- [memory_optimization/01-memory-optimization-roadmap.md](./memory_optimization/01-memory-optimization-roadmap.md): 记忆系统优化总路线，记录写入门控、质量评分、检索重排、冲突检测和长期卫生方向。
+- [memory_optimization/02-memory-quality-metrics.md](./memory_optimization/02-memory-quality-metrics.md): 记忆质量指标清单，区分现有可测、加埋点可测和需要评测集才能测的指标。
+- [memory_optimization/03-memory-governance-design.md](./memory_optimization/03-memory-governance-design.md): 记忆治理设计草案，覆盖写入门控、质量评分、冲突检测、重排和生命周期。
+- [memory_optimization/04-memory-plugin-experiment-roadmap.md](./memory_optimization/04-memory-plugin-experiment-roadmap.md): memory 插件实验扩展路线，覆盖版本链、信息价值评分、三路召回、睡眠巩固、层级溯源和对比数据开关。
 - [local_agent/01-local-dev-workbench-agent-roadmap.md](./local_agent/01-local-dev-workbench-agent-roadmap.md): 本地开发工作台 Agent 演进路线，记录当前底座能力、能力缺口、建设优先级和面试表达。
 - [local_agent/02-task-plan-first-phase-design.md](./local_agent/02-task-plan-first-phase-design.md): TaskPlan 第一阶段、工具边界、completion 和真实 CLI smoke 记录。
 - [local_agent/03-task-plan-recovery-execution-design.md](./local_agent/03-task-plan-recovery-execution-design.md): LA-002 可恢复、幂等、受控的单步骤执行编排设计。

@@ -305,6 +305,8 @@ engine = ""
 记忆系统把 agent 的上下文分成短期 session history、可读可控的 markdown memory 和可语义召回的 vector memory；对话前通过 retrieval 把相关记忆注入 prompt，对话后通过 consolidation 提取值得长期保存的信息，先进入 PENDING/HISTORY 等缓冲，再由 memory optimizer 归档到长期记忆，兼顾记忆质量、可控性和 prompt cache 稳定性。
 ```
 
+后续优化路线、可测指标、写入门控、检索重排和生命周期治理，统一记录在 [memory_optimization](../memory_optimization/README.md) 专题目录。
+
 ## Tool System
 
 关键文件：
@@ -751,6 +753,31 @@ plugins/*/plugin.py
 
 - 安全治理和主工具逻辑解耦。
 - 横切逻辑不用写进每个工具。
+
+当前安全边界：
+
+- ToolHook 能在工具执行前做 deny 或 rewrite，也能在执行后记录 trace。
+- `shell_safety` 主要阻止交互式命令、可能等待密码的 sudo、缺少非交互参数的包管理写操作。
+- `shell_restore` 能把显式 `rm` 改写为 `mv` 到 restore 目录。
+- 这些能力适合治理常见误操作和交互卡死，但不等于完整 shell 行为安全；`echo a | xargs rm file.txt`、`python -c "import os; os.remove(...)"` 这类语义绕过不能靠简单 token/字符串规则可靠阻断。
+
+后续工具安全治理方向：
+
+```text
+ToolExecutor
+  -> ToolInvocationPolicyEngine
+  -> ResourcePolicy(tool + arguments + scope)
+  -> allow / deny / require_approval / sandbox
+  -> ToolAuditLedger
+  -> ToolRegistry.execute()
+```
+
+第一阶段应先补四个模块边界：
+
+- `ToolInvocationPolicyEngine`：统一一次工具调用的安全裁决。
+- `ResourcePolicy`：检查 path/url/command/code 等参数是否越权或危险。
+- workspace / approval / deny 默认策略：主 Agent 默认只能影响受控资源，副作用进入授权或沙箱。
+- `ToolAuditLedger`：记录 request、tool、参数 hash、policy decision、执行状态和脱敏结果，便于事后追责。
 
 ### 注入 Lifecycle Phase Module
 

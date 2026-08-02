@@ -9,6 +9,10 @@
 - [04-memory-tools-plugins.md](./04-memory-tools-plugins.md): 记忆、工具、插件扩展机制。
 - [05-proactive-agent.md](./05-proactive-agent.md): 主动推送机制。
 
+## 关联专题
+
+- [../memory_optimization/](../memory_optimization/): 记忆系统优化路线、质量指标、写入门控、检索重排和长期记忆治理设计。
+
 ## 使用规则
 
 - 学习或解释模块设计时，更新对应专题文档。

@@ -721,6 +721,48 @@ Task 10 证据：
 - 应在通用 final-only reply normalization 或 provider adapter 层解析/拒绝 tool syntax，覆盖 replay、success、defer/blocked 等 terminal scope。
 - normalization 必须产出基于 durable snapshot 的确定性短回复，不能通过重新开放工具或重新进入 ReAct 解决。
 
+### TG-002 Tool Safety Gateway P1（open）
+
+现象：
+
+- 现有工具治理已经能降低 Document RAG、TaskPlan 等场景中的工具跑偏、重复调用和 ReAct 成本，但它主要治理“模型应该用哪些工具、什么时候停止调用工具”。
+- Shell Safety 当前主要依赖 `shlex.split()` 后的 token / base command 规则、插件 hook 和可选 `restricted_dir`，不是完整 Shell AST 语义分析，也不是默认容器/namespace/seccomp 沙箱。
+- 普通 shell 仍通过 `asyncio.create_subprocess_shell()` 执行；如果模型输出 `echo a | xargs rm file.txt` 或 `python -c "import os; os.remove(...)"`，单纯 `if "rm" in command` 一类规则无法构成生产级安全边界。
+- 文件工具有 `allowed_dir` 能力，但主 Agent 常规注册路径下 `write_file/edit_file` 没有统一 workspace resource policy；风险可能来自参数，例如 `path=/etc/passwd`，不能只按工具名判断。
+- TaskExecution attempt/event 已有较强审计结构，但普通工具调用的 observe/tool_chain 还没有统一升级为可追责的 Tool Audit Ledger。
+
+当前结论：
+
+- 现有系统可称为 Agent 行为治理和成本治理，不应表述为企业级强安全执行平台。
+- 下一阶段应新增 `Tool Safety Gateway P1`，把工具安全从“工具级风险 + 分散 hook”推进到“工具 + 参数 + 资源范围 + 审计”的统一边界。
+
+四步推进大纲：
+
+1. `ToolInvocationPolicyEngine`：
+   - 统一接收 `tool_name + normalized_args + session + user_intent + registry_risk + resource_scope`。
+   - 输出 `allow / deny / require_approval / sandbox`，并附带 `reason/risk/policy_version`。
+   - 目标是把散落在 Gateway、Boundary、TaskExecution、shell 插件和工具内部的安全判断收束为一次调用裁决。
+2. 参数级 `ResourcePolicy`：
+   - 对 `path/url/command/code/request_context` 做资源级判断。
+   - 文件路径必须检查 workspace 越界、系统目录、敏感文件、父级路径和符号链接逃逸。
+   - shell/code 参数必须识别二级解释器、管道/重定向/串联、绝对路径写入、网络访问和本地文件上传。
+   - 目标是解决“工具本身正常，但参数危险”的问题。
+3. 默认 workspace / approval / deny 策略：
+   - 主 Agent 默认把 read/list/write/edit/shell 约束到 workspace 或 task scoped directory。
+   - `read-only` 可以在明确范围内自动执行；`write/external/shell/destructive/unknown` 根据上下文进入 deny、approval 或 sandbox。
+   - TaskExecution 继续保持 exact `read-only` 自动执行，非 read-only 进入 `waiting_authorization`。
+   - 目标是让模型即使选错工具，也不能直接影响系统级资源。
+4. 统一 `ToolAuditLedger`：
+   - 普通工具调用也记录 `request_id/session_key/turn_id/tool_call_id/tool/raw_args/normalized_args/redacted_args/args_hash/risk/policy_decision/policy_reason/invoker_reached/execution_status/result_preview/timestamp`。
+   - 明文 secret、完整大输出和敏感文件内容不长期保存，只保存脱敏参数、hash、preview 和 policy trace。
+   - 目标是一旦用户追问“为什么昨天 Agent 删除了文件”，系统能基于结构化证据回答，而不是翻日志猜测。
+
+后续方向：
+
+- P1 先实现统一策略引擎、参数级资源判断、主 Agent workspace 默认边界和审计 ledger。
+- P2 再考虑 Docker/Podman、non-root user、read-only rootfs、seccomp/AppArmor、CPU/memory/pid/network limits、filesystem snapshot/diff/rollback。
+- 不要把 shell 字符串黑名单继续扩展成主要安全方案；它只能作为 preflight hint，不能作为最终安全边界。
+
 ## 测试误判
 
 ### EV-004 测试断言过硬
