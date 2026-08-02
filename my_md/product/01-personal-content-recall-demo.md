@@ -227,3 +227,40 @@ Agent 先使用 `list_recent_content_items(hours=24, for_push=true)`，无内容
 - 用户询问长期兴趣趋势时，Agent 可以先查询内容库，再单独调用
   `recall_memory` 获取稳定偏好。
 - 内容反馈保存在内容库中，不会因为一次收藏或一次摘要自动写入长期记忆。
+
+## 2026-08-02 Demo 验证记录
+
+本次验证使用本地 CLI，运行流程如下：
+
+```text
+用户发送 B 站视频链接和“晚点看”的备注
+  -> Agent 调用 web_fetch 获取页面标题
+  -> Agent 调用 save_content_item
+  -> 工具治理创建 pending approval
+  -> 用户执行 /approvals
+  -> 用户执行 /approve_last
+  -> 内容保存成功
+  -> 用户询问“我之前收藏过哪些英雄联盟视频？”
+  -> Agent 调用 search_content_items 返回收藏内容
+  -> 用户执行 /content_review_now 24
+  -> CLI 输出最近 24 小时内容回顾
+  -> 用户执行 /content_review_daily HH:MM
+  -> Scheduler 注册 soft job
+  -> 到点调用 list_recent_content_items(for_push=true)
+  -> Scheduler 通过 CLI message_push 推送摘要
+```
+
+验证结果：
+
+- `save_content_item` 审批和执行成功。
+- `search_content_items` 能按“英雄联盟”找回内容。
+- `/content_review_now 24` 能输出平台、标题、备注、标签和链接。
+- `/content_review_daily 22:03` 成功注册并收到 CLI 主动推送。
+- 曾产生 3 个同名测试任务，随后清理为 1 个有效的
+  `content_daily_review` 任务。
+- Scheduler soft job 曾出现一次工具边界误判，已通过
+  `_scheduler_soft_job` 内部 metadata 修复；修复后日志确认成功调用
+  `list_recent_content_items` 并推送摘要。
+
+当前结论：个人内容收藏已经作为 `content_library` 可切换插件完成一个
+“保存 -> 审批 -> 查询 -> 定时回顾 -> CLI 主动推送”的最小闭环。
