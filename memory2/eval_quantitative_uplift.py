@@ -24,6 +24,10 @@ from memory2.eval_runner import (
     _scope,
     run_eval_cases,
 )
+from memory2.eval_route_governance import (
+    build_offline_route_governance_rows,
+    route_governance_markdown_lines,
+)
 from memory2.injection_governance_experiments import (
     build_injection_governance_shadow_result,
 )
@@ -614,6 +618,11 @@ def write_quantitative_uplift_markdown(report: QuantitativeUpliftReport, path: P
         ]
     )
     lines.extend(
+        route_governance_markdown_lines(
+            build_offline_route_governance_rows(report)
+        )
+    )
+    lines.extend(
         [
             "",
             "## 说明",
@@ -729,43 +738,43 @@ def _family_trace_for_case(case: EvalCase, family_name: str) -> EvalTrace | None
             metrics=metrics,
         )
     if family_name == "tri_retrieval":
-        semantic_items, keyword_items, provenance_items, _ = _candidate_lanes(case)
+        lanes = _candidate_lanes(case)
         scope = _scope(case)
         result = build_tri_retrieval_shadow_result(
             query=_query(case),
             baseline_items=_baseline_recalled_items(case),
-            semantic_items=semantic_items,
-            keyword_items=keyword_items,
-            provenance_items=provenance_items,
+            semantic_items=lanes.semantic_items,
+            keyword_items=lanes.keyword_items,
+            provenance_items=lanes.provenance_items,
             latency_ms=0.0,
             top_n=max(8, len(_active_memory_items(case))),
         )
         metrics = dict(result.metrics)
         return EvalTrace("tri_retrieval", result.baseline_result, result.experimental_result, metrics)
     if family_name == "graph_retrieval":
-        semantic_items, keyword_items, provenance_items, graph_items = _candidate_lanes(case)
+        lanes = _candidate_lanes(case)
         result = build_graph_retrieval_shadow_result(
             query=_query(case),
             baseline_items=_baseline_recalled_items(case),
-            semantic_items=semantic_items,
-            keyword_items=keyword_items,
-            provenance_items=provenance_items,
-            graph_items=graph_items,
+            semantic_items=lanes.semantic_items,
+            keyword_items=lanes.keyword_items,
+            provenance_items=lanes.provenance_items,
+            graph_items=lanes.graph_items,
             latency_ms=0.0,
             top_n=max(8, len(_active_memory_items(case))),
         )
         metrics = dict(result.metrics)
         return EvalTrace("graph_retrieval", result.baseline_result, result.experimental_result, metrics)
     if family_name == "rerank_shadow":
-        semantic_items, keyword_items, provenance_items, graph_items = _candidate_lanes(case)
+        lanes = _candidate_lanes(case)
         scope = _scope(case)
         result = build_rerank_shadow_result(
             query=_query(case),
             baseline_items=_baseline_recalled_items(case),
-            semantic_items=semantic_items,
-            keyword_items=keyword_items,
-            provenance_items=provenance_items,
-            graph_items=graph_items,
+            semantic_items=lanes.semantic_items,
+            keyword_items=lanes.keyword_items,
+            provenance_items=lanes.provenance_items,
+            graph_items=lanes.graph_items,
             scope_channel=scope["channel"],
             scope_chat_id=scope["chat_id"],
             top_n=max(8, len(_active_memory_items(case))),
@@ -908,7 +917,7 @@ def _score_case_feature_set(
         baseline_kind="unavailable",
     )
     latency_ms = _sum_numeric(row["latency_ms"] for row in family_scores)
-    return {
+    row = {
         "case_id": case.id,
         "category": case.category,
         "case_set": case_set,
@@ -933,6 +942,36 @@ def _score_case_feature_set(
         "latency_ms": latency_ms,
         "unavailable": unavailable,
     }
+    row.update(_route_case_fields(runtime_profile, feature_names))
+    return row
+
+
+def _route_case_fields(
+    runtime_profile: EvalProfileResult,
+    feature_names: tuple[str, ...],
+) -> dict[str, object]:
+    for feature_name in ("tri_retrieval", "graph_retrieval", "rerank_shadow"):
+        if feature_name not in feature_names:
+            continue
+        trace = runtime_profile.traces.get(feature_name)
+        if trace is None:
+            continue
+        metrics = trace.metrics
+        if "retrieval_scene" not in metrics:
+            continue
+        return {
+            "retrieval_scene": metrics.get("retrieval_scene", "unknown"),
+            "route_source_feature": feature_name,
+            "route_decision": metrics.get("route_decision", {}),
+            "candidate_drop_counts": metrics.get("candidate_drop_counts", {}),
+            "candidate_drop_rate": metrics.get("candidate_drop_rate", 0.0),
+            "candidate_accept_rate": metrics.get("candidate_accept_rate", 0.0),
+            "expected_route_hit_rate": metrics.get("expected_route_hit_rate", 0.0),
+            "route_hit_rate": metrics.get("route_hit_rate", 0.0),
+            "graph_lane_used": bool(metrics.get("graph_lane_used", False)),
+            "route_input_counts": metrics.get("route_input_counts", {}),
+        }
+    return {}
 
 
 def _score_original_memory_base_case(

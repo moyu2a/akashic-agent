@@ -523,11 +523,18 @@ _pending_plugins: list[tuple[Path, Path]] = []
 _pending_plugins_lock = threading.Lock()
 
 
-def _esbuild_command(project_root: Path) -> list[str] | None:
+def _allow_npx_plugin_compile() -> bool:
+    value = os.getenv("AKASHIC_DASHBOARD_COMPILE_PLUGINS", "")
+    return value.strip().lower() in {"1", "true", "yes", "on", "npx"}
+
+
+def _esbuild_command(project_root: Path, *, allow_npx: bool = True) -> list[str] | None:
     bin_name = "esbuild.cmd" if os.name == "nt" else "esbuild"
     local_bin = project_root / "node_modules" / ".bin" / bin_name
     if local_bin.exists():
         return [str(local_bin)]
+    if not allow_npx:
+        return None
     if os.name == "nt":
         cmd_bin = shutil.which("cmd.exe") or shutil.which("cmd")
         npx_bin = shutil.which("npx.cmd") or shutil.which("npx")
@@ -551,7 +558,10 @@ def _build_plugin_panel_js(project_root: Path, plugin_dir: Path) -> None:
     if js_path.exists() and js_path.stat().st_mtime >= ts_path.stat().st_mtime:
         return
 
-    esbuild_cmd = _esbuild_command(project_root)
+    esbuild_cmd = _esbuild_command(
+        project_root,
+        allow_npx=_allow_npx_plugin_compile(),
+    )
     if esbuild_cmd is None:
         with _pending_plugins_lock:
             _pending_plugins.append((project_root, plugin_dir))
@@ -606,7 +616,10 @@ async def _compile_pending_plugins_async() -> None:
     first_root = pending[0][0]
 
     logger.info("正在安装前端构建工具 (npx esbuild)...")
-    esbuild_cmd = _esbuild_command(first_root)
+    esbuild_cmd = _esbuild_command(
+        first_root,
+        allow_npx=_allow_npx_plugin_compile(),
+    )
     if esbuild_cmd is None:
         logger.warning("esbuild unavailable: neither local install nor npx was found")
         return

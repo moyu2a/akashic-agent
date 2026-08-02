@@ -1,5 +1,235 @@
 # Document RAG P10a Intent Preload Plan
 
+## 2026-07-28 Memory Tri Answer Contract Implementation Plan
+
+Goal: create an executable plan for eval-only `chain_tri_answer_contract`, testing whether structured evidence injection and answer constraints can fix tri retrieval's post-grounding answer-quality failures.
+
+1. Inspect current `memory-next` eval/profile/report entry points - complete
+2. Write `docs/superpowers/plans/2026-07-28-memory-tri-answer-contract.md` - complete
+3. Self-review the plan for scope, placeholders, interfaces, and verification gates - complete
+4. Hand off execution choice to user - complete
+
+Boundary:
+
+- Planning only; no implementation code changed.
+- Plan keeps production `AgentLoop`, `Reasoner`, `ToolExecutor`, memory writes, production prompt behavior, and old `Retriever.retrieve()` contract unchanged.
+- Plan file is under ignored `docs/`; use `git add -f` only if the plan should be committed.
+
+## 2026-07-28 Memory Tri Retrieval Failure Attribution
+
+Goal: explain why `chain_tri_retrieval` in the route-governed small online run has `100%` grounding but only `42.5%` answer pass rate, without rerunning real LLM or changing production behavior.
+
+1. Add tri retrieval failure attribution module and tests - complete
+2. Add report writers and CLI wrapper - complete
+3. Generate `tri_retrieval_failure_attribution_v1` from `route_governance_small_online_v1` - complete
+4. Update memory optimization docs with metrics, result, and next decisions - complete
+5. Run focused regression, compile, and diff checks - complete
+6. Commit locally without push - complete
+
+Inputs:
+
+- `my_md/memory_optimization/eval_reports/route_governance_small_online_v1/memory_comprehensive_online_eval.json`
+
+Outputs:
+
+- `my_md/memory_optimization/eval_reports/tri_retrieval_failure_attribution_v1/tri_retrieval_failure_attribution.json`
+- `my_md/memory_optimization/eval_reports/tri_retrieval_failure_attribution_v1/tri_retrieval_failure_attribution.md`
+
+Boundary:
+
+- No real LLM rerun.
+- No production `AgentLoop`, `Reasoner`, `ToolExecutor`, memory write, retrieval, or prompt change.
+- Reports omit raw prompt, raw memory summary, session text, and full answers.
+
+Current result:
+
+- `tri_case_count = 40`
+- `tri_answer_fail_count = 23`
+- `tri_grounding_fail_count = 0`
+- `tri_grounded_answer_fail_count_any = 23`
+- `tri_grounded_non_forbidden_answer_fail_count = 18`
+- `tri_forbidden_fail_count = 5`
+- `baseline_passed_but_tri_failed_count = 5`
+- `baseline_failed_but_tri_passed_count = 9`
+- `tri_failed_but_rerank_passed_count = 7`
+
+Current conclusion:
+
+- Tri retrieval's current small-online bottleneck is not recall coverage. The failures are after grounding: evidence use, noise, answer constraints, and forbidden governance.
+- Next decision: if later cumulative profile rescue remains high, validate `route + tri + graph/rerank/injection`; otherwise prioritize candidate denoising, forbidden filtering, and scenario routing.
+
+Verification:
+
+- `tests/test_memory_tri_retrieval_failure_attribution.py tests/test_memory_online_failure_attribution.py tests/test_memory_comprehensive_online_eval.py` -> `24 passed`.
+- `compileall -q memory2 scripts tests` -> passed.
+- `git diff --check` -> passed.
+
+Commit:
+
+- Local commit created; not pushed.
+
+## 2026-07-27 Memory Tri Retrieval Route Governance
+
+Goal: turn tri retrieval / graph retrieval from global always-on enhancements into scene-routed candidate governance, while preserving the existing AgentLoop, Reasoner, ToolExecutor, production write path, and old `retrieve()` return contract.
+
+1. Add retrieval governance pure functions for scene classification, route policy, lane caps, source/scope/low-confidence filtering, and trace output - complete
+2. Reuse the same governance helper in offline eval, quantitative uplift, retriever trace, and default memory engine trace - complete
+3. Add route governance CLI/report and focused tests - complete
+4. Generate route governance reports and update memory/governance docs - complete
+5. Run focused regression, compile, and diff checks - complete
+6. Commit when verification is complete - pending
+
+Results so far:
+
+- New route governance module: `memory2/retrieval_governance.py`.
+- New report path:
+  - `my_md/memory_optimization/eval_reports/memory_route_governance_eval.json`
+  - `my_md/memory_optimization/eval_reports/memory_route_governance_eval.md`
+- Offline route report:
+  - `offline_case_count = 320`
+  - `offline_scene_count = 5`
+  - all offline scenes currently show `expected_route_hit_rate = 100%`
+  - candidate drop rate ranges from `63.3933%` to `77.085%`
+- Live engine route smoke:
+  - `live_case_count = 9`
+  - only validates real `DefaultMemoryEngine.retrieve()` route trace wiring
+  - does not prove real LLM answer-quality uplift
+- Review follow-up:
+  - offline eval now applies route governance once across all lanes, matching real retriever duplicate and lane precedence behavior;
+  - reports split `expected_route_hit_rate` from `candidate_accept_rate`;
+  - focused verification after fixes: `88 passed`, `compileall` exit `0`, `git diff --check` exit `0`.
+
+Current conclusion:
+
+- Tri retrieval and graph retrieval should not be interpreted as global default-on modules.
+- The current implementation improves candidate boundaries and traceability.
+- The next trustworthy answer-quality conclusion requires more realistic live fixtures and a fresh bounded LLM rerun for tri/graph/rerank paths.
+
+## 2026-07-26 Memory Online Attribution And Version Grounding Plan
+
+Goal: create a reproducible online answer-quality failure attribution report and fix the `chain_version_provenance` grounding metric before spending more real LLM calls.
+
+1. Write implementation plan for online failure attribution and version grounding repair - complete
+2. Review the plan before execution - complete
+3. Implement Task 1 online failure attribution report - complete
+4. Implement Task 2 profile-aware version/provenance grounding fix - complete
+5. Rebuild checkpoint/fake-provider reports and update docs - complete
+6. Run final regression and commit - complete
+
+Plan:
+
+- `docs/superpowers/plans/2026-07-26-memory-online-attribution-version-grounding.md`
+
+Current inputs:
+
+- Real LLM full answer-quality report:
+  - `/tmp/akashic-memory-answer-quality-real-full-v1/reports/memory_comprehensive_online_eval.json`
+  - `/tmp/akashic-memory-answer-quality-real-full-v1/checkpoint-report/memory_comprehensive_online_eval.json`
+- Current online result:
+  - `chain_memory_base answer_rate = 42.1875%`, grounding `96.25%`, forbidden `12.1875%`;
+  - `chain_tri_retrieval answer_rate = 28.4375%`, grounding `100%`, forbidden `30%`;
+  - `chain_graph_retrieval answer_rate = 26.25%`, grounding `100%`, forbidden `29.6875%`;
+  - `chain_rerank_injection answer_rate = 39.6875%`, grounding `100%`, forbidden `9.6875%`;
+  - `chain_version_provenance answer_rate = 40.3125%`, grounding `0%`, forbidden `0.9375%`;
+  - `chain_all_on answer_rate = 23.4375%`, grounding `100%`, forbidden `24.6875%`.
+
+Working hypothesis:
+
+- The first issue is not raw recall shortage. Tri/graph retrieve evidence but increase forbidden/noise, hurting final answers.
+- The second issue is likely evaluation-side grounding mismatch for `chain_version_provenance`: generic answer expectations include both target and graph ids, while the version/provenance evidence source intentionally uses `version_chain.active_leaf_ids`.
+
+Plan review result:
+
+- Independent review verdict: required revision before execution.
+- Critical fix applied: historical checkpoint rows already contain final `memory_grounding_passed` booleans, so checkpoint-only rebuilds cannot prove a scorer fix or change old `chain_version_provenance` grounding values.
+- Important fix applied: Task 2 tests now require a fresh fake-provider/evaluation path that exercises scoring, not a hand-written checkpoint row with `memory_grounding_passed=True`.
+- Important fix applied: Task 1 CLI now explicitly supports both report JSON and checkpoint JSONL, matching the stated input boundary.
+- Minor fix applied: Task 1 attribution now includes paired comparison against matching `chain_memory_base` rows and failure-code distribution / examples should be produced during implementation.
+
+Task 1 result:
+
+- Added `memory2/eval_online_failure_attribution.py`, `scripts/run_memory_online_failure_attribution.py`, and `tests/test_memory_online_failure_attribution.py`.
+- Focused test: `tests/test_memory_online_failure_attribution.py` -> `4 passed`.
+- Generated report:
+  - `my_md/memory_optimization/eval_reports/online_failure_attribution/online_failure_attribution.json`
+  - `my_md/memory_optimization/eval_reports/online_failure_attribution/online_failure_attribution.md`
+- Historical real LLM attribution summary:
+  - `chain_tri_retrieval`: 229 answer failures, 0 grounding failures, 96 forbidden failures, 78 forbidden introduced vs baseline;
+  - `chain_graph_retrieval`: 236 answer failures, 0 grounding failures, 95 forbidden failures, 82 forbidden introduced vs baseline;
+  - `chain_rerank_injection`: 193 answer failures, 0 grounding failures, 31 forbidden failures, 15 forbidden introduced vs baseline;
+  - `chain_version_provenance`: 191 answer failures, 320 grounding failures, 3 forbidden failures, 320 `missing_expected_memory_ids`.
+
+Task 2 result:
+
+- Added profile-aware answer expectations in `memory2/eval_comprehensive_online.py`.
+- `chain_version_provenance` now scores grounding against `expected_active_version_ids` when those ids exist.
+- This aligns scoring with the profile's evidence source, `version_chain_shadow.active_leaf_ids`.
+- Added regression tests in `tests/test_memory_comprehensive_online_eval.py`:
+  - `test_version_provenance_grounding_uses_active_version_ids`
+  - `test_version_provenance_online_scoring_not_forced_to_graph_ids`
+- Focused verification:
+  - `tests/test_memory_comprehensive_online_eval.py` -> `16 passed`.
+- Report rebuild / validation:
+  - historical checkpoint-only report written to `my_md/memory_optimization/eval_reports/answer_quality_real_full_after_version_grounding_fix/`;
+  - it still shows historical `chain_version_provenance grounding = 0.0%`, which is expected because checkpoint rows already store old `memory_grounding_passed` values;
+  - fresh fake-provider scorer validation written to `my_md/memory_optimization/eval_reports/version_grounding_fake_validation/`;
+  - 20-case slice shows `chain_memory_base grounding = 20/20 = 100.0%` and `chain_version_provenance grounding = 20/20 = 100.0%`.
+- Small real LLM smoke recorded for later reference:
+  - `/tmp/akashic-memory-version-grounding-smoke/reports/memory_comprehensive_online_eval.{json,md}`;
+  - `case_count = 10`, `unique_case_count = 5`, `profile_count = 2`;
+  - `chain_memory_base answer_rate = 60%`, `chain_version_provenance answer_rate = 80%`;
+  - both profiles had `grounding_rate = 100%` and `forbidden_rate = 0%`.
+
+Current conclusion:
+
+- The old real report's version-chain grounding failure is explained by an evaluation-side expected-id mismatch.
+- The scorer path for future runs is fixed.
+- Old checkpoint-only reports remain historical evidence and must not be used to claim the fix changed old real percentages.
+- The next trustworthy real number requires a bounded fresh real LLM rerun for `chain_version_provenance` after this fix.
+- The new smoke is only a gate check and should not be promoted to the final online conclusion.
+
+Final verification:
+
+- `PYTHONDONTWRITEBYTECODE=1 /home/jjh/git_work/akashic-agent/.worktrees/memory-experiments-phase0/.venv/bin/python -m pytest tests/test_memory_online_failure_attribution.py tests/test_memory_comprehensive_online_eval.py tests/test_memory_target_metrics.py tests/test_memory_answer_retrieval_counts.py -q -p no:cacheprovider` -> `42 passed in 116.97s`.
+- `git diff --check` -> passed.
+
+Constraints:
+
+- Do not change production `AgentLoop`, `Reasoner`, `ToolExecutor`, memory writes, or production prompt behavior.
+- Do not run a new full real LLM matrix until checkpoint/fake-provider verification is complete.
+- Keep all-on labeled as `combo/check`.
+- Do not push without explicit user instruction.
+
+## 2026-07-26 Memory Next Post-Merge Regression Repair
+
+Goal: repair post-merge regressions on `memory-next` so dashboard / memory_rollup tests, Markdown consolidation tests, and memory quantitative expectations run reliably in the current Python 3.14 test environment.
+
+1. Confirm current worktree and preserve existing dirty changes - complete
+2. Reproduce and isolate dashboard startup delay - complete
+3. Disable implicit `npx` plugin-panel compilation unless explicitly enabled - complete
+4. Reproduce and isolate Markdown consolidation hang - complete
+5. Replace local Markdown `asyncio.to_thread()` file calls with a synchronous async helper - complete
+6. Replace hanging Starlette `TestClient` usages in dashboard tests with a test-only ASGI client - complete
+7. Add the `httpx2` dev dependency and update `uv.lock` - complete
+8. Synchronize memory quantitative expected totals with current write-governance semantics - complete
+9. Run focused and broad regression verification - complete
+10. Commit and push - pending user instruction
+
+Results:
+
+- Dashboard / rollup target: `31 passed in 9.21s`.
+- Combined dashboard / memory engine / quantitative target: `83 passed in 12.93s`.
+- Memory engine / quantitative group: `91 passed in 29.00s`.
+- Memory enhancement group: `86 passed in 111.05s`.
+- Tool governance group: `293 passed, 2 warnings in 3.27s`.
+- `git diff --check`: exit `0`.
+
+Constraints:
+
+- Do not push without explicit user instruction.
+- Keep the dashboard ASGI replacement test-only.
+- Do not enable network-backed `npx` compilation during ordinary dashboard app startup.
+- Do not reinterpret the current `all_on` score as a regression unless write-governance semantics change again.
 ## 2026-07-28 Tool Governance P4c/P5a Queryable ToolAuditLedger Design
 
 Goal: create a design-first specification for a workspace-scoped, queryable, persistent, redacted `ToolAuditLedger` before expanding any new tool execution capability.
@@ -82,6 +312,12 @@ Errors Encountered:
 
 | Error | Attempt | Resolution |
 | --- | --- | --- |
+| Dashboard app creation waited on `npx --yes esbuild` for plugins without local esbuild | 1 | Added explicit `AKASHIC_DASHBOARD_COMPILE_PLUGINS` gate for npx fallback and queued pending panels by default. |
+| Markdown consolidation test hung around async thread cleanup | 1 | Replaced local Markdown `asyncio.to_thread()` calls with `_run_blocking_io()`. |
+| FastAPI `TestClient` hung in anyio blocking portal | 1 | Added `tests/asgi_client.py` using `httpx2.AsyncClient` with `ASGITransport`. |
+| Sync dashboard endpoints still entered threadpool under ASGI transport | 1 | Wrapped sync FastAPI route calls as async handlers and updated the route coroutine flag. |
+| Background optimizer test lost task state across requests | 1 | Kept a per-client event loop for the test client lifetime and drained pending tasks on close. |
+| Parallel dashboard request test hit event-loop reentrancy | 1 | Added a per-client lock to serialize calls through the shared sync test client. |
 | Task 8 RED failed with missing `approved_side_effect_lifecycle` in slim observe output | 1 | Added observe allowlist handling for call-attached P4 lifecycle metadata. |
 | Review found status-command P4 lifecycle events in `TurnCommitted.extra` were not observed | 1 | Added synthetic bounded lifecycle group from turn extra and regression coverage. |
 | Review found P4 contract did not cover executor defer/direct-block integration | 1 | Added contract test for real `ToolExecutor` defer payload storage, approved direct file blocking, and managed runtime apply. |
@@ -569,8 +805,8 @@ Goal: change the quantitative memory evaluation framing from disabled-memory bas
 
 Results:
 
-- Quantitative uplift: `baseline_main_score = 94.375`, `all_on_main_score = 69.5543`, `total_uplift_points = -24.8207`.
-- Chain uplift: `chain_memory_base = 94.375`, `chain_all_on = 69.5543`, `total_chain_uplift_points = -24.8207`.
+- Quantitative uplift: `baseline_main_score = 94.375`, `all_on_main_score = 69.3043`, `total_uplift_points = -25.0707`.
+- Chain uplift: `chain_memory_base = 94.375`, `chain_all_on = 69.3043`, `total_chain_uplift_points = -25.0707`.
 - Layered scoring: `baseline_total_layered_score = 94.375`, `final_total_layered_score = 54.9521`, `total_layered_uplift_points = -39.4229`.
 - Focused verification: `50 passed`; `git diff --check` exited `0`.
 
@@ -1403,3 +1639,646 @@ Verification so far:
 
 - `.venv/bin/python -m pytest tests/test_memory_comprehensive_online_eval.py -q -p no:cacheprovider` -> `14 passed in 7.74s`.
 - `.venv/bin/python -m pytest tests/test_memory_comprehensive_online_cli.py -q -p no:cacheprovider` -> `8 passed in 9.35s`.
+
+## 2026-07-27 Memory Route Governance Small Online Eval
+
+Goal: after adding route governance, run a short real LLM fresh rerun for answer/retrieval profiles and record whether the routed path is worth expanding.
+
+Plan status:
+
+1. Revise plan after independent review - complete.
+2. Run fake-provider balanced smoke - complete.
+3. Run real LLM common 20 + hard 20 balanced matrix - complete.
+4. Rebuild checkpoint-only report and validate data integrity - complete.
+5. Update docs and reports - complete.
+6. Final verification and commit - pending.
+
+Report:
+
+- `my_md/memory_optimization/eval_reports/route_governance_small_online_v1/memory_comprehensive_online_eval.json`
+- `my_md/memory_optimization/eval_reports/route_governance_small_online_v1/memory_comprehensive_online_eval.md`
+
+Run shape:
+
+- `unique_case_count = 40`
+- common `20`, hard `20`
+- `profile_count = 4`
+- profiles: `chain_memory_base`, `chain_tri_retrieval`, `chain_graph_retrieval`, `chain_rerank_injection`
+- `completed_call_count = 160`
+- `real_llm_enabled = True`
+- `provider_error_count = 0`
+- `timeout_count = 0`
+- `excluded_infra_failure_count = 0`
+- `partial_due_to_infra_failure = False`
+
+Key results:
+
+| profile | answer_success | answer_rate | relative answer lift vs base | grounding_rate | forbidden_rate |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `chain_memory_base` | `13/40` | `32.5%` | `0%` | `100%` | `15%` |
+| `chain_tri_retrieval` | `17/40` | `42.5%` | `+30.7692%` | `100%` | `12.5%` |
+| `chain_graph_retrieval` | `13/40` | `32.5%` | `0%` | `100%` | `15%` |
+| `chain_rerank_injection` | `18/40` | `45%` | `+38.4615%` | `100%` | `10%` |
+
+Conclusion:
+
+- This is a short controlled online result, not a production/full-matrix claim.
+- Tri retrieval is positive after route governance on this slice.
+- Graph retrieval is still not better than the original memory baseline on this slice, but current answer-quality fixtures do not isolate graph evidence from tri evidence well enough to treat this as a standalone graph-capability verdict.
+- Rerank/injection is the strongest routed answer path and should be prioritized for the next expanded fresh rerun.
+
+## 2026-07-28 Memory Tri Candidate Governance
+
+Goal: execute the reviewed plan for tri retrieval candidate denoising and forbidden / conflict filtering, producing offline trace evidence before spending more real LLM calls.
+
+Plan status:
+
+1. Add candidate risk classification - complete.
+2. Add strict candidate governance policy and trace fields - complete.
+3. Add offline tri candidate governance report - complete.
+4. Add CLI wrapper and privacy tests - complete.
+5. Generate comprehensive report - complete.
+6. Update memory optimization docs and progress records - complete.
+7. Run final regression, compile, diff check, independent review, and commit - pending.
+
+Report:
+
+- `my_md/memory_optimization/eval_reports/tri_candidate_governance_v1/tri_candidate_governance.json`
+- `my_md/memory_optimization/eval_reports/tri_candidate_governance_v1/tri_candidate_governance.md`
+
+Key offline result:
+
+| metric | value |
+| --- | ---: |
+| `case_count` | `320` |
+| target evidence | `640` |
+| baseline expected hits | `640/640` |
+| protected strict expected hits | `640/640` |
+| protected target loss | `0` |
+| should-not candidates | `368` |
+| strict should-not drops | `368/368` |
+| strict should-not kept | `0` |
+| unprotected strict target loss | `640/640` |
+
+Interpretation:
+
+- This phase proves the candidate governance layer can be measured and can remove known bad candidates without losing protected target evidence.
+- It also proves a risky point: strict filtering without target protection is too aggressive on the current fixture because weak source_ref appears on many expected memories.
+- The next meaningful answer-quality check should be a small fresh real LLM rerun comparing current route-governed tri retrieval against candidate-governed tri retrieval, focused on forbidden rate and grounded-answer-rule misses.
+
+## 2026-07-28 Tri Candidate Governance Small Online Plan
+
+Goal: run a bounded real LLM small online comparison for the candidate-governed tri retrieval path.
+
+Plan:
+
+- `docs/superpowers/plans/2026-07-28-tri-candidate-governance-small-online.md`
+
+Current status:
+
+1. Record latest offline tri candidate governance data - complete.
+2. Create formal implementation plan using writing-plans skill - complete.
+3. Review plan with independent reviewer - complete.
+4. Revise plan after review - complete.
+5. Implement eval-only `chain_tri_candidate_governance` profile - complete.
+6. Add balanced common/hard small case selection to CLI - complete.
+7. Run fake-provider smoke and integrity check - complete.
+8. Run real LLM 40-case / 120-call small matrix - complete.
+9. Update docs and commit - in progress.
+
+Planned small test shape:
+
+| item | value |
+| --- | --- |
+| unique cases | `40` |
+| split | common `20` + hard `20` |
+| profiles | `chain_memory_base`, `chain_tri_retrieval`, `chain_tri_candidate_governance` |
+| prompt variants | `baseline` |
+| repeats | `1` |
+| expected real LLM calls | `120` |
+| output dir | `my_md/memory_optimization/eval_reports/tri_candidate_governance_small_online_v1` |
+
+Main decision criteria:
+
+- If governed tri forbidden rate drops and answer rate does not fall, expand to a larger rerun.
+- If forbidden drops but answer does not improve, prioritize evidence injection and answer constraints.
+- If grounding drops, tune candidate governance false positives before more online runs.
+- Because the governed tri profile is oracle-protected in eval, any positive result must be described as controlled test-set evidence, not production readiness.
+
+Plan review / revision notes:
+
+- Independent review found no Critical issues, but required fixes before execution.
+- The plan now requires explicit JSON and Markdown metadata for `chain_tri_candidate_governance`: `eval_only = true`, `oracle_protected = true`, `uses_fixture_expected_ids = true`.
+- The governed profile is no longer described as re-running tri lanes. It is now a strict, order-preserving filter over existing `tri_retrieval.fused_ids`.
+- Tests now cover the final 40-case selection, should-not removal, target preservation, duplicate prevention, and optional profile Markdown visibility.
+- Fake and real commands use a temp empty `--real-memory-workspace` to avoid accidental read-only sampling from the default workspace.
+
+Execution result:
+
+- Fake-provider smoke passed: `case_count = 120`, `unique_case_count = 40`, `profile_count = 3`, `provider_error_count = 0`, `timeout_count = 0`.
+- Real LLM small online run passed infrastructure gates: `case_count = 120`, `unique_case_count = 40`, `completed_call_count = 120`, `provider_error_count = 0`, `timeout_count = 0`.
+- Real LLM output dir: `my_md/memory_optimization/eval_reports/tri_candidate_governance_small_online_v1`.
+
+| profile | answer_success | answer_rate | grounding_rate | forbidden_rate | avg_tokens | avg_latency_ms |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `chain_memory_base` | `20/40` | `50.0%` | `100.0%` | `10.0%` | `5486.7` | `4785.5` |
+| `chain_tri_retrieval` | `22/40` | `55.0%` | `100.0%` | `15.0%` | `5529.875` | `4922.225` |
+| `chain_tri_candidate_governance` | `17/40` | `42.5%` | `100.0%` | `0.0%` | `5383.225` | `3988.775` |
+
+Conclusion:
+
+- The candidate governance layer succeeded on forbidden control: `chain_tri_candidate_governance` reduced forbidden violations from tri retrieval's `15.0%` to `0.0%`.
+- It did not satisfy the planned answer-quality success gate: answer rate dropped from tri retrieval's `55.0%` to `42.5%`.
+- Grounding stayed at `100.0%`, so the next bottleneck is not target recall but recall-after-answer quality: evidence injection, answer constraints, candidate confidence routing, and fallback behavior.
+
+## 2026-07-28 Memory Tri Answer Contract
+
+Goal: test whether structured answer-contract evidence injection fixes tri retrieval's post-grounding answer-quality failures without changing production retrieval or prompt behavior.
+
+1. Add pure answer-contract helper and tests - complete
+2. Add eval-only `chain_tri_answer_contract` profile - complete
+3. Run fake-provider smoke and focused regression - complete
+4. Run bounded real LLM comparison and document measured outcome - complete
+5. Commit locally without push - pending
+
+## 2026-07-28 Memory P6o1 Governed Answer Contract
+
+Goal: add eval-only `chain_tri_governed_answer_contract` wiring so the next real A/B can test candidate governance plus answer contract.
+
+Plan:
+
+- `docs/superpowers/plans/2026-07-28-memory-p6o1-governed-answer-contract.md`
+
+Current status:
+
+1. Extend pure answer contract helper for governed allowed ids - complete.
+2. Register governed answer contract profile in comprehensive online eval - complete.
+3. Run fake-provider smoke and metadata regression - complete.
+4. Update docs and commit locally without push - complete.
+
+Fake-provider smoke:
+
+- output dir: `/tmp/akashic-memory-p6o1-governed-answer-contract-fake/reports`;
+- profiles: `chain_memory_base`, `chain_tri_retrieval`, `chain_tri_candidate_governance`, `chain_tri_answer_contract`, `chain_tri_governed_answer_contract`;
+- split: common `20` + hard `20`;
+- prompt variant: `baseline`;
+- repeats: `1`;
+- `case_count = 200`;
+- `unique_case_count = 40`;
+- `profile_count = 5`;
+- `real_llm_enabled = False`;
+- `provider_error_count = 0`;
+- `timeout_count = 0`.
+
+Boundary:
+
+- eval-only profile wiring, fake-provider smoke, metadata, docs;
+- no real LLM in P6o-1;
+- no production `AgentLoop`, `Reasoner`, `ToolExecutor`, memory write, production prompt, or old `Retriever.retrieve()` contract changes.
+
+Next real A/B criteria:
+
+- answer_rate close to or above `75.0%`;
+- grounding_rate remains `100.0%`;
+- forbidden_rate below `12.5%`;
+- no obvious token blow-up.
+
+## 2026-07-28 Memory P6o2 Risk-Tiered Candidate Governance
+
+Goal: replace eval-only strict candidate filtering with risk-tiered candidate governance before production-safe evidence contract work.
+
+1. Add pure risk tier classification - complete
+2. Add tiered candidate governance mode while preserving strict mode - complete
+3. Switch eval-only tri candidate/governed profiles to tiered ids - complete
+4. Add offline report tier metrics - complete
+5. Update docs and commit locally without push - pending
+
+## 2026-07-28 Memory P6o3 Production-Safe Evidence Contract
+
+Goal: replace fixture answer expectations in the governed tri contract path with production-safe evidence contract fields.
+
+1. Add pure production-safe evidence contract helper - complete
+2. Switch governed eval profile to production-safe contract - complete
+3. Add fake-provider smoke and privacy coverage - complete
+4. Update docs and commit locally without push - complete
+
+## 2026-07-28 Memory P6o4 Answer Post-Check Shadow
+
+Goal: record answer post-check shadow diagnostics for the governed production-safe evidence contract without changing answer behavior.
+
+1. Add pure answer post-check shadow helper - complete
+2. Attach post-check shadow to comprehensive eval reports - complete
+3. Add fake-provider smoke and privacy coverage - complete
+4. Update docs and commit locally without push - complete
+
+## 2026-07-28 Memory P6o5 Small Real LLM AB
+
+Goal: run a bounded real LLM A/B comparing raw tri retrieval, candidate governance, oracle answer contract, and governed production-safe evidence contract.
+
+Plan:
+
+- `docs/superpowers/plans/2026-07-28-memory-p6o5-small-real-llm-ab.md`
+
+Matrix:
+
+- common `20` + hard `20`;
+- prompt variant `baseline`;
+- repeats `1`;
+- profiles: `chain_tri_retrieval`, `chain_tri_candidate_governance`, `chain_tri_answer_contract`, `chain_tri_governed_answer_contract`;
+- expected and completed calls: `160`.
+
+Execution status:
+
+1. Add scaled fake-provider CLI matrix-shape regression - complete.
+2. Run full fake-provider 160-row smoke - complete.
+3. Run real LLM 160-call matrix - complete.
+4. Update docs and commit locally without push - in progress.
+
+Real report:
+
+- `my_md/memory_optimization/eval_reports/p6o5_governed_answer_contract_small_online_v1/memory_comprehensive_online_eval.json`
+- `my_md/memory_optimization/eval_reports/p6o5_governed_answer_contract_small_online_v1/memory_comprehensive_online_eval.md`
+
+Real report integrity:
+
+- `real_llm_enabled = True`;
+- `case_count = 160`;
+- `unique_case_count = 40`;
+- `completed_call_count = 160`;
+- `profile_count = 4`;
+- `prompt_variant_count = 1`;
+- `repeat_count = 1`;
+- `provider_error_count = 0`;
+- `timeout_count = 0`;
+- `excluded_infra_failure_count = 0`;
+- `partial_due_to_infra_failure = False`.
+
+Per-profile result:
+
+- `chain_tri_retrieval`: answer `15/40 = 37.5%`, grounding `100.0%`, forbidden `12.5%`, avg tokens `5518.825`.
+- `chain_tri_candidate_governance`: answer `20/40 = 50.0%`, grounding `100.0%`, forbidden `15.0%`, avg tokens `5538.125`.
+- `chain_tri_answer_contract`: answer `32/40 = 80.0%`, grounding `100.0%`, forbidden `15.0%`, avg tokens `5688.775`.
+- `chain_tri_governed_answer_contract`: answer `39/40 = 97.5%`, grounding `100.0%`, forbidden `0.0%`, avg tokens `6079.675`.
+
+Post-check shadow:
+
+- `case_count = 40`;
+- `enabled_case_count = 40`;
+- `needs_retry_count = 0`;
+- `forbidden_boundary_included_count = 0`;
+- `missing_likely_relevant_context_count = 0`;
+- `stale_evidence_included_count = 0`;
+- `conflict_evidence_included_count = 0`;
+- `insufficient_fallback_missing_count = 0`.
+
+Conclusion:
+
+- `chain_tri_governed_answer_contract` is the best P6o-5 profile: it combines candidate governance and production-safe evidence contract, reaching `97.5%` answer rate with `0.0%` forbidden.
+- Raw tri retrieval underperforms because it expands context without answer guidance.
+- Candidate governance alone underperforms because it filters input but does not tell the model how to use allowed evidence.
+- Oracle answer contract performs well but is not production-safe because it uses fixture answer expectations.
+- Post-check shadow ids mean injected/included context ids, not proven answer citation use.
+
+Boundary:
+
+- Small controlled eval only, not production natural traffic.
+- No production `AgentLoop`, `Reasoner`, `ToolExecutor`, memory write, production prompt, or old `Retriever.retrieve()` contract changes.
+- Next step should be robustness / targeted failure expansion before productionization.
+
+## 2026-07-28 Memory P6o6 Governed Rerank Signal
+
+Goal: execute the first P6o-6 signal-expansion slice by testing rerank as a governed evidence-contract input, without graph/version/all-on productionization.
+
+Plan:
+
+- `docs/superpowers/plans/2026-07-28-memory-p6o6-governed-rerank-signal.md`
+
+Execution status:
+
+1. Write, review, and revise P6o-6 plan - complete.
+2. Add custom production evidence contract profile name - complete.
+3. Add eval-only `chain_tri_rerank_governed_answer_contract` profile - complete.
+4. Add Markdown metadata / fake-provider / CLI smoke coverage - complete.
+5. Run full fake-provider gate - complete.
+6. Run bounded real LLM matrix - complete.
+7. Update docs and commit locally without push - complete.
+
+Real report:
+
+- `my_md/memory_optimization/eval_reports/p6o6_governed_rerank_small_online_v1/memory_comprehensive_online_eval.json`
+- `my_md/memory_optimization/eval_reports/p6o6_governed_rerank_small_online_v1/memory_comprehensive_online_eval.md`
+
+Real report integrity:
+
+- `real_llm_enabled = True`;
+- `case_count = 80`;
+- `unique_case_count = 40`;
+- `completed_call_count = 80`;
+- `profile_count = 2`;
+- `prompt_variant_count = 1`;
+- `repeat_count = 1`;
+- `provider_error_count = 0`;
+- `timeout_count = 0`;
+- JSON / Markdown privacy checks passed.
+
+Per-profile result:
+
+- `chain_tri_governed_answer_contract`: answer `39/40 = 97.5%`, grounding `100.0%`, forbidden `0.0%`, avg tokens `6162.05`.
+- `chain_tri_rerank_governed_answer_contract`: answer `40/40 = 100.0%`, grounding `100.0%`, forbidden `0.0%`, avg tokens `6209.475`.
+
+Post-check shadow:
+
+- `case_count = 80`;
+- `enabled_case_count = 80`;
+- `needs_retry_count = 0`;
+- `forbidden_boundary_included_count = 0`;
+- `missing_likely_relevant_context_count = 0`;
+- `stale_evidence_included_count = 0`;
+- `conflict_evidence_included_count = 0`;
+- `insufficient_fallback_missing_count = 0`.
+
+Conclusion:
+
+- Rerank helped only as governed-contract internal ordering; it did not expand recall beyond candidate-governed tri ids.
+- The rerank-governed profile recovered the remaining P6o-5 `1/40` miss while keeping forbidden at `0.0%`.
+- Avg-token overhead versus governed baseline is about `47.425` tokens, roughly `0.77%`.
+- This remains controlled eval harness evidence, not production natural traffic.
+
+Next step:
+
+- Test version-boundary governed fields separately.
+- Do not add graph or all-on until version-boundary has its own controlled result.
+
+## 2026-07-28 P6o-7 Version-Boundary Governed Slice
+
+Goal: test version-boundary evidence-contract fields as a governed tri signal, without expanding recall and without enabling graph/all-on/rerank combinations.
+
+Plan:
+
+- `docs/superpowers/plans/2026-07-28-memory-p6o7-version-boundary-governed.md`
+
+Execution status:
+
+1. Confirm P6o-6 data is recorded in docs - complete.
+2. Write, review, and revise P6o-7 plan - complete.
+3. Add version-boundary evidence contract fields - complete.
+4. Add eval-only `chain_tri_version_governed_answer_contract` profile - complete.
+5. Add fake-provider CLI matrix smoke - complete.
+6. Run fake-provider 40-case gate - complete.
+7. Run bounded real LLM matrix - complete.
+8. Update docs and commit locally without push - in progress.
+
+Real report:
+
+- `my_md/memory_optimization/eval_reports/p6o7_version_boundary_governed_small_online_v1/memory_comprehensive_online_eval.json`
+- `my_md/memory_optimization/eval_reports/p6o7_version_boundary_governed_small_online_v1/memory_comprehensive_online_eval.md`
+
+Real report integrity:
+
+- `real_llm_enabled = True`;
+- `case_count = 80`;
+- `unique_case_count = 40`;
+- `completed_call_count = 80`;
+- `profile_count = 2`;
+- `prompt_variant_count = 1`;
+- `repeat_count = 1`;
+- `provider_error_count = 0`;
+- `timeout_count = 0`;
+- JSON / Markdown privacy checks passed.
+
+Per-profile real result:
+
+- `chain_tri_governed_answer_contract`: answer `38/40 = 95.0%`, grounding `100.0%`, forbidden `0.0%`, avg tokens `6170.85`.
+- `chain_tri_version_governed_answer_contract`: answer `38/40 = 95.0%`, grounding `100.0%`, forbidden `0.0%`, avg tokens `6052.6`.
+
+Post-check shadow:
+
+- `case_count = 80`;
+- `enabled_case_count = 80`;
+- `needs_retry_count = 2`;
+- `forbidden_boundary_included_count = 0`;
+- `missing_likely_relevant_context_count = 0`;
+- `stale_evidence_included_count = 0`;
+- `conflict_evidence_included_count = 0`;
+- `insufficient_fallback_missing_count = 0`.
+
+Conclusion:
+
+- Version-boundary metadata did not expand recall and did not hurt answer, grounding, or forbidden main metrics.
+- It reduced token cost by `118.25` avg tokens versus the same-run governed baseline.
+- It did not pass the post-check no-rise safety gate: version-governed `needs_retry_count = 2` versus governed `0`, both due to `forbidden_boundary_mentioned` on `hard_version_chain_01` and `hard_stale_sleep_02`.
+- Keep version-boundary as eval/shadow evidence-contract metadata for now; do not productionize it alone.
+
+Next step:
+
+- Analyze the two forbidden-boundary mention retries and redesign how forbidden boundary ids are presented or hidden from the model before combining rerank + version.
+- Continue deferring graph/all-on until combined governed-contract signals have targeted evidence.
+
+## 2026-07-28 P6o-8 Safe Boundary Presentation
+
+Goal: fix the P6o-7 forbidden-boundary expression risk by hiding model-visible raw forbidden/deleted ids while preserving raw metadata for post-check.
+
+Plan:
+
+- `docs/superpowers/plans/2026-07-28-memory-p6o8-p6o10-boundary-rerank-combo.md`
+
+Execution status:
+
+1. Write, review, and revise the gated P6o-8/P6o-9/P6o-10 plan - complete.
+2. Hide model-visible `forbidden_boundary_ids:` and `deleted_evidence_ids:` labels/values - complete.
+3. Preserve raw ids in `result.raw["answer_contract"]` for post-check - complete.
+4. Add focused contract, engine, and CLI coverage - complete.
+5. Run P6o-8 fake-provider gate - complete.
+6. Run bounded P6o-8 real LLM matrix - complete.
+7. Update docs and commit locally without push - in progress.
+
+Real report:
+
+- `my_md/memory_optimization/eval_reports/p6o8_version_boundary_safe_presentation_small_online_v1/memory_comprehensive_online_eval.json`
+- `my_md/memory_optimization/eval_reports/p6o8_version_boundary_safe_presentation_small_online_v1/memory_comprehensive_online_eval.md`
+
+Real report integrity:
+
+- `real_llm_enabled = True`;
+- `case_count = 80`;
+- `unique_case_count = 40`;
+- `completed_call_count = 80`;
+- `profile_count = 2`;
+- `prompt_variant_count = 1`;
+- `repeat_count = 1`;
+- `provider_error_count = 0`;
+- `timeout_count = 0`;
+- JSON / Markdown privacy checks passed.
+
+Per-profile real result:
+
+- `chain_tri_governed_answer_contract`: answer `40/40 = 100.0%`, grounding `100.0%`, forbidden `0.0%`, avg tokens `6171.225`.
+- `chain_tri_version_governed_answer_contract`: answer `39/40 = 97.5%`, grounding `100.0%`, forbidden `0.0%`, avg tokens `6054.025`.
+
+Post-check shadow:
+
+- `case_count = 80`;
+- `enabled_case_count = 80`;
+- `needs_retry_count = 0`;
+- `forbidden_boundary_included_count = 0`;
+- `missing_likely_relevant_context_count = 0`;
+- `stale_evidence_included_count = 0`;
+- `conflict_evidence_included_count = 0`;
+- `insufficient_fallback_missing_count = 0`.
+
+Conclusion:
+
+- The P6o-7 failure was caused by unsafe model-visible boundary expression, not by the version-boundary metadata itself.
+- Hiding raw forbidden/deleted ids restored the post-check no-rise gate: aggregate `needs_retry_count` is now `0`.
+- Version-governed answer rate is `2.5` points below the same-run governed baseline, within the `5.0` point gate; grounding and forbidden remain clean, and avg tokens decrease by `117.2`.
+- This remains eval/shadow evidence, not production natural traffic.
+
+Next step:
+
+- Run P6o-9 same-matrix comparison for `chain_tri_governed_answer_contract`, `chain_tri_rerank_governed_answer_contract`, and revised `chain_tri_version_governed_answer_contract`.
+- Only enter P6o-10 combo implementation if P6o-9 passes the same gates.
+
+## 2026-07-28 P6o-9 Governed/Rerank/Version Same Matrix
+
+Goal: compare existing governed, rerank-governed, and safe version-governed profiles in one real LLM run before adding a combined profile.
+
+Plan:
+
+- `docs/superpowers/plans/2026-07-28-memory-p6o8-p6o10-boundary-rerank-combo.md`
+
+Execution status:
+
+1. Run P6o-9 fake-provider gate - complete.
+2. Run bounded P6o-9 real LLM matrix - complete.
+3. Assert P6o-9 gate - complete.
+4. Update docs and commit locally without push - in progress.
+
+Real report:
+
+- `my_md/memory_optimization/eval_reports/p6o9_governed_rerank_version_same_matrix_v1/memory_comprehensive_online_eval.json`
+- `my_md/memory_optimization/eval_reports/p6o9_governed_rerank_version_same_matrix_v1/memory_comprehensive_online_eval.md`
+
+Real report integrity:
+
+- `real_llm_enabled = True`;
+- `case_count = 120`;
+- `unique_case_count = 40`;
+- `completed_call_count = 120`;
+- `profile_count = 3`;
+- `prompt_variant_count = 1`;
+- `repeat_count = 1`;
+- `provider_error_count = 0`;
+- `timeout_count = 0`;
+- JSON / Markdown privacy checks passed.
+
+Per-profile real result:
+
+- `chain_tri_governed_answer_contract`: answer `39/40 = 97.5%`, grounding `100.0%`, forbidden `0.0%`, avg tokens `6156.725`.
+- `chain_tri_rerank_governed_answer_contract`: answer `38/40 = 95.0%`, grounding `100.0%`, forbidden `0.0%`, avg tokens `6118.475`.
+- `chain_tri_version_governed_answer_contract`: answer `38/40 = 95.0%`, grounding `100.0%`, forbidden `0.0%`, avg tokens `6021.55`.
+
+Post-check shadow:
+
+- `case_count = 120`;
+- `enabled_case_count = 120`;
+- `needs_retry_count = 0`;
+- `forbidden_boundary_included_count = 0`;
+- `missing_likely_relevant_context_count = 0`;
+- `stale_evidence_included_count = 0`;
+- `conflict_evidence_included_count = 0`;
+- `insufficient_fallback_missing_count = 0`.
+
+Conclusion:
+
+- Same-run governed is still the strongest standalone profile by answer rate.
+- Rerank-governed and safe version-governed both trail governed by `2.5` answer-rate points but pass the configured gate.
+- All three preserve grounding `100.0%`, forbidden `0.0%`, and zero post-check risk counts.
+- P6o-10 can proceed, but must prove the combination preserves governed evidence ids and does not expand recall.
+
+Next step:
+
+- Add eval-only `chain_tri_rerank_version_governed_answer_contract`.
+- Validate combo ordering, no recall expansion, metadata, fake gate, real gate, and docs before considering graph/all-on.
+
+## 2026-07-28 P6o-10 Rerank + Version Governed Combo
+
+Goal: test whether rerank ordering and safe version-boundary metadata are complementary when combined inside the governed evidence contract without recall expansion.
+
+Plan:
+
+- `docs/superpowers/plans/2026-07-28-memory-p6o8-p6o10-boundary-rerank-combo.md`
+
+Execution status:
+
+1. Add eval-only `chain_tri_rerank_version_governed_answer_contract` - complete.
+2. Prove combo ids equal rerank-governed ids and have the same set as governed ids - complete.
+3. Prove combo contract hides raw forbidden/deleted ids and exposes combined metadata - complete.
+4. Run P6o-10 fake-provider gate - complete.
+5. Run bounded P6o-10 real LLM matrix - complete.
+6. Assert P6o-10 gate - complete.
+7. Update docs and commit locally without push - in progress.
+
+Real report:
+
+- `my_md/memory_optimization/eval_reports/p6o10_rerank_version_governed_combo_small_online_v1/memory_comprehensive_online_eval.json`
+- `my_md/memory_optimization/eval_reports/p6o10_rerank_version_governed_combo_small_online_v1/memory_comprehensive_online_eval.md`
+
+Real report integrity:
+
+- `real_llm_enabled = True`;
+- `case_count = 160`;
+- `unique_case_count = 40`;
+- `completed_call_count = 160`;
+- `profile_count = 4`;
+- `prompt_variant_count = 1`;
+- `repeat_count = 1`;
+- `provider_error_count = 0`;
+- `timeout_count = 0`;
+- JSON / Markdown privacy checks passed.
+
+Per-profile real result:
+
+- `chain_tri_governed_answer_contract`: answer `39/40 = 97.5%`, grounding `100.0%`, forbidden `0.0%`, avg tokens `6130.1`.
+- `chain_tri_rerank_governed_answer_contract`: answer `39/40 = 97.5%`, grounding `100.0%`, forbidden `0.0%`, avg tokens `6131.95`.
+- `chain_tri_version_governed_answer_contract`: answer `40/40 = 100.0%`, grounding `100.0%`, forbidden `0.0%`, avg tokens `6004.95`.
+- `chain_tri_rerank_version_governed_answer_contract`: answer `39/40 = 97.5%`, grounding `100.0%`, forbidden `0.0%`, avg tokens `6036.7`.
+
+Post-check shadow:
+
+- `case_count = 160`;
+- `enabled_case_count = 160`;
+- `needs_retry_count = 0`;
+- `forbidden_boundary_included_count = 0`;
+- `missing_likely_relevant_context_count = 0`;
+- `stale_evidence_included_count = 0`;
+- `conflict_evidence_included_count = 0`;
+- `insufficient_fallback_missing_count = 0`.
+
+Conclusion:
+
+- Combo passes the gate and is safe in this matrix.
+- Combo ties governed answer rate, keeps grounding and forbidden clean, and reduces avg tokens by `93.4` versus governed.
+- Safe version-governed is the strongest profile in this run: `40/40 = 100.0%`, avg tokens `6004.95`.
+- The data does not justify jumping to graph/all-on or production activation; it supports a targeted robustness/failure analysis next.
+
+Next step:
+
+- Compare failure cases and rerun sensitivity for safe version-only vs combo.
+- Keep all profiles eval/shadow-only until robustness holds beyond this 40-case small matrix.
+
+Current issues to resolve before any productionization:
+
+1. Sample size is still small: P6o-8/P6o-9/P6o-10 use common `20` + hard `20`, so the result is useful for direction but not enough for production confidence.
+2. Same profile results still vary across fresh real LLM runs: safe version-governed was `38/40` in P6o-9 and `40/40` in P6o-10, which means stochastic sensitivity must be measured before choosing a winner.
+3. Combo is safe but not clearly better: `chain_tri_rerank_version_governed_answer_contract` ties governed at `39/40` and lowers tokens, but does not beat version-only.
+4. Rerank's incremental value is not stable in the latest matrix: rerank-governed no longer beats governed, so rerank should remain an ordering signal under test rather than a default production layer.
+5. The profiles remain eval/shadow-only and oracle-protected through fixture expected ids; they are not production natural traffic and should not be wired into production `AgentLoop` yet.
+6. Post-check is still shadow-only: it observes retry needs and boundary risk but does not yet implement a production retry/fallback policy.
+
+Recommended next plan:
+
+1. P6o-11 failure/sensitivity analysis: compare pass/fail case ids across P6o-8, P6o-9, and P6o-10 for governed, rerank-governed, safe version-governed, and combo; identify whether misses are random, profile-specific, or case-family-specific.
+2. P6o-12 targeted hard slice: add or select harder version/rerank cases where active version, stale warning, conflict warning, and ordering should matter; keep common `20` + hard `20` plus a small targeted pack instead of jumping to all-on.
+3. P6o-13 repeat stability gate: rerun safe version-governed vs combo with repeats `2` or `3` on the same bounded matrix; require answer/forbidden/post-check stability, not just one lucky `40/40`.
+4. P6o-14 production-shadow design: remove fixture expected-id dependence for the chosen profile path, define real candidate signals, source_ref confidence, active-version source, insufficient evidence fallback, and post-check logging.
+5. Only after those pass, consider a larger real LLM matrix or a production shadow experiment. Graph/all-on should stay deferred until version-only vs combo is stable.

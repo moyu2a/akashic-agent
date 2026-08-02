@@ -1,0 +1,19 @@
+{
+  "case_count": 1,
+  "checkpoint_jsonl": "my_md/memory_optimization/eval_reports/p6o22_infra_abort_guard_v1/fake_abort/checkpoint.jsonl",
+  "checkpoint_line_count": 1,
+  "early_infra_abort_count": 1,
+  "early_infra_abort_rate": 1.0,
+  "fresh_case_count": 1,
+  "fresh_provider_error_count": 0,
+  "fresh_timeout_count": 1,
+  "malformed_checkpoint_line_count": 0,
+  "mode_count": 1,
+  "provider_error_count": 0,
+  "quality_interpretation_allowed": false,
+  "reason": "early infra failure rate 100.0% met or exceeded 100.0%",
+  "repeat_count": 1,
+  "status": "infra_blocked",
+  "timeout_count": 1,
+  "unique_case_count": 2
+}

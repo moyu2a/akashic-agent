@@ -94,6 +94,69 @@
 - `my_md/governance/01-issue-index.md`
 - `my_md/governance/04-fix-roadmap.md`
 
+### ARCH-002: Memory 三路召回从全局增强演进为场景路由治理
+
+领域：
+
+- Architecture / RAG
+
+场景：
+
+- 真实 LLM answer-quality 完整矩阵显示，三路召回和图谱召回虽然能把 grounding 提到 `100%`，但回答命中率下降，forbidden 风险上升。
+- 失败归因显示主要问题不是“证据完全没召回”，而是“证据到了但回答没有稳定用对”，同时部分场景引入了更多噪声。
+
+发现：
+
+- 三路召回不适合无条件全开。
+- 图谱召回也不适合全局默认参与；它在模糊指代、实体别名和图谱桥接场景有价值，但在工具偏好、时间偏好、冲突和风格偏好场景容易带来噪声。
+- 后续重点应从“继续扩大召回”转成“按场景选择召回通道、控制候选数量、过滤低置信和跨作用域候选”。
+
+处理：
+
+- 新增 `memory2/retrieval_governance.py`，提供场景识别、路由决策和候选准入过滤。
+- 在 `memory2/eval_runner.py`、`memory2/eval_quantitative_uplift.py`、`memory2/retriever.py` 和 `plugins/default_memory/engine.py` 中复用同一套路由治理 helper。
+- 新增 `retrieve_with_trace()`，让真实 memory engine 能透出 route trace；保留旧 `retrieve()` 列表返回合同。
+- 新增 `memory2/eval_route_governance.py` 和 `scripts/run_memory_route_governance_eval.py`，输出离线路由治理报告和真实引擎 route smoke。
+
+结果：
+
+- 离线 comprehensive 路由报告覆盖 `320` case、`5` 类场景。
+- 各场景路由后 `expected_route_hit_rate = 100%`，候选丢弃率约 `63.3933%` 到 `77.085%`。
+- 真实引擎 route smoke 覆盖 `9` case，证明 `DefaultMemoryEngine.retrieve()` 可以输出路由 trace。
+- 当前结果只证明候选边界治理和 trace 接线可用，不代表真实 LLM 回答质量已经提升。
+- 2026-07-27 补做短线上 fresh rerun：`40` 个唯一样本，common `20`、hard `20`，4 个 profile，真实 LLM 调用 `160` 次，无 provider error / timeout。结果显示 `chain_tri_retrieval` 回答命中 `32.5% -> 42.5%`，相对基线提升 `30.7692%`；`chain_rerank_injection` 回答命中 `32.5% -> 45%`，相对基线提升 `38.4615%`，forbidden 从 `15%` 降到 `10%`；`chain_graph_retrieval` 本轮与基线持平。
+
+证据：
+
+- `memory2/retrieval_governance.py`
+- `memory2/eval_route_governance.py`
+- `scripts/run_memory_route_governance_eval.py`
+- `my_md/memory_optimization/eval_reports/memory_route_governance_eval.json`
+- `my_md/memory_optimization/eval_reports/memory_route_governance_eval.md`
+- `my_md/memory_optimization/eval_reports/route_governance_small_online_v1/memory_comprehensive_online_eval.json`
+- `my_md/memory_optimization/eval_reports/route_governance_small_online_v1/memory_comprehensive_online_eval.md`
+
+影响：
+
+- Memory 召回增强从“全局打开更多通道”转为“按场景治理候选”。
+- 后续 active 化时，三路召回和图谱召回应先经过路由层，再进入重排、注入治理和回答约束。
+- 短线上 fresh rerun 初步支持继续扩测三路召回和重排注入治理；图谱召回仍需要更细的触发条件、候选去噪和证据注入约束。
+- 同时发现当前 answer-quality fixture 中 `chain_graph_retrieval` 和 `chain_tri_retrieval` 的 evidence ids 没有充分隔离，所以图谱行不能被解释为“图谱能力无效”，只能解释为当前 profile 口径下没有超过基线。
+- 这轮是小样本受控结论，不能替代 `320 case / 1920 call` 的完整矩阵，也不能作为生产自然流量收益。
+
+下一步：
+
+- 补更真实的 live fixture，让真实引擎 route smoke 不只覆盖模糊指代和未知场景。
+- 扩展 fresh answer-quality rerun，优先验证 `route + rerank/injection`，同时补图谱专用 case 或让 graph profile 输出可区分证据，再对图谱召回增加场景路由和噪声控制。
+- 继续补回答正确性、证据命中、forbidden、噪声控制和上下文成本的分场景分析。
+
+关联文档：
+
+- `my_md/memory_optimization/README.md`
+- `my_md/memory_optimization/02-memory-quality-metrics.md`
+- `my_md/memory_optimization/03-memory-governance-design.md`
+- `my_md/memory_optimization/04-memory-plugin-experiment-roadmap.md`
+
 ## Test
 
 ### TEST-001: deep live eval 首轮报告暴露测试噪声

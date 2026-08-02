@@ -21,6 +21,7 @@ from agent.core.prompt_block import (
     SystemPromptBuilder,
     TurnContext,
 )
+from agent.persona import PersonaMode
 from agent.prompting import (
     PromptAssembler,
     PromptSectionMeta,
@@ -61,6 +62,7 @@ class MessageEnvelopeBuilder:
         *,
         multimodal: bool = True,
         vl_available: bool = False,
+        persona_mode: PersonaMode = "casual",
     ):
         self._policies = policies or {}
         self._multimodal = multimodal
@@ -208,13 +210,17 @@ class ContextBuilder:
         *,
         multimodal: bool = True,
         vl_available: bool = False,
+        persona_mode: PersonaMode = "casual",
     ):
         self.workspace = workspace
         self.skills = SkillsLoader(workspace)
         self.memory = memory
         self._system_prompt_builder = SystemPromptBuilder(
             [
-                IdentityPromptBlock(render_fn=build_agent_static_identity_prompt),
+                IdentityPromptBlock(
+                    render_fn=build_agent_static_identity_prompt,
+                    persona_mode=persona_mode,
+                ),
                 BehaviorRulesPromptBlock(),
                 MemoryBlockPromptBlock(),
                 LongTermMemoryPromptBlock(),

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from agent.looping.ports import MemoryConfig
 from plugins.default_memory.config import (
     load_default_memory_config,
     resolve_memory_db_path,
@@ -14,6 +15,14 @@ def test_default_memory_config_reads_example_defaults() -> None:
     assert cfg.retrieval.top_k_history == 8
     assert cfg.retrieval.thresholds.procedure == 0.66
     assert cfg.retrieval.inject.max_chars == 6000
+
+
+def test_agent_memory_config_keeps_safe_version_defaults_off() -> None:
+    cfg = MemoryConfig()
+
+    assert cfg.safe_version_governed_mode == "off"
+    assert cfg.safe_version_answer_prompt_variant == "standard"
+    assert cfg.safe_version_answer_guidance_enabled is False
 
 
 def test_default_memory_config_local_overrides(tmp_path: Path) -> None:

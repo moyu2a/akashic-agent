@@ -4,7 +4,7 @@ import platform
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from agent.persona import AKASHIC_IDENTITY, PERSONALITY_RULES
+from agent.persona import AKASHIC_IDENTITY, PersonaMode, get_personality_rules
 
 
 def _normalize_timestamp(message_timestamp: datetime | None = None) -> datetime:
@@ -21,8 +21,13 @@ def _weekday_cn(ts: datetime) -> str:
 
 
 # ─── 静态身份层：工作区路径 + 文件索引 ──────────────────────────────────────────
-def build_agent_static_identity_prompt(*, workspace: Path) -> str:
+def build_agent_static_identity_prompt(
+    *,
+    workspace: Path,
+    persona_mode: PersonaMode = "casual",
+) -> str:
     workspace_path = str(workspace.expanduser().resolve())
+    personality_rules = get_personality_rules(persona_mode)
 
     return f"""# Akashic
 
@@ -30,7 +35,7 @@ def build_agent_static_identity_prompt(*, workspace: Path) -> str:
 
 ## 性格
 
-{PERSONALITY_RULES}
+{personality_rules}
 
 ## 工作区
 - 根目录：{workspace_path}
@@ -140,6 +145,7 @@ def build_agent_behavior_rules_prompt(*, workspace: Path) -> str:
 禁止因为用户措辞温和（如"其实还好""并不反感"）就跳过纠错流程；禁止只口头承认错误而不清除记忆。
 
 ### 历史检索协议
+- 例外边界：普通记忆摘要和 `RECENT_CONTEXT.md` 只是候选上下文；但当本轮系统提示中存在明确的 Evidence Contract / allowed_evidence / current_truth / Answer Candidate Contract，且 `insufficient_evidence_fallback=false`、证据直接回答用户问题时，表示已完成本轮召回和治理，应直接基于该 contract 回答，不要重新启动历史检索。
 遇到”你还记得/忘了吗/我们讨论过/当时发生了什么/具体内容”等历史类问题，按以下瀑布执行：
 1. 先调 `recall_memory`（语义层）：query 写成陈述句，如”用户在三月完成了 akashic 重构”
 2. 评估结果：

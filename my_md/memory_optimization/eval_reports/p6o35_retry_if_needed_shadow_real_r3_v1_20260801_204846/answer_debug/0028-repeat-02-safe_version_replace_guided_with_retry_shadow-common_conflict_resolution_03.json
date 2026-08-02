@@ -1,0 +1,152 @@
+{
+  "answer_length": 217,
+  "answer_rule_passed": true,
+  "answer_text": "是的，以最新为准。归到一句话就是：**冲突偏好要保留最新明确版本，冲突链应保留最新明确决策。**\n\n这里的边界在于“明确”二字：\n\n- 新版本必须是明确表态，不是随口一说或语气摇摆；含糊的新表述不会覆盖之前清晰的结论。\n- 一旦确认新版本明确，旧版本就标记为失效，不再参与后续回答，只以最新结论为准。\n\n所以你可以理解为：不是简单的“后说者胜”，而是“后出现且明确说清的那一版胜”。当前证据里没有其他可用的矛盾分支，这条就是现行规则。",
+  "case_id": "common_conflict_resolution_03",
+  "case_index": 28,
+  "category": "common_conflict_resolution",
+  "completion_token_count": 615,
+  "failures": [],
+  "forbidden_contains_violation_count": 0,
+  "latency_ms": 38203,
+  "memory_grounding_passed": true,
+  "mode": "safe_version_replace_guided_with_retry_shadow",
+  "model": "deepseek-v4-flash",
+  "post_check_shadow": {
+    "allowed_evidence_included": true,
+    "answer_candidate_contract_enabled": true,
+    "answer_choice_group_missing": false,
+    "answerable_evidence_contract_ignored": false,
+    "conflict_evidence_included": false,
+    "dsml_tool_markup_in_final_answer": false,
+    "forbidden_boundary_included": false,
+    "forbidden_boundary_mentions": [],
+    "included_allowed_evidence_ids": [
+      "common_conflict_resolution_03_target",
+      "common_conflict_resolution_03_graph",
+      "common_conflict_resolution_03_dup_a"
+    ],
+    "included_conflict_warning_ids": [],
+    "included_forbidden_boundary_ids": [],
+    "included_stale_warning_ids": [],
+    "insufficient_evidence_fallback_expected": false,
+    "insufficient_evidence_fallback_observed": false,
+    "language_requirement_failed": false,
+    "meta_action_final_answer": false,
+    "missing_likely_relevant_context_ids": [],
+    "needs_retry": false,
+    "production_safe_evidence_contract": true,
+    "required_terms_missing": false,
+    "retry_if_needed_blocked_reasons": [],
+    "retry_if_needed_eligible": false,
+    "retry_if_needed_reasons": [],
+    "retry_if_needed_shadow_enabled": true,
+    "retry_reasons": [],
+    "shadow_enabled": true,
+    "stale_evidence_included": false,
+    "tool_markup_in_final_answer": false
+  },
+  "prompt_token_count": 5602,
+  "provider_error": false,
+  "query": "前后矛盾时以最新为准吗？",
+  "repeat_index": 2,
+  "run_metadata": {
+    "balanced_small": true,
+    "case_pack": "standard",
+    "common_limit": 40,
+    "config_hash": "a688ec69aff2669f86b6f073d0430c4d7dcfc664de7691257bad399bbcfb9a38",
+    "fake_provider_enabled": false,
+    "git_commit": "0b5d296a7cfb8604df66183331140f218c51e2c2",
+    "hard_limit": 40,
+    "model": "deepseek-v4-flash",
+    "modes": "safe_version_replace_guided_with_retry_shadow",
+    "persona_mode": "work",
+    "real_llm_enabled": true,
+    "repeats": 3,
+    "timeout_s": 60.0
+  },
+  "safe_version_contract": {
+    "accepted_candidate_risk_tier_counts": {
+      "downgrade": 3
+    },
+    "active_version_ids": [
+      "common_conflict_resolution_03_target",
+      "common_conflict_resolution_03_graph",
+      "common_conflict_resolution_03_dup_a"
+    ],
+    "allowed_evidence_ids": [
+      "common_conflict_resolution_03_target",
+      "common_conflict_resolution_03_graph",
+      "common_conflict_resolution_03_dup_a"
+    ],
+    "answer_candidate_contract": {
+      "candidate_reason": "safe_version_guided_retry_shadow",
+      "current_truth_count": 3,
+      "enabled": true,
+      "forbidden_old_value_count": 1,
+      "language_requirement": "match_user_language",
+      "must_include_term_count": 3
+    },
+    "answer_guidance_enabled": true,
+    "answer_prompt_variant": "guided_retry_shadow",
+    "candidate_governance_mode": "tiered",
+    "candidate_risk_tier_counts": {
+      "delete": 1,
+      "downgrade": 3
+    },
+    "conflict_warning_ids": [],
+    "deleted_evidence_ids": [
+      "common_conflict_resolution_03_old"
+    ],
+    "downgrade_ids": [
+      "common_conflict_resolution_03_target",
+      "common_conflict_resolution_03_graph",
+      "common_conflict_resolution_03_dup_a"
+    ],
+    "forbidden_boundary_ids": [],
+    "insufficient_evidence_fallback": false,
+    "insufficient_evidence_ids": [],
+    "likely_relevant_evidence_ids": [
+      "common_conflict_resolution_03_target",
+      "common_conflict_resolution_03_graph",
+      "common_conflict_resolution_03_dup_a"
+    ],
+    "production_safe": true,
+    "production_safe_evidence_contract": true,
+    "profile_name": "system_memory_safe_version_governed",
+    "requires_review_ids": [],
+    "stale_warning_ids": [
+      "common_conflict_resolution_03_old"
+    ],
+    "tiered_deleted_risks_by_reason": {
+      "superseded_candidate": 1
+    },
+    "uses_fixture_answer_expectations": false,
+    "version_boundary": {
+      "active_leaf_count": 1,
+      "chain_count": 1,
+      "conflict_chain_count": 0,
+      "replacement_count": 1,
+      "rollback_candidate_count": 1,
+      "stale_recalled_count": 0,
+      "superseded_recalled_count": 0
+    }
+  },
+  "safe_version_metadata": {
+    "allowed_evidence_count": 3,
+    "answer_guidance_enabled": true,
+    "answer_prompt_variant": "guided_retry_shadow",
+    "contract_generation_success": true,
+    "deleted_evidence_count": 1,
+    "downgrade_count": 3,
+    "forbidden_boundary_count": 0,
+    "mode": "replace",
+    "replace_allowed": true,
+    "replace_applied": true,
+    "replacement_requested": true,
+    "requires_review_count": 0
+  },
+  "timeout": false,
+  "token_count": 6217,
+  "token_metrics_available": true
+}

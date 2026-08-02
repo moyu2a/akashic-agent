@@ -1,0 +1,38 @@
+{
+  "answer_delta_points": 2.5,
+  "avg_token_delta": 103.8667,
+  "case_count": 240,
+  "gate_passed": true,
+  "guided_answer_rate": 66.6667,
+  "guided_answer_spread": 15.0,
+  "guided_avg_tokens": 5522.75,
+  "guided_contract_enabled": true,
+  "guided_forbidden_rate": 0.0,
+  "guided_grounding_rate": 100.0,
+  "guided_metadata_enabled": true,
+  "guided_repeat_answer_rates": [
+    57.5,
+    70.0,
+    72.5
+  ],
+  "guided_repeat_not_lower_count": 2,
+  "guided_token_metrics_available": true,
+  "mode_count": 2,
+  "provider_error_count": 0,
+  "repeat_count": 3,
+  "replace_answer_rate": 64.1667,
+  "replace_avg_tokens": 5418.8833,
+  "replace_contract_unguided": true,
+  "replace_forbidden_rate": 0.0,
+  "replace_grounding_rate": 100.0,
+  "replace_metadata_unguided": true,
+  "replace_repeat_answer_rates": [
+    57.5,
+    60.0,
+    75.0
+  ],
+  "replace_token_metrics_available": true,
+  "timeout_count": 0,
+  "token_limit": 5689.8275,
+  "unique_case_count": 40
+}

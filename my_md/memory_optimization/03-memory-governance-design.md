@@ -13,6 +13,89 @@ Phase 6h 之后，治理设计的当前口径可以分成两类：
 
 因此，这份治理设计下一步要继续补的不是回答层本身，而是更真实的 write-governance evidence 和 memory-hygiene evidence。
 
+Phase 6m 真实 LLM answer-quality 矩阵和失败归因又补充了一个新的结论：三路召回和图谱召回不能再按“默认全开”理解。它们能把证据召回进上下文，但在部分场景会提高噪声和 forbidden 风险，导致回答质量下降。因此当前回答侧治理新增一层“场景路由 + 候选治理”：
+
+```text
+用户问题
+  -> 识别召回场景
+  -> 选择允许的召回通道
+  -> 限制每路候选数量
+  -> 按 source_ref、scope、低置信和重复规则丢弃候选
+  -> 再交给后续重排、注入治理和回答约束
+```
+
+当前已经落地的实现是 `memory2/retrieval_governance.py`。它把查询分成模糊指代、工具偏好、部分冲突、精确召回、来源查询和未知场景，并为每类场景配置召回通道、每路上限、是否要求来源、是否要求同作用域、是否启用图谱和是否丢弃低置信候选。`DefaultMemoryEngine.retrieve()` 透出 route trace，但不修改主循环、真实写入或工具执行边界。
+
+Phase 6m-tri-candidate-governance 在这层之后继续补了一层可选的候选治理策略：
+
+```text
+召回候选
+  -> classify_candidate_risks
+  -> CandidateGovernancePolicy
+  -> 受保护严格过滤
+  -> trace 记录保留、丢弃和 would-drop 原因
+```
+
+当前识别的候选风险包括：
+
+- `forbidden_candidate`：fixture 或候选字段显式标记为不应召回。
+- `superseded_candidate`：旧版本、已被替换的记忆。
+- `conflict_candidate`：候选字段显式标记为冲突项；不会再仅凭摘要里出现“冲突”两个字就判风险。
+- `scope_mismatch`：候选 scope 和当前会话不一致。
+- `missing_source_ref`：缺少来源。
+- `weak_source_ref`：来源过弱，例如 session 级或 post-response 级来源。
+- `low_confidence`：低置信候选。
+
+这层默认关闭，只有显式设置 `CandidateGovernancePolicy(enabled=True)` 才执行严格过滤，因此不会改变现有生产召回契约。本轮 320 case 离线 trace 结果显示：受保护严格治理能保住 `640/640` 个目标证据，目标损失为 `0`，同时丢弃 `368/368` 个 should-not 候选；但不受保护严格治理会误删 `640/640` 个目标证据。结论是候选去噪必须和场景路由、来源质量、目标保护或生产替代信号一起使用，不能把“低置信/弱来源”规则直接全局硬删。
+
+## 行业通用处理方式
+
+针对“证据已经召回进上下文，但回答质量仍然不好”的问题，市面上的 RAG / Agent 方案通常不会继续盲目扩大召回，而是把链路拆开治理：
+
+| 通用方向 | 常见做法 | 解决的问题 |
+| --- | --- | --- |
+| 分层评测 | 分开评估召回质量、上下文相关性、答案正确性、faithfulness / groundedness 和 forbidden 风险 | 避免只看最终答案分数，无法判断是召回错了还是生成没用对证据 |
+| 候选去噪 | 去重、低置信过滤、冲突隔离、权限和 scope 过滤、旧版本过滤 | 解决召回候选太多、相似候选太杂、旧信息干扰回答的问题 |
+| 重排 | 用规则分、交叉编码器、LLM reranker 或 RRF 后再排序 | 把真正关键的证据放到更靠前的位置，降低模型忽略关键证据的概率 |
+| 上下文压缩 | 只保留关键句、实体、时间、来源和必要上下文 | 降低 prompt 噪声和 token 成本 |
+| 场景路由 | 按问题类型选择不同检索策略，例如精确事实、模糊指代、工具偏好、冲突判断分别处理 | 避免高噪声通道在不适合的场景默认打开 |
+| 证据注入约束 | 在 prompt 中明确证据 ID、来源、当前有效版本和回答依据 | 让模型更稳定地使用正确记忆 |
+| 回答后校验 | 对输出做 grounding、relevance、forbidden 和 policy check，不通过则重试、降级或拒答 | 处理证据到了但答案仍答偏、幻觉或越界的问题 |
+| 观测和回归集 | 把失败 query、召回候选、回答、评分和 trace 记录成可复现 case | 后续每次改召回、重排、prompt 或模型时做回归对比 |
+
+这些做法和公开资料里的 RAG 评测、grounding guardrail、企业级 RAG 治理是一致的：
+
+- Braintrust 的 RAG evaluation 把检索和生成分开评估，常用指标包括 context precision、context recall、answer relevancy 和 groundedness / faithfulness。
+- Amazon Bedrock Guardrails 的 contextual grounding check 会同时检查回答是否基于来源、是否和用户问题相关，并支持阈值和阻断动作。
+- AWS 的 grounding and RAG 指南强调生产系统需要在 grounding 之外加入安全、合规、访问控制、可追溯和自动推理。
+
+参考：
+
+- https://www.braintrust.dev/articles/what-is-rag-evaluation
+- https://www.braintrust.dev/articles/rag-evaluation-metrics
+- https://docs.aws.amazon.com/bedrock/latest/userguide/guardrails-contextual-grounding-check.html
+- https://docs.aws.amazon.com/prescriptive-guidance/latest/agentic-ai-serverless/grounding-and-rag.html
+
+## 我们项目的对应方案
+
+结合 Phase 6m 三路召回失败归因，本项目当前问题更像“召回后的回答治理”，不是单纯召回覆盖不足：
+
+| 我们的现象 | 数据 | 对应治理方案 |
+| --- | --- | --- |
+| 目标记忆已经召回 | `tri_grounding_fail_count = 0` | 不继续把重点放在扩大召回覆盖 |
+| 证据到了但没答对 | `tri_grounded_answer_fail_count_any = 23`，其中非 forbidden 失败 `18` | 加强证据注入模板、答案约束和回答后 grounding / relevance 校验 |
+| 三路有救活能力也有回退 | 救活基线 `9` 个 case，回退基线 `5` 个 case | 做场景路由、候选去噪和低置信过滤，避免全局默认打开 |
+| forbidden 风险仍存在 | `tri_forbidden_fail_count = 5` | 加 forbidden 过滤、旧版本过滤、冲突候选隔离 |
+| 后续累计链路可救回部分失败 | `tri_failed_but_rerank_passed_count = 7` | 验证 `route + tri + graph/rerank/injection` 组合链路，但不把它解释成 rerank 单因素因果 |
+
+拟定执行顺序：
+
+1. 先做候选去噪：对三路候选加重复、低置信、旧版本、跨 scope 和弱来源过滤。
+2. 再做 forbidden / 冲突治理：把 forbidden term、superseded item、冲突链旧节点和低可信来源候选隔离出注入上下文。
+3. 然后做证据注入约束：让进入 prompt 的记忆带上更清晰的来源、当前有效版本、关键事实和回答时必须使用的证据边界。
+4. 再做回答后校验：对生成结果检查是否 grounded、是否回答了问题、是否包含 forbidden；失败时重试、降级为基线召回或输出证据不足。
+5. 最后做小型真实 LLM 复测：用同一批 40 case 或更聚焦的失败 case，比较 `answer_rate`、`forbidden_rate`、`baseline_passed_but_tri_failed_count` 和 `grounded_answer_rule_miss` 是否改善。
+
 目标是把记忆链路拆成五个治理点：
 
 ```text
@@ -148,6 +231,8 @@ reason
 - source_ref。
 - low confidence label。
 
+Phase 6m 之后，检索重排前新增了 `RetrievalRoutingDecision`。它不是新的排序算法，而是排序前的候选准入层：先判断当前问题适合哪些召回通道，再限制每个通道最多进入多少候选。比如模糊指代允许少量图谱候选，工具偏好只走语义和关键词，部分冲突和来源查询优先要求同 scope 且可追溯的来源证据。
+
 ### 后续重排信号
 
 ```text
@@ -171,6 +256,12 @@ raw_hits
 reranked_hits
 injected_hits
 drop_reasons
+route_decision
+allowed_lanes
+accepted_by_lane
+dropped_by_reason
+expected_route_hit_rate
+candidate_accept_rate
 ```
 
 ### drop reason
@@ -182,6 +273,12 @@ drop_reasons
 - `conflict_candidate`
 - `too_many_same_type`
 - `missing_source_ref_for_fact_question`
+- `lane_not_allowed`
+- `lane_cap`
+- `missing_source_ref`
+- `scope_mismatch`
+- `low_confidence`
+- `duplicate`
 
 ## 5. MemoryLifecycleManager：生命周期维护
 
@@ -271,6 +368,103 @@ AgentLoop 只继续通过生命周期、事件和工具抽象使用记忆。
 ### 不把所有记忆强行注入 prompt
 
 优化目标不是“召回更多”，而是“注入更准”。低置信、过期、冲突候选记忆应当被降权或提示需要回源。
+
+### Tri Candidate Governance 小型线上结论
+
+本轮新增的 `chain_tri_candidate_governance` 只存在于评测 harness 中，不进入生产链路。它的作用是把现有三路召回的 `fused_ids` 作为候选集合，再应用严格候选治理：
+
+- 过滤 forbidden / should-not 候选。
+- 保留原三路融合顺序。
+- 去重。
+- 用 fixture `should_recall_ids` 做目标保护。
+- 在报告中明确标记 `eval_only`、`oracle_protected` 和 `uses_fixture_expected_ids`。
+
+真实 LLM 小矩阵结果：
+
+| profile | answer_rate | grounding_rate | forbidden_rate |
+| --- | ---: | ---: | ---: |
+| `chain_memory_base` | `50.0%` | `100.0%` | `10.0%` |
+| `chain_tri_retrieval` | `55.0%` | `100.0%` | `15.0%` |
+| `chain_tri_candidate_governance` | `42.5%` | `100.0%` | `0.0%` |
+
+设计结论：
+
+- 候选治理对 forbidden 风险有效，证明边界治理不是只停留在离线 proxy。
+- answer 降低说明“过滤坏候选”还不等于“让模型更会回答”；证据集合变短、关键上下文丢失、候选置信度没有分层、回答约束不够强，都可能让答案命中下降。
+- 后续治理不应把所有候选一刀切删除，而应引入风险分级：高风险删除，中风险降权或放入 requires_review，低风险保留并通过重排控制注入位置。
+- 生产化前还需要去掉 oracle-protected 依赖，用真实 source_ref、scope、版本链、冲突状态和候选置信度做决策。
+
+### Tri Answer Contract 小型线上结论
+
+`chain_tri_answer_contract` 是下一轮 eval-only 诊断 profile。它不扩大召回，也不改变生产链路，而是把现有 `tri_retrieval.fused_ids` 渲染成更明确的回答契约：
+
+- `must_use_memory_ids`：期望必须使用的目标证据。
+- `allowed_evidence`：允许模型使用的证据块。
+- `forbidden_memory_ids`：从三路候选中识别出的 should-not 证据。
+- `required_terms` / `required_term_groups`：答案应保留的关键表达。
+- `forbidden_terms`：答案不能输出的冲突或错误表达。
+
+真实 LLM 小矩阵结果：
+
+| profile | answer_rate | grounding_rate | forbidden_rate |
+| --- | ---: | ---: | ---: |
+| `chain_memory_base` | `35.0%` | `100.0%` | `7.5%` |
+| `chain_tri_retrieval` | `40.0%` | `100.0%` | `12.5%` |
+| `chain_tri_candidate_governance` | `52.5%` | `100.0%` | `0.0%` |
+| `chain_tri_answer_contract` | `75.0%` | `100.0%` | `12.5%` |
+
+治理结论：
+
+- `chain_tri_answer_contract` 最有效的原因是它把“证据已召回”进一步转成“模型必须如何使用证据”的结构化约束，直接命中三路召回的 post-grounding answer failure。
+- 原始 memory baseline 性能低，是因为基础注入没有 must-use、required terms 和 forbidden 边界，模型容易漏关键事实。
+- `chain_tri_retrieval` 性能不够好，是因为三路召回扩大了证据面，也扩大了噪声和 should-not 风险；没有 answer contract 时，模型会混用或弱化证据。
+- `chain_tri_candidate_governance` 的安全性最好，但它只过滤坏候选，不告诉模型如何组织答案，所以 answer_rate 没有达到 P6n 的目标。
+- 生产治理应组合两类能力：候选层用风险分级和 forbidden filtering 控制输入，回答层用 evidence contract / answer constraints 控制输出。当前 eval 结果不能直接上线，因为 answer contract 使用 fixture answer expectations。
+
+后续设计计划：
+
+1. 设计 `governed answer contract`：先按真实风险信号过滤和标记候选，再生成回答契约。
+2. 将候选治理从二值删除改为风险分层：delete、downgrade、requires_review、allow。
+3. 用 source_ref、scope、active version、conflict、superseded、lane contribution 和 rerank score 替代 fixture `should_recall_ids` / answer terms。
+4. 将 answer contract 拆成生产可解释字段：allowed evidence、current facts、stale/conflict warnings、insufficient-evidence fallback 和 forbidden boundary。
+5. 先以 eval-only / shadow 方式验证回答后校验和 retry，不直接改变生产 `AgentLoop` 或默认 prompt。
+
+P6o-1 implementation boundary: `chain_tri_governed_answer_contract` is still oracle-assisted because candidate governance protects fixture expected ids and the answer contract uses fixture answer expectations. It is useful for testing whether the combined shape can be evaluated, not for production activation. The fake-provider smoke only verifies wiring and report metadata: `case_count = 200`, `unique_case_count = 40`, `profile_count = 5`, `provider_error_count = 0`, `timeout_count = 0`, and `combines_candidate_governance` visible in JSON / Markdown.
+
+P6o-2 design boundary: tiered governance changes the eval/shadow decision record from binary keep/drop to `delete`, `downgrade`, `requires_review`, and `allow`. `delete` is reserved for forbidden, superseded, and scope mismatch candidates; weak source and low confidence are downgraded; conflicts, missing source, and insufficient evidence require review. This is the bridge to P6o-3 evidence contract generation, not a production activation.
+
+P6o-2 offline standard report facts: `case_count = 80`, `tiered_candidate_risk_tier_counts = {"delete": 324, "downgrade": 896}`, `tiered_accepted_candidate_risk_tier_counts = {"downgrade": 480}`, `tiered_deleted_risks_by_reason = {"forbidden_candidate": 324, "scope_mismatch": 52, "superseded_candidate": 176}`, `protected_expected_hit_loss_count = 0`, and `strict_should_not_kept_count = 0`. The strict-mode compatibility result matters as much as the tiered result: existing callers still default to `mode="strict"`, while eval-only tri profiles opt into `mode="tiered"`.
+
+P6o-3 design boundary: the governed evidence contract no longer says what terms the answer must contain. Instead it exposes evidence state that production code could plausibly know: allowed ids, likely relevant ids, downgraded ids, requires-review ids, stale/superseded warnings, conflict warnings, active version ids, insufficient-evidence fallback, and forbidden boundary ids. This keeps the answer contract useful without depending on fixture answer expectations.
+
+P6o-4 design boundary: answer post-check is shadow-only. It does not rewrite, retry, or block answers; it records whether the eval context included allowed evidence, missed likely evidence, included forbidden boundaries, included stale/conflict evidence, or whether the answer text failed to acknowledge insufficient evidence. P6o-5 can use these fields to compare real LLM profiles before any active retry policy exists.
+
+P6o-5 small real LLM result:
+
+| profile | answer_rate | grounding_rate | forbidden_rate | avg_tokens |
+| --- | ---: | ---: | ---: | ---: |
+| `chain_tri_retrieval` | `37.5%` | `100.0%` | `12.5%` | `5518.825` |
+| `chain_tri_candidate_governance` | `50.0%` | `100.0%` | `15.0%` | `5538.125` |
+| `chain_tri_answer_contract` | `80.0%` | `100.0%` | `15.0%` | `5688.775` |
+| `chain_tri_governed_answer_contract` | `97.5%` | `100.0%` | `0.0%` | `6079.675` |
+
+Governance conclusion: the best result comes from combining input-side candidate risk governance with output-side production-safe evidence contract. Candidate governance alone controls what evidence can enter, but it does not tell the model how to use the remaining evidence. The oracle `chain_tri_answer_contract` shows answer constraints are effective, but it still depends on fixture answer expectations. The governed contract keeps the useful part of the answer contract by using production-safe evidence states: allowed evidence, likely relevant evidence, stale/conflict warnings, active version, insufficient-evidence fallback, and forbidden boundary.
+
+P6o-5 post-check shadow reported `enabled_case_count = 40`, `needs_retry_count = 0`, and no forbidden/stale/conflict/insufficient fallback misses. These fields must be treated as context-inclusion diagnostics: they show what evidence ids were injected or included by the eval harness, not that the generated answer cited those ids. The productionization path should therefore stay staged: first shadow a larger matrix and targeted failures, then design retry/fallback policy, then consider active prompt or retrieval changes.
+
+P6o-6 combination guidance: use `chain_tri_governed_answer_contract` as the base, then add one governed signal at a time. Rerank should be tested first because it affects evidence order and token budget without requiring more recall. Version/provenance should be tested as boundary metadata inside the evidence contract: active version, stale warning, conflict warning, and forbidden boundary. Graph should be routed to graph-needed scenes only; global graph-on can reintroduce noise when tri grounding is already `100.0%`.
+
+The intended sequence is:
+
+```text
+tri governed
+tri + rerank governed
+tri + version-boundary governed
+tri + rerank + version-boundary governed
+tri + rerank + version-boundary + routed graph governed
+```
+
+Do not interpret this as a plan to remove graph or version work. The P6o-5 data only says the current small matrix does not need more recall coverage. Graph and version should continue as precision/boundary signals under governed contract, not as unconditional extra context.
 
 ## 8. 最小可行版本
 

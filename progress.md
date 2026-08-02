@@ -1,5 +1,344 @@
 # Document RAG P10a Progress
 
+## 2026-07-28 Memory P6o1 Governed Answer Contract Plan
+
+- Plan path: `docs/superpowers/plans/2026-07-28-memory-p6o1-governed-answer-contract.md`
+- Scope: eval-only profile wiring, fake-provider smoke, docs, no real LLM.
+- Production boundary: no AgentLoop, Reasoner, ToolExecutor, memory write, production prompt, or old `Retriever.retrieve()` contract changes.
+- Task 0 preserved prior P6n/P6o documentation notes separately in commit `c6706e3 docs: record memory p6o follow-up direction`.
+- Task 1 added governed answer-contract pure helpers in commit `ae253f0 feat: add governed tri answer contract helper`.
+- Task 2 registered `chain_tri_governed_answer_contract` in comprehensive online eval in commit `14d36d0 feat: add governed tri answer contract eval profile`.
+- Task 3 added fake-provider / metadata coverage in commit `075d7be test: cover governed answer contract eval metadata`.
+- Fake-provider smoke output:
+  - `/tmp/akashic-memory-p6o1-governed-answer-contract-fake/reports/memory_comprehensive_online_eval.json`;
+  - `/tmp/akashic-memory-p6o1-governed-answer-contract-fake/reports/memory_comprehensive_online_eval.md`.
+- Fake-provider smoke facts:
+  - `case_count = 200`;
+  - `unique_case_count = 40`;
+  - `profile_count = 5`;
+  - `real_llm_enabled = False`;
+  - `provider_error_count = 0`;
+  - `timeout_count = 0`;
+  - `chain_tri_governed_answer_contract` appears in `profile_summaries`;
+  - JSON and Markdown metadata expose `combines_candidate_governance = True`.
+- Current conclusion:
+  - P6o-1 proves only that the combined governed-answer-contract shape is wired, renderable, reportable, and fake-provider smokeable;
+  - it does not prove real answer quality, cost, or production readiness;
+  - the next evidence step is a bounded real LLM A/B comparing `chain_tri_retrieval`, `chain_tri_candidate_governance`, `chain_tri_answer_contract`, and `chain_tri_governed_answer_contract`.
+- Next real A/B criteria:
+  - answer_rate close to or above `75.0%`;
+  - grounding_rate `100.0%`;
+  - forbidden_rate below `12.5%`;
+  - no obvious token blow-up.
+
+## 2026-07-28 Memory Tri Retrieval Failure Attribution
+
+- User asked to execute the reviewed plan for tri retrieval failure attribution on `memory-next`, without syncing remote/main first.
+- Scope stayed analysis-only:
+  - no real LLM call;
+  - no production `AgentLoop`, `Reasoner`, `ToolExecutor`, memory write, retrieval, or prompt change;
+  - reports exclude raw prompt, raw memory summary, session text, and full answers.
+- Added `memory2/eval_tri_retrieval_failure_attribution.py`:
+  - pairs `chain_tri_retrieval` rows with matching `chain_memory_base` and `chain_rerank_injection` rows by case id, prompt variant, and repeat index;
+  - classifies tri rows into mutually exclusive buckets: `passed`, `grounding_failure`, `forbidden_answer_failure`, `grounded_answer_rule_miss`, `infra_failure`;
+  - separates `tri_grounded_answer_fail_count_any` from `tri_grounded_non_forbidden_answer_fail_count`;
+  - records pass patterns and failure-code cross tables;
+  - adds `fixture_*` evidence-count proxy fields from eval fixtures, explicitly not observed online prompt ids.
+- Added `scripts/run_memory_tri_retrieval_failure_attribution.py`.
+- Added `tests/test_memory_tri_retrieval_failure_attribution.py`.
+- Generated report:
+  - `my_md/memory_optimization/eval_reports/tri_retrieval_failure_attribution_v1/tri_retrieval_failure_attribution.json`;
+  - `my_md/memory_optimization/eval_reports/tri_retrieval_failure_attribution_v1/tri_retrieval_failure_attribution.md`.
+- Report integrity checks passed:
+  - `tri_case_count = 40`;
+  - `tri_answer_fail_count = 23`;
+  - `tri_grounded_answer_fail_count_any = 23`;
+  - `tri_grounded_non_forbidden_answer_fail_count = 18`;
+  - `tri_grounding_fail_count = 0`;
+  - `tri_forbidden_fail_count = 5`;
+  - failure bucket counts sum to `40`;
+  - answer-failure buckets sum to `23`;
+  - `case_rows = 40`.
+- Main data:
+  - failure buckets: `passed = 17`, `grounded_answer_rule_miss = 18`, `forbidden_answer_failure = 5`;
+  - pass patterns: `base_fail_tri_fail_rerank_fail = 12`, `base_fail_tri_fail_rerank_pass = 6`, `base_fail_tri_pass_rerank_fail = 5`, `base_fail_tri_pass_rerank_pass = 4`, `base_pass_tri_fail_rerank_fail = 4`, `base_pass_tri_fail_rerank_pass = 1`, `base_pass_tri_pass_rerank_fail = 1`, `base_pass_tri_pass_rerank_pass = 7`;
+  - `baseline_passed_but_tri_failed_count = 5`;
+  - `baseline_failed_but_tri_passed_count = 9`;
+  - `tri_failed_but_rerank_passed_count = 7`;
+  - `avg_fixture_tri_evidence_id_count = 4.95`;
+  - `avg_fixture_evidence_count_delta_vs_base = 0.375`;
+  - `fixture_rerank_reduced_evidence_count_cases = 34`.
+- Current conclusion:
+  - tri retrieval's small-online failure is not a recall miss problem because `tri_grounding_fail_count = 0`;
+  - the dominant issue is after grounding: evidence use, candidate noise, answer constraints, and forbidden governance;
+  - tri retrieval can rescue baseline (`9` cases) but also regresses baseline (`5` cases), so it needs scene routing and candidate governance rather than global default-on;
+  - `tri_failed_but_rerank_passed_count = 7` indicates later cumulative profile rescue potential, not rerank single-factor causality.
+- User-facing explanation recorded:
+  - answer quality is poor because target evidence is present but not reliably used;
+  - the `18` non-forbidden grounded answer misses point to evidence-use / answer-rule / injection issues;
+  - the `5` forbidden answer failures point to old/conflicting/noisy candidate governance gaps;
+  - the combination of `9` rescued cases and `5` regressions means tri retrieval should be routed and denoised, not globally expanded.
+- Market/common solution mapping recorded:
+  - split retrieval evaluation from answer generation evaluation;
+  - apply candidate denoising, reranking, context compression, scenario routing, evidence injection constraints, post-answer grounding / relevance checks, and regression observability;
+  - mapped those practices to this project's next steps: candidate denoising, forbidden/conflict filtering, evidence injection constraints, answer post-check, and bounded real LLM rerun.
+- Updated docs:
+  - `my_md/memory_optimization/README.md`;
+  - `my_md/memory_optimization/02-memory-quality-metrics.md`;
+  - `my_md/memory_optimization/03-memory-governance-design.md`;
+  - `my_md/memory_optimization/04-memory-plugin-experiment-roadmap.md`.
+  - `my_md/memory_optimization/eval_reports/tri_retrieval_failure_attribution_v1/tri_retrieval_failure_attribution.md`.
+- Verification:
+  - `tests/test_memory_tri_retrieval_failure_attribution.py tests/test_memory_online_failure_attribution.py tests/test_memory_comprehensive_online_eval.py` -> `24 passed in 8.80s`;
+  - `compileall -q memory2 scripts tests` -> passed;
+  - `git diff --check` -> passed.
+- Commit:
+  - local commit created;
+  - not pushed.
+- Remaining:
+  - next technical step should be a small targeted validation around candidate denoising / forbidden filtering / evidence injection for the tri route, not another blind recall expansion.
+
+## 2026-07-28 Tri Candidate Governance Small Online Planning
+
+- User asked to record the latest tri candidate governance data and create the next small online test plan using the plan skill.
+- Recorded the offline tri candidate governance recap in:
+  - `my_md/memory_optimization/eval_reports/tri_candidate_governance_v1/tri_candidate_governance.md`.
+- Current offline data recorded:
+  - `case_count = 320`;
+  - target evidence count `640`;
+  - baseline expected hits `640/640`;
+  - protected strict governance expected hits `640/640`;
+  - protected target loss `0`;
+  - should-not candidates `368`;
+  - strict should-not drops `368/368`;
+  - strict should-not kept `0`;
+  - unprotected strict target loss `640/640`;
+  - major drop reasons: `weak_source_ref = 3936`, `forbidden_candidate = 1800`, `superseded_candidate = 712`, `missing_source_ref = 712`, `scope_mismatch = 376`.
+- Execution conclusion recorded:
+  - candidate governance is effective as a trace-level candidate filter when target evidence is protected;
+  - unprotected strict filtering is too aggressive because many expected memories still have weak source_ref;
+  - the next useful validation is a bounded real LLM run, not another offline recall-only run.
+- New formal plan created:
+  - `docs/superpowers/plans/2026-07-28-tri-candidate-governance-small-online.md`.
+- Independent plan review result:
+  - verdict: `With fixes`;
+  - no Critical findings;
+  - Important fixes required: explicit eval-only/oracle metadata, faithful governed evidence semantics, stronger RED tests, Markdown optional-profile visibility, and temp `--real-memory-workspace` in fake/real run commands.
+- Plan revision applied:
+  - governed tri is now defined as an eval-only, oracle-protected strict filter over existing tri fused ids, preserving fused order;
+  - plan adds JSON/Markdown `profile_metadata` tests for `eval_only`, `oracle_protected`, and `uses_fixture_expected_ids`;
+  - plan tests the final common `20` + hard `20` selection and requires at least one case where tri contains should-not ids;
+  - plan includes optional profile visibility in JSON and Markdown;
+  - plan adds non-negative CLI limit validation;
+  - fake and real run commands now pass a temp empty `--real-memory-workspace`.
+- Planned small online shape:
+  - common `20` + hard `20` = `40` unique cases;
+  - profiles: `chain_memory_base`, `chain_tri_retrieval`, `chain_tri_candidate_governance`;
+  - prompt variant: `baseline`;
+  - repeats: `1`;
+  - expected completed real LLM calls: `120`;
+  - fake-provider smoke and report integrity checks must pass before real LLM calls.
+- Important boundary:
+  - `chain_tri_candidate_governance` is planned as eval-only and oracle-protected, so it is an upper-bound / mechanism validation profile, not production behavior.
+
+## 2026-07-27 Memory Tri Retrieval Route Governance
+
+- User asked to execute the reviewed plan for tri retrieval governance after the real online answer-quality matrix showed that tri/graph retrieval are not safe global defaults.
+- Worktree: `/home/jjh/git_work/akashic-agent/.worktrees/memory-next`, branch `memory-next`.
+- Implemented `memory2/retrieval_governance.py`:
+  - `classify_retrieval_scene()` classifies queries into fuzzy reference, tool preference, partial conflict, exact recall, source lookup, and unknown scenes.
+  - `build_retrieval_routing_decision()` maps each scene to allowed lanes, lane caps, source requirement, scope requirement, graph usage, and low-confidence filtering.
+  - `apply_retrieval_route()` filters candidates and emits trace fields such as accepted lanes, dropped reasons, input counts, output count, and route hit rate.
+- Integrated route governance into offline and engine paths without changing production AgentLoop / Reasoner / ToolExecutor or memory writes:
+  - `memory2/eval_runner.py`
+  - `memory2/eval_quantitative_uplift.py`
+  - `memory2/retriever.py`
+  - `plugins/default_memory/engine.py`
+- Kept `retrieve()` returning the old `list[dict]` contract and added / used trace-returning paths for evaluation and observability.
+- Added route governance evaluation:
+  - `memory2/eval_route_governance.py`
+  - `scripts/run_memory_route_governance_eval.py`
+  - reports under `my_md/memory_optimization/eval_reports/memory_route_governance_eval.{json,md}`.
+- Offline route report:
+  - `offline_case_count = 320`
+  - `offline_scene_count = 5`
+  - fuzzy reference: `16` cases, baseline `30`, gated `32`, candidate drop `68.27%`, expected route hit `100%`, candidate accept `31.73%`
+  - partial conflict: `24` cases, baseline `48`, gated `48`, candidate drop `63.3933%`, expected route hit `100%`, candidate accept `36.6067%`
+  - source lookup: `16` cases, baseline `32`, gated `32`, candidate drop `77.085%`, expected route hit `100%`, candidate accept `22.915%`
+  - tool preference: `16` cases, baseline `30`, gated `32`, candidate drop `76.73%`, expected route hit `100%`, candidate accept `23.27%`
+  - unknown: `248` cases, baseline `488`, gated `496`, candidate drop `73.7155%`, expected route hit `100%`, candidate accept `26.2845%`
+- Live engine route smoke:
+  - `live_case_count = 9`
+  - fuzzy reference: `2` cases, route hit `25%`, candidate drop `75%`, graph used `100%`
+  - unknown: `7` cases, route hit `34.2843%`, candidate drop `51.43%`, graph used `0%`
+- Updated documentation:
+  - `my_md/memory_optimization/README.md`
+  - `my_md/memory_optimization/02-memory-quality-metrics.md`
+  - `my_md/memory_optimization/03-memory-governance-design.md`
+  - `my_md/memory_optimization/04-memory-plugin-experiment-roadmap.md`
+  - `my_md/governance/03-domain-evolution.md`
+- Independent review found three eval/report issues and they were fixed:
+  - offline eval now calls route governance once with all lanes, so cross-lane duplicate filtering matches the real retriever path;
+  - offline graph usage is derived from the graph profile rather than the tri profile;
+  - route reports now split `expected_route_hit_rate` from `candidate_accept_rate`, avoiding mixed meanings between offline target recall and live candidate acceptance.
+- Focused verification after the review fix:
+  - `tests/test_memory_retrieval_governance.py tests/test_memory_eval_runner.py tests/test_memory_engine_contract.py tests/test_recall_memory_tool.py tests/test_memory_quantitative_uplift.py tests/test_memory_route_governance_eval.py` -> `88 passed in 8.71s`;
+  - `compileall` over `memory2 plugins/default_memory scripts tests` -> exit `0`;
+  - `git diff --check` -> exit `0`.
+- Current conclusion:
+  - route governance addresses candidate control and observability, not final answer quality by itself;
+  - the live route smoke is intentionally small and should not be used as a full online conclusion;
+  - next answer-quality step should be a bounded fresh rerun for tri/graph/rerank after route governance.
+
+## 2026-07-27 Memory Route Governance Small Online Eval
+
+- User asked to continue with the reviewed plan: run a short real LLM online evaluation for route-governed answer/retrieval profiles, update docs/reports, and record data.
+- Independent plan review found important issues:
+  - final online report needed hard assertions, not just printed metrics;
+  - `--exclude-infra-failures` could hide partial matrices;
+  - profile table needed sample counts;
+  - commands should explicitly run from the `memory-next` worktree;
+  - report artifacts should be checked, not only unit tests.
+- Plan revised:
+  - enforce `40` unique cases as common `20` + hard `20`;
+  - enforce `160` checkpoint rows, `4` profiles, `1` prompt variant, `1` repeat;
+  - require zero provider errors, timeouts, excluded infra failures, and `partial_due_to_infra_failure = False` for a complete result;
+  - add artifact integrity checks and partial-report documentation boundary.
+- Fake-provider smoke:
+  - common `20` + hard `20`, same checkpoint;
+  - rebuilt checkpoint-only report;
+  - `case_count = 160`, `unique_case_count = 40`, `profile_count = 4`, `real_llm_enabled = False`, `infra_passed = True`, `answer_quality_partial_matrix = True`, `checkpoint_report_only = True`, `checkpoint_input_count = 160`.
+- Real LLM run:
+  - report path: `my_md/memory_optimization/eval_reports/route_governance_small_online_v1/memory_comprehensive_online_eval.json`;
+  - markdown path: `my_md/memory_optimization/eval_reports/route_governance_small_online_v1/memory_comprehensive_online_eval.md`;
+  - `case_count = 160`, `unique_case_count = 40`, common `20`, hard `20`;
+  - profiles: `chain_memory_base`, `chain_tri_retrieval`, `chain_graph_retrieval`, `chain_rerank_injection`;
+  - `real_llm_enabled = True`, `provider_error_count = 0`, `timeout_count = 0`, `excluded_infra_failure_count = 0`, `partial_due_to_infra_failure = False`;
+  - `answer_rule_pass_rate = 38.125%`, `memory_grounding_pass_rate = 100.0%`, `forbidden_violation_rate = 13.125%`;
+  - `total_token_count = 877048`, `avg_latency_ms = 4390.7375`.
+- Per-profile results:
+  - `chain_memory_base`: `13/40` answer, `32.5%`; grounding `100%`; forbidden `15%`;
+  - `chain_tri_retrieval`: `17/40` answer, `42.5%`; relative answer lift vs base `+30.7692%`; grounding `100%`; forbidden `12.5%`;
+  - `chain_graph_retrieval`: `13/40` answer, `32.5%`; relative answer lift vs base `0%`; grounding `100%`; forbidden `15%`;
+  - `chain_rerank_injection`: `18/40` answer, `45%`; relative answer lift vs base `+38.4615%`; grounding `100%`; forbidden `10%`.
+- Current conclusion:
+  - this short controlled online run does not replace the complete `320 case / 1920 call` matrix and is not a production natural-traffic claim;
+  - route governance appears to make tri retrieval worth expanding because tri is positive on this slice;
+  - graph retrieval remains unresolved; current answer-quality fixtures do not isolate graph evidence from tri evidence well enough to treat this as a standalone graph-capability verdict;
+  - next graph work should add graph-specific cases or make graph profile evidence visibly distinct before judging graph answer uplift;
+  - rerank/injection is the strongest current routed answer path and should be prioritized in the next expanded fresh rerun.
+
+## 2026-07-26 Memory Online Attribution And Version Grounding Plan
+
+- User asked to call the plan skill and create a plan for the next two memory-next mainline steps:
+  - Step 1: online answer-quality failure attribution;
+  - Step 2: `chain_version_provenance` grounding repair.
+- Created the formal implementation plan:
+  - `docs/superpowers/plans/2026-07-26-memory-online-attribution-version-grounding.md`.
+- The plan starts from the newer real LLM online answer-quality report, not the offline retrieval-count table:
+  - `/tmp/akashic-memory-answer-quality-real-full-v1/checkpoint-report/memory_comprehensive_online_eval.json`;
+  - 320 unique cases, 6 profiles, 1920 completed real LLM calls, 0 provider errors, 0 timeouts.
+- Current problem statement recorded in the plan:
+  - tri/graph reach `100%` grounding but hurt answer rate and raise forbidden rate;
+  - rerank/injection is the best current enhanced profile because it keeps grounding at `100%` while lowering forbidden rate;
+  - version/provenance has likely evaluation-side grounding mismatch because answer rate is close to baseline and forbidden is low, but grounding is `0%`.
+- Code context checked before planning:
+  - `memory2/eval_comprehensive_online.py` owns `evidence_ids_for_profile()`, checkpoint report rebuilding, profile summaries, and answer-quality tables;
+  - `ComprehensiveOnlineMemoryEngine.retrieve()` injects ids from `evidence_ids_for_profile()`;
+  - scoring currently calls `score_answer_text(answer, answer_expectation_from_case(spec.case), memory.used_memory_ids)`;
+  - generated answer expectations include both target and graph ids, while `chain_version_provenance` uses only `version_chain_shadow.active_leaf_ids`.
+- Independent plan review completed:
+  - reviewer found a critical issue: checkpoint-only rebuilds cannot prove the version grounding fix because checkpoint rows already store final `memory_grounding_passed` values and do not contain answer text for rescoring;
+  - reviewer found an important Task 2 test issue: hand-written checkpoint rows with `memory_grounding_passed=True` would not test the scorer;
+  - reviewer found an important Task 1 mismatch: the plan said JSONL checkpoint support but the CLI snippet only accepted report JSON;
+  - reviewer recommended failure-code distribution / top examples for deeper tri/graph attribution.
+- Plan was revised:
+  - checkpoint inputs are now attribution-only / historical evidence;
+  - scorer fix validation now uses direct profile-aware expectation tests plus fresh fake-provider online eval path;
+  - attribution CLI now has `--input-json` and `--checkpoint-jsonl`;
+  - attribution profile rows now include paired deltas against matching `chain_memory_base` rows.
+- Task 1 implemented online failure attribution:
+  - added `memory2/eval_online_failure_attribution.py`;
+  - added `scripts/run_memory_online_failure_attribution.py`;
+  - added `tests/test_memory_online_failure_attribution.py`;
+  - RED: focused attribution test first failed with `ModuleNotFoundError: No module named 'memory2.eval_online_failure_attribution'`;
+  - GREEN: `tests/test_memory_online_failure_attribution.py` -> `4 passed`.
+- Generated attribution reports:
+  - report JSON input: `my_md/memory_optimization/eval_reports/online_failure_attribution/online_failure_attribution.{json,md}`;
+  - checkpoint JSONL input smoke: `/tmp/akashic-memory-online-failure-attribution-checkpoint/online_failure_attribution.{json,md}`.
+- Task 1 attribution findings:
+  - `chain_tri_retrieval`: `320` rows, `229` answer failures, `0` grounding failures, `96` forbidden failures, `78` forbidden introduced vs baseline, primary issue `grounded_but_answer_failed`;
+  - `chain_graph_retrieval`: `320` rows, `236` answer failures, `0` grounding failures, `95` forbidden failures, `82` forbidden introduced vs baseline, primary issue `grounded_but_answer_failed`;
+  - `chain_rerank_injection`: `320` rows, `193` answer failures, `0` grounding failures, `31` forbidden failures, `15` forbidden introduced vs baseline, primary issue `grounded_but_answer_failed`;
+  - `chain_version_provenance`: `320` rows, `191` answer failures, `320` grounding failures, `3` forbidden failures, `320` `missing_expected_memory_ids`, primary issue `grounding_only_failure`.
+- Task 2 implemented profile-aware version/provenance grounding:
+  - added `answer_expectation_for_profile()` in `memory2/eval_comprehensive_online.py`;
+  - `chain_version_provenance` now uses `expected_active_version_ids` for grounding when available;
+  - this matches `version_chain_shadow.active_leaf_ids`, the evidence source injected by that profile.
+- Task 2 focused tests:
+  - `test_version_provenance_grounding_uses_active_version_ids`;
+  - `test_version_provenance_online_scoring_not_forced_to_graph_ids`;
+  - `tests/test_memory_comprehensive_online_eval.py` -> `16 passed`.
+- Report validation:
+  - checkpoint-only historical rebuild: `my_md/memory_optimization/eval_reports/answer_quality_real_full_after_version_grounding_fix/memory_comprehensive_online_eval.{json,md}`;
+  - checkpoint rebuild still reports `chain_version_provenance grounding = 0.0%`, expected because old checkpoint rows store old final booleans;
+  - fresh fake-provider validation: `my_md/memory_optimization/eval_reports/version_grounding_fake_validation/memory_comprehensive_online_eval.{json,md}`;
+  - fake-provider slice result: `case_count = 40`, `chain_memory_base grounding = 20/20 = 100.0%`, `chain_version_provenance grounding = 20/20 = 100.0%`.
+- Small real LLM smoke recorded:
+  - `/tmp/akashic-memory-version-grounding-smoke/reports/memory_comprehensive_online_eval.{json,md}`;
+  - `case_count = 10`, `unique_case_count = 5`, `profile_count = 2`;
+  - `chain_memory_base answer_rate = 60%`, `chain_version_provenance answer_rate = 80%`;
+  - both profiles had `grounding_rate = 100%` and `forbidden_rate = 0%`;
+  - this is only a gate check, not a final conclusion.
+- Routing analysis recorded:
+  - tri rescue is concentrated in `tool_preference`, `conflict_resolution`, `temporal_preference`, and `preference_recall`;
+  - tri regressions are concentrated in `style_preference`, `source_ref_missing`, `entropy_value`, and `hard_tool_preference`;
+  - graph rescue is concentrated in `tri_rrf`, `version_chain`, `graph_bridge`, `source_ref_missing`, `session_boundary`, and `entity_alias`;
+  - graph regressions are concentrated in `tool_preference`, `temporal_preference`, `conflict_resolution`, and `style_preference`;
+  - conclusion: tri/graph need scene routing, not global default on/off.
+- Current conclusion:
+  - historical version-chain grounding failure is an evaluation expected-id mismatch, not proof that version evidence cannot be injected;
+  - future scorer runs no longer force version/provenance to include graph ids;
+  - a bounded fresh real LLM rerun is still required before claiming updated real online grounding percentages.
+
+## 2026-07-26 Memory Next Post-Merge Regression Repair
+
+- User asked to continue fixing the post-merge regression issues on the `memory-next` branch.
+- Worktree: `/home/jjh/git_work/akashic-agent/.worktrees/memory-next`.
+- Fixed dashboard startup delay:
+  - root cause: dashboard plugin panel compilation fell back to `npx --yes esbuild` when local `node_modules/.bin/esbuild` was absent;
+  - in this environment, that network path can block for about 30 seconds per plugin;
+  - `_build_plugin_panel_js()` now only allows the `npx` fallback when `AKASHIC_DASHBOARD_COMPILE_PLUGINS` is explicitly enabled;
+  - local esbuild remains supported, and missing build tools queue plugin panels as pending instead of blocking app startup.
+- Fixed Markdown consolidation hang:
+  - root cause: small Markdown memory file operations through `asyncio.to_thread()` could hang during async/thread cleanup in this Python 3.14 test environment;
+  - `core/memory/markdown.py` now routes those local file operations through `_run_blocking_io()`, which currently executes synchronously inside the async flow.
+- Fixed dashboard / memory_rollup HTTP test hangs:
+  - Starlette/FastAPI `TestClient` still blocks in this environment while starting the anyio blocking portal;
+  - added test-only `tests/asgi_client.py` using `httpx2.AsyncClient` and `ASGITransport`;
+  - sync FastAPI endpoints are wrapped as async route handlers so dashboard tests do not enter the anyio worker-thread path;
+  - the wrapper keeps one event loop for the client lifetime so background optimizer tasks can span multiple requests;
+  - a lock serializes concurrent calls made through the same test client.
+- Dependency state:
+  - added `httpx2>=2.9.1` to `pyproject.toml` and `requirements-dev.txt`;
+  - ran `uv lock`, adding `httpx2 2.9.1`, `httpcore2 2.9.1`, and `truststore 0.10.4` to `uv.lock`.
+- Quantitative uplift drift:
+  - current code computes `memory_base = 94.375`, `all_on = 69.3043`, `total_uplift_points = -25.0707`, `total_uplift_pct = -26.565`;
+  - this reflects the current write-governance scoring where `review` is not treated as `reject`;
+  - tests and memory optimization reports were synchronized to the current semantics.
+- Verification completed in this worktree:
+  - dashboard / rollup target: `31 passed in 9.21s`;
+  - focused dashboard busy runtime: `1 passed in 2.80s`;
+  - focused dashboard parallel filters: `1 passed in 0.97s`;
+  - combined target regression: `83 passed in 12.93s`;
+  - memory engine / quantitative group: `91 passed in 29.00s`;
+  - memory enhancement group: `86 passed in 111.05s`;
+  - tool governance group: `293 passed, 2 warnings in 3.27s`;
+  - `git diff --check` exited `0`.
+- Remaining boundary:
+  - this is a test-environment compatibility repair, not a production dashboard behavior redesign;
+  - the new ASGI client is test-only;
+  - no commit or push has been made in this step.
 ## 2026-07-28 Tool Governance P4c/P5a Queryable ToolAuditLedger Design
 
 - Created isolated worktree from merged `origin/main`: `/home/jjh/git_work/akashic-agent/.worktrees/tool-governance-p4c-audit-ledger`.
@@ -968,8 +1307,8 @@
   - `memory_quantitative_chain_eval.json/.md`
   - `memory_layered_scoring_eval.json/.md`
 - Current 80-case offline results under the new baseline:
-  - quantitative uplift: `baseline_main_score = 94.375`, `all_on_main_score = 69.5543`, `total_uplift_points = -24.8207`;
-  - chain uplift: `chain_memory_base = 94.375`, `chain_all_on = 69.5543`, `total_chain_uplift_points = -24.8207`;
+  - quantitative uplift: `baseline_main_score = 94.375`, `all_on_main_score = 69.3043`, `total_uplift_points = -25.0707`;
+  - chain uplift: `chain_memory_base = 94.375`, `chain_all_on = 69.3043`, `total_chain_uplift_points = -25.0707`;
   - layered scoring: `baseline_total_layered_score = 94.375`, `final_total_layered_score = 54.9521`, `total_layered_uplift_points = -39.4229`.
 - Focused verification:
   - `.venv/bin/python -m pytest tests/test_memory_quantitative_uplift.py tests/test_memory_quantitative_chain_cli.py tests/test_memory_quantitative_uplift_cli.py tests/test_memory_layered_scoring.py tests/test_memory_comprehensive_online_eval.py tests/test_memory_comprehensive_online_cli.py -q -p no:cacheprovider` -> `50 passed`.
@@ -1411,6 +1750,49 @@
   - no production `sessions.db` or memory DB writes;
   - no active cleanup.
 
+## 2026-07-28 Memory Tri Candidate Governance
+
+- Goal: add offline candidate denoising governance for tri retrieval after failure attribution showed the main bottleneck was grounded-but-wrong answers and forbidden/noise, not raw recall coverage.
+- Scope:
+  - no real LLM calls;
+  - no remote sync;
+  - no `AgentLoop`, `Reasoner`, `ToolExecutor`, `ToolRegistry`, production memory write, or production prompt changes;
+  - keep existing `retrieve()` result contract compatible.
+- Implemented:
+  - `CandidateGovernancePolicy` in `memory2/retrieval_governance.py`;
+  - `classify_candidate_risks()` with risks for forbidden, superseded, explicit conflict, scope mismatch, missing source_ref, weak source_ref, and low confidence;
+  - optional strict candidate filtering in `apply_retrieval_route()` with trace fields for dropped risks, protected target ids, would-drop protected reasons, and accepted risky candidates;
+  - `memory2/eval_tri_candidate_governance.py`;
+  - `scripts/run_memory_tri_candidate_governance_eval.py`;
+  - focused unit / CLI tests in `tests/test_memory_tri_candidate_governance.py`.
+- Important implementation correction:
+  - conflict risk is now based on explicit conflict fields / relations / tags;
+  - it no longer drops a valid active memory only because its summary or topic contains the Chinese word "冲突".
+- Generated report:
+  - `my_md/memory_optimization/eval_reports/tri_candidate_governance_v1/tri_candidate_governance.json`;
+  - `my_md/memory_optimization/eval_reports/tri_candidate_governance_v1/tri_candidate_governance.md`.
+- Current comprehensive offline trace result:
+  - `case_count = 320`;
+  - target evidence count: `640`;
+  - baseline expected hits: `640/640`;
+  - protected strict governance expected hits: `640/640`;
+  - protected target loss: `0`;
+  - should-not candidates in baseline route: `368`;
+  - strict should-not drops: `368/368`;
+  - strict should-not kept: `0`;
+  - unprotected strict governance target loss: `640/640`;
+  - protected would-drop reasons: `weak_source_ref = 1424`;
+  - dropped risks by reason: `weak_source_ref = 3936`, `forbidden_candidate = 1800`, `superseded_candidate = 712`, `missing_source_ref = 712`, `scope_mismatch = 376`.
+- Joined tri-failure buckets:
+  - `passed = 17`;
+  - `forbidden_answer_failure = 5`;
+  - `grounded_answer_rule_miss = 18`;
+  - `not_in_40_case_report = 280`.
+- Current conclusion:
+  - protected strict governance can preserve known target evidence while removing all fixture-labeled should-not candidates;
+  - unprotected strict governance is too aggressive and would erase all target evidence in this fixture, mainly because weak source_ref is common among expected memories;
+  - this validates candidate-governance trace and safety boundaries, but does not prove answer-rate uplift until a bounded real LLM rerun is performed.
+
 ## 2026-07-24 Answer Retrieval Metric Plan Boundary
 
 - Goal: improve the answer/retrieval count report so interview-facing recall numbers show both raw counts and relative percentages against the original memory baseline.
@@ -1599,3 +1981,1427 @@
   - no `memory_items.source_ref` rewrite;
   - no production `sessions.db` or memory DB writes;
   - no active cleanup.
+
+## 2026-07-28 Tri Candidate Governance Small Online
+
+- Goal: compare original memory baseline, existing tri retrieval, and eval-only candidate-governed tri retrieval on a bounded real LLM matrix.
+- Implementation:
+  - added optional eval-only profile `chain_tri_candidate_governance`;
+  - profile is a strict, order-preserving filter over existing `tri_retrieval.fused_ids`;
+  - profile metadata marks `eval_only = true`, `oracle_protected = true`, `uses_fixture_expected_ids = true`;
+  - added CLI selection `--balanced-small --common-limit --hard-limit`;
+  - production `AgentLoop`, `Reasoner`, `ToolExecutor`, memory writes, production prompt, and `retrieve()` contract were not changed.
+- Fake-provider smoke:
+  - output `/tmp/akashic-memory-tri-governance-small-fake/reports`;
+  - `case_count = 120`;
+  - `unique_case_count = 40`;
+  - `profile_count = 3`;
+  - `provider_error_count = 0`;
+  - `timeout_count = 0`.
+- Real LLM run:
+  - output `my_md/memory_optimization/eval_reports/tri_candidate_governance_small_online_v1`;
+  - checkpoint `/tmp/akashic-memory-tri-governance-small-online/reports/memory_comprehensive_online_eval.checkpoint.jsonl`;
+  - split common `20` + hard `20`;
+  - profiles `chain_memory_base`, `chain_tri_retrieval`, `chain_tri_candidate_governance`;
+  - prompt variant `baseline`;
+  - repeats `1`;
+  - `case_count = 120`;
+  - `unique_case_count = 40`;
+  - `completed_call_count = 120`;
+  - `profile_count = 3`;
+  - `real_llm_enabled = True`;
+  - `provider_error_count = 0`;
+  - `timeout_count = 0`;
+  - `total_token_count = 655992`;
+  - `avg_total_token_count = 5466.6`;
+  - `avg_latency_ms = 4565.5`.
+- Real LLM profile result:
+
+| profile | answer_success | answer_rate | grounding_rate | forbidden_rate | avg_tokens | avg_latency_ms |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `chain_memory_base` | `20/40` | `50.0%` | `100.0%` | `10.0%` | `5486.7` | `4785.5` |
+| `chain_tri_retrieval` | `22/40` | `55.0%` | `100.0%` | `15.0%` | `5529.875` | `4922.225` |
+| `chain_tri_candidate_governance` | `17/40` | `42.5%` | `100.0%` | `0.0%` | `5383.225` | `3988.775` |
+
+- Conclusion:
+  - infrastructure gate passed;
+  - candidate governance reduced forbidden from tri retrieval's `15.0%` to `0.0%`;
+  - answer rate dropped from tri retrieval's `55.0%` to `42.5%`, so the answer-quality success gate was not met;
+  - grounding stayed `100.0%`, so the next work should focus on evidence injection, answer constraints, candidate confidence routing, and fallback instead of simply expanding recall.
+
+## 2026-07-28 Memory Tri Answer Contract Plan
+
+- User chose方案 1: continue on `memory-next` and create a plan for eval-only Evidence Injection / Answer Contract work.
+- Confirmed current worktree is `/home/jjh/git_work/akashic-agent/.worktrees/memory-next`, branch `memory-next`, clean before planning, and currently `领先 10, 落后 44` against `origin/main`.
+- Wrote implementation plan:
+  - `docs/superpowers/plans/2026-07-28-memory-tri-answer-contract.md`
+- Plan scope:
+  - add pure `memory2/eval_answer_contract.py`;
+  - add optional eval-only `chain_tri_answer_contract` profile;
+  - render structured Answer Contract only inside `ComprehensiveOnlineMemoryEngine`;
+  - run fake-provider smoke and bounded 40-case real LLM comparison;
+  - update memory optimization docs with measured result and explicit diagnostic/oracle-assisted boundary.
+- Production boundary:
+  - no production `AgentLoop`, `Reasoner`, `ToolExecutor`, memory write, production prompt, or old `Retriever.retrieve()` contract change in the plan.
+- Self-review:
+  - scanned the plan for placeholder markers and removed `<measured>` style placeholders;
+  - `docs/` is ignored by `.gitignore`, so the plan requires `git add -f` if it should be committed.
+- Plan revision after review:
+  - fixed answer expectation field names from nonexistent `expected_terms` / `expected_term_groups` / `forbidden_terms` to current fixture keys `expected_answer_contains` / `expected_answer_contains_any` / `forbidden_answer_contains`;
+  - fixed report metric assertion from nonexistent `profile_summary` to current `profile_summaries`;
+  - added explicit Markdown metadata-column update so `diagnostic_answer_contract` and `uses_fixture_answer_expectations` are visible in reports;
+  - aligned Task 1 interface notes with direct `EvalCase.trace["tri_retrieval"]["fused_ids"]` usage instead of mentioning `_ids_from_trace`.
+- Execution:
+  - committed Task 1 as `fd202a8 feat: add memory tri answer contract helper`;
+  - committed Task 2 as `8ceba0d feat: add eval-only tri answer contract profile`;
+  - committed Task 3 as `959d828 test: cover tri answer contract online eval profile`;
+  - fake-provider smoke command:
+    `PYTHONDONTWRITEBYTECODE=1 .venv/bin/python scripts/run_memory_comprehensive_online_eval.py --workspace /tmp/akashic-memory-tri-answer-contract-fake/workspace --out-dir /tmp/akashic-memory-tri-answer-contract-fake/reports --case-pack standard --balanced-small --common-limit 20 --hard-limit 20 --profiles chain_memory_base,chain_tri_retrieval,chain_tri_candidate_governance,chain_tri_answer_contract --prompt-variants baseline --repeats 1 --fake-provider --timeout-s 60 --concurrency 1`;
+  - fake-provider result: `case_count = 160`, `unique_case_count = 40`, `profile_count = 4`, `real_llm_enabled = False`, `provider_error_count = 0`, `timeout_count = 0`;
+  - first real run with worktree-relative `config.toml` failed before provider setup because the linked worktree had no `config.toml`;
+  - second sandboxed real run using `/home/jjh/git_work/akashic-agent/config.toml` produced 4 checkpointed rows and all 4 timed out at 60s, so it was interrupted and not used as evidence;
+  - escalated real LLM command:
+    `PYTHONDONTWRITEBYTECODE=1 .venv/bin/python scripts/run_memory_comprehensive_online_eval.py --workspace /tmp/akashic-memory-tri-answer-contract-online-escalated/workspace --out-dir my_md/memory_optimization/eval_reports/tri_answer_contract_small_online_v1 --config /home/jjh/git_work/akashic-agent/config.toml --case-pack standard --balanced-small --common-limit 20 --hard-limit 20 --profiles chain_memory_base,chain_tri_retrieval,chain_tri_candidate_governance,chain_tri_answer_contract --prompt-variants baseline --repeats 1 --enable-real-llm --checkpoint-jsonl /tmp/akashic-memory-tri-answer-contract-online-escalated/reports/memory_comprehensive_online_eval.checkpoint.jsonl --timeout-s 60 --concurrency 1`;
+  - real LLM output:
+    `my_md/memory_optimization/eval_reports/tri_answer_contract_small_online_v1/memory_comprehensive_online_eval.json`;
+    `my_md/memory_optimization/eval_reports/tri_answer_contract_small_online_v1/memory_comprehensive_online_eval.md`;
+  - real LLM result: `real_llm_enabled = True`, `case_count = 160`, `unique_case_count = 40`, `profile_count = 4`, `provider_error_count = 0`, `timeout_count = 0`;
+  - profile rows:
+    `chain_memory_base`: answer `35.0%`, grounding `100.0%`, forbidden `7.5%`, avg tokens `5499.525`, avg latency `4152.275ms`;
+    `chain_tri_retrieval`: answer `40.0%`, grounding `100.0%`, forbidden `12.5%`, avg tokens `5492.15`, avg latency `3768.3ms`;
+    `chain_tri_candidate_governance`: answer `52.5%`, grounding `100.0%`, forbidden `0.0%`, avg tokens `5428.85`, avg latency `3869.3ms`;
+    `chain_tri_answer_contract`: answer `75.0%`, grounding `100.0%`, forbidden `12.5%`, avg tokens `5698.625`, avg latency `3897.975ms`;
+  - P6n success gate: passed for `chain_tri_answer_contract` because answer rate is above `55.0%`, grounding is `100.0%`, and forbidden is `<= 15.0%`;
+  - boundary: `chain_tri_answer_contract` is eval-only and diagnostic/oracle-assisted because it uses fixture answer expectations; it is not production-ready behavior.
+
+## 2026-07-28 Memory P6o2 Risk-Tiered Candidate Governance
+
+- Plan path: `docs/superpowers/plans/2026-07-28-memory-p6o2-risk-tiered-candidate-governance.md`.
+- Scope: eval/shadow-only candidate risk tiers, offline report metrics, docs, no real LLM.
+- Production boundary: no AgentLoop, Reasoner, ToolExecutor, memory write, production prompt, or old `Retriever.retrieve()` contract changes.
+- Risk tiers: `delete`, `downgrade`, `requires_review`, `allow`.
+- Strict mode remains the default for `CandidateGovernancePolicy`; eval-only tri candidate/governed answer-contract profiles opt into `mode="tiered"`.
+- Offline standard report facts: `case_count = 80`, `tiered_candidate_risk_tier_counts = {"delete": 324, "downgrade": 896}`, `tiered_accepted_candidate_risk_tier_counts = {"downgrade": 480}`, `tiered_deleted_risks_by_reason = {"forbidden_candidate": 324, "scope_mismatch": 52, "superseded_candidate": 176}`, `protected_expected_hit_loss_count = 0`, `strict_should_not_kept_count = 0`.
+- Conclusion: strict candidate governance is useful for forbidden control but over-prunes weak-source / low-confidence evidence; tiered governance keeps soft-risk candidates visible for answer contracts while still deleting forbidden, superseded, and scope-mismatch candidates.
+- Next handoff: P6o-3 production-safe evidence contract should consume tiered candidate metadata and remove fixture answer expectations.
+
+## 2026-07-28 Memory P6o3 Production-Safe Evidence Contract
+
+- Plan path: `docs/superpowers/plans/2026-07-28-memory-p6o3-production-safe-evidence-contract.md`.
+- Scope: eval/shadow-only evidence contract, no real LLM.
+- Production boundary: no AgentLoop, Reasoner, ToolExecutor, memory write, production prompt, or old `Retriever.retrieve()` contract changes.
+- Contract fields: `allowed_evidence`, `likely_relevant_evidence`, `stale_warning`, `conflict_warning`, `active_version`, `insufficient_evidence_fallback`, `forbidden_boundary`.
+- Old `chain_tri_answer_contract` remains oracle diagnostic; governed profile is the production-safe eval/shadow path.
+- Fake-provider smoke: `case_count = 12`, `real_llm_enabled = False`, `provider_error_count = 0`, `timeout_count = 0`; all governed rows passed with empty failures.
+- Focused verification: `tests/test_memory_answer_contract.py` plus governed profile integration tests passed with `14 passed`.
+- Comprehensive fake-provider regression: `tests/test_memory_comprehensive_online_eval.py` passed with `33 passed`.
+- Final verification: `tests/test_memory_answer_contract.py tests/test_memory_comprehensive_online_eval.py tests/test_memory_retrieval_governance.py tests/test_memory_tri_candidate_governance.py` passed with `68 passed`; `compileall -q memory2 scripts tests` and `git diff --check` passed.
+- Next handoff: P6o-4 answer post-check shadow should record allowed evidence inclusion, missed likely context evidence, forbidden boundary inclusion, stale/conflict evidence inclusion, insufficient fallback observation, and retry need.
+
+## 2026-07-28 Memory P6o4 Answer Post-Check Shadow
+
+- Plan path: `docs/superpowers/plans/2026-07-28-memory-p6o4-answer-post-check-shadow.md`.
+- Scope: eval/shadow-only post-answer diagnostics, no real LLM.
+- Production boundary: no retry, no answer rewrite, no production prompt change, no AgentLoop / Reasoner / ToolExecutor / memory write change.
+- Shadow fields: allowed evidence inclusion, missing likely relevant evidence from context, forbidden boundary inclusion, stale evidence inclusion, conflict evidence inclusion, insufficient-evidence fallback observation, retry need.
+- Markdown boundary: aggregate metrics only; no raw prompt, session text, full answer, or answer_debug.
+- Fake-provider smoke: `case_count = 12`, `enabled_case_count = 4`, `real_llm_enabled = False`, `provider_error_count = 0`, `timeout_count = 0`, `forbidden_boundary_included_count = 0`, `insufficient_fallback_missing_count = 0`.
+- Final verification: `tests/test_memory_answer_contract.py tests/test_memory_answer_post_check.py tests/test_memory_comprehensive_online_eval.py tests/test_memory_retrieval_governance.py tests/test_memory_tri_candidate_governance.py` passed with `78 passed`; `compileall -q memory2 scripts tests` and `git diff --check` passed.
+- Next handoff: P6o-5 small real LLM A/B should compare `chain_tri_retrieval`, `chain_tri_candidate_governance`, `chain_tri_answer_contract`, and `chain_tri_governed_answer_contract` with post-check shadow metrics enabled.
+
+## 2026-07-28 Memory P6o5 Small Real LLM AB
+
+- Plan path: `docs/superpowers/plans/2026-07-28-memory-p6o5-small-real-llm-ab.md`.
+- Scope: small controlled real LLM A/B, sanitized reports, docs; no production AgentLoop / Reasoner / ToolExecutor / memory write / production prompt / old `Retriever.retrieve()` contract changes.
+- Plan review fixes applied before execution:
+  - JSON and Markdown privacy gates;
+  - `completed_call_count` assertion;
+  - common `20` + hard `20` split assertion;
+  - literal `baseline` prompt variant and repeat `0` assertions;
+  - corrected wording from aggregate-only to sanitized report artifacts.
+- Task 1 commit: `248a234 test: cover p6o5 small online matrix shape`.
+- Fake-provider smoke:
+  - path: `/tmp/akashic-memory-p6o5-small-fake/reports`;
+  - `case_count = 160`;
+  - `unique_case_count = 40`;
+  - `completed_call_count = 160`;
+  - `profile_count = 4`;
+  - `provider_error_count = 0`;
+  - `timeout_count = 0`;
+  - `answer_post_check_shadow.case_count = 40`;
+  - artifact integrity and privacy checks passed.
+- Real LLM report:
+  - `my_md/memory_optimization/eval_reports/p6o5_governed_answer_contract_small_online_v1/memory_comprehensive_online_eval.json`;
+  - `my_md/memory_optimization/eval_reports/p6o5_governed_answer_contract_small_online_v1/memory_comprehensive_online_eval.md`.
+- Real LLM integrity:
+  - `real_llm_enabled = True`;
+  - `case_count = 160`;
+  - `unique_case_count = 40`;
+  - `completed_call_count = 160`;
+  - `profile_count = 4`;
+  - `prompt_variant_count = 1`;
+  - `repeat_count = 1`;
+  - `provider_error_count = 0`;
+  - `timeout_count = 0`;
+  - `excluded_infra_failure_count = 0`;
+  - `partial_due_to_infra_failure = False`;
+  - JSON / Markdown privacy checks passed.
+- Per-profile result:
+  - `chain_tri_retrieval`: answer `15/40 = 37.5%`, grounding `100.0%`, forbidden `12.5%`, avg tokens `5518.825`;
+  - `chain_tri_candidate_governance`: answer `20/40 = 50.0%`, grounding `100.0%`, forbidden `15.0%`, avg tokens `5538.125`;
+  - `chain_tri_answer_contract`: answer `32/40 = 80.0%`, grounding `100.0%`, forbidden `15.0%`, avg tokens `5688.775`;
+  - `chain_tri_governed_answer_contract`: answer `39/40 = 97.5%`, grounding `100.0%`, forbidden `0.0%`, avg tokens `6079.675`.
+- Post-check shadow:
+  - `case_count = 40`;
+  - `enabled_case_count = 40`;
+  - `needs_retry_count = 0`;
+  - `forbidden_boundary_included_count = 0`;
+  - `missing_likely_relevant_context_count = 0`;
+  - `stale_evidence_included_count = 0`;
+  - `conflict_evidence_included_count = 0`;
+  - `insufficient_fallback_missing_count = 0`.
+- Conclusion:
+  - latest governed profile is most effective because it combines candidate risk governance with production-safe evidence contract;
+  - raw tri retrieval underperforms because it expands context without answer guidance;
+  - candidate governance alone underperforms because it filters input but lacks answer-construction guidance;
+  - oracle answer contract performs well but is not production-safe because it uses fixture answer expectations;
+  - post-check shadow id fields mean injected/included context, not proven answer citation use.
+- Remaining:
+  - update docs commit, final verification, plan commit.
+
+## 2026-07-28 Side Conversation: P6o-6 Combination Guidance
+
+- User asked how to combine graph, version/provenance, rerank, and the P6o-5 governed contract after seeing that tri recall grounding was already `100.0%`.
+- Current decision:
+  - do not directly combine all modules in one production-like profile;
+  - use `chain_tri_governed_answer_contract` as the baseline candidate;
+  - test one governed signal layer at a time.
+- Rationale:
+  - P6o-5 proves the current bottleneck is answer/evidence control, not raw recall coverage;
+  - `chain_tri_retrieval` had grounding `100.0%` but answer only `37.5%`;
+  - `chain_tri_governed_answer_contract` had answer `39/40 = 97.5%`, grounding `100.0%`, forbidden `0.0%`;
+  - adding graph/version/rerank as unconditional extra context could reintroduce noise and reduce answer quality.
+- Recommended P6o-6 sequence:
+  1. `tri governed` vs `tri + rerank governed`;
+  2. `tri governed` vs `tri + version-boundary governed`;
+  3. `tri + rerank + version-boundary governed`;
+  4. only after that, `tri + rerank + version-boundary + routed graph governed`.
+- Module roles:
+  - tri retrieval: candidate coverage;
+  - rerank/injection: evidence order and context budget;
+  - version/provenance: active version, stale warning, conflict warning, forbidden boundary;
+  - graph retrieval: graph-needed scenes only, such as fuzzy references and entity relationship hops;
+  - governed evidence contract: model-facing allowed evidence and fallback structure;
+  - post-check shadow: observe retry/fallback need without changing answers.
+- P6o-6 success gates:
+  - answer_rate stays close to P6o-5 governed `97.5%`;
+  - grounding remains `100.0%`;
+  - forbidden remains close to `0.0%`;
+  - avg tokens do not grow materially;
+  - post-check `needs_retry_count` and evidence-risk counts do not rise.
+- Boundary:
+  - this side conversation only records guidance;
+  - no new eval has been run;
+  - no code or production behavior has been changed.
+
+## 2026-07-28 Memory P6o6 Governed Rerank Signal
+
+- User asked to call the plan skill, review the plan, revise it, and start execution.
+- Plan created and reviewed:
+  - `docs/superpowers/plans/2026-07-28-memory-p6o6-governed-rerank-signal.md`.
+- Review result:
+  - initial plan needed fixes for inconsistent fake gate counts, missing Markdown metadata columns, unenforced real success criteria, fake-provider profile recognition, stronger no-expansion tests, checkpoint-recovery instructions, and privacy assertions.
+- Plan revision applied:
+  - focused CLI fake gate is `8` rows;
+  - full fake pre-real gate is `80` rows;
+  - optional real matrix is `80` rows;
+  - Markdown metadata now covers `combines_rerank_injection` and `does_not_expand_recall`;
+  - real result gate requires answer rate within `5` points of governed baseline, grounding `100.0%`, forbidden no worse than baseline, avg-token overhead <= `10%`, and post-check risk counts at `0`.
+- Implementation commits:
+  - `85dfcd9 feat: allow governed evidence contract profile name`;
+  - `f4a9dc9 feat: add rerank governed answer contract eval profile`;
+  - `b6f6529 test: cover p6o6 governed rerank online matrix`.
+- Fake-provider full gate:
+  - report path: `/tmp/akashic-memory-p6o6-governed-rerank/fake-reports/memory_comprehensive_online_eval.json`;
+  - `case_count = 80`;
+  - `unique_case_count = 40`;
+  - `profile_count = 2`;
+  - `provider_error_count = 0`;
+  - `timeout_count = 0`;
+  - `answer_post_check_shadow.case_count = 80`.
+- Real LLM run:
+  - first attempt failed before any calls because linked worktree lacked `config.toml`;
+  - reran with `--config /home/jjh/git_work/akashic-agent/config.toml`;
+  - report path: `my_md/memory_optimization/eval_reports/p6o6_governed_rerank_small_online_v1/memory_comprehensive_online_eval.json`;
+  - markdown path: `my_md/memory_optimization/eval_reports/p6o6_governed_rerank_small_online_v1/memory_comprehensive_online_eval.md`;
+  - `case_count = 80`;
+  - `unique_case_count = 40`;
+  - `completed_call_count = 80`;
+  - `profile_count = 2`;
+  - `prompt_variant_count = 1`;
+  - `repeat_count = 1`;
+  - `provider_error_count = 0`;
+  - `timeout_count = 0`;
+  - privacy flags: `raw_query_included = False`, `raw_memory_summary_included = False`, `prompt_included = False`, `session_text_included = False`, `full_answer_included = False`.
+- Per-profile real result:
+  - `chain_tri_governed_answer_contract`: answer `39/40 = 97.5%`, grounding `100.0%`, forbidden `0.0%`, avg tokens `6162.05`;
+  - `chain_tri_rerank_governed_answer_contract`: answer `40/40 = 100.0%`, grounding `100.0%`, forbidden `0.0%`, avg tokens `6209.475`.
+- Post-check shadow aggregate:
+  - `case_count = 80`;
+  - `enabled_case_count = 80`;
+  - `needs_retry_count = 0`;
+  - `forbidden_boundary_included_count = 0`;
+  - `missing_likely_relevant_context_count = 0`;
+  - `stale_evidence_included_count = 0`;
+  - `conflict_evidence_included_count = 0`;
+  - `insufficient_fallback_missing_count = 0`.
+- Conclusion:
+  - rerank is useful in this slice when used only as a governed-contract ordering signal;
+  - it did not expand recall beyond candidate-governed tri ids;
+  - it recovered the remaining P6o-5 `1/40` miss while keeping forbidden at `0.0%`;
+  - avg-token overhead was `47.425` tokens, about `0.77%`;
+  - this is still controlled eval harness evidence, not production natural traffic.
+- Next step:
+  - test version-boundary governed fields separately;
+  - do not add routed graph or all-on until the version-boundary slice has its own result.
+
+## 2026-07-28 P6o-7 version-boundary governed slice
+
+- Plan:
+  - `docs/superpowers/plans/2026-07-28-memory-p6o7-version-boundary-governed.md`.
+- Review revisions:
+  - scoped version-boundary `recalled_items` to governed allowed evidence rows;
+  - kept full `memory_items` only for version-chain topology;
+  - restricted superseded forbidden boundary to predecessors of governed active leaves;
+  - enforced `allowed_evidence_ids` and `active_version_ids` disjoint from `forbidden_boundary_ids`;
+  - added unrelated superseded fixture regression so unrelated version chains do not pollute the profile.
+- Implementation commits:
+  - `836c67d feat: add version boundary evidence contract fields`;
+  - `ede1a9e feat: add version governed answer contract eval profile`;
+  - `604de4b test: cover p6o7 version governed online matrix`.
+- Fake-provider full gate:
+  - report path: `/tmp/akashic-memory-p6o7-version-boundary-governed/fake-reports/memory_comprehensive_online_eval.json`;
+  - `case_count = 80`;
+  - `unique_case_count = 40`;
+  - `profile_count = 2`;
+  - `provider_error_count = 0`;
+  - `timeout_count = 0`;
+  - `answer_post_check_shadow.case_count = 80`.
+- Real LLM run:
+  - report path: `my_md/memory_optimization/eval_reports/p6o7_version_boundary_governed_small_online_v1/memory_comprehensive_online_eval.json`;
+  - markdown path: `my_md/memory_optimization/eval_reports/p6o7_version_boundary_governed_small_online_v1/memory_comprehensive_online_eval.md`;
+  - `case_count = 80`;
+  - `unique_case_count = 40`;
+  - `completed_call_count = 80`;
+  - `profile_count = 2`;
+  - `prompt_variant_count = 1`;
+  - `repeat_count = 1`;
+  - `provider_error_count = 0`;
+  - `timeout_count = 0`;
+  - privacy flags: `raw_query_included = False`, `raw_memory_summary_included = False`, `prompt_included = False`, `session_text_included = False`, `full_answer_included = False`.
+- Per-profile real result:
+  - `chain_tri_governed_answer_contract`: answer `38/40 = 95.0%`, grounding `100.0%`, forbidden `0.0%`, avg tokens `6170.85`;
+  - `chain_tri_version_governed_answer_contract`: answer `38/40 = 95.0%`, grounding `100.0%`, forbidden `0.0%`, avg tokens `6052.6`.
+- Post-check shadow aggregate:
+  - `case_count = 80`;
+  - `enabled_case_count = 80`;
+  - `needs_retry_count = 2`;
+  - `forbidden_boundary_included_count = 0`;
+  - `missing_likely_relevant_context_count = 0`;
+  - `stale_evidence_included_count = 0`;
+  - `conflict_evidence_included_count = 0`;
+  - `insufficient_fallback_missing_count = 0`.
+- Conclusion:
+  - version-boundary metadata is scoped and does not expand recall in this slice;
+  - it did not expand recall beyond candidate-governed tri ids;
+  - it did not hurt answer, grounding, or forbidden main metrics;
+  - token cost decreased by `118.25` avg tokens versus the same-run governed baseline;
+  - it failed the post-check no-rise gate because `needs_retry_count` rose from governed `0` to version-governed `2`;
+  - both retry cases were `forbidden_boundary_mentioned`: `hard_version_chain_01` and `hard_stale_sleep_02`;
+  - this is not production-ready as currently rendered.
+- Next step:
+  - analyze the two forbidden-boundary mention retries;
+  - redesign forbidden-boundary presentation so the model can respect boundaries without echoing forbidden ids;
+  - then compare governed, rerank-governed, and revised version-governed before combining rerank + version;
+  - keep graph/all-on deferred.
+
+## 2026-07-28 P6o-8 safe boundary presentation
+
+- Plan:
+  - `docs/superpowers/plans/2026-07-28-memory-p6o8-p6o10-boundary-rerank-combo.md`.
+- Review revisions:
+  - hide both `forbidden_boundary_ids:` and `deleted_evidence_ids:` from model-visible prompt text;
+  - preserve raw boundary ids in `result.raw["answer_contract"]` for post-check;
+  - count post-check failures from real serialized fields and `retry_reasons`;
+  - enforce privacy, prompt/repeat counts, completed call counts, and infra gates before each next phase;
+  - require P6o-10 no-recall-expansion and rerank-order delta tests before real combo validation.
+- Implementation commits:
+  - `90ab0ce fix: hide forbidden boundary ids from evidence prompt`;
+  - `2a8d84d test: cover p6o8 safe boundary online matrix`.
+- Fake-provider full gate:
+  - report path: `/tmp/akashic-memory-p6o8-safe-boundary/fake-reports/memory_comprehensive_online_eval.json`;
+  - `case_count = 80`;
+  - `unique_case_count = 40`;
+  - `profile_count = 2`;
+  - `provider_error_count = 0`;
+  - `timeout_count = 0`.
+- Real LLM run:
+  - report path: `my_md/memory_optimization/eval_reports/p6o8_version_boundary_safe_presentation_small_online_v1/memory_comprehensive_online_eval.json`;
+  - markdown path: `my_md/memory_optimization/eval_reports/p6o8_version_boundary_safe_presentation_small_online_v1/memory_comprehensive_online_eval.md`;
+  - `case_count = 80`;
+  - `unique_case_count = 40`;
+  - `completed_call_count = 80`;
+  - `profile_count = 2`;
+  - `prompt_variant_count = 1`;
+  - `repeat_count = 1`;
+  - `provider_error_count = 0`;
+  - `timeout_count = 0`;
+  - privacy flags: `raw_query_included = False`, `raw_memory_summary_included = False`, `prompt_included = False`, `session_text_included = False`, `full_answer_included = False`.
+- Per-profile real result:
+  - `chain_tri_governed_answer_contract`: answer `40/40 = 100.0%`, grounding `100.0%`, forbidden `0.0%`, avg tokens `6171.225`;
+  - `chain_tri_version_governed_answer_contract`: answer `39/40 = 97.5%`, grounding `100.0%`, forbidden `0.0%`, avg tokens `6054.025`.
+- Post-check shadow aggregate:
+  - `case_count = 80`;
+  - `enabled_case_count = 80`;
+  - `needs_retry_count = 0`;
+  - `forbidden_boundary_included_count = 0`;
+  - `missing_likely_relevant_context_count = 0`;
+  - `stale_evidence_included_count = 0`;
+  - `conflict_evidence_included_count = 0`;
+  - `insufficient_fallback_missing_count = 0`.
+- Conclusion:
+  - raw forbidden/deleted ids should not be shown to the model; count-only and abstract boundary instructions are safer;
+  - P6o-8 fixed the P6o-7 post-check regression because `needs_retry_count` dropped from `2` to `0`;
+  - version-governed remains within gate: answer delta `-2.5` points versus same-run governed baseline, grounding `100.0%`, forbidden `0.0%`, avg tokens `-117.2`;
+  - this is controlled eval harness evidence, not production natural traffic.
+- Next step:
+  - run P6o-9 same-matrix comparison before adding the rerank + version combo profile;
+  - do not enter P6o-10 unless P6o-9 passes.
+
+## 2026-07-28 P6o-9 governed/rerank/version same matrix
+
+- Plan:
+  - `docs/superpowers/plans/2026-07-28-memory-p6o8-p6o10-boundary-rerank-combo.md`.
+- Fake-provider full gate:
+  - report path: `/tmp/akashic-memory-p6o9-same-matrix/fake-reports/memory_comprehensive_online_eval.json`;
+  - `case_count = 120`;
+  - `unique_case_count = 40`;
+  - `profile_count = 3`;
+  - `provider_error_count = 0`;
+  - `timeout_count = 0`;
+  - `infra_passed = True`.
+- Real LLM run:
+  - report path: `my_md/memory_optimization/eval_reports/p6o9_governed_rerank_version_same_matrix_v1/memory_comprehensive_online_eval.json`;
+  - markdown path: `my_md/memory_optimization/eval_reports/p6o9_governed_rerank_version_same_matrix_v1/memory_comprehensive_online_eval.md`;
+  - `case_count = 120`;
+  - `unique_case_count = 40`;
+  - `completed_call_count = 120`;
+  - `profile_count = 3`;
+  - `prompt_variant_count = 1`;
+  - `repeat_count = 1`;
+  - `provider_error_count = 0`;
+  - `timeout_count = 0`;
+  - privacy flags: `raw_query_included = False`, `raw_memory_summary_included = False`, `prompt_included = False`, `session_text_included = False`, `full_answer_included = False`.
+- Per-profile real result:
+  - `chain_tri_governed_answer_contract`: answer `39/40 = 97.5%`, grounding `100.0%`, forbidden `0.0%`, avg tokens `6156.725`;
+  - `chain_tri_rerank_governed_answer_contract`: answer `38/40 = 95.0%`, grounding `100.0%`, forbidden `0.0%`, avg tokens `6118.475`;
+  - `chain_tri_version_governed_answer_contract`: answer `38/40 = 95.0%`, grounding `100.0%`, forbidden `0.0%`, avg tokens `6021.55`.
+- Post-check shadow aggregate:
+  - `case_count = 120`;
+  - `enabled_case_count = 120`;
+  - `needs_retry_count = 0`;
+  - `forbidden_boundary_included_count = 0`;
+  - `missing_likely_relevant_context_count = 0`;
+  - `stale_evidence_included_count = 0`;
+  - `conflict_evidence_included_count = 0`;
+  - `insufficient_fallback_missing_count = 0`.
+- Gate result:
+  - answer-rate deltas for rerank and version are `-2.5` points versus governed, within the `5.0` point gate;
+  - grounding remains `100.0%`;
+  - forbidden remains `0.0%`;
+  - avg tokens do not rise and are lower than governed for rerank and version;
+  - post-check risk counts do not rise.
+- Conclusion:
+  - governed remains the strongest standalone setting in this same-run matrix;
+  - rerank and safe version are safe but not individually better in answer rate;
+  - P6o-10 can test whether rerank ordering and safe version-boundary metadata are complementary when combined without recall expansion.
+
+## 2026-07-28 P6o-10 rerank + version governed combo
+
+- Plan:
+  - `docs/superpowers/plans/2026-07-28-memory-p6o8-p6o10-boundary-rerank-combo.md`.
+- Implementation commit:
+  - `7bb3b06 feat: add rerank version governed answer contract profile`.
+- Implementation detail:
+  - added eval-only `chain_tri_rerank_version_governed_answer_contract`;
+  - combo evidence ids equal rerank-governed ids;
+  - combo evidence id set equals governed ids;
+  - safe version-boundary metadata is attached without model-visible raw forbidden/deleted ids;
+  - metadata marks `combines_rerank_injection = True`, `combines_version_boundary = True`, and `does_not_expand_recall = True`.
+- Fake-provider full gate:
+  - report path: `/tmp/akashic-memory-p6o10-combo/fake-reports/memory_comprehensive_online_eval.json`;
+  - `case_count = 160`;
+  - `unique_case_count = 40`;
+  - `profile_count = 4`;
+  - `provider_error_count = 0`;
+  - `timeout_count = 0`;
+  - `infra_passed = True`.
+- Real LLM run:
+  - report path: `my_md/memory_optimization/eval_reports/p6o10_rerank_version_governed_combo_small_online_v1/memory_comprehensive_online_eval.json`;
+  - markdown path: `my_md/memory_optimization/eval_reports/p6o10_rerank_version_governed_combo_small_online_v1/memory_comprehensive_online_eval.md`;
+  - `case_count = 160`;
+  - `unique_case_count = 40`;
+  - `completed_call_count = 160`;
+  - `profile_count = 4`;
+  - `prompt_variant_count = 1`;
+  - `repeat_count = 1`;
+  - `provider_error_count = 0`;
+  - `timeout_count = 0`;
+  - privacy flags: `raw_query_included = False`, `raw_memory_summary_included = False`, `prompt_included = False`, `session_text_included = False`, `full_answer_included = False`.
+- Per-profile real result:
+  - `chain_tri_governed_answer_contract`: answer `39/40 = 97.5%`, grounding `100.0%`, forbidden `0.0%`, avg tokens `6130.1`;
+  - `chain_tri_rerank_governed_answer_contract`: answer `39/40 = 97.5%`, grounding `100.0%`, forbidden `0.0%`, avg tokens `6131.95`;
+  - `chain_tri_version_governed_answer_contract`: answer `40/40 = 100.0%`, grounding `100.0%`, forbidden `0.0%`, avg tokens `6004.95`;
+  - `chain_tri_rerank_version_governed_answer_contract`: answer `39/40 = 97.5%`, grounding `100.0%`, forbidden `0.0%`, avg tokens `6036.7`.
+- Post-check shadow aggregate:
+  - `case_count = 160`;
+  - `enabled_case_count = 160`;
+  - `needs_retry_count = 0`;
+  - `forbidden_boundary_included_count = 0`;
+  - `missing_likely_relevant_context_count = 0`;
+  - `stale_evidence_included_count = 0`;
+  - `conflict_evidence_included_count = 0`;
+  - `insufficient_fallback_missing_count = 0`.
+- Gate result:
+  - combo passes answer, grounding, forbidden, token, privacy, infra, and post-check gates;
+  - combo ties governed answer rate and lowers avg tokens by `93.4`;
+  - safe version-governed is the best profile in this matrix.
+- Conclusion:
+  - rerank + version combo is safe but not the winner;
+  - safe version-governed is currently the strongest small-matrix answer-level profile;
+  - next work should inspect misses and rerun sensitivity before graph/all-on or production activation.
+
+## 2026-07-29 current P6o follow-up assessment
+
+- Current best profile:
+  - `chain_tri_version_governed_answer_contract` in P6o-10;
+  - answer `40/40 = 100.0%`;
+  - grounding `100.0%`;
+  - forbidden `0.0%`;
+  - avg tokens `6004.95`;
+  - post-check risk counts all `0`.
+- Safe fallback candidate:
+  - `chain_tri_rerank_version_governed_answer_contract`;
+  - answer `39/40 = 97.5%`;
+  - grounding `100.0%`;
+  - forbidden `0.0%`;
+  - avg tokens `6036.7`;
+  - post-check risk counts all `0`;
+  - passes gate but does not outperform safe version-governed.
+- Test scheme recorded:
+  - P6o-8: two-profile real validation after hiding raw boundary ids, `80` completed calls;
+  - P6o-9: same-matrix governed/rerank/version comparison, `120` completed calls;
+  - P6o-10: four-profile combo validation, `160` completed calls;
+  - all real runs used standard case pack, common `20` + hard `20`, baseline prompt, repeat `1`, concurrency `2`, and privacy-preserving reports.
+- Current problems:
+  - the matrix is still only `40` unique cases;
+  - stochastic run-to-run variation is visible, especially safe version-governed changing from `38/40` in P6o-9 to `40/40` in P6o-10;
+  - rerank is safe but has not shown stable incremental answer-rate gain in the latest matrix;
+  - combo is safe and cheaper than governed but not better than version-only;
+  - all profiles remain eval/shadow-only and fixture-protected, not production natural traffic;
+  - post-check is observation-only and has no production retry/fallback implementation.
+- Recommended next step:
+  - P6o-11 should be a failure/sensitivity analysis, not a new production feature;
+  - compare per-case pass/fail patterns across P6o-8/P6o-9/P6o-10;
+  - identify whether version-only's `40/40` is stable or a one-run effect;
+  - only after that run a targeted hard slice and repeat stability gate for safe version-only vs combo.
+
+## 2026-07-29 P6o-11 cross-report synthesis
+
+- User asked to compare graph retrieval data together with P6/P6o-5 through P6o-10 data.
+- Created report-only synthesis:
+  - `my_md/memory_optimization/eval_reports/p6o11_cross_report_synthesis_v1/cross_report_synthesis.md`.
+- No new LLM run was performed.
+- Sources compared:
+  - offline V2 answer/retrieval count report;
+  - route-governance small real LLM matrix;
+  - online failure attribution;
+  - tri retrieval failure attribution;
+  - P6o-5, P6o-8, P6o-9, and P6o-10 real LLM reports.
+- Core finding:
+  - graph retrieval has offline recall value: `1994/2000 = 99.7%`, `+16` recalled vs memory base, `72.7273%` miss reduction;
+  - graph retrieval did not prove global answer-level value: route-governance small matrix stayed at `13/40 = 32.5%`, same as memory base, and online attribution had `236/320` answer failures with `95/320` forbidden failures;
+  - tri retrieval is strongest offline recall path (`2000/2000`) but raw tri answer quality remains weak;
+  - P6o governed/version-governed gains come from candidate governance and evidence contract, not additional recall expansion;
+  - current strongest small-matrix setting remains P6o-10 safe version-governed: `40/40 = 100.0%`, grounding `100.0%`, forbidden `0.0%`, avg tokens `6004.95`.
+- Decision:
+  - do not rerun failure attribution; it already exists;
+  - do not run graph-all-on;
+  - treat graph as a routed graph candidate;
+  - next conservative step is safe version-governed repeat stability, with routed graph designed only if graph-only rescue cases are clear enough.
+
+## 2026-07-29 P6o-12 safe version repeat stability
+
+- Plan file:
+  - `docs/superpowers/plans/2026-07-29-memory-p6o12-safe-version-repeat-stability.md`.
+- Real report:
+  - `my_md/memory_optimization/eval_reports/p6o12_safe_version_repeat_stability_v1/memory_comprehensive_online_eval.json`;
+  - `my_md/memory_optimization/eval_reports/p6o12_safe_version_repeat_stability_v1/memory_comprehensive_online_eval.md`;
+  - `my_md/memory_optimization/eval_reports/p6o12_safe_version_repeat_stability_v1/repeat_stability_summary.md`.
+- Scope:
+  - no graph/all-on;
+  - no new eval profile;
+  - no production activation;
+  - no production AgentLoop / prompt / write path changes.
+- Matrix:
+  - standard case pack;
+  - common `20` + hard `20`;
+  - baseline prompt;
+  - repeat `3`;
+  - profiles `chain_tri_governed_answer_contract` and `chain_tri_version_governed_answer_contract`;
+  - `240` completed real LLM calls.
+- Infra:
+  - `provider_error_count = 0`;
+  - `timeout_count = 0`;
+  - `infra_passed = True`.
+- Profile totals:
+  - `chain_tri_governed_answer_contract`: answer `119/120 = 99.1667%`, grounding `100.0%`, forbidden `0.0%`, avg tokens `6122.6917`;
+  - `chain_tri_version_governed_answer_contract`: answer `117/120 = 97.5%`, grounding `100.0%`, forbidden `0.0%`, avg tokens `6030.3833`.
+- Per-repeat answer counts:
+  - governed baseline: `40/40`, `39/40`, `40/40`;
+  - safe version-governed: `39/40`, `39/40`, `39/40`.
+- Post-check shadow:
+  - both profiles had `needs_retry = 0`;
+  - forbidden boundary, stale evidence, conflict evidence, missing likely relevant context, and insufficient fallback risk counts were all `0`.
+- Conclusion:
+  - safe version-governed repeat stability gate passed;
+  - P6o-10 `40/40` should not be treated as a fixed 100% guarantee;
+  - better current wording is stable `39/40` to `40/40` band on the current 40-case slice;
+  - safe version-governed remained cheaper than governed baseline by `92.3084` avg tokens.
+- Next step:
+  - targeted hard-slice validation before any routed graph design;
+  - do not run graph-all-on or production activation yet.
+
+## 2026-07-29 P6o-12 production candidate handoff
+
+- User asked to record the current best scheme's data, test method, conclusions, and test results in docs.
+- Added:
+  - `my_md/memory_optimization/eval_reports/p6o12_safe_version_repeat_stability_v1/best_profile_production_candidate_summary.md`.
+- Updated:
+  - `my_md/memory_optimization/README.md`.
+- Content recorded:
+  - current best candidate is eval-only `chain_tri_version_governed_answer_contract`;
+  - production-migratable structure is `tri retrieval candidate pool + candidate governance + production-safe evidence contract + safe version boundary + answer post-check shadow`;
+  - graph is parked for now and should remain a routed graph candidate, not graph-all-on;
+  - P6o-12 test method: standard case pack, common `20` + hard `20`, baseline prompt, repeat `3`, 2 profiles, `240` completed real LLM calls;
+  - P6o-12 data: governed baseline `119/120 = 99.1667%`, safe version-governed `117/120 = 97.5%`, both grounding `100.0%`, forbidden `0.0%`, post-check risk all `0`;
+  - safe version-governed per-repeat answer counts: `39/40`, `39/40`, `39/40`;
+  - token delta vs governed baseline: `-92.3084` avg tokens;
+  - conclusion: initial eval-only loop is closed, but production default activation is not justified yet.
+- Recommended next step recorded:
+  - P6o-13 production-shadow safe version-governed design;
+  - shadow output only first;
+  - no direct production activation, no graph-all-on, no fixture expectation copied into production.
+
+## 2026-07-29 P6o-13 system path safe version governed
+
+- Plan file:
+  - `docs/superpowers/plans/2026-07-29-memory-p6o13-system-path-safe-version-governed.md`.
+- Implemented system-path integration:
+  - `memory2/system_path_safe_version_contract.py` builds a production-safe contract from real retrieved memory candidates, route traces, and replacement records;
+  - `MemoryConfig.safe_version_governed_mode` defaults to `off`;
+  - `safe_version_shadow` records contract metadata and post-check shadow while keeping the original memory block;
+  - `safe_version_replace` can replace the memory block only when config mode and a separate replace allow gate are both enabled;
+  - session metadata can request `off` or `shadow`, but cannot grant replace permission.
+- Implementation commits completed before docs:
+  - `fe95ec7 feat: add system path safe version contract builder`;
+  - `43b98ca feat: pass safe version memory mode through retrieval pipeline`;
+  - `4632f5f feat: attach safe version governed memory shadow to engine`;
+  - `8c22cf3 feat: add system path safe version eval runner`.
+- Fake-provider system-path smoke report:
+  - `my_md/memory_optimization/eval_reports/p6o13_system_path_safe_version_governed_v1/system_path_safe_version_eval.json`;
+  - `my_md/memory_optimization/eval_reports/p6o13_system_path_safe_version_governed_v1/system_path_safe_version_eval.md`.
+- Smoke matrix:
+  - standard case pack;
+  - common `20` + hard `20`;
+  - modes `current`, `safe_version_shadow`, `safe_version_replace`;
+  - `unique_case_count = 40`;
+  - `case_count = 120`;
+  - `replacement_seeded_count = 120`;
+  - `version_boundary_case_count = 80`.
+- Smoke gate metrics:
+  - `provider_error_count = 0`;
+  - `timeout_count = 0`;
+  - `current` contract generation `0.0%`, post-check shadow `0.0%`;
+  - `safe_version_shadow` contract generation `100.0%`, post-check shadow `100.0%`;
+  - `safe_version_replace` contract generation `100.0%`, post-check shadow `100.0%`.
+- Boundaries:
+  - default production behavior remains `off`;
+  - no graph/all-on;
+  - no production write, retry, or fallback changes;
+  - committed reports exclude raw prompt, raw session text, raw memory summaries, and full answers;
+  - pre-existing untracked real LLM validation intent directory was left untouched.
+- Conclusion:
+  - P6o-13 proves the current best safe version-governed structure can be mounted on the real system path behind explicit test/eval gates;
+  - this is fake-provider system-path validation, not real LLM answer-quality proof and not production default activation.
+- Next gate:
+  - P6o-14 system-path safe version-governed real LLM A/B;
+  - compare `current` against `safe_version_replace`, with optional `safe_version_shadow` telemetry parity;
+  - success requires clean infra, `100.0%` contract generation in governed modes, no worse answer/grounding/forbidden than current, and sanitized reports.
+
+## 2026-07-29 P6o-14 system path real LLM A/B
+
+- Plan file:
+  - `docs/superpowers/plans/2026-07-29-memory-p6o14-system-path-real-llm-ab.md`.
+- Code/report commits:
+  - `39cf169 docs: add p6o14 system path real llm ab plan`;
+  - `b15f9da feat: score system path safe version ab eval`;
+  - `0c3eec6 test: gate system path safe version ab report shape`;
+  - `64e0515 test: record p6o14 system path real llm ab`.
+- Runner changes:
+  - `scripts/run_memory_system_path_safe_version_eval.py` now has a real LLM provider gate using configured `LLMProvider`;
+  - fake and real provider flags are mutually exclusive;
+  - `memory2/eval_system_path_safe_version.py` now uses fixture query text for execution but excludes it from committed reports;
+  - answer scoring uses existing `answer_expectation_from_case()` and `score_answer_text()`;
+  - provider calls are wrapped with `_RecordingProvider` and token counts are extracted with `_extract_token_counts()`;
+  - JSON/Markdown reports include aggregate and per-mode answer, grounding, forbidden, token, latency, contract, and post-check metrics.
+- Real report:
+  - `my_md/memory_optimization/eval_reports/p6o14_system_path_safe_version_real_llm_ab_v1/system_path_safe_version_eval.json`;
+  - `my_md/memory_optimization/eval_reports/p6o14_system_path_safe_version_real_llm_ab_v1/system_path_safe_version_eval.md`.
+- Matrix:
+  - standard case pack;
+  - common `20` + hard `20`;
+  - modes `current` and `safe_version_replace`;
+  - `unique_case_count = 40`;
+  - `case_count = 80`;
+  - real LLM enabled with config from `/home/jjh/git_work/akashic-agent/config.toml`;
+  - `--real-memory-workspace` remained intentionally unused because the runner seeds fixture memory into temporary system-path stores.
+- Infra and aggregate metrics:
+  - `provider_error_count = 0`;
+  - `timeout_count = 0`;
+  - `token_metrics_available = True`;
+  - aggregate answer rate `40.0%`;
+  - aggregate grounding rate `100.0%`;
+  - aggregate forbidden rate `16.25%`;
+  - `total_token_count = 436123`;
+  - `avg_total_token_count = 5451.5375`;
+  - `avg_latency_ms = 4867.4375`.
+- Per-mode result:
+  - `current`: answer `11/40 = 27.5%`, grounding `40/40 = 100.0%`, forbidden `13/40 = 32.5%`, avg tokens `5488.75`, avg latency `5329.475ms`, contract generation `0.0%`, post-check shadow `0.0%`;
+  - `safe_version_replace`: answer `21/40 = 52.5%`, grounding `40/40 = 100.0%`, forbidden `0/40 = 0.0%`, avg tokens `5414.325`, avg latency `4405.4ms`, contract generation `100.0%`, post-check shadow `100.0%`.
+- Gate result:
+  - P6o-14 real A/B gate passed;
+  - replace answer rate is higher than current by `25.0` points;
+  - grounding stays equal at `100.0%`;
+  - forbidden drops by `32.5` points;
+  - avg tokens drop by `74.425`;
+  - avg latency drops by `924.075ms`.
+- Boundaries:
+  - this is controlled fixture-seeded system-path A/B, not production natural traffic;
+  - default production mode remains `off`;
+  - no graph/all-on;
+  - no production write, retry, or fallback changes;
+  - reports exclude prompt text, conversation logs, memory summaries, complete responses, API keys, and authorization values;
+  - pre-existing untracked P6o-13 real LLM intent directory was left untouched.
+- Next gate:
+  - P6o-15 system-path repeat stability;
+  - compare `current` vs `safe_version_replace`;
+  - suggested matrix: common `20` + hard `20`, repeat `3`, baseline prompt, `240` real calls;
+  - only after repeat stability should production-shadow rollout be considered, still with default `off`.
+
+## 2026-07-29 P6o-15 answer lift handoff
+
+- User asked from side conversation to record enough context so the main thread can continue.
+- Added handoff document:
+  - `my_md/memory_optimization/eval_reports/p6o15_system_path_answer_lift_handoff_v1/system_path_answer_lift_handoff.md`.
+- Recorded P6o-14 method:
+  - real LLM system-path A/B;
+  - standard case pack;
+  - common `20` + hard `20`;
+  - modes `current` and `safe_version_replace`;
+  - `40` unique cases and `80` total calls;
+  - fixture-seeded temporary system-path stores;
+  - no real user memory DB read;
+  - answer scoring via existing answer expectation scorer.
+- Recorded P6o-14 data:
+  - `current`: answer `11/40 = 27.5%`, grounding `100.0%`, forbidden `32.5%`, avg tokens `5488.75`, avg latency `5329.475ms`;
+  - `safe_version_replace`: answer `21/40 = 52.5%`, grounding `100.0%`, forbidden `0.0%`, avg tokens `5414.325`, avg latency `4405.4ms`;
+  - delta: answer `+25.0` points, forbidden `-32.5` points, avg tokens `-74.425`, avg latency `-924.075ms`.
+- Recorded conclusion:
+  - P6o-14 gate passed;
+  - system-path replace is clearly better than current;
+  - but `52.5%` is not enough for production default activation.
+- Recorded explanation for lower score than prior near-100 profiles:
+  - prior P6o-10/P6o-12 results were eval-only / comprehensive profile results with stronger evidence and answer contract presentation;
+  - P6o-14 uses real system path, so prompt composition, memory block format and AgentLoop context reduce answer determinism;
+  - grounding is already `100.0%`, so the bottleneck is evidence-to-answer rather than recall.
+- Recorded next target:
+  - move P6o-14 `safe_version_replace` answer rate from `52.5%` toward P6o-12 eval-only `97.5%`;
+  - keep grounding `100.0%`;
+  - keep forbidden `0.0%`;
+  - avoid token blow-up.
+- Recorded recommended roadmap:
+  - P6o-15 repeat stability + failure attribution;
+  - P6o-16 system-path answer guidance;
+  - P6o-17 post-check retry shadow;
+  - P6o-18 memory block placement / format A/B;
+  - P6o-19 combined validation.
+- Recommended immediate next action:
+  - create formal plan for `P6o-15 to P6o-19 system-path answer lift roadmap`;
+  - execute first only P6o-15 repeat stability + failure attribution.
+
+## 2026-07-29 P6o-15 system path repeat stability and failure attribution
+
+- Plan file:
+  - `docs/superpowers/plans/2026-07-29-memory-p6o15-system-path-repeat-stability-failure-attribution.md`.
+- Implementation/report commits completed before docs:
+  - `28db4e5 feat: add system path repeat stability eval`;
+  - `72fdbac feat: add system path failure attribution`;
+  - `f41b26c test: record p6o15 system path repeat stability`;
+  - `70ce56f docs: record p6o15 system path repeat stability`;
+  - `25ed050 fix: harden system path checkpoint rebuild`.
+- Runner/report changes:
+  - `scripts/run_memory_system_path_safe_version_eval.py` now supports `--repeats`, `--checkpoint-jsonl`, `--resume`, and `--checkpoint-report-only`;
+  - `memory2/eval_system_path_safe_version.py` records `repeat_index`, repeat summaries, checkpoint metrics, and sanitized scoring counts;
+  - review follow-up split checkpoint semantics: resume skips provider_error/timeout checkpoint rows so they can be retried, while checkpoint-report-only includes infra rows so reports cannot silently hide partial failures;
+  - checkpoint loading now tolerates malformed trailing JSONL and records `malformed_checkpoint_line_count`;
+  - checkpoint append now inserts a newline if the existing checkpoint file ends with a partial line;
+  - `memory2/eval_system_path_failure_attribution.py` builds report-only, sanitized heuristic failure attribution from completed system-path rows;
+  - committed reports still exclude raw prompt, raw session text, raw user query, raw memory summaries, complete responses, API keys, and authorization values.
+- Fake-provider repeat smoke:
+  - common `2` + hard `2`;
+  - modes `current`, `safe_version_replace`;
+  - repeat `3`;
+  - `unique_case_count = 4`;
+  - `case_count = 24`;
+  - checkpoint rebuild `checkpoint_input_count = 24`;
+  - attribution `paired_run_count = 12`;
+  - privacy gate passed with key-aware JSON/Markdown and fixture-string checks.
+- Real report:
+  - `my_md/memory_optimization/eval_reports/p6o15_system_path_repeat_stability_v1/system_path_safe_version_eval.json`;
+  - `my_md/memory_optimization/eval_reports/p6o15_system_path_repeat_stability_v1/system_path_safe_version_eval.md`;
+  - `my_md/memory_optimization/eval_reports/p6o15_system_path_repeat_stability_v1/system_path_failure_attribution.json`;
+  - `my_md/memory_optimization/eval_reports/p6o15_system_path_repeat_stability_v1/system_path_failure_attribution.md`.
+- Matrix:
+  - standard case pack;
+  - common `20` + hard `20`;
+  - modes `current` and `safe_version_replace`;
+  - repeat `3`;
+  - `unique_case_count = 40`;
+  - `case_count = 240`;
+  - real LLM enabled with config from `/home/jjh/git_work/akashic-agent/config.toml`;
+  - checkpoint used at `/tmp/akashic-memory-p6o15-system-path-repeat-real/checkpoint.jsonl`;
+  - `--real-memory-workspace` remained CLI compatibility only; the runner fixture-seeded temporary system-path stores and did not read real user memory DB.
+- Infra and aggregate metrics:
+  - `provider_error_count = 0`;
+  - `timeout_count = 0`;
+  - `token_metrics_available = True`;
+  - aggregate answer rate `49.5833%`;
+  - aggregate grounding rate `100.0%`;
+  - aggregate forbidden rate `19.5833%`;
+  - `avg_total_token_count = 5504.5417`;
+  - `avg_latency_ms = 3943.4583`.
+- Per-mode result:
+  - `current`: answer `31/120 = 25.8333%`, grounding `120/120 = 100.0%`, forbidden `47/120 = 39.1667%`, avg tokens `5582.0`, avg latency `4627.15ms`, contract generation `0.0%`, post-check shadow `0.0%`;
+  - `safe_version_replace`: answer `88/120 = 73.3333%`, grounding `120/120 = 100.0%`, forbidden `0/120 = 0.0%`, avg tokens `5427.0833`, avg latency `3259.7667ms`, contract generation `100.0%`, post-check shadow `100.0%`.
+- Delta vs `current`:
+  - answer `+47.5` points;
+  - grounding `0.0` points;
+  - forbidden `-39.1667` points;
+  - avg tokens `-154.9167`;
+  - avg latency `-1367.3833ms`.
+- Per-repeat result:
+  - repeat `0`: current answer `10/40 = 25.0%`, forbidden `45.0%`; replace answer `29/40 = 72.5%`, forbidden `0.0%`;
+  - repeat `1`: current answer `14/40 = 35.0%`, forbidden `27.5%`; replace answer `29/40 = 72.5%`, forbidden `0.0%`;
+  - repeat `2`: current answer `7/40 = 17.5%`, forbidden `45.0%`; replace answer `30/40 = 75.0%`, forbidden `0.0%`.
+- Repeat stability gate:
+  - complete matrix gate passed: `240` rows, `40` unique cases, `2` modes, `3` repeats, zero infra failures;
+  - replace answer was higher than current in every repeat;
+  - replace per-repeat answer floor stayed above `45.0%`;
+  - replace answer spread was `2.5` points, below the `25.0` point gate;
+  - grounding stayed `100.0%`;
+  - forbidden stayed `0.0%`;
+  - token and latency did not increase.
+- Failure attribution:
+  - `paired_run_count = 120`;
+  - `unpaired_run_count = 0`;
+  - `baseline_failed_candidate_passed_count = 64`;
+  - `baseline_passed_candidate_failed_count = 7`;
+  - `baseline_passed_candidate_passed_count = 24`;
+  - `baseline_failed_candidate_failed_count = 25`;
+  - candidate buckets: `passed = 88`, `answer_rule_miss_required_terms = 16`, `answer_rule_miss_any_group = 13`, `language_failure = 3`;
+  - bucket semantics are sanitized heuristics, not raw-answer semantic diagnosis.
+- Conclusion:
+  - P6o-14's `safe_version_replace` result was directionally stable and understated the repeat result;
+  - P6o-15 shows system-path replace can reach `73.3333%` answer while keeping grounding `100.0%`, forbidden `0.0%`, contract generation `100.0%`, and post-check shadow `100.0%`;
+  - current system path remains unstable and unsafe in this slice, with `25.8333%` answer and `39.1667%` forbidden;
+  - remaining replace misses are mostly required-term / any-group answer-rule misses plus a small language-failure bucket, so the next bottleneck is still evidence-to-answer expression rather than recall.
+- Boundaries:
+  - this is controlled fixture-seeded system-path repeat stability, not production natural traffic;
+  - default production mode remains `off`;
+  - no graph/all-on;
+  - no production write, retry, fallback, answer guidance, prompt placement, or contract-format production change in P6o-15;
+  - pre-existing untracked P6o-13 intent directory was left untouched.
+- Next gate:
+  - proceed to P6o-16 system-path answer guidance;
+  - P6o-16 should target the remaining answer-rule and language buckets while keeping grounding `100.0%`, forbidden `0.0%`, contract success `100.0%`, and bounded tokens.
+- Final verification after review fix:
+  - focused safe-version/system-path slice: `30 passed`;
+  - regression slice: `17 passed`;
+  - `git diff --check` passed;
+  - P6o-15 docs/report privacy gate passed.
+
+## 2026-07-29 P6o-16 system path answer guidance
+
+- Plan file:
+  - `docs/superpowers/plans/2026-07-29-memory-p6o16-system-path-answer-guidance.md`.
+- Review result:
+  - independent read-only plan review found no Critical issues;
+  - important fixes applied before execution: pass guidance flag into engine `system_path_contract_to_dict()`, block `request.extra` guidance escalation, replace fixed Chinese instruction with user-language-neutral wording, add explicit real A/B gate check, and expand privacy scans to query/key/value leaks.
+- Implementation scope:
+  - added optional answer guidance rendering to `memory2/system_path_safe_version_contract.py`;
+  - added `MemoryConfig.safe_version_answer_guidance_enabled = False`;
+  - wired guidance through `AgentLoop` and `DefaultMemoryRetrievalPipeline`;
+  - pipeline removes caller-provided `safe_version_governed_mode`, `safe_version_governed_replace_allowed`, and `safe_version_answer_guidance_enabled` from `request.extra`, then only writes safe-version controls from config/session-safe routing;
+  - `DefaultMemoryEngine` enables guidance only when `safe_version_governed_mode = replace`, replace is allowed, and the gated hint is true;
+  - eval harness added `safe_version_replace_guided` mode;
+  - reports sanitize `answer_guidance_enabled` metadata and contract state.
+- Production boundary:
+  - production default remains `off`;
+  - session metadata cannot enable guidance;
+  - `request.extra` cannot enable safe-version replace or guidance;
+  - no graph/all-on;
+  - no new retrieval lane;
+  - no production write, retry, fallback, or real user memory DB read;
+  - guidance uses no fixture answer expectations, expected answer terms, expected memory ids, raw query, full prompt, or raw answer.
+- Fake-provider smoke:
+  - report path: `my_md/memory_optimization/eval_reports/p6o16_system_path_answer_guidance_v1/fake_smoke/system_path_safe_version_eval.json` and `.md`;
+  - common `2` + hard `2`;
+  - modes `current`, `safe_version_replace`, `safe_version_replace_guided`;
+  - `unique_case_count = 4`;
+  - `mode_count = 3`;
+  - `case_count = 12`;
+  - `provider_error_count = 0`;
+  - `timeout_count = 0`;
+  - guided rows had `answer_guidance_enabled = true` in metadata and contract;
+  - key privacy scan had no matches.
+- Real report:
+  - primary: `my_md/memory_optimization/eval_reports/p6o16_system_path_answer_guidance_v1/real_small_ab/system_path_safe_version_eval.json` and `.md`;
+  - checkpoint: `my_md/memory_optimization/eval_reports/p6o16_system_path_answer_guidance_v1/real_small_ab/checkpoint.jsonl`;
+  - rebuilt: `my_md/memory_optimization/eval_reports/p6o16_system_path_answer_guidance_v1/real_small_ab_rebuilt/system_path_safe_version_eval.json` and `.md`;
+  - summary report: `my_md/memory_optimization/eval_reports/p6o16_system_path_answer_guidance_v1/system_path_answer_guidance_report.md`.
+- Matrix:
+  - standard case pack;
+  - common `20` + hard `20`;
+  - `40` unique cases;
+  - modes `current`, `safe_version_replace`, `safe_version_replace_guided`;
+  - repeat `1`;
+  - `case_count = 120`;
+  - real LLM enabled with config from `/home/jjh/git_work/akashic-agent/config.toml`;
+  - checkpoint line count `120`.
+- Infra:
+  - `provider_error_count = 0`;
+  - `timeout_count = 0`;
+  - `malformed_checkpoint_line_count = 0`;
+  - `token_metrics_available = True`;
+  - checkpoint report-only rebuild matched primary metrics for case count and mode summaries.
+- Per-mode result:
+  - `current`: answer `10/40 = 25.0%`, grounding `40/40 = 100.0%`, forbidden `11/40 = 27.5%`, avg tokens `5530.525`, avg latency `4734.875ms`, contract generation `0.0%`, post-check shadow `0.0%`;
+  - `safe_version_replace`: answer `26/40 = 65.0%`, grounding `40/40 = 100.0%`, forbidden `0/40 = 0.0%`, avg tokens `5382.625`, avg latency `3261.825ms`, contract generation `100.0%`, post-check shadow `100.0%`;
+  - `safe_version_replace_guided`: answer `29/40 = 72.5%`, grounding `40/40 = 100.0%`, forbidden `0/40 = 0.0%`, avg tokens `5467.7`, avg latency `3207.6ms`, contract generation `100.0%`, post-check shadow `100.0%`.
+- Delta:
+  - replace vs current: answer `+40.0` points, forbidden `-27.5` points, grounding unchanged, avg tokens `-147.9`;
+  - guided vs replace: answer `+7.5` points, forbidden unchanged at `0.0%`, grounding unchanged at `100.0%`, avg tokens `+85.075`;
+  - guided vs current: answer `+47.5` points, forbidden `-27.5` points, grounding unchanged, avg tokens `-62.825`.
+- Gate:
+  - guided grounding did not regress: `100.0% >= 100.0%`;
+  - guided forbidden did not regress and stayed zero: `0.0% == 0.0%`;
+  - guided answer exceeded replace: `72.5% > 65.0%`;
+  - guided avg tokens stayed within replace + `5%`: `5467.7 <= 5651.7563`;
+  - `gate_passed = true`.
+- Privacy:
+  - key scan found no raw prompt, prompt, raw query, query, full answer, raw answer, session text, memory summary, API key, authorization, or secret keys in reports;
+  - value scan over selected 40 case queries, memory summaries, and replacement summaries returned `leak_count = 0`.
+- Conclusion:
+  - P6o-16 passed the exploratory answer-guidance gate;
+  - generic production-safe guidance improved answer rate over `safe_version_replace` without increasing forbidden leakage, without grounding regression, and without token blow-up;
+  - this reinforces the diagnosis that current bottleneck is evidence-to-answer expression, not recall.
+- Compared with P6o-15:
+  - P6o-15 was a repeat-stability test: `40` unique cases, `2` modes, `3` repeats, `240` real calls;
+  - P6o-15 proved `safe_version_replace` was a stable best base at answer `88/120 = 73.3333%`, grounding `100.0%`, forbidden `0.0%`, avg tokens `5427.0833`, and repeat spread `2.5` points;
+  - P6o-16 was an exploratory same-run A/B: `40` unique cases, `3` modes, `1` repeat, `120` real calls;
+  - P6o-16 proved `safe_version_replace_guided` beat same-run unguided replace by `+7.5` points (`29/40 = 72.5%` vs `26/40 = 65.0%`) while preserving grounding `100.0%`, forbidden `0.0%`, and token budget;
+  - the updated conclusion is that answer guidance is a valid next lift layer on top of safe version replacement, but its stability has not yet been proven to the same strength as P6o-15.
+- Next:
+  - do not promote directly to production default;
+  - run guided repeat confirmation against `safe_version_replace`;
+  - if repeat stability holds, design a config-gated shadow rollout that records guided-vs-unguided post-check deltas without changing production replies.
+- Side conversation follow-up:
+  - current quality is still not enough for production default activation because answer remains around the low `70%` range even though grounding is `100.0%` and forbidden is `0.0%`;
+  - the known problem is evidence-to-answer expression, not primarily recall;
+  - if improving prompts, prefer changing the local system-path memory contract / evidence block instead of the global system prompt;
+  - global prompt changes have a larger blast radius across tools, style, multi-turn behavior, and unrelated workflows;
+  - safer improvement surfaces are memory block format, structured answer scaffold, evidence block placement/proximity, guided failure attribution, and evaluator review for semantic-but-term-miss cases;
+  - proposed later comparison after repeat confirmation: `safe_version_replace`, `safe_version_replace_guided`, `safe_version_replace_structured_guided`, and `safe_version_replace_near_query_block`;
+  - the purpose is to identify whether the next lift comes from guidance wording, evidence block structure, or prompt placement.
+
+## 2026-07-29 P6o-17 guided repeat stability attempt
+
+- Plan file:
+  - `docs/superpowers/plans/2026-07-29-memory-p6o17-guided-repeat-stability.md`.
+- Review result:
+  - independent read-only plan review found no Critical issues;
+  - important fixes applied before execution: assert real guided metadata/contract flags, assert unguided replace rows remain unguided, require token metrics availability, require checkpoint input/malformed-line health, use a fresh real workspace, and treat P6o-15 as historical context instead of a hard cross-run gate.
+- Intended purpose:
+  - repeat-confirm P6o-16's `safe_version_replace_guided` lift with the same 3-repeat methodology as P6o-15;
+  - compare only `safe_version_replace` vs `safe_version_replace_guided`;
+  - keep production default `off`;
+  - do not change source behavior, global system prompt, graph/all-on, retry, fallback, or production writes.
+- Fake-provider smoke:
+  - path: `my_md/memory_optimization/eval_reports/p6o17_guided_repeat_stability_v1/fake_smoke/`;
+  - standard balanced small, common `2` + hard `2`;
+  - modes `safe_version_replace`, `safe_version_replace_guided`;
+  - repeat `3`;
+  - `unique_case_count = 4`;
+  - `mode_count = 2`;
+  - `repeat_count = 3`;
+  - `case_count = 24`;
+  - guided rows `12`;
+  - guided metadata and contract both had `answer_guidance_enabled = true`.
+- Real run attempt:
+  - intended matrix: standard case pack, common `20` + hard `20`, `40` unique cases, `2` modes, repeat `3`, `240` real calls;
+  - real workspace freshness check passed for `/tmp/akashic-p6o17-real-workspace-20260729-v1`;
+  - command used `/home/jjh/git_work/akashic-agent/config.toml` without printing or copying config contents;
+  - configured DeepSeek provider repeatedly returned `402 Insufficient Balance`;
+  - run was interrupted after checkpoint wrote `140/240` rows to avoid continuing invalid calls;
+  - interrupt exit code was `130`.
+- Partial checkpoint evidence:
+  - checkpoint: `my_md/memory_optimization/eval_reports/p6o17_guided_repeat_stability_v1/real_repeat/checkpoint.jsonl`;
+  - partial rebuilt report: `my_md/memory_optimization/eval_reports/p6o17_guided_repeat_stability_v1/real_repeat_partial_rebuilt/system_path_safe_version_eval.json` and `.md`;
+  - `case_count = 140`;
+  - `unique_case_count = 40`;
+  - `mode_count = 2`;
+  - `repeat_count = 2`;
+  - mode split: `safe_version_replace = 70`, `safe_version_replace_guided = 70`;
+  - `checkpoint_input_count = 140`;
+  - `malformed_checkpoint_line_count = 0`;
+  - `provider_error_count = 140`;
+  - `timeout_count = 0`;
+  - `token_metrics_available = false` for both modes.
+- Conclusion:
+  - P6o-17 is not complete and produced no valid real LLM performance conclusion;
+  - fake smoke proves eval shape and guided flags are wired;
+  - partial real data is provider-failure evidence only and must not be used to compare answer rate, grounding, forbidden leakage, token count, or latency;
+  - production default remains `off`.
+- Next:
+  - restore provider balance or switch to a working eval provider config;
+  - rerun P6o-17 from a fresh real workspace and fresh/clean checkpoint;
+  - only after a complete `240`-row, zero-provider-error, token-available run should we decide whether guided replace can move to config-gated shadow rollout planning.
+
+## 2026-07-29 P6o-17 guided repeat stability retry v2
+
+- Retry reason:
+  - provider balance was restored after the first attempt was blocked by DeepSeek `402 Insufficient Balance`;
+  - the previous failed checkpoint was preserved as blocked evidence and was not reused for performance conclusions.
+- Report paths:
+  - primary: `my_md/memory_optimization/eval_reports/p6o17_guided_repeat_stability_v1/real_repeat_retry_v2/system_path_safe_version_eval.json` and `.md`;
+  - checkpoint: `my_md/memory_optimization/eval_reports/p6o17_guided_repeat_stability_v1/real_repeat_retry_v2/checkpoint.jsonl`;
+  - rebuilt: `my_md/memory_optimization/eval_reports/p6o17_guided_repeat_stability_v1/real_repeat_retry_v2_rebuilt/system_path_safe_version_eval.json` and `.md`;
+  - gate: `my_md/memory_optimization/eval_reports/p6o17_guided_repeat_stability_v1/gate_decision_retry_v2.json`;
+  - summary: `my_md/memory_optimization/eval_reports/p6o17_guided_repeat_stability_v1/guided_repeat_stability_report_retry_v2.md`.
+- Matrix:
+  - standard case pack;
+  - common `20` + hard `20`;
+  - `40` unique cases;
+  - modes `safe_version_replace` and `safe_version_replace_guided`;
+  - repeat `3`;
+  - `case_count = 240`;
+  - fresh workspace `/tmp/akashic-p6o17-real-workspace-20260729-v2`.
+- Infra and shape:
+  - `unique_case_count = 40`;
+  - `mode_count = 2`;
+  - `repeat_count = 3`;
+  - `provider_error_count = 0`;
+  - `timeout_count = 0`;
+  - `checkpoint_input_count = 240`;
+  - `malformed_checkpoint_line_count = 0`;
+  - primary and rebuilt metrics matched;
+  - guided rows `120`;
+  - unguided replace rows `120`;
+  - guided metadata and contract had `answer_guidance_enabled = true`;
+  - unguided replace metadata and contract remained unguided;
+  - token metrics were available for both modes.
+- Per-mode result:
+  - `safe_version_replace`: answer `77/120 = 64.1667%`, grounding `120/120 = 100.0%`, forbidden `0/120 = 0.0%`, avg tokens `5418.8833`, avg latency `3441.175ms`, contract generation `100.0%`, post-check shadow `100.0%`;
+  - `safe_version_replace_guided`: answer `80/120 = 66.6667%`, grounding `120/120 = 100.0%`, forbidden `0/120 = 0.0%`, avg tokens `5522.75`, avg latency `3518.9083ms`, contract generation `100.0%`, post-check shadow `100.0%`.
+- Delta:
+  - guided answer delta vs replace: `+2.5` points;
+  - grounding delta: `0.0` points;
+  - forbidden delta: `0.0` points;
+  - avg token delta: `+103.8667`;
+  - guided token threshold was replace + `5%` = `5689.8275`, and guided avg tokens `5522.75` stayed within the gate.
+- Repeat result:
+  - repeat `0`: replace `23/40 = 57.5%`, guided `23/40 = 57.5%`, delta `0.0`;
+  - repeat `1`: replace `24/40 = 60.0%`, guided `28/40 = 70.0%`, delta `+10.0`;
+  - repeat `2`: replace `30/40 = 75.0%`, guided `29/40 = 72.5%`, delta `-2.5`;
+  - guided not-lower count `2/3`;
+  - guided answer spread `15.0` points.
+- Gate:
+  - `gate_passed = true`.
+- Privacy:
+  - key scan found no raw prompt, prompt, raw query, query, full answer, raw answer, session text, memory summary, API key, authorization, or secret keys in retry-v2 reports;
+  - secret pattern scan found no bearer/API-key/authorization/secret/token patterns;
+  - value and 32-character snippet scan over the selected 40 case queries, memory summaries, and replacement summaries returned `leak_count = 0`.
+- Conclusion:
+  - P6o-17 repeat-confirmed `safe_version_replace_guided` as a small positive lift over `safe_version_replace` under same-run 3-repeat real LLM testing;
+  - the lift is smaller than P6o-16's exploratory single-repeat `+7.5` points, but it passed stability gates and did not regress grounding, forbidden leakage, or token budget;
+  - P6o-15 remains the historical unguided stability baseline at `73.3333%` answer and `2.5` point repeat spread, so P6o-17 should be read as same-run guided-vs-unguided confirmation, not proof of production readiness.
+- Next:
+  - proceed to config-gated shadow rollout planning for guided safe-version replacement;
+  - shadow rollout should record guided-vs-unguided post-check deltas without changing production replies;
+  - production default remains `off` until shadow telemetry is reviewed.
+
+## 2026-07-29 P6o-18 evidence prompt A/B
+
+- Plan file:
+  - `docs/superpowers/plans/2026-07-29-memory-p6o18-evidence-prompt-ab.md`.
+- Plan review result:
+  - no Critical issues;
+  - important revisions applied before implementation: make `answer_prompt_variant` canonical contract state, define guidance/variant precedence, add session metadata escalation tests, add per-row token gate, add primary/rebuilt checkpoint health checks, and add reproducible `scripts/check_memory_p6o18_gate.py`.
+- Implementation scope:
+  - added `safe_version_answer_prompt_variant` to `MemoryConfig`;
+  - `DefaultMemoryRetrievalPipeline` now strips caller-provided `safe_version_answer_prompt_variant` from `request.extra`;
+  - prompt variants are emitted only from trusted config/eval replace mode when replace is allowed and `safe_version_answer_guidance_enabled = true`;
+  - `DefaultMemoryEngine` renders `standard`, `guided`, `structured_guided`, and `near_query_block` variants through the safe-version contract;
+  - `SystemPathEvidenceContract` now stores canonical `answer_prompt_variant`;
+  - eval harness added `safe_version_replace_structured_guided` and `safe_version_replace_near_query_block`;
+  - added `scripts/check_memory_p6o18_gate.py` to write reproducible `gate_decision.json` and `evidence_prompt_ab_report.md`.
+- Production boundary:
+  - production default remains `off`;
+  - no global system prompt change;
+  - no `MessageEnvelopeBuilder` ordering change;
+  - no graph/all-on;
+  - no new retrieval lane;
+  - no production write, retry, or fallback change.
+- Fake smoke:
+  - path: `my_md/memory_optimization/eval_reports/p6o18_evidence_prompt_ab_v1/fake_smoke/`;
+  - common `2` + hard `2`;
+  - modes `safe_version_replace`, `safe_version_replace_guided`, `safe_version_replace_structured_guided`, `safe_version_replace_near_query_block`;
+  - `case_count = 16`;
+  - `unique_case_count = 4`;
+  - `mode_count = 4`;
+  - `provider_error_count = 0`;
+  - `timeout_count = 0`;
+  - every row's metadata and contract variant matched its mode.
+- Real report paths:
+  - primary: `my_md/memory_optimization/eval_reports/p6o18_evidence_prompt_ab_v1/real_small_ab/system_path_safe_version_eval.json` and `.md`;
+  - checkpoint: `my_md/memory_optimization/eval_reports/p6o18_evidence_prompt_ab_v1/real_small_ab/checkpoint.jsonl`;
+  - rebuilt: `my_md/memory_optimization/eval_reports/p6o18_evidence_prompt_ab_v1/real_small_ab_rebuilt/system_path_safe_version_eval.json` and `.md`;
+  - gate: `my_md/memory_optimization/eval_reports/p6o18_evidence_prompt_ab_v1/gate_decision.json`;
+  - summary: `my_md/memory_optimization/eval_reports/p6o18_evidence_prompt_ab_v1/evidence_prompt_ab_report.md`.
+- Matrix:
+  - standard case pack;
+  - common `20` + hard `20`;
+  - `40` unique cases;
+  - `4` modes;
+  - repeat `1`;
+  - `case_count = 160`.
+- Infra and report integrity:
+  - `provider_error_count = 0`;
+  - `timeout_count = 0`;
+  - `checkpoint_input_count = 160`;
+  - `malformed_checkpoint_line_count = 0`;
+  - primary and rebuilt mode summaries matched;
+  - every row had `token_metrics_available = true`;
+  - every mode had `token_metrics_available = true`.
+- Per-mode result:
+  - `safe_version_replace`: answer `24/40 = 60.0%`, grounding `40/40 = 100.0%`, forbidden `0/40 = 0.0%`, avg tokens `5394.275`, avg latency `3923.425ms`;
+  - `safe_version_replace_guided`: answer `31/40 = 77.5%`, grounding `40/40 = 100.0%`, forbidden `0/40 = 0.0%`, avg tokens `5481.8`, avg latency `3625.4ms`;
+  - `safe_version_replace_structured_guided`: answer `31/40 = 77.5%`, grounding `40/40 = 100.0%`, forbidden `0/40 = 0.0%`, avg tokens `5577.075`, avg latency `4032.775ms`;
+  - `safe_version_replace_near_query_block`: answer `23/40 = 57.5%`, grounding `40/40 = 100.0%`, forbidden `0/40 = 0.0%`, avg tokens `5524.125`, avg latency `3954.9ms`.
+- Deltas vs guided:
+  - replace: `-17.5` points;
+  - structured guided: `0.0` points;
+  - near-query block: `-20.0` points.
+- Gate:
+  - best new mode: `safe_version_replace_structured_guided`;
+  - token limit: replace + `8%` = `5825.817`;
+  - `gate_passed = false`;
+  - reason: best new mode tied guided answer rate and did not exceed it.
+- Privacy:
+  - key scan found no raw prompt, prompt, raw query, query, full answer, raw answer, session text, memory summary, API key, authorization, or secret keys;
+  - secret pattern scan found no bearer/API-key/authorization/secret/token patterns;
+  - selected 40 case query/summary/replacement full-value and 32-character snippet scan returned `leak_count = 0`.
+- Conclusion:
+  - P6o-18 did not prove structured or near-query evidence prompting is better than the existing generic guided contract;
+  - generic guided remained the best practical prompt variant in this single-repeat matrix;
+  - structured guided tied answer rate but used more tokens and latency, so it should not replace guided;
+  - near-query block hurt answer selection and should not be pursued in this wording;
+  - grounding and forbidden stayed solved at `100.0%` and `0.0%`, so the remaining issue is narrower than recall and safety.
+- Next:
+  - do failure attribution on the remaining guided misses and on near-query regressions before writing another prompt variant;
+  - classify failures into required-term miss, any-group miss, language miss, evidence granularity mismatch, and over-instruction / evidence-suppression effects;
+  - do not promote structured or near-query variants to shadow rollout.
+
+## 2026-07-29 P6o-18 variant failure attribution follow-up
+
+- User request:
+  - first update test method/data/conclusion docs;
+  - then do failure attribution by splitting missed cases into concrete failure types.
+- Implementation:
+  - extended `memory2/eval_system_path_failure_attribution.py` with `build_system_path_variant_failure_attribution`;
+  - extended `scripts/run_memory_system_path_failure_attribution.py` with `--variant-attribution`, `--anchor-mode`, and `--comparison-modes`;
+  - added tests in `tests/test_memory_system_path_failure_attribution.py` for variant pairwise movement, case-level miss markdown, and CLI output;
+  - generated `my_md/memory_optimization/eval_reports/p6o18_evidence_prompt_ab_v1/system_path_variant_failure_attribution.json` and `.md`;
+  - updated `my_md/memory_optimization/eval_reports/p6o18_evidence_prompt_ab_v1/evidence_prompt_ab_report.md` and `my_md/memory_optimization/README.md`.
+- Attribution method:
+  - report-only analysis on completed P6o-18 real rows;
+  - source: `my_md/memory_optimization/eval_reports/p6o18_evidence_prompt_ab_v1/real_small_ab/system_path_safe_version_eval.json`;
+  - rows: `160`;
+  - anchor: `safe_version_replace_guided`;
+  - comparisons: `safe_version_replace`, `safe_version_replace_structured_guided`, `safe_version_replace_near_query_block`;
+  - failure buckets are sanitized heuristics from existing score fields: provider error, timeout, grounding failure, forbidden violation, language failure, required-term miss, any-group miss, answer-too-short/generic, or evidence-present-answer-missed;
+  - no raw query, raw prompt, memory text, session text, or full answer is included.
+- Mode failure buckets:
+  - `safe_version_replace`: passed `24`, required-term miss `8`, any-group miss `6`, language failure `2`;
+  - `safe_version_replace_guided`: passed `31`, required-term miss `5`, any-group miss `2`, language failure `2`;
+  - `safe_version_replace_structured_guided`: passed `31`, required-term miss `4`, any-group miss `3`, language failure `2`;
+  - `safe_version_replace_near_query_block`: passed `23`, required-term miss `8`, any-group miss `8`, language failure `1`.
+- Pairwise movements vs `safe_version_replace_guided`:
+  - replace: both pass `21`, guided passed / comparison failed `10`, guided failed / comparison passed `3`, both fail `6`;
+  - structured guided: both pass `27`, guided passed / comparison failed `4`, guided failed / comparison passed `4`, both fail `5`;
+  - near-query block: both pass `21`, guided passed / comparison failed `10`, guided failed / comparison passed `2`, both fail `7`.
+- Guided missed cases:
+  - `9/40` total;
+  - required-term miss `5`: `common_preference_recall_01`, `common_preference_recall_02`, `hard_graph_bridge_02`, `hard_preference_recall_01`, `hard_preference_recall_02`;
+  - any-group miss `2`: `common_version_chain_02`, `hard_stale_sleep_01`;
+  - language failure `2`: `common_tool_preference_01`, `common_tool_preference_02`.
+- Conclusion:
+  - P6o-18 misses are not infra failures, recall failures, grounding failures, or forbidden-boundary failures;
+  - remaining bottleneck is answer expression / answer selection over already available safe evidence;
+  - `structured_guided` has no net lift: it fixes `4` guided misses but regresses `4` guided passes, with higher token and latency cost;
+  - `near_query_block` is a regression: it loses `10` guided-passed cases and fixes only `2` guided misses;
+  - generic `safe_version_replace_guided` remains the best current production-candidate combination.
+- Next:
+  - do targeted guided-miss analysis and prompt adjustment against the `9` guided missed cases;
+  - focus on preference-recall required terms, version/stale answer choice, graph-bridge evidence selection, and language constraint handling;
+  - keep production default `safe_version_governed_mode = off`;
+  - do not promote structured or near-query wording and do not turn on graph/all-on.
+
+## 2026-07-30 P6o-18 error-analysis conclusion record
+
+- User request:
+  - record the error-analysis conclusion/result.
+- Documents updated:
+  - `my_md/memory_optimization/eval_reports/p6o18_evidence_prompt_ab_v1/evidence_prompt_ab_report.md`;
+  - `my_md/memory_optimization/README.md`;
+  - `progress.md`.
+- Error-analysis conclusion:
+  - P6o-18's remaining failures are answer-layer failures, not memory-layer failures;
+  - infra was clean: `provider_error_count = 0`, `timeout_count = 0`;
+  - safety and grounding were clean: grounding `100.0%`, forbidden `0.0%`;
+  - therefore the remaining misses should not be interpreted as recall misses, unsafe boundary misses, missing evidence injection, or provider noise.
+- Best-current mode:
+  - `safe_version_replace_guided`;
+  - answer `31/40 = 77.5%`;
+  - misses `9/40`;
+  - miss split: required-term miss `5`, any-group miss `2`, language failure `2`.
+- Why weaker modes failed:
+  - `safe_version_replace`: lacks answer guidance, producing more expression misses (`16` total misses vs guided's `9`);
+  - `safe_version_replace_structured_guided`: no net lift because it fixes `4` guided misses but regresses `4` guided passes, with higher token and latency cost;
+  - `safe_version_replace_near_query_block`: over-focuses on query-near evidence, losing `10` guided-passed cases and fixing only `2` guided misses.
+- Operational implication:
+  - do not expand recall for this failure set;
+  - do not turn on graph-all-on;
+  - do not promote current structured/near-query wording;
+  - next work should target answer-selection / prompt adjustment on the guided miss set, especially preference recall, version/stale choice, graph-bridge evidence use, and Chinese language compliance.
+
+## 2026-07-30 Memory next session handoff prompt
+
+- User request:
+  - record a prompt that can continue the current session in a new chat.
+- Added:
+  - `my_md/memory_optimization/09-memory-next-session-handoff.md`.
+- Handoff content includes:
+  - current worktree and branch;
+  - key docs to read first;
+  - protected untracked P6o-13 intent directory boundary;
+  - P6o-18 best mode and failure-attribution data;
+  - side-conversation方案：P6o-6 combination guidance, P6o-13 system-path validation intent, and P6o-15 to P6o-19 answer-lift roadmap;
+  - recommended next direction: P6o-19 system-path combination validation with `safe_version_replace_guided + post-check retry shadow`, while keeping production default `off`.
+
+## 2026-07-30 P6o-19 answer candidate retry shadow
+
+- Goal:
+  - test an eval-only Answer Candidate Contract plus Post-check Retry Shadow for the current failure mode where retrieved evidence is grounded correctly but the LLM selects or phrases the answer incorrectly.
+- Scope implemented:
+  - added `safe_version_replace_guided_with_retry_shadow` as an eval mode;
+  - added prompt-only `AnswerCandidateContract` for `guided_retry_shadow`;
+  - added sanitized report fields for candidate contract counts and reason labels;
+  - added scorer-driven retry-shadow reasons: `required_terms_missing`, `answer_choice_group_missing`, and `language_requirement_failed`;
+  - added `scripts/check_memory_p6o19_gate.py`;
+  - production default remains `MemoryConfig.safe_version_governed_mode = "off"`;
+  - no graph-all-on, no recall expansion, no real retry/fallback, no production write change, no global prompt change.
+- Fake smoke:
+  - report path: `my_md/memory_optimization/eval_reports/p6o19_answer_candidate_retry_shadow_v1/fake_smoke/`;
+  - command used `--fake-provider --case-pack standard --balanced-small --common-limit 2 --hard-limit 2 --modes safe_version_replace,safe_version_replace_guided,safe_version_replace_guided_with_retry_shadow`;
+  - `unique_case_count = 4`;
+  - `mode_count = 3`;
+  - `case_count = 12`;
+  - `provider_error_count = 0`;
+  - `timeout_count = 0`;
+  - `malformed_checkpoint_line_count = 0`;
+  - retry-shadow `answer_candidate_contract_enabled_rate = 100.0%`;
+  - retry-shadow `would_retry_count = 4/4`;
+  - retry-shadow reasons: `required_terms_missing = 4`, `answer_choice_group_missing = 4`.
+- Gate result:
+  - gate file: `my_md/memory_optimization/eval_reports/p6o19_answer_candidate_retry_shadow_v1/fake_smoke/gate_decision.json`;
+  - `gate_passed = false`;
+  - `guided_answer_rate = 0.0`;
+  - `retry_shadow_answer_rate = 0.0`;
+  - `answer_delta_vs_guided = 0.0`;
+  - conclusion: fake smoke validates wiring, privacy, and retry-shadow classification only; it is not a real LLM answer-quality conclusion.
+- Verification:
+  - `.venv/bin/python -m pytest tests/test_memory_system_path_safe_version_contract.py tests/test_memory_answer_post_check.py tests/test_memory_system_path_safe_version_eval.py tests/test_memory_engine_contract.py tests/test_turn_pipelines.py -q -p no:cacheprovider` -> `98 passed in 22.58s`;
+  - `PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -m compileall memory2/system_path_safe_version_contract.py memory2/eval_answer_post_check.py memory2/eval_system_path_safe_version.py scripts/run_memory_system_path_safe_version_eval.py scripts/check_memory_p6o19_gate.py tests/test_memory_system_path_safe_version_contract.py tests/test_memory_answer_post_check.py tests/test_memory_system_path_safe_version_eval.py` -> exit `0`;
+  - `PYTHONDONTWRITEBYTECODE=1 .venv/bin/python scripts/check_memory_p6o19_gate.py --report-json my_md/memory_optimization/eval_reports/p6o19_answer_candidate_retry_shadow_v1/fake_smoke/system_path_safe_version_eval.json --out-dir my_md/memory_optimization/eval_reports/p6o19_answer_candidate_retry_shadow_v1/fake_smoke` -> exit `0`;
+  - P6o-19 report privacy scan found no raw prompt/query/answer/secret content; only allowed documentation/boolean-field text matched (`raw_memory_summary_included = false` and the report privacy rule sentence);
+  - `git diff --check` -> exit `0`.
+- Code review:
+  - first subagent review inspected the main checkout instead of `.worktrees/memory-next`, so its findings were discarded as checkout-mismatch artifacts;
+  - corrected subagent review failed with provider `403 INSUFFICIENT_BALANCE`, so no valid external review feedback was available to apply;
+  - local self-review checked P6o-19 report sanitation, scorer-count retry classification, gate failure conditions, and production-default boundaries.
+- Next:
+  - if provider spend is approved, run checkpointed real small matrix common `20` + hard `20` with the same 3 modes, rebuild from checkpoint, run P6o-19 gate, and only then evaluate answer-quality lift.
+
+## 2026-07-30 P6o-20 real answer detail
+
+- User request:
+  - create a complete plan with plan skill;
+  - call review skill to review the plan;
+  - revise plan issues;
+  - execute the experiment;
+  - record testing method, data, and conclusion into docs.
+- Plan:
+  - created `docs/superpowers/plans/2026-07-30-memory-p6o20-real-answer-detail.md`;
+  - reviewer assessment was `Ready to execute? With fixes`;
+  - plan was revised for:
+    - explicit status taxonomy: `infra_blocked`, `quality_failed`, `quality_passed`;
+    - `gate_decision.json` inspection requirement;
+    - blocked report requirement for gate hard failure;
+    - complete scoring export metadata;
+    - typed JSONL lists instead of pipe-joined JSONL strings;
+    - exact mode/equal row/pair validation;
+    - checkpoint resume/stale-checkpoint rules;
+    - `rg` privacy scan exit-code handling;
+    - wording that avoids implying real retry.
+- Implementation:
+  - added `scripts/export_memory_p6o20_answer_details.py`;
+  - added `test_p6o20_detail_export_writes_per_case_scoring_and_movement`;
+  - exporter outputs:
+    - `per_case_scoring_rows.jsonl`;
+    - `per_case_scoring_rows.csv`;
+    - `case_movement_vs_guided.json`;
+    - `case_movement_vs_guided.md`;
+    - `export_summary.json`.
+- TDD:
+  - initial test run failed because `scripts/export_memory_p6o20_answer_details.py` did not exist;
+  - after implementation, `.venv/bin/python -m pytest tests/test_memory_system_path_safe_version_eval.py::test_p6o20_detail_export_writes_per_case_scoring_and_movement -q -p no:cacheprovider` -> `1 passed in 0.12s`.
+- Fake detail smoke:
+  - input: `my_md/memory_optimization/eval_reports/p6o19_answer_candidate_retry_shadow_v1/fake_smoke/system_path_safe_version_eval.json`;
+  - output: `my_md/memory_optimization/eval_reports/p6o20_answer_candidate_retry_shadow_real_small_v1/fake_detail_smoke/`;
+  - rows: `12` JSONL rows and `13` CSV rows including header;
+  - paired cases: `4`;
+  - movement counts: `both_failed = 4`, `both_passed = 0`, `anchor_failed_comparison_passed = 0`, `anchor_passed_comparison_failed = 0`;
+  - privacy scan clean.
+- Real LLM attempt:
+  - command used real provider path with `--enable-real-llm`, standard case pack, common `20` + hard `20`, modes `safe_version_replace,safe_version_replace_guided,safe_version_replace_guided_with_retry_shadow`;
+  - intended matrix: `40` unique cases * `3` modes = `120` calls;
+  - first run was interrupted after checkpoint showed `30/30` timeout rows;
+  - resume with `--timeout-s 1` completed a full blocked data shape;
+  - command emitted an asyncio runtime warning: `The executor did not finishing joining its threads within 300 seconds`;
+  - checkpoint physical line count is `151` because resume does not skip infra-failure rows; rebuilt report deduplicates by spec key to `120` rows.
+- Real run data:
+  - primary report: `my_md/memory_optimization/eval_reports/p6o20_answer_candidate_retry_shadow_real_small_v1/real_small_ab/system_path_safe_version_eval.json`;
+  - rebuilt report: `my_md/memory_optimization/eval_reports/p6o20_answer_candidate_retry_shadow_real_small_v1/real_small_ab_rebuilt/system_path_safe_version_eval.json`;
+  - `unique_case_count = 40`;
+  - `mode_count = 3`;
+  - `case_count = 120`;
+  - `repeat_count = 1`;
+  - `provider_error_count = 0`;
+  - `timeout_count = 120`;
+  - `malformed_checkpoint_line_count = 0`;
+  - rebuilt `checkpoint_input_count = 151`;
+  - gate hard failed with `timeout_count must be 0`.
+- Per-mode blocked data:
+  - `safe_version_replace`: `40` rows, answer `0.0%`, grounding `100.0%`, forbidden `0.0%`, token metrics unavailable, would-retry `0`;
+  - `safe_version_replace_guided`: `40` rows, answer `0.0%`, grounding `100.0%`, forbidden `0.0%`, token metrics unavailable, would-retry `0`;
+  - `safe_version_replace_guided_with_retry_shadow`: `40` rows, answer `0.0%`, grounding `100.0%`, forbidden `0.0%`, candidate contract enabled `100.0%`, would-retry `40/40`, retry reasons `required_terms_missing = 40`, `answer_choice_group_missing = 40`, `language_requirement_failed = 40`.
+- Detail export:
+  - output: `my_md/memory_optimization/eval_reports/p6o20_answer_candidate_retry_shadow_real_small_v1/answer_details/`;
+  - JSONL rows: `120`;
+  - CSV rows: `121` including header;
+  - paired cases: `40`;
+  - unpaired cases: `0`;
+  - movement counts: `both_failed = 40`, `both_passed = 0`, `anchor_failed_comparison_passed = 0`, `anchor_passed_comparison_failed = 0`;
+  - `forbidden_key_scan_passed = true`.
+- Verification:
+  - focused tests: `.venv/bin/python -m pytest tests/test_memory_system_path_safe_version_contract.py tests/test_memory_answer_post_check.py tests/test_memory_system_path_safe_version_eval.py tests/test_memory_engine_contract.py tests/test_turn_pipelines.py -q -p no:cacheprovider` -> `99 passed in 22.77s`;
+  - compileall: `PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -m compileall scripts/export_memory_p6o20_answer_details.py scripts/check_memory_p6o19_gate.py scripts/run_memory_system_path_safe_version_eval.py memory2/system_path_safe_version_contract.py memory2/eval_answer_post_check.py memory2/eval_system_path_safe_version.py tests/test_memory_system_path_safe_version_eval.py` -> exit `0`;
+  - P6o-20 privacy scan: no forbidden raw prompt/full answer/raw answer/session/Authorization/API key/secret matches.
+- Conclusion:
+  - P6o-20 status is `infra_blocked`;
+  - this is not `quality_failed` and not `quality_passed`;
+  - answer `0.0%` is caused by timeout/empty answers, not by evidence selection or retry-shadow quality;
+  - do not compare guided vs guided-with-retry-shadow answer quality from this run;
+  - the useful result is the complete scoring export pipeline and artifacts;
+  - to get answer-quality data, rerun P6o-20 with a working provider and a fresh or deliberately cleaned checkpoint.
+
+## 2026-07-30 P6o-26 schema-first answer shadow
+
+- Goal:
+  - test whether a schema-first / natural-language two-stage shadow can improve system-path answer correctness when evidence recall and grounding are already correct but answer selection still fails.
+- Implementation:
+  - added `schema_first_shadow` prompt variant;
+  - added `safe_version_replace_schema_first_shadow` eval mode;
+  - kept the change eval/config/shadow only, with production default still `off`;
+  - added boundary coverage for config-only sourcing and privilege escalation guards.
+- Verification:
+  - focused regression: `70 passed`;
+  - fake-provider gate: `16` rows, `4` modes, `answer_candidate_contract_enabled_rate = 100.0%`, `would_retry_count = 4`, retry reasons `required_terms_missing = 4` and `answer_choice_group_missing = 4`;
+  - real pregate: `40` rows, `10` unique cases, `4` modes, `provider_error_count = 0`, `timeout_count = 0`, `memory_grounding_pass_rate = 100.0%`, `forbidden_violation_rate = 0.0%`;
+  - mode results: `safe_version_replace = 80.0%`, `safe_version_replace_guided = 90.0%`, `safe_version_replace_guided_with_retry_shadow = 100.0%`, `safe_version_replace_schema_first_shadow = 50.0%`.
+- Conclusion:
+  - schema-first shadow kept the safety boundary but did not improve answer quality;
+  - it regressed below guided and should stay shadow-only;
+  - the strongest signal remains guided retry-shadow, but it still should not be promoted to a production default.
+- Review follow-up:
+  - fixed schema-first telemetry so sanitized report rows use `candidate_reason = safe_version_schema_first_shadow` instead of the guided retry-shadow reason;
+  - restored parallel config-only boundary coverage for both `structured_guided` and `schema_first_shadow`;
+  - updated the answer-correctness history intro to include P6o-26.
+
+## 2026-07-31 P6o-27 best shadow medium real validation
+
+- Goal:
+  - validate the current small-sample best `safe_version_replace_guided_with_retry_shadow` on a medium real LLM matrix against `safe_version_replace` and `safe_version_replace_guided`.
+- Fake smoke:
+  - command used `/tmp/akashic-p6o27-best-shadow-fake-workspace` and `/tmp/akashic-p6o27-best-shadow-fake-report`;
+  - `case_count = 12`, `unique_case_count = 4`, `mode_count = 3`, `provider_error_count = 0`, `timeout_count = 0`, `malformed_checkpoint_line_count = 0`;
+  - privacy flags were false and `rg` found no forbidden raw prompt/answer/session/secret patterns.
+- Real medium run:
+  - primary report: `my_md/memory_optimization/eval_reports/p6o27_best_shadow_medium_real_v1/real_balanced_40/system_path_safe_version_eval.json`;
+  - checkpoint rebuild: `my_md/memory_optimization/eval_reports/p6o27_best_shadow_medium_real_v1/checkpoint_rebuild/system_path_safe_version_eval.json`;
+  - matrix: standard common `20` + hard `20`, 3 modes, repeat `1`, `120` real LLM calls;
+  - `case_count = 120`, `unique_case_count = 40`, `mode_count = 3`, `repeat_count = 1`, checkpoint rows `120`;
+  - `provider_error_count = 0`, `timeout_count = 0`, `malformed_checkpoint_line_count = 0`, `memory_grounding_pass_rate = 100.0%`, `forbidden_violation_rate = 0.0%`, token metrics available;
+  - primary/rebuild top-level and mode metrics match exactly.
+- Mode results:
+  - `safe_version_replace`: `26/40 = 65.0%`, grounding `100.0%`, forbidden `0.0%`, avg tokens `5470.85`, avg latency `3671.025ms`;
+  - `safe_version_replace_guided`: `31/40 = 77.5%`, grounding `100.0%`, forbidden `0.0%`, avg tokens `5514.45`, avg latency `3204.425ms`;
+  - `safe_version_replace_guided_with_retry_shadow`: `34/40 = 85.0%`, grounding `100.0%`, forbidden `0.0%`, avg tokens `5631.95`, avg latency `2786.55ms`, would-retry `6/40`;
+  - retry-shadow reasons: `answer_choice_group_missing = 5`, `required_terms_missing = 5`.
+- Conclusion:
+  - P6o-27 is a clean medium real LLM run and supports retry-shadow as positive in this run: `+7.5` points over guided with only about `+2.13%` average token increase;
+  - because P6o-24 showed retry-shadow below guided on another 40-case run, this is not yet stable-best proof;
+  - keep retry-shadow shadow-only, with no real retry and no production default change;
+  - next confidence step should be repeat `2` or `3` stability validation before any rollout decision.

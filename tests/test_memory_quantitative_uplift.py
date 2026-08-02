@@ -180,14 +180,14 @@ def test_full_report_has_expected_totals() -> None:
     overall = {(row.case_set, row.profile_name): row for row in report.profile_summaries}
 
     assert round(overall[("overall", "memory_base")].main_score, 4) == 94.375
-    assert round(overall[("overall", "all_on")].main_score, 4) == 69.5543
-    assert round(overall[("overall", "all_on")].uplift_points, 4) == -24.8207
+    assert round(overall[("overall", "all_on")].main_score, 4) == 68.8579
+    assert round(overall[("overall", "all_on")].uplift_points, 4) == -25.5171
     assert overall[("overall", "all_on")].token_signal_kind == "mixed"
     assert overall[("overall", "all_on")].token_signal_value == "unavailable"
     assert overall[("overall", "all_on")].token_signal_delta == "unavailable"
     assert overall[("overall", "tri_retrieval_only")].latency_delta_ms == "unavailable"
-    assert report.metrics["total_uplift_points"] == -24.8207
-    assert report.metrics["total_uplift_pct"] == -26.3001
+    assert report.metrics["total_uplift_points"] == -25.5171
+    assert report.metrics["total_uplift_pct"] == -27.038
 
 
 def test_token_signal_kind_is_explicit() -> None:
@@ -252,6 +252,8 @@ def test_primary_offline_markdown_tables_use_counts_and_rates(tmp_path: Path) ->
     chain_markdown = chain_path.read_text(encoding="utf-8")
     assert "| profile | case_set | targets | success | miss | recall_rate |" in uplift_markdown
     assert "| profile | case_set | main_score |" not in uplift_markdown
+    assert "## 三路召回路由表" in uplift_markdown
+    assert "| scene | cases | baseline_success | gated_success | graph_success |" in uplift_markdown
     assert "| step | label | targets | success | miss | recall_rate |" in chain_markdown
     assert "| step | label | main_score |" not in chain_markdown
 

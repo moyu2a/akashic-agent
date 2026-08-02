@@ -1,0 +1,88 @@
+{
+  "live_rows": [
+    {
+      "candidate_accept_rate": 25.0,
+      "candidate_drop_rate": 75.0,
+      "case_count": 2,
+      "graph_used_rate": 100.0,
+      "note": "ok hits=1; ok hits=2",
+      "scene": "fuzzy_reference"
+    },
+    {
+      "candidate_accept_rate": 34.2843,
+      "candidate_drop_rate": 51.43,
+      "case_count": 7,
+      "graph_used_rate": 0.0,
+      "note": "ok hits=0; ok hits=1; ok hits=2",
+      "scene": "unknown"
+    }
+  ],
+  "metrics": {
+    "live_case_count": 9,
+    "live_scene_count": 2,
+    "offline_case_count": 320,
+    "offline_scene_count": 5
+  },
+  "offline_rows": [
+    {
+      "baseline_success": 30,
+      "candidate_accept_rate": 31.73,
+      "candidate_drop_rate": 68.27,
+      "case_count": 16,
+      "expected_route_hit_rate": 100.0,
+      "gated_success": 32,
+      "graph_success": 30,
+      "graph_used_rate": 0.0,
+      "note": "模糊指代需要语义扩展，允许少量图谱邻接候选补全上下文。",
+      "scene": "fuzzy_reference"
+    },
+    {
+      "baseline_success": 48,
+      "candidate_accept_rate": 36.6067,
+      "candidate_drop_rate": 63.3933,
+      "case_count": 24,
+      "expected_route_hit_rate": 100.0,
+      "gated_success": 48,
+      "graph_success": 48,
+      "graph_used_rate": 0.0,
+      "note": "冲突判断优先保留同作用域、可追溯的来源证据。",
+      "scene": "partial_conflict"
+    },
+    {
+      "baseline_success": 32,
+      "candidate_accept_rate": 22.915,
+      "candidate_drop_rate": 77.085,
+      "case_count": 16,
+      "expected_route_hit_rate": 100.0,
+      "gated_success": 32,
+      "graph_success": 32,
+      "graph_used_rate": 0.0,
+      "note": "来源查询必须可追溯，先返回同作用域的 provenance 证据。",
+      "scene": "source_lookup"
+    },
+    {
+      "baseline_success": 30,
+      "candidate_accept_rate": 23.27,
+      "candidate_drop_rate": 76.73,
+      "case_count": 16,
+      "expected_route_hit_rate": 100.0,
+      "gated_success": 32,
+      "graph_success": 30,
+      "graph_used_rate": 0.0,
+      "note": "工具偏好以规则语义和字面工具名为主，避免引入图谱或来源噪声。",
+      "scene": "tool_preference"
+    },
+    {
+      "baseline_success": 488,
+      "candidate_accept_rate": 26.2845,
+      "candidate_drop_rate": 73.7155,
+      "case_count": 248,
+      "expected_route_hit_rate": 100.0,
+      "gated_success": 496,
+      "graph_success": 488,
+      "graph_used_rate": 0.0,
+      "note": "未识别场景采用保守的语义和关键词双 lane。",
+      "scene": "unknown"
+    }
+  ]
+}

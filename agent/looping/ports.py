@@ -40,6 +40,10 @@ class LLMConfig:
 @dataclass
 class MemoryConfig:
     window: int = 40
+    safe_version_governed_mode: str = "off"
+    safe_version_governed_replace_allowed: bool = False
+    safe_version_answer_guidance_enabled: bool = False
+    safe_version_answer_prompt_variant: str = "standard"
 
     @property
     def keep_count(self) -> int:

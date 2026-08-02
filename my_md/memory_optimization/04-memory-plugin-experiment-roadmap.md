@@ -219,6 +219,112 @@ MemoryValueScorer
 - `lane_contribution`：每一路对最终结果的贡献。
 - `rerank_changed_count`：重排改变名次次数。
 
+### Phase 6m 候选去噪补充
+
+三路召回的线上失败归因显示，当前主要问题不是“证据完全没有召回”，而是“证据到了以后，噪声、forbidden 候选、旧版本和弱来源候选会干扰回答”。因此 Phase 6m-tri-candidate-governance 先在离线 trace 层补充候选治理，不调用 LLM，也不改真实 `AgentLoop`。
+
+新增可观测字段：
+
+- `candidate_governance_enabled`：本轮是否启用候选治理。
+- `dropped_risks_by_reason`：严格治理实际丢弃候选的风险原因。
+- `would_drop_protected_by_reason`：目标证据如果没有保护会被哪些风险误删。
+- `protected_risky_candidate_count`：被保护留下的风险目标证据数量。
+- `accepted_risky_candidate_count`：最终仍进入结果的带风险候选数量。
+
+本轮 comprehensive 离线结果：
+
+| 项目 | 数值 |
+| --- | ---: |
+| case 数 | `320` |
+| 目标证据 | `640` |
+| 原始路由目标命中 | `640/640` |
+| 受保护严格治理目标命中 | `640/640` |
+| 受保护目标损失 | `0` |
+| should-not 候选 | `368` |
+| 严格治理丢弃 should-not | `368/368` |
+| 严格治理保留 should-not | `0` |
+| 不受保护严格治理目标损失 | `640/640` |
+
+这个阶段的结论是：候选去噪可以作为三路召回进入真实 LLM 复测前的安全门，但必须继续保留“目标保护或生产替代信号”。下一步才适合做小型真实 LLM rerun，验证 forbidden 违规率和回答命中率是否真的改善。
+
+### Phase 6n Answer Contract 诊断结果
+
+小型真实 LLM 复测已验证 eval-only `chain_tri_answer_contract`：在 common `20` + hard `20`、baseline、repeat `1` 的 160-call 矩阵中，`chain_tri_answer_contract` 达到 `answer_rate = 75.0%`、`grounding_rate = 100.0%`、`forbidden_rate = 12.5%`，通过 P6n 成功门槛。它不扩大召回，也不改变生产链路，只把现有 tri fused ids 和 fixture answer expectations 转成 must-use、allowed evidence、forbidden ids、required terms 和 forbidden terms。
+
+下一步不是直接把 fixture contract 上线，而是把这个诊断结果翻译成生产安全的 evidence injection：用真实候选置信度、风险标签、source_ref、版本状态和回答后校验替代 fixture expected terms；同时保留 `chain_tri_candidate_governance` 的轻量 forbidden filtering，避免 answer contract 提升回答率时重新放大 forbidden 风险。
+
+本轮四种方案的对比解释：
+
+- 原始方案 `chain_memory_base`：grounding 为 `100.0%`，但 answer_rate 只有 `35.0%`，说明基础 memory 注入不足以让模型稳定保留关键术语和具体事实。
+- 三路召回 `chain_tri_retrieval`：answer_rate 提升到 `40.0%`，但 forbidden_rate 也到 `12.5%`，说明增加召回覆盖会带来候选噪声和错误证据风险。
+- 候选治理 `chain_tri_candidate_governance`：forbidden_rate 降到 `0.0%`，answer_rate 到 `52.5%`，说明输入侧安全门有效，但还缺少输出侧答案约束。
+- Answer Contract `chain_tri_answer_contract`：answer_rate 达到 `75.0%`，通过 P6n gate，说明现阶段最有效的方向是 post-retrieval answer control，而不是继续扩大召回。
+
+后续路线：
+
+1. 新增 eval-only `chain_tri_governed_answer_contract`，组合轻量 forbidden / conflict filtering 和生产安全 evidence contract。
+2. 把 strict filtering 改成风险分层，避免候选治理再次因为过度剪枝拉低 answer_rate。
+3. 将 fixture answer expectations 替换为生产可用信号：source_ref、scope、版本状态、冲突状态、候选置信度和 route trace。
+4. 增加回答后校验 shadow，记录是否使用 allowed evidence、是否遗漏关键事实、是否输出 forbidden terms。
+5. 用同一 40-case 小矩阵先跑 A/B，只有当 answer_rate 维持接近 `75.0%` 且 forbidden_rate 低于 `12.5%` 时，再考虑扩大真实 LLM run。
+
+P6o-1 complete criteria now cover the eval-only wiring step before that real A/B: profile registered, governed ids reused as allowed evidence, contract rendered with governed profile name, eval-only metadata visible in JSON and Markdown, and 200-row fake-provider smoke passes. Current fake-provider smoke result is `case_count = 200`, `unique_case_count = 40`, `profile_count = 5`, `real_llm_enabled = False`, `provider_error_count = 0`, and `timeout_count = 0`. Real LLM A/B is intentionally deferred.
+
+P6o-2 complete criteria: strict mode remains compatible, tiered mode records candidate tier counts, eval-only tri profiles use tiered allowed ids, offline report exposes tiered counts, and focused tests pass. P6o-2 is still eval/shadow-only and does not run real LLM. Standard offline report result: `case_count = 80`, `tiered_candidate_risk_tier_counts = {"delete": 324, "downgrade": 896}`, `tiered_accepted_candidate_risk_tier_counts = {"downgrade": 480}`, `tiered_deleted_risks_by_reason = {"forbidden_candidate": 324, "scope_mismatch": 52, "superseded_candidate": 176}`, `protected_expected_hit_loss_count = 0`, and `strict_should_not_kept_count = 0`.
+
+P6o-2 comparison conclusion: strict candidate governance was too coarse because weak source_ref and low confidence are common on useful fixture evidence; deleting them protects forbidden boundaries but can remove answer-useful context. Tiered governance keeps those candidates as `downgrade` or `requires_review` while still deleting forbidden / superseded / scope-mismatch records. P6o-3 should consume these tiers to render production-safe contract fields without fixture answer expectations.
+
+P6o-3 complete criteria: governed tri contract uses production-safe evidence fields, JSON / Markdown metadata marks `production_safe_evidence_contract`, fixture answer expectations are absent from the governed contract raw output and rendered block, and fake-provider smoke passes. P6o-4 should add answer post-check shadow over these fields before any real LLM A/B.
+
+P6o-4 complete criteria: comprehensive eval case records include private `answer_post_check_shadow`, aggregate metrics expose retry and evidence-risk counts, Markdown shows only aggregate shadow metrics, fake-provider smoke passes, and no production answer behavior changes. P6o-5 should run the small real LLM A/B with these shadow metrics enabled.
+
+P6o-5 complete result: small real LLM A/B used common `20` + hard `20`, baseline prompt, repeat `1`, and four profiles for `160` completed calls. Report path is `my_md/memory_optimization/eval_reports/p6o5_governed_answer_contract_small_online_v1/`. Infra was clean: `provider_error_count = 0`, `timeout_count = 0`, `excluded_infra_failure_count = 0`. The winning profile was `chain_tri_governed_answer_contract`: answer `39/40 = 97.5%`, grounding `100.0%`, forbidden `0.0%`, avg tokens `6079.675`. The comparison rows were `chain_tri_retrieval` answer `37.5%` / forbidden `12.5%`, `chain_tri_candidate_governance` answer `50.0%` / forbidden `15.0%`, and `chain_tri_answer_contract` answer `80.0%` / forbidden `15.0%`.
+
+P6o-5 conclusion: the combination works because it joins the two previously separated controls. Candidate risk tiers keep dangerous or stale boundaries visible before injection, while the production-safe evidence contract gives the model a clear allowed-evidence and insufficient-evidence structure without fixture answer terms. Raw tri retrieval is too weak because it only expands context. Candidate governance alone is too weak because it filters input but does not guide answer construction. Oracle answer contract is useful diagnostically but cannot be productized as-is. The governed contract is now the best candidate for the next shadow expansion, not for immediate production activation.
+
+Next recommended roadmap step: do a P6o-6 robustness pass before productionization. Keep production code unchanged; rerun a slightly larger or failure-targeted real LLM matrix, inspect the remaining `1/40` governed answer miss, and add non-oracle citation/use signals if available. Only after that should a production evidence contract or retry policy be designed.
+
+P6o-6 side-conversation handoff: the next combination should not directly turn on graph, version, rerank, and governed contract all at once. P6o-5 already showed that the current bottleneck is not raw recall coverage: `chain_tri_retrieval` had `100.0%` grounding but only `37.5%` answer rate, while `chain_tri_governed_answer_contract` reached `97.5%` answer rate and `0.0%` forbidden. The next work should treat `chain_tri_governed_answer_contract` as the baseline candidate and test additional modules as governed-contract inputs.
+
+Recommended P6o-6 order:
+
+1. Test rerank / injection ordering first: compare `chain_tri_governed_answer_contract` with a tri + rerank governed variant. Rerank should decide allowed evidence order and context budget, not expand recall blindly.
+2. Test version boundary second: add active version, stale warning, superseded forbidden boundary, and conflict warning as contract fields. This should reduce old-fact misuse, not serve as a separate broad recall expansion.
+3. Test graph only as routed graph: use graph retrieval for graph-needed scenes such as fuzzy references, entity relationship hops, and multi-hop project/person references. Do not use global graph-on as the next default.
+4. Test cumulative governed chain only after the first two layers show no regression: tri governed, tri + rerank governed, tri + version-boundary governed, and tri + rerank + version-boundary governed.
+
+Success criteria for P6o-6:
+
+- answer_rate should stay close to the P6o-5 governed result and should not fall materially below `97.5%` without an explainable tradeoff;
+- grounding should remain `100.0%`;
+- forbidden should stay close to `0.0%`;
+- avg tokens should not grow obviously beyond the governed baseline;
+- post-check `needs_retry_count`, `missing_likely_relevant_context_count`, stale/conflict inclusion, and insufficient fallback misses should not rise.
+
+Interpretation rule: graph, version, and rerank may conflict with the P6o-5 gain if they are added as unconditional extra context. They are more likely to help if they become signals inside the governed evidence contract: graph for relationship recovery, rerank for evidence order and compression, version/provenance for current-vs-stale boundaries, and post-check shadow for future retry/fallback policy.
+
+P6o-6 first slice result: implemented eval-only `chain_tri_rerank_governed_answer_contract`, which reorders `chain_tri_governed_answer_contract` evidence with the existing `chain_rerank_injection` signal but forbids recall expansion outside governed tri ids. The bounded real LLM matrix used common `20` + hard `20`, baseline prompt, repeat `1`, two profiles, and `80` completed calls. Report path is `my_md/memory_optimization/eval_reports/p6o6_governed_rerank_small_online_v1/`. Infra was clean: `provider_error_count = 0`, `timeout_count = 0`. Results: `chain_tri_governed_answer_contract` answer `39/40 = 97.5%`, grounding `100.0%`, forbidden `0.0%`, avg tokens `6162.05`; `chain_tri_rerank_governed_answer_contract` answer `40/40 = 100.0%`, grounding `100.0%`, forbidden `0.0%`, avg tokens `6209.475`.
+
+P6o-6 first slice conclusion: rerank is useful when treated as contract-internal ordering and budget signal, not as unconditional extra context. It recovered the remaining `1/40` miss from the governed baseline with only about `0.77%` avg-token overhead and no post-check risk count increase. The next P6o-6 slice should test version-boundary governed fields separately: active version, stale warning, conflict warning, superseded forbidden boundary, and insufficient evidence fallback. Do not add routed graph or all-on until version-boundary has its own result.
+
+P6o-7 version-boundary slice result: implemented eval-only `chain_tri_version_governed_answer_contract`, which keeps `chain_tri_governed_answer_contract` allowed evidence unchanged and adds scoped version-boundary fields. The bounded real LLM matrix used common `20` + hard `20`, baseline prompt, repeat `1`, two profiles, and `80` completed calls. Report path is `my_md/memory_optimization/eval_reports/p6o7_version_boundary_governed_small_online_v1/`. Infra was clean: `provider_error_count = 0`, `timeout_count = 0`. Results: `chain_tri_governed_answer_contract` answer `38/40 = 95.0%`, grounding `100.0%`, forbidden `0.0%`, avg tokens `6170.85`; `chain_tri_version_governed_answer_contract` answer `38/40 = 95.0%`, grounding `100.0%`, forbidden `0.0%`, avg tokens `6052.6`.
+
+P6o-7 version-boundary conclusion: answer, grounding, and forbidden main metrics stayed equal to the same-run governed baseline, and avg tokens decreased by `118.25`. However, the post-check no-rise gate failed: version-governed produced `needs_retry_count = 2` versus governed `0`, both from `forbidden_boundary_mentioned` on `hard_version_chain_01` and `hard_stale_sleep_02`. This means the current forbidden-boundary presentation can be echoed by the model and should remain shadow-only. Next recommended step is targeted failure analysis/redesign of forbidden-boundary presentation before combining rerank + version or adding graph/all-on.
+
+P6o-8 safe-boundary presentation result: changed only the eval harness evidence-contract rendering so model-visible text no longer contains raw `forbidden_boundary_ids:` or `deleted_evidence_ids:` values. The prompt now exposes boundary counts and an abstract instruction, while raw ids remain in `result.raw["answer_contract"]` for post-check. The bounded real LLM matrix used common `20` + hard `20`, baseline prompt, repeat `1`, two profiles, and `80` completed calls. Report path is `my_md/memory_optimization/eval_reports/p6o8_version_boundary_safe_presentation_small_online_v1/`. Infra was clean: `provider_error_count = 0`, `timeout_count = 0`. Results: `chain_tri_governed_answer_contract` answer `40/40 = 100.0%`, grounding `100.0%`, forbidden `0.0%`, avg tokens `6171.225`; `chain_tri_version_governed_answer_contract` answer `39/40 = 97.5%`, grounding `100.0%`, forbidden `0.0%`, avg tokens `6054.025`.
+
+P6o-8 conclusion: safe boundary presentation fixed the P6o-7 post-check regression. Aggregate post-check shadow across both profiles is clean: `needs_retry_count = 0`, `forbidden_boundary_included_count = 0`, `missing_likely_relevant_context_count = 0`, `stale_evidence_included_count = 0`, `conflict_evidence_included_count = 0`, and `insufficient_fallback_missing_count = 0`. Version-boundary still trails the same-run governed baseline by `2.5` answer-rate points, but it is within the `5.0` point gate, keeps forbidden at `0.0%`, and reduces average tokens by `117.2`. The next step is P6o-9 same-matrix comparison of governed, rerank-governed, and revised version-governed before adding a combined profile.
+
+P6o-9 same-matrix result: reran existing eval-only governed, rerank-governed, and safe version-governed profiles together on common `20` + hard `20`, baseline prompt, repeat `1`, for `120` completed real LLM calls. Report path is `my_md/memory_optimization/eval_reports/p6o9_governed_rerank_version_same_matrix_v1/`. Infra was clean: `provider_error_count = 0`, `timeout_count = 0`. Results: `chain_tri_governed_answer_contract` answer `39/40 = 97.5%`, grounding `100.0%`, forbidden `0.0%`, avg tokens `6156.725`; `chain_tri_rerank_governed_answer_contract` answer `38/40 = 95.0%`, grounding `100.0%`, forbidden `0.0%`, avg tokens `6118.475`; `chain_tri_version_governed_answer_contract` answer `38/40 = 95.0%`, grounding `100.0%`, forbidden `0.0%`, avg tokens `6021.55`. Post-check shadow stayed clean for all profiles: `needs_retry_count = 0` and all boundary/stale/conflict/fallback risk counts `0`.
+
+P6o-9 conclusion: governed remains the best standalone profile in the same-run answer-rate comparison, while rerank and safe version are both safe but slightly lower. Because rerank and version each pass the gate without adding forbidden, grounding loss, token rise, or post-check risk, P6o-10 may test the combination. The combo must stay eval-only and prove no recall expansion: rerank may reorder governed ids, version-boundary may add safe metadata, but neither may add new model-visible evidence ids.
+
+P6o-10 combo result: added eval-only `chain_tri_rerank_version_governed_answer_contract`, which uses rerank-governed evidence order and safe version-boundary metadata without adding evidence ids. The bounded real LLM matrix used common `20` + hard `20`, baseline prompt, repeat `1`, four profiles, and `160` completed calls. Report path is `my_md/memory_optimization/eval_reports/p6o10_rerank_version_governed_combo_small_online_v1/`. Infra was clean: `provider_error_count = 0`, `timeout_count = 0`. Results: `chain_tri_governed_answer_contract` answer `39/40 = 97.5%`, grounding `100.0%`, forbidden `0.0%`, avg tokens `6130.1`; `chain_tri_rerank_governed_answer_contract` answer `39/40 = 97.5%`, grounding `100.0%`, forbidden `0.0%`, avg tokens `6131.95`; `chain_tri_version_governed_answer_contract` answer `40/40 = 100.0%`, grounding `100.0%`, forbidden `0.0%`, avg tokens `6004.95`; `chain_tri_rerank_version_governed_answer_contract` answer `39/40 = 97.5%`, grounding `100.0%`, forbidden `0.0%`, avg tokens `6036.7`. Post-check shadow stayed clean for all profiles: `needs_retry_count = 0` and all boundary/stale/conflict/fallback risk counts `0`.
+
+P6o-10 conclusion: the combination is safe in this matrix and reduces tokens versus governed, but it does not outperform safe version-governed. The current best answer-level setting is safe version-governed, with combo as a safe fallback candidate rather than a clear winner. Do not proceed directly to graph/all-on or production activation; the next step should be targeted robustness/failure analysis around the single misses and whether version-only remains best across reruns or harder version/rerank cases.
+
+Current P6o follow-up assessment: the data is directional but not production-ready. The strongest current profile is safe version-governed from P6o-10 (`40/40`, grounding `100.0%`, forbidden `0.0%`, avg tokens `6004.95`, post-check risk `0`). The combo profile is safe (`39/40`, grounding `100.0%`, forbidden `0.0%`, avg tokens `6036.7`) but does not beat version-only. Remaining problems are small sample size (`40` unique cases), visible run-to-run stochasticity, unstable rerank incremental value, fixture-protected eval-only profile construction, and post-check being shadow-only. The next plan should therefore be P6o-11 failure/sensitivity analysis: compare per-case pass/fail deltas across P6o-8/P6o-9/P6o-10, then run a targeted hard slice and repeat stability gate for safe version-only vs combo before any graph/all-on or production-shadow work.
+
 ## Phase 6t：source_ref 写入质量治理
 
 ### 目的
@@ -488,6 +594,180 @@ chain_off
 
 注意：报告 JSON 顶层 `passed = False` 表示答案质量没有全量通过。CLI 对 checkpoint-only 报告返回 0 只代表有效样本报告生成成功，不代表 answer-level 质量达标。
 
+### Phase 6m 真实 answer-quality 失败归因与版本 grounding 修复
+
+Phase 6m 之后补了一个专门的失败归因层，用来解释完整真实 LLM answer-quality 矩阵里的失败类型。这个报告不重新调用模型，也不改历史结果，只读取既有 report JSON 或 checkpoint JSONL：
+
+```text
+my_md/memory_optimization/eval_reports/online_failure_attribution/online_failure_attribution.json
+my_md/memory_optimization/eval_reports/online_failure_attribution/online_failure_attribution.md
+```
+
+归因结果显示：
+
+| profile | answer_fail | grounding_fail | forbidden_fail | 主要问题 |
+| --- | ---: | ---: | ---: | --- |
+| chain_tri_retrieval | 229 | 0 | 96 | 召回到证据，但回答没有稳定用对，并且 forbidden 风险升高。 |
+| chain_graph_retrieval | 236 | 0 | 95 | 图谱召回扩大了证据面，但还缺少更强的过滤和回答约束。 |
+| chain_rerank_injection | 193 | 0 | 31 | 注入治理能降低 forbidden，但答案命中仍需继续优化。 |
+| chain_version_provenance | 191 | 320 | 3 | grounding 失败主要来自评测口径和 active version evidence 不一致。 |
+
+因此当前的下一步不是继续盲目扩大召回，而是：
+
+- 对三路召回和图谱召回做噪声控制、forbidden 过滤和场景路由。
+- 对重排与注入治理继续优化回答证据组织。
+- 先修复版本链 grounding 评测口径，再决定是否补跑真实 LLM。
+
+版本链 grounding 修复已经完成在评测层：`chain_version_provenance` 的答案期望改为优先使用 `expected_active_version_ids`，与 `version_chain_shadow.active_leaf_ids` 对齐。它没有修改生产 `AgentLoop`、真实召回、真实写入或 prompt 注入。
+
+验证边界：
+
+- 旧 checkpoint-only 报告仍显示 `chain_version_provenance grounding = 0.0%`，这是预期结果，因为 checkpoint 已保存旧评分布尔值，不能事后重算。
+- fresh fake-provider 验证报告位于 `my_md/memory_optimization/eval_reports/version_grounding_fake_validation/`，20 case 切片中 `chain_memory_base` 和 `chain_version_provenance` 都是 `20/20 grounding = 100.0%`。
+- 要得到修复后的真实线上结果，需要下一轮对受影响 profile 做有界真实 LLM fresh rerun。
+- 之后又补了一个极小真实 LLM smoke，路径是 `/tmp/akashic-memory-version-grounding-smoke/reports/memory_comprehensive_online_eval.{json,md}`，只跑 `chain_memory_base` 和 `chain_version_provenance` 两个 profile、5 个 case。结果是两者 grounding 都为 `100%`，`chain_version_provenance answer_rate = 80%`、`chain_memory_base answer_rate = 60%`。这只是门槛检查，不能替代后续 20/40 case 的有界复测。
+- 从完整真实 answer-quality 报告再往下拆，三路召回和图谱召回都不适合无条件全开：
+  - 三路召回在 `tool_preference`、`conflict_resolution`、`temporal_preference`、`preference_recall` 等场景更容易救活基线，但在 `style_preference`、`source_ref_missing`、`entropy_value`、`hard_tool_preference` 等场景更容易回退；
+  - 图谱召回在 `tri_rrf`、`version_chain`、`graph_bridge`、`source_ref_missing`、`session_boundary`、`entity_alias` 等场景更容易救活基线，但在 `tool_preference`、`temporal_preference`、`conflict_resolution`、`style_preference` 上也会回退；
+  - 所以下一步应把三路和图谱纳入场景路由层，而不是继续把它们当成全局默认增强。
+
+### Phase 6m 三路召回路由治理
+
+在失败归因之后，本轮已把三路召回治理从“继续加召回”调整为“先做场景路由和候选准入”。核心实现是 `memory2/retrieval_governance.py`：
+
+- `classify_retrieval_scene()`：把查询分成模糊指代、工具偏好、部分冲突、精确召回、来源查询和未知场景。
+- `build_retrieval_routing_decision()`：为每类场景生成允许通道、每路上限、是否要求来源、是否要求同作用域、是否启用图谱和是否丢弃低置信候选。
+- `apply_retrieval_route()`：对语义、关键词、溯源、图谱候选做准入过滤，输出保留候选和 route trace。
+- `Retriever.retrieve_with_trace()` / `DefaultMemoryEngine.retrieve()`：把 route trace 透出到评测和默认 memory engine，不改变旧 `retrieve()` 的列表返回合同。
+
+当前报告：
+
+```text
+my_md/memory_optimization/eval_reports/memory_route_governance_eval.json
+my_md/memory_optimization/eval_reports/memory_route_governance_eval.md
+```
+
+离线路由表基于 comprehensive `320` case，覆盖 `5` 类场景：
+
+| 场景 | case | baseline_success | gated_success | candidate_drop_rate | expected_route_hit_rate | candidate_accept_rate |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| 模糊指代 | 16 | 30 | 32 | 68.27% | 100.0% | 31.73% |
+| 部分冲突 | 24 | 48 | 48 | 63.3933% | 100.0% | 36.6067% |
+| 来源查询 | 16 | 32 | 32 | 77.085% | 100.0% | 22.915% |
+| 工具偏好 | 16 | 30 | 32 | 76.73% | 100.0% | 23.27% |
+| 未知场景 | 248 | 488 | 496 | 73.7155% | 100.0% | 26.2845% |
+
+真实引擎 route smoke 基于 `9` case，只验证 `DefaultMemoryEngine.retrieve()` 可以输出路由 trace：
+
+| 场景 | case | candidate_accept_rate | candidate_drop_rate | graph_used_rate |
+| --- | ---: | ---: | ---: | ---: |
+| 模糊指代 | 2 | 25.0% | 75.0% | 100.0% |
+| 未知场景 | 7 | 34.2843% | 51.43% | 0.0% |
+
+结论：
+
+- 三路召回和图谱召回不再作为全局默认开关，而是受场景路由控制。
+- 当前路由治理能输出候选丢弃率、路由命中率、通道使用率和丢弃原因，用于解释“为什么保留或丢弃某条记忆”。
+- 离线表证明 deterministic trace 能按策略过滤候选；真实引擎 smoke 只证明接线可用。
+- 还不能把这一步解释为真实 LLM 回答质量已经提升。下一步要补更真实的 live fixture，并对三路/图谱/重排链路做 fresh answer-quality rerun。
+
+#### 小型真实 LLM fresh rerun
+
+2026-07-27 已补做一轮短线上评测，目标是验证路由治理后是否值得继续扩测，而不是替代完整大矩阵。
+
+运行配置：
+
+- 报告：`my_md/memory_optimization/eval_reports/route_governance_small_online_v1/memory_comprehensive_online_eval.json` 和 `.md`。
+- 样本：`40` 个唯一样本，common `20`、hard `20`。
+- profile：`chain_memory_base`、`chain_tri_retrieval`、`chain_graph_retrieval`、`chain_rerank_injection`。
+- 真实调用：`160` 次，`prompt_variant = baseline`，`repeat = 1`。
+- 基础设施：`provider_error_count = 0`，`timeout_count = 0`，`excluded_infra_failure_count = 0`，`partial_due_to_infra_failure = False`。
+
+| profile | cases | answer_success | answer_rate | 相对基线回答提升 | grounding_rate | forbidden_rate | avg_tokens | avg_latency_ms | 结论 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| `chain_memory_base` | 40 | 13 | `32.5%` | `0%` | `100%` | `15%` | `5503.7` | `4678.825` | 原始记忆基线 |
+| `chain_tri_retrieval` | 40 | 17 | `42.5%` | `+30.7692%` | `100%` | `12.5%` | `5481.2` | `4082.825` | 路由治理后小样本转正，值得扩测 |
+| `chain_graph_retrieval` | 40 | 13 | `32.5%` | `0%` | `100%` | `15%` | `5514.75` | `4465.575` | 本轮持平，仍需更细场景路由和去噪 |
+| `chain_rerank_injection` | 40 | 18 | `45%` | `+38.4615%` | `100%` | `10%` | `5426.55` | `4335.725` | 本轮最稳，回答和 forbidden 都优于基线 |
+
+结论边界：
+
+- 这轮只覆盖 `40` case，不能替代 `320 case / 1920 call` 完整矩阵。
+- 三路召回本轮转正，说明此前“全局打开三路导致噪声”的问题可以通过场景路由缓解。
+- 图谱召回本轮没有提升，但当前 answer-quality fixture 中 `chain_graph_retrieval` 和 `chain_tri_retrieval` 的 evidence ids 没有充分隔离，所以不能把这行解释为“图谱能力无效”；后续需要补图谱专用 case 或让 graph profile 输出可区分证据，再优化图谱触发条件、图谱候选去噪和证据注入约束。
+- 重排与注入治理是本轮最稳的增强路径，后续扩测应优先验证 `route + rerank/injection` 的组合。
+
+#### 三路召回失败归因
+
+在小型真实 LLM fresh rerun 之后，新增了一个三路召回失败归因报告。这个报告回答的问题不是“有没有召回”，而是“召回后为什么没有答对”。它只读取已有 `route_governance_small_online_v1` 报告，不重新调用 LLM，不写原始 prompt、session 文本、memory summary 或完整回答，也不修改生产 `AgentLoop`、`Reasoner`、`ToolExecutor`、真实召回、真实写入或 prompt。
+
+报告路径：
+
+- `my_md/memory_optimization/eval_reports/tri_retrieval_failure_attribution_v1/tri_retrieval_failure_attribution.json`
+- `my_md/memory_optimization/eval_reports/tri_retrieval_failure_attribution_v1/tri_retrieval_failure_attribution.md`
+
+核心数据：
+
+| 指标 | 数值 | 解释 |
+| --- | ---: | --- |
+| `tri_case_count` | `40` | 本轮三路召回 case 数 |
+| `tri_answer_fail_count` | `23` | 三路回答未通过数 |
+| `tri_grounding_fail_count` | `0` | 目标记忆未 grounding 的 case 数 |
+| `tri_grounded_answer_fail_count_any` | `23` | 证据已到但回答未通过，包含 forbidden |
+| `tri_grounded_non_forbidden_answer_fail_count` | `18` | 证据已到、没有 forbidden、但答案规则未命中 |
+| `tri_forbidden_fail_count` | `5` | 三路回答出现 forbidden 的 case 数 |
+| `baseline_passed_but_tri_failed_count` | `5` | 原始记忆通过但三路回退 |
+| `baseline_failed_but_tri_passed_count` | `9` | 原始记忆失败但三路救活 |
+| `tri_failed_but_rerank_passed_count` | `7` | 三路失败但后续累计 profile 通过 |
+
+互斥失败桶：
+
+| bucket | case 数 | 结论 |
+| --- | ---: | --- |
+| `passed` | `17` | 三路召回答案通过 |
+| `grounded_answer_rule_miss` | `18` | 主要瓶颈：证据进入上下文，但模型没有稳定用对 |
+| `forbidden_answer_failure` | `5` | 需要继续做 forbidden 过滤和冲突/旧信息控制 |
+
+本轮结论：
+
+- `tri_grounding_fail_count = 0`，所以三路召回当前的主要瓶颈已经不是召回覆盖。
+- 失败主要发生在召回之后：证据使用、候选噪声、排序、注入治理、forbidden 控制和回答约束。
+- `baseline_failed_but_tri_passed_count = 9` 说明三路召回确实有救活能力；`baseline_passed_but_tri_failed_count = 5` 说明它也会引入回退，不能全局无脑打开。
+- `tri_failed_but_rerank_passed_count = 7` 只表示后续累计 `chain_rerank_injection` profile 可能救活部分 case，不证明 rerank 是单一因果来源。
+- 当前 `40` case 的 category 粒度接近一类一个 common 和一个 hard 样本，不能把单个 category 失败解释成统计集中；下一步应优先看 failure bucket、pass pattern 和 failure-code 交叉表，再做专项小型真实 LLM 复测。
+
+回答质量不好的原因：
+
+1. 目标证据已经进入上下文，但模型没有稳定使用这些证据。对应数据是 `tri_grounded_answer_fail_count_any = 23`，且 `tri_grounding_fail_count = 0`。
+2. 三路召回扩大了候选来源，覆盖更强，但也更容易把次要证据、旧信息、冲突信息或低置信信息带进上下文。对应现象是三路救活 `9` 个基线失败 case，同时让 `5` 个基线通过 case 回退。
+3. forbidden 风险仍然存在。对应数据是 `tri_forbidden_fail_count = 5`，说明仅靠召回和 grounding 不能保证回答边界。
+4. 后续累计 profile 可以救回部分失败。对应数据是 `tri_failed_but_rerank_passed_count = 7`，说明重排、注入治理或组合链路有优化空间，但不能直接归因为某一个单独模块。
+
+面试表达可以压缩为：
+
+> 三路召回这轮 grounding 是 `100%`，说明目标记忆已经召回到了；但回答通过率只有 `42.5%`，说明瓶颈在召回之后。具体看，`23` 个失败全部是证据已到后的失败，其中 `18` 个是答案规则未命中，`5` 个是 forbidden 失败。所以后续重点不是继续扩大召回，而是候选去噪、forbidden 过滤、场景路由、重排和证据注入约束。
+
+下一步决策规则：
+
+- 如果三路仍出现 `grounded_answer_rule_miss`：优先做证据注入模板、答案约束和候选重排。
+- 如果 `forbidden_answer_failure` 上升：优先做 forbidden 过滤、旧版本过滤、冲突候选隔离。
+- 如果 `baseline_passed_but_tri_failed_count` 上升：优先做场景路由和候选去噪，避免三路在不适合的场景覆盖原始记忆基线。
+- 如果 `tri_failed_but_rerank_passed_count` 较高：设计 `route + tri + graph/rerank/injection` 累计组合验证，但报告中必须写清它不是单因素因果。
+
+#### 对齐行业通用方案后的执行入口
+
+市面上通常把这类问题拆成“检索是否拿到证据”和“生成是否正确使用证据”两层处理。对我们项目来说，三路召回当前已经达到 `100%` grounding，所以后续主线应转向召回后的治理：
+
+| 执行项 | 当前依据 | 目标指标 |
+| --- | --- | --- |
+| 候选去噪 | 三路救活 `9` 个 case，但也让 `5` 个基线通过 case 回退 | `baseline_passed_but_tri_failed_count` 下降 |
+| forbidden / 冲突过滤 | `tri_forbidden_fail_count = 5` | `tri_forbidden_fail_count` 和 `forbidden_rate` 下降 |
+| 证据注入约束 | `grounded_answer_rule_miss = 18` | `grounded_answer_rule_miss` 下降，`answer_rate` 上升 |
+| 回答后校验 | grounding 后仍有 `23` 个回答失败 | 不合格回答可重试、降级或标记为证据不足 |
+| 小型真实 LLM 复测 | 当前结论来自 `40` case 短线上样本 | 用相同 case 或失败专项 case 对比修改前后百分比 |
+
+执行顺序建议是：先做候选去噪和 forbidden / 冲突过滤，因为它们能直接降低三路引入的回退和违规；然后再做证据注入约束和回答后校验，因为这两项直接处理“证据到了但没用对”的问题。
+
 ### 写入价值与睡眠巩固的专项评测
 
 本轮 Phase 6e 是 answer-level 评测，它天然更偏向检索、图谱、重排和注入治理。写入价值和睡眠巩固不应该只用这张表判断强弱。
@@ -643,6 +923,7 @@ Phase 6d   已完成第一版：80 case 量化 uplift 总表，输出 common/har
 Phase 6d-chain 已完成第一版：链路量化评测，输出累计开关链路、相邻增益和总增益 JSON + Markdown
 Phase 6d-balanced 已完成第一版：分层 balanced 链路评测，输出回答、召回代理、证据、治理、效率和综合代理分 JSON + Markdown
 Phase 6d-layered 已完成第一版：三层评分评测，输出即时回答、写入治理和记忆库卫生 JSON + Markdown
+Phase 6m-retrieval-route-governance 已完成第一版：三路召回场景路由和候选治理，输出离线路由表和真实引擎 route smoke
 Phase 6   待做：Dashboard、连续评测和 active 化决策
 ```
 
@@ -1054,8 +1335,8 @@ Phase 6c-1 已完成第一版：离线 uplift report。
 后续建议拆分：
 
 1. Phase 6c：把 eval report 接入 Dashboard 或 observe 查询界面。
-2. Phase 6d：已经完成 80 case 量化 uplift 总表，输出 common/hard 双集和单项 / 总增益 JSON + Markdown，当前结果为 `baseline_main_score = 94.375`、`all_on_main_score = 69.5543`、`total_uplift_points = -24.8207`。这里的 `memory_base` 是原始记忆基线，`off` 只是关闭增强控制组。本轮修正后，token 输出使用 `token_signal_kind/value/delta`，混合成本与节省的组合态标记为 `mixed`；溯源 forbidden rate 只按实际 `cross_scope_risk_count` 计算。报表路径见 `my_md/memory_optimization/eval_reports/memory_quantitative_uplift_eval.json`。
-3. Phase 6d-chain：已经完成链路量化评测，输出 `memory_quantitative_chain_eval.json` 和 `memory_quantitative_chain_eval.md`。当前链路为 `chain_memory_base -> chain_write_value -> chain_tri_retrieval -> chain_graph_retrieval -> chain_rerank_injection -> chain_version_provenance -> chain_sleep_consolidation -> chain_all_on`，`chain_off` 仅作为关闭增强控制组。结果显示最终总提升 `-24.8207` 分；相邻增益最高是写入价值 `-40.4156` 的基线切换，随后三路召回带来 `+18.2433`，图谱召回 `-0.1093`；后续治理和睡眠步骤在当前平均评分公式下继续下降，说明下一步应优化组合权重、场景路由和 active 化策略。
+2. Phase 6d：已经完成 80 case 量化 uplift 总表，输出 common/hard 双集和单项 / 总增益 JSON + Markdown，当前结果为 `baseline_main_score = 94.375`、`all_on_main_score = 68.8579`、`total_uplift_points = -25.5171`。这里的 `memory_base` 是原始记忆基线，`off` 只是关闭增强控制组。本轮修正后，token 输出使用 `token_signal_kind/value/delta`，混合成本与节省的组合态标记为 `mixed`；溯源 forbidden rate 只按实际 `cross_scope_risk_count` 计算。当前写入治理口径中 `review` 不等同于 `reject`，因此 `tool_preference` case 的 `all_on` 数值低于旧报表。报表路径见 `my_md/memory_optimization/eval_reports/memory_quantitative_uplift_eval.json`。
+3. Phase 6d-chain：已经完成链路量化评测，输出 `memory_quantitative_chain_eval.json` 和 `memory_quantitative_chain_eval.md`。当前链路为 `chain_memory_base -> chain_write_value -> chain_tri_retrieval -> chain_graph_retrieval -> chain_rerank_injection -> chain_version_provenance -> chain_sleep_consolidation -> chain_all_on`，`chain_off` 仅作为关闭增强控制组。结果显示最终总提升 `-25.0707` 分；相邻增益最高是写入价值 `-40.4156` 的基线切换，随后三路召回带来 `+18.2433`，图谱召回 `-0.1093`；后续治理和睡眠步骤在当前平均评分公式下继续下降，说明下一步应优化组合权重、场景路由和 active 化策略。
 4. Phase 6d-balanced：已经完成分层 balanced 链路评测，输出 `memory_quantitative_balanced_eval.json` 和 `memory_quantitative_balanced_eval.md`。当前结果为 `baseline_balanced_score = 12.6923`、`final_balanced_score = 67.2022`、`total_balanced_uplift_points = 54.5099`，common 最终分 `66.6972`，hard 最终分 `67.7072`。Balanced report 借鉴 RAG/Agent 分层评测共识，把回答、召回代理、证据、治理和效率分开；本项目的改进是把 memory 生命周期治理纳入评分，包括 forbidden、source_ref、版本链、scope 隔离和 token/sleep 信号。它仍然是离线代理评测，不是生产回答准确率。
 5. Phase 6d-layered：已经完成三层评分评测，输出 `memory_layered_scoring_eval.json` 和 `memory_layered_scoring_eval.md`。当前结果为 `baseline_total_layered_score = 94.375`、`final_total_layered_score = 54.9521`、`total_layered_uplift_points = -39.4229`，common 最终分 `54.773`，hard 最终分 `55.1312`，`chain_all_on` 的写入治理分 `49.3334`，记忆库卫生分 `35.4107`。这一步的意义是把即时回答、写入治理、记忆库卫生拆开，避免后两者被单一回答分误伤。
 6. Phase 6e：已经完成第一轮综合线上 answer-level 评测，但外部 provider 在 checkpoint `1599` 条时返回 `402 Insufficient Balance`，排除基础设施失败后得到 `1417` 条有效真实调用。该报告证明真实 LLM 接入链路可用，但不能作为完整 2560-run 结论。
@@ -1199,12 +1480,33 @@ Phase 6s 当前状态：
 - dry-run patch 已新增 `source_backed_action_safe` 和 `source_backed_block_reason`。当前 `200` 条 patch 记录中，只有 `12` 条满足真实 `session-store` 回源且原文支持；`24` 条进入 review，`73` 条因来源不可取回阻断，`11` 条因原文不支持摘要阻断。
 - 该阶段证明真实来源证据链路可审计，但仍是 fixture 数据，不是生产自然流量；source support 仍是轻量 expected-term 判断，不是完整语义蕴含。
 
+Phase 6t 当前状态：
+
+- 已完成 tri candidate governance 的小型真实 LLM 线上评测。
+- 新增 eval-only `chain_tri_candidate_governance` profile，作为现有 `chain_tri_retrieval.fused_ids` 的严格候选治理过滤层。
+- 新增综合线上评测 CLI 参数：`--balanced-small`、`--common-limit`、`--hard-limit`。
+- fake-provider smoke 跑通：`case_count = 120`、`unique_case_count = 40`、`profile_count = 3`、`provider_error_count = 0`、`timeout_count = 0`。
+- 真实 LLM 小矩阵跑通：`case_count = 120`、`unique_case_count = 40`、`completed_call_count = 120`、`provider_error_count = 0`、`timeout_count = 0`、`total_token_count = 655992`。
+- 结果表：
+
+| profile | answer_success | answer_rate | grounding_rate | forbidden_rate | avg_tokens | avg_latency_ms |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `chain_memory_base` | `20/40` | `50.0%` | `100.0%` | `10.0%` | `5486.7` | `4785.5` |
+| `chain_tri_retrieval` | `22/40` | `55.0%` | `100.0%` | `15.0%` | `5529.875` | `4922.225` |
+| `chain_tri_candidate_governance` | `17/40` | `42.5%` | `100.0%` | `0.0%` | `5383.225` | `3988.775` |
+
+- 当前结论：candidate governance 能把 forbidden 降到 `0.0%`，但 answer rate 相对三路召回下降 `12.5` 个百分点；因此它还不能作为“性能提升”的生产结论，只能作为“风险治理有效，但回答质量需要后续补强”的受控测试证据。
+- 后续应先解决召回后回答质量：候选去噪不应一刀切，应该结合场景路由、证据注入、回答约束、source_ref 回源和低置信 fallback。
+
 后续计划：
 
-1. 如果继续扩大真实模型测试，复用 Phase 6o runner 和 checkpoint 机制，把 `240` 条扩展样本推进到可选 `1200` 条全量；默认不继续消耗这部分 token。
-2. 继续把睡眠巩固从 source-backed fixture 推进到真实样本 evidence：真实 source_ref 覆盖、真实回源、真实 active 数、真实 prompt token 变化和清理后召回保持率。
-3. 扩展冲突链 fixture 类型，例如多层分叉、回滚分叉和跨 source_ref 分叉。
-4. 再从 Phase 6e checkpoint 重建真实 LLM 目标指标表；如果 checkpoint 不完整，再考虑 `--resume` 补跑。
+1. 针对 Phase 6t 的 answer 下降，做失败归因：区分关键证据被过滤、证据仍在但注入表达不足、模型回答没有遵守证据、评分规则过窄。
+2. 增加候选风险分层和低风险 fallback：高风险删除，中风险降权，低风险保留，避免 strict filter 过度削弱答案证据。
+3. 做证据注入和回答约束小型线上 A/B：同一 40-case 子集比较 baseline 注入、coached 注入和 forbidden-aware 注入。
+4. 如果继续扩大真实模型测试，复用 Phase 6o runner 和 checkpoint 机制，把 `240` 条扩展样本推进到可选 `1200` 条全量；默认不继续消耗这部分 token。
+5. 继续把睡眠巩固从 source-backed fixture 推进到真实样本 evidence：真实 source_ref 覆盖、真实回源、真实 active 数、真实 prompt token 变化和清理后召回保持率。
+6. 扩展冲突链 fixture 类型，例如多层分叉、回滚分叉和跨 source_ref 分叉。
+7. 再从 Phase 6e checkpoint 重建真实 LLM 目标指标表；如果 checkpoint 不完整，再考虑 `--resume` 补跑。
 
 ## 面试表达
 

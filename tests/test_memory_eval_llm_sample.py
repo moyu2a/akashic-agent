@@ -126,6 +126,83 @@ def test_score_answer_text_accepts_any_expected_term_group() -> None:
     assert result.answer_rule_passed is True
 
 
+def test_score_answer_text_accepts_calibrated_equivalent_terms() -> None:
+    expectation = AnswerExpectation(
+        expected_answer_contains=("清理",),
+        expected_answer_contains_any=(
+            ("冲突", "冲突偏好要保留最新明确版本"),
+            ("中文回答", "用户偏好中文回答"),
+        ),
+        expected_memory_ids=("m_current",),
+        expected_language="zh",
+        grounding_required=True,
+    )
+
+    result = score_answer_text(
+        "前后矛盾时按最新明确版本处理。我会保持中文，并把低价值记忆清掉。",
+        expectation,
+        ["m_current"],
+    )
+
+    assert result.passed is True
+    assert result.expected_contains_pass_count == 1
+    assert result.expected_any_pass_count == 2
+    assert result.expected_any_miss_count == 0
+
+
+def test_score_answer_text_accepts_calibrated_equivalent_summary_phrases() -> None:
+    cross_scope = AnswerExpectation(
+        expected_answer_contains=("会话", "隔离"),
+        expected_answer_contains_any=(
+            ("会话", "隔离"),
+            ("session_key", "不同会话的偏好不能混用"),
+        ),
+        expected_memory_ids=("m_scope",),
+        expected_language="zh",
+        grounding_required=True,
+    )
+    version_chain = AnswerExpectation(
+        expected_answer_contains=("叶子", "回滚"),
+        expected_answer_contains_any=(
+            ("叶子", "回滚"),
+            ("版本链", "旧版本记忆被新版本替换后只保留叶子"),
+        ),
+        expected_memory_ids=("m_version",),
+        expected_language="zh",
+        grounding_required=True,
+    )
+
+    cross_scope_result = score_answer_text(
+        "不同会话的偏好是隔离的，telegram 和 qq 的 session 互相独立，不会混用。",
+        cross_scope,
+        ["m_scope"],
+    )
+    version_chain_result = score_answer_text(
+        "旧版本被新版本替换后，只保留叶子，也会记录回滚候选。",
+        version_chain,
+        ["m_version"],
+    )
+
+    assert cross_scope_result.passed is True
+    assert version_chain_result.passed is True
+
+
+def test_score_answer_text_still_rejects_fragment_answers_for_anchor_terms() -> None:
+    expectation = AnswerExpectation(
+        expected_answer_contains=("条目式",),
+        expected_answer_contains_any=(("条目式", "回答时尽量用条目式"),),
+        expected_memory_ids=("m_style",),
+        expected_language="zh",
+        grounding_required=True,
+    )
+
+    for fragment in ("可以的。", "嗯，对的。", "嗯……我查一下记忆。"):
+        result = score_answer_text(fragment, expectation, ["m_style"])
+        assert result.passed is False
+        assert result.expected_contains_miss_count == 1
+        assert result.expected_any_miss_count == 1
+
+
 def test_score_answer_text_separates_memory_grounding_from_answer_rules() -> None:
     expectation = AnswerExpectation(
         expected_answer_contains=("RRF",),

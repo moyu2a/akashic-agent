@@ -1,0 +1,112 @@
+{
+  "anchor_mode": "safe_version_replace_guided",
+  "case_count": 12,
+  "comparison_mode": "safe_version_replace_guided_with_retry_shadow",
+  "movement_counts": {
+    "anchor_failed_comparison_passed": 0,
+    "anchor_passed_comparison_failed": 0,
+    "both_failed": 4,
+    "both_passed": 0
+  },
+  "paired_case_count": 4,
+  "rows": [
+    {
+      "anchor_failures": [
+        "missing_expected_answer_term",
+        "missing_expected_answer_term_group",
+        "missing_expected_answer_term_group"
+      ],
+      "anchor_mode": "safe_version_replace_guided",
+      "anchor_passed": false,
+      "case_id": "common_preference_recall_01",
+      "category": "common_preference_recall",
+      "comparison_failures": [
+        "missing_expected_answer_term",
+        "missing_expected_answer_term_group",
+        "missing_expected_answer_term_group"
+      ],
+      "comparison_mode": "safe_version_replace_guided_with_retry_shadow",
+      "comparison_passed": false,
+      "comparison_retry_reasons": [
+        "required_terms_missing",
+        "answer_choice_group_missing"
+      ],
+      "movement": "both_failed",
+      "repeat_index": 0
+    },
+    {
+      "anchor_failures": [
+        "missing_expected_answer_term",
+        "missing_expected_answer_term_group",
+        "missing_expected_answer_term_group"
+      ],
+      "anchor_mode": "safe_version_replace_guided",
+      "anchor_passed": false,
+      "case_id": "common_tool_preference_01",
+      "category": "common_tool_preference",
+      "comparison_failures": [
+        "missing_expected_answer_term",
+        "missing_expected_answer_term_group",
+        "missing_expected_answer_term_group"
+      ],
+      "comparison_mode": "safe_version_replace_guided_with_retry_shadow",
+      "comparison_passed": false,
+      "comparison_retry_reasons": [
+        "required_terms_missing",
+        "answer_choice_group_missing"
+      ],
+      "movement": "both_failed",
+      "repeat_index": 0
+    },
+    {
+      "anchor_failures": [
+        "missing_expected_answer_term",
+        "missing_expected_answer_term_group",
+        "missing_expected_answer_term_group"
+      ],
+      "anchor_mode": "safe_version_replace_guided",
+      "anchor_passed": false,
+      "case_id": "hard_preference_recall_01",
+      "category": "hard_preference_recall",
+      "comparison_failures": [
+        "missing_expected_answer_term",
+        "missing_expected_answer_term_group",
+        "missing_expected_answer_term_group"
+      ],
+      "comparison_mode": "safe_version_replace_guided_with_retry_shadow",
+      "comparison_passed": false,
+      "comparison_retry_reasons": [
+        "required_terms_missing",
+        "answer_choice_group_missing"
+      ],
+      "movement": "both_failed",
+      "repeat_index": 0
+    },
+    {
+      "anchor_failures": [
+        "missing_expected_answer_term",
+        "missing_expected_answer_term_group",
+        "missing_expected_answer_term_group"
+      ],
+      "anchor_mode": "safe_version_replace_guided",
+      "anchor_passed": false,
+      "case_id": "hard_tool_preference_01",
+      "category": "hard_tool_preference",
+      "comparison_failures": [
+        "missing_expected_answer_term",
+        "missing_expected_answer_term_group",
+        "missing_expected_answer_term_group"
+      ],
+      "comparison_mode": "safe_version_replace_guided_with_retry_shadow",
+      "comparison_passed": false,
+      "comparison_retry_reasons": [
+        "required_terms_missing",
+        "answer_choice_group_missing"
+      ],
+      "movement": "both_failed",
+      "repeat_index": 0
+    }
+  ],
+  "unpaired_case_count": 0,
+  "unpaired_rows": []
+}

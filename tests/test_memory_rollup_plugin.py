@@ -3,12 +3,11 @@ from __future__ import annotations
 from pathlib import Path
 from typing import cast
 
-from fastapi.testclient import TestClient
-
 from agent.memory import MemoryStore
 from bootstrap.dashboard_api import create_dashboard_app as _create_dashboard_app
 from plugins.default_memory.engine import DefaultMemoryEngine
 from memory2.store import MemoryStore2
+from tests.asgi_client import TestClient
 
 
 class _DashboardMemoryAdmin:

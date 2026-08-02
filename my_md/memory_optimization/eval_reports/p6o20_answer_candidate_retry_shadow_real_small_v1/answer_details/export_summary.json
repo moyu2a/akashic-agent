@@ -1,0 +1,23 @@
+{
+  "expected_modes": [
+    "safe_version_replace",
+    "safe_version_replace_guided",
+    "safe_version_replace_guided_with_retry_shadow"
+  ],
+  "forbidden_key_scan_passed": true,
+  "mode_row_counts": {
+    "safe_version_replace": 40,
+    "safe_version_replace_guided": 40,
+    "safe_version_replace_guided_with_retry_shadow": 40
+  },
+  "movement_counts": {
+    "anchor_failed_comparison_passed": 0,
+    "anchor_passed_comparison_failed": 0,
+    "both_failed": 40,
+    "both_passed": 0
+  },
+  "paired_case_count": 40,
+  "source_report_json": "my_md/memory_optimization/eval_reports/p6o20_answer_candidate_retry_shadow_real_small_v1/real_small_ab/system_path_safe_version_eval.json",
+  "total_rows": 120,
+  "unpaired_case_count": 0
+}

@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Protocol
 
+from agent.persona import PersonaMode
 from agent.prompting import PromptSectionMeta, PromptSectionRender, SectionCache
 from prompts.agent import (
     build_agent_behavior_rules_prompt,
@@ -75,14 +76,20 @@ class IdentityPromptBlock:
     label = "identity"
     is_static = True
 
-    def __init__(self, render_fn=build_agent_static_identity_prompt) -> None:
+    def __init__(
+        self,
+        render_fn=build_agent_static_identity_prompt,
+        *,
+        persona_mode: PersonaMode = "casual",
+    ) -> None:
         self._render_fn = render_fn
+        self._persona_mode = persona_mode
 
     def render(self, ctx: TurnContext, cached_signature: str | None = None) -> str | None:
-        return self._render_fn(workspace=ctx.workspace)
+        return self._render_fn(workspace=ctx.workspace, persona_mode=self._persona_mode)
 
     def cache_signature(self, ctx: TurnContext) -> str | None:
-        return str(ctx.workspace.expanduser().resolve())
+        return f"{ctx.workspace.expanduser().resolve()}:{self._persona_mode}"
 
 
 class BehaviorRulesPromptBlock:

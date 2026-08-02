@@ -4,7 +4,7 @@ import asyncio
 import hashlib
 import json
 import time
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Sequence
@@ -31,6 +31,7 @@ from core.memory.engine import (
 )
 from memory2.eval_cases import EvalCase
 from memory2.eval_llm_sample import (
+    AnswerExpectation,
     LLMSampleAnswerDebugRecord,
     _extract_token_counts,
     _memory_summaries_by_id,
@@ -41,6 +42,18 @@ from memory2.eval_llm_sample import (
     score_answer_text,
     write_llm_sample_answer_debug,
 )
+from memory2.eval_answer_contract import (
+    build_production_governed_tri_evidence_contract,
+    build_tri_answer_contract,
+    build_version_boundary_info,
+    render_answer_contract_block,
+    render_production_evidence_contract_block,
+    tri_answer_contract_evidence_ids,
+)
+from memory2.eval_answer_post_check import (
+    answer_post_check_shadow_to_dict,
+    build_answer_post_check_shadow,
+)
 from memory2.eval_runner import _baseline_recalled_items
 from memory2.eval_quantitative_uplift import (
     BALANCED_SCORE_FORMULA,
@@ -50,6 +63,11 @@ from memory2.eval_quantitative_uplift import (
     _family_trace_for_case,
     calculate_balanced_scores,
     calculate_main_score,
+)
+from memory2.retrieval_governance import (
+    CandidateGovernancePolicy,
+    apply_retrieval_route,
+    build_retrieval_routing_decision,
 )
 from session.manager import SessionManager
 
@@ -65,6 +83,119 @@ ANSWER_QUALITY_PROFILES: tuple[str, ...] = (
     "chain_version_provenance",
     "chain_all_on",
 )
+TRI_CANDIDATE_GOVERNANCE_PROFILE = "chain_tri_candidate_governance"
+TRI_ANSWER_CONTRACT_PROFILE = "chain_tri_answer_contract"
+TRI_GOVERNED_ANSWER_CONTRACT_PROFILE = "chain_tri_governed_answer_contract"
+TRI_RERANK_GOVERNED_ANSWER_CONTRACT_PROFILE = (
+    "chain_tri_rerank_governed_answer_contract"
+)
+TRI_VERSION_GOVERNED_ANSWER_CONTRACT_PROFILE = (
+    "chain_tri_version_governed_answer_contract"
+)
+TRI_RERANK_VERSION_GOVERNED_ANSWER_CONTRACT_PROFILE = (
+    "chain_tri_rerank_version_governed_answer_contract"
+)
+PRODUCTION_GOVERNED_ANSWER_CONTRACT_PROFILES: tuple[str, ...] = (
+    TRI_GOVERNED_ANSWER_CONTRACT_PROFILE,
+    TRI_RERANK_GOVERNED_ANSWER_CONTRACT_PROFILE,
+    TRI_VERSION_GOVERNED_ANSWER_CONTRACT_PROFILE,
+    TRI_RERANK_VERSION_GOVERNED_ANSWER_CONTRACT_PROFILE,
+)
+OPTIONAL_ANSWER_QUALITY_PROFILES: tuple[str, ...] = (
+    TRI_CANDIDATE_GOVERNANCE_PROFILE,
+    TRI_ANSWER_CONTRACT_PROFILE,
+    TRI_GOVERNED_ANSWER_CONTRACT_PROFILE,
+    TRI_RERANK_GOVERNED_ANSWER_CONTRACT_PROFILE,
+    TRI_VERSION_GOVERNED_ANSWER_CONTRACT_PROFILE,
+    TRI_RERANK_VERSION_GOVERNED_ANSWER_CONTRACT_PROFILE,
+)
+PROFILE_METADATA: dict[str, dict[str, object]] = {
+    TRI_CANDIDATE_GOVERNANCE_PROFILE: {
+        "eval_only": True,
+        "oracle_protected": True,
+        "uses_fixture_expected_ids": True,
+        "candidate_governance_mode": "tiered",
+        "description": (
+            "Applies risk-tiered candidate governance to existing tri fused "
+            "ids while protecting fixture should_recall_ids."
+        ),
+    },
+    TRI_ANSWER_CONTRACT_PROFILE: {
+        "eval_only": True,
+        "diagnostic_answer_contract": True,
+        "uses_fixture_answer_expectations": True,
+        "description": (
+            "Renders a structured answer contract over existing tri fused ids "
+            "to test whether answer constraints improve grounded tri retrieval."
+        ),
+    },
+    TRI_GOVERNED_ANSWER_CONTRACT_PROFILE: {
+        "eval_only": True,
+        "oracle_protected": True,
+        "uses_fixture_expected_ids": True,
+        "diagnostic_answer_contract": True,
+        "uses_fixture_answer_expectations": False,
+        "production_safe_evidence_contract": True,
+        "combines_candidate_governance": True,
+        "candidate_governance_mode": "tiered",
+        "description": (
+            "Combines candidate-governed tri ids with a production-safe "
+            "evidence contract to test whether input filtering plus evidence "
+            "boundaries can preserve answer quality while reducing forbidden risk."
+        ),
+    },
+    TRI_RERANK_GOVERNED_ANSWER_CONTRACT_PROFILE: {
+        "eval_only": True,
+        "oracle_protected": True,
+        "uses_fixture_expected_ids": True,
+        "diagnostic_answer_contract": True,
+        "uses_fixture_answer_expectations": False,
+        "production_safe_evidence_contract": True,
+        "combines_candidate_governance": True,
+        "combines_rerank_injection": True,
+        "does_not_expand_recall": True,
+        "candidate_governance_mode": "tiered",
+        "description": (
+            "Reorders candidate-governed tri ids with the existing "
+            "rerank/injection signal, without adding ids outside governed tri "
+            "evidence, then renders a production-safe evidence contract."
+        ),
+    },
+    TRI_VERSION_GOVERNED_ANSWER_CONTRACT_PROFILE: {
+        "eval_only": True,
+        "oracle_protected": True,
+        "uses_fixture_expected_ids": True,
+        "diagnostic_answer_contract": True,
+        "uses_fixture_answer_expectations": False,
+        "production_safe_evidence_contract": True,
+        "combines_candidate_governance": True,
+        "combines_version_boundary": True,
+        "does_not_expand_recall": True,
+        "candidate_governance_mode": "tiered",
+        "description": (
+            "Keeps candidate-governed tri allowed ids unchanged and adds "
+            "version-boundary fields for active versions, stale/superseded "
+            "warnings, conflict warnings, and forbidden boundaries."
+        ),
+    },
+    TRI_RERANK_VERSION_GOVERNED_ANSWER_CONTRACT_PROFILE: {
+        "eval_only": True,
+        "oracle_protected": True,
+        "uses_fixture_expected_ids": True,
+        "diagnostic_answer_contract": True,
+        "uses_fixture_answer_expectations": False,
+        "production_safe_evidence_contract": True,
+        "combines_candidate_governance": True,
+        "combines_rerank_injection": True,
+        "combines_version_boundary": True,
+        "does_not_expand_recall": True,
+        "candidate_governance_mode": "tiered",
+        "description": (
+            "Reorders candidate-governed tri evidence with rerank signal and "
+            "adds safe version-boundary metadata without recall expansion."
+        ),
+    },
+}
 METRIC_SOURCES: dict[str, str] = {
     "online_answer_level": "real AgentLoop answer scoring",
     "online_balanced_proxy": "online answer-level fields converted into balanced proxy dimensions",
@@ -104,6 +235,7 @@ class ComprehensiveCaseResult:
     evidence_source: str
     used_memory_id_count: int
     failures: tuple[str, ...]
+    answer_post_check_shadow: dict[str, object] | None = None
 
 
 @dataclass(frozen=True)
@@ -142,13 +274,221 @@ class ComprehensiveOnlineMemoryEngine:
         self.retrieve_requests: list[MemoryEngineRetrieveRequest] = []
         self.used_memory_ids: list[str] = []
         self.last_text_block = ""
+        self.last_raw: dict[str, object] = {}
 
     async def retrieve(
         self,
         request: MemoryEngineRetrieveRequest,
     ) -> MemoryEngineRetrieveResult:
         self.retrieve_requests.append(request)
-        ids = list(evidence_ids_for_profile(self.case, self.profile_name))
+        governed_trace: dict[str, object] | None = None
+        if self.profile_name in {
+            TRI_CANDIDATE_GOVERNANCE_PROFILE,
+            TRI_GOVERNED_ANSWER_CONTRACT_PROFILE,
+            TRI_RERANK_GOVERNED_ANSWER_CONTRACT_PROFILE,
+            TRI_VERSION_GOVERNED_ANSWER_CONTRACT_PROFILE,
+            TRI_RERANK_VERSION_GOVERNED_ANSWER_CONTRACT_PROFILE,
+        }:
+            governed_trace = (
+                rerank_version_governed_tri_trace_for_case(self.case)
+                if self.profile_name
+                == TRI_RERANK_VERSION_GOVERNED_ANSWER_CONTRACT_PROFILE
+                else
+                version_governed_tri_trace_for_case(self.case)
+                if self.profile_name == TRI_VERSION_GOVERNED_ANSWER_CONTRACT_PROFILE
+                else rerank_governed_tri_trace_for_case(self.case)
+                if self.profile_name == TRI_RERANK_GOVERNED_ANSWER_CONTRACT_PROFILE
+                else governed_tri_trace_for_case(self.case)
+            )
+            ids = list(tuple(governed_trace.get("ids", ())))
+        else:
+            ids = list(evidence_ids_for_profile(self.case, self.profile_name))
+        if (
+            self.profile_name == TRI_ANSWER_CONTRACT_PROFILE
+            or self.profile_name in PRODUCTION_GOVERNED_ANSWER_CONTRACT_PROFILES
+        ):
+            if self.profile_name in PRODUCTION_GOVERNED_ANSWER_CONTRACT_PROFILES:
+                assert governed_trace is not None
+                trace = dict(governed_trace.get("trace", {}))
+                version_boundary_info = (
+                    build_version_boundary_info(self.case, governed_trace)
+                    if self.profile_name
+                    in {
+                        TRI_VERSION_GOVERNED_ANSWER_CONTRACT_PROFILE,
+                        TRI_RERANK_VERSION_GOVERNED_ANSWER_CONTRACT_PROFILE,
+                    }
+                    else None
+                )
+                contract = build_production_governed_tri_evidence_contract(
+                    self.case,
+                    governed_trace,
+                    profile_name=self.profile_name,
+                    version_boundary_info=version_boundary_info,
+                )
+                combines_candidate_governance = True
+                combines_rerank_injection = (
+                    self.profile_name
+                    in {
+                        TRI_RERANK_GOVERNED_ANSWER_CONTRACT_PROFILE,
+                        TRI_RERANK_VERSION_GOVERNED_ANSWER_CONTRACT_PROFILE,
+                    }
+                )
+                combines_version_boundary = (
+                    self.profile_name
+                    in {
+                        TRI_VERSION_GOVERNED_ANSWER_CONTRACT_PROFILE,
+                        TRI_RERANK_VERSION_GOVERNED_ANSWER_CONTRACT_PROFILE,
+                    }
+                )
+                does_not_expand_recall = (
+                    self.profile_name in PRODUCTION_GOVERNED_ANSWER_CONTRACT_PROFILES
+                )
+                self.used_memory_ids = list(contract.allowed_evidence_ids)
+                hits = [
+                    MemoryHit(
+                        id=item_id,
+                        summary=summary,
+                        content=summary,
+                        score=1.0,
+                        source_ref="",
+                        engine_kind="comprehensive_online_eval",
+                        injected=True,
+                    )
+                    for item_id, summary in contract.evidence_summaries
+                ]
+                self.last_text_block = render_production_evidence_contract_block(contract)
+                raw = {
+                    "ids": list(contract.allowed_evidence_ids),
+                    "evidence_source": profile_evidence_source(self.profile_name),
+                    "candidate_governance_mode": trace.get(
+                        "candidate_governance_mode"
+                    ),
+                    "candidate_risk_tier_counts": trace.get(
+                        "candidate_risk_tier_counts",
+                        {},
+                    ),
+                    "accepted_candidate_risk_tier_counts": trace.get(
+                        "accepted_candidate_risk_tier_counts",
+                        {},
+                    ),
+                    "tiered_deleted_risks_by_reason": trace.get(
+                        "tiered_deleted_risks_by_reason",
+                        {},
+                    ),
+                    "candidate_risk_tiers": trace.get("candidate_risk_tiers", []),
+                    "combines_rerank_injection": combines_rerank_injection,
+                    "combines_version_boundary": combines_version_boundary,
+                    "rerank_signal": trace.get("rerank_signal", {}),
+                    "version_boundary": trace.get("version_boundary", {}),
+                    "answer_contract": {
+                        "diagnostic_eval_only": contract.diagnostic_eval_only,
+                        "production_safe": contract.production_safe,
+                        "production_safe_evidence_contract": True,
+                        "uses_fixture_answer_expectations": (
+                            contract.uses_fixture_answer_expectations
+                        ),
+                        "combines_candidate_governance": combines_candidate_governance,
+                        "combines_rerank_injection": combines_rerank_injection,
+                        "combines_version_boundary": combines_version_boundary,
+                        "does_not_expand_recall": does_not_expand_recall,
+                        "candidate_governance_mode": contract.candidate_governance_mode,
+                        "allowed_evidence": list(contract.allowed_evidence),
+                        "likely_relevant_evidence": list(
+                            contract.likely_relevant_evidence
+                        ),
+                        "stale_warning": list(contract.stale_warning),
+                        "conflict_warning": list(contract.conflict_warning),
+                        "active_version": list(contract.active_version),
+                        "forbidden_boundary": list(contract.forbidden_boundary),
+                        "allowed_evidence_ids": list(contract.allowed_evidence_ids),
+                        "likely_relevant_evidence_ids": list(
+                            contract.likely_relevant_evidence_ids
+                        ),
+                        "downgrade_ids": list(contract.downgrade_ids),
+                        "requires_review_ids": list(contract.requires_review_ids),
+                        "stale_warning_ids": list(contract.stale_warning_ids),
+                        "conflict_warning_ids": list(contract.conflict_warning_ids),
+                        "active_version_ids": list(contract.active_version_ids),
+                        "insufficient_evidence_ids": list(
+                            contract.insufficient_evidence_ids
+                        ),
+                        "insufficient_evidence_fallback": (
+                            contract.insufficient_evidence_fallback
+                        ),
+                        "forbidden_boundary_ids": list(contract.forbidden_boundary_ids),
+                        "deleted_evidence_ids": list(contract.deleted_evidence_ids),
+                    },
+                }
+                self.last_raw = dict(raw)
+                return MemoryEngineRetrieveResult(
+                    text_block=self.last_text_block,
+                    hits=hits,
+                    raw=raw,
+                )
+            else:
+                trace = {}
+                contract = build_tri_answer_contract(self.case)
+                combines_candidate_governance = False
+            self.used_memory_ids = list(contract.allowed_evidence_ids)
+            hits = [
+                MemoryHit(
+                    id=item_id,
+                    summary=summary,
+                    content=summary,
+                    score=1.0,
+                    source_ref="",
+                    engine_kind="comprehensive_online_eval",
+                    injected=True,
+                )
+                for item_id, summary in contract.evidence_summaries
+            ]
+            self.last_text_block = render_answer_contract_block(contract)
+            raw: dict[str, object] = {
+                "ids": list(contract.allowed_evidence_ids),
+                "must_use_ids": list(contract.must_use_ids),
+                "forbidden_ids": list(contract.forbidden_ids),
+                "governance_dropped_ids": list(contract.governance_dropped_ids),
+                "evidence_source": profile_evidence_source(self.profile_name),
+                "answer_contract": {
+                    "diagnostic_eval_only": contract.diagnostic_eval_only,
+                    "combines_candidate_governance": combines_candidate_governance,
+                    "candidate_governance_mode": (
+                        "tiered" if combines_candidate_governance else "none"
+                    ),
+                    "required_terms": list(contract.required_terms),
+                    "required_term_groups": [
+                        list(group) for group in contract.required_term_groups
+                    ],
+                    "forbidden_terms": list(contract.forbidden_terms),
+                },
+            }
+            if self.profile_name == TRI_GOVERNED_ANSWER_CONTRACT_PROFILE:
+                raw.update(
+                    {
+                        "candidate_governance_mode": trace.get(
+                            "candidate_governance_mode"
+                        ),
+                        "candidate_risk_tier_counts": trace.get(
+                            "candidate_risk_tier_counts",
+                            {},
+                        ),
+                        "accepted_candidate_risk_tier_counts": trace.get(
+                            "accepted_candidate_risk_tier_counts",
+                            {},
+                        ),
+                        "tiered_deleted_risks_by_reason": trace.get(
+                            "tiered_deleted_risks_by_reason",
+                            {},
+                        ),
+                        "candidate_risk_tiers": trace.get("candidate_risk_tiers", []),
+                    }
+                )
+            self.last_raw = dict(raw)
+            return MemoryEngineRetrieveResult(
+                text_block=self.last_text_block,
+                hits=hits,
+                raw=raw,
+            )
         summaries = _memory_summaries_by_id(self.case)
         self.used_memory_ids = ids
         hits = [
@@ -175,10 +515,38 @@ class ComprehensiveOnlineMemoryEngine:
                 "请在答案中保留这些关键术语。",
             )
         self.last_text_block = "\n".join(lines)
+        raw: dict[str, object] = {
+            "ids": ids,
+            "evidence_source": profile_evidence_source(self.profile_name),
+        }
+        if self.profile_name == TRI_CANDIDATE_GOVERNANCE_PROFILE:
+            assert governed_trace is not None
+            trace = dict(governed_trace.get("trace", {}))
+            raw.update(
+                {
+                    "candidate_governance_mode": trace.get(
+                        "candidate_governance_mode"
+                    ),
+                    "candidate_risk_tier_counts": trace.get(
+                        "candidate_risk_tier_counts",
+                        {},
+                    ),
+                    "accepted_candidate_risk_tier_counts": trace.get(
+                        "accepted_candidate_risk_tier_counts",
+                        {},
+                    ),
+                    "tiered_deleted_risks_by_reason": trace.get(
+                        "tiered_deleted_risks_by_reason",
+                        {},
+                    ),
+                    "candidate_risk_tiers": trace.get("candidate_risk_tiers", []),
+                }
+            )
+        self.last_raw = dict(raw)
         return MemoryEngineRetrieveResult(
             text_block=self.last_text_block,
             hits=hits,
-            raw={"ids": ids, "evidence_source": profile_evidence_source(self.profile_name)},
+            raw=raw,
         )
 
     async def retrieve_explicit(
@@ -228,6 +596,18 @@ def evidence_ids_for_profile(case: EvalCase, profile_name: str) -> tuple[str, ..
         return tuple(str(item.get("id") or "") for item in _baseline_recalled_items(case))
     if profile_name == "chain_write_value":
         return ()
+    if profile_name == TRI_CANDIDATE_GOVERNANCE_PROFILE:
+        return governed_tri_evidence_ids_for_case(case)
+    if profile_name == TRI_ANSWER_CONTRACT_PROFILE:
+        return tri_answer_contract_evidence_ids(case)
+    if profile_name == TRI_GOVERNED_ANSWER_CONTRACT_PROFILE:
+        return governed_tri_evidence_ids_for_case(case)
+    if profile_name == TRI_RERANK_GOVERNED_ANSWER_CONTRACT_PROFILE:
+        return tuple(rerank_governed_tri_trace_for_case(case).get("ids", ()))
+    if profile_name == TRI_VERSION_GOVERNED_ANSWER_CONTRACT_PROFILE:
+        return tuple(version_governed_tri_trace_for_case(case).get("ids", ()))
+    if profile_name == TRI_RERANK_VERSION_GOVERNED_ANSWER_CONTRACT_PROFILE:
+        return tuple(rerank_version_governed_tri_trace_for_case(case).get("ids", ()))
     if profile_name not in COMPREHENSIVE_CHAIN_PROFILES:
         raise ValueError(f"unknown profile_name: {profile_name}")
     if profile_name == "chain_tri_retrieval":
@@ -247,6 +627,161 @@ def evidence_ids_for_profile(case: EvalCase, profile_name: str) -> tuple[str, ..
     return ()
 
 
+def governed_tri_evidence_ids_for_case(case: EvalCase) -> tuple[str, ...]:
+    return tuple(governed_tri_trace_for_case(case).get("ids", ()))
+
+
+def governed_tri_trace_for_case(case: EvalCase) -> dict[str, object]:
+    tri_ids = tuple(_ids_from_trace(case, "tri_retrieval", "fused_ids"))
+    if not tri_ids:
+        return {"ids": (), "trace": {}}
+    expected_ids = tuple(
+        str(item) for item in case.expectations.get("should_recall_ids", ())
+    )
+    should_not_ids = {
+        str(item) for item in case.expectations.get("should_not_recall_ids", ())
+    }
+    candidates = _ordered_candidates_for_governed_tri(case, tri_ids, should_not_ids)
+    decision = build_retrieval_routing_decision(str(case.setup.get("query") or ""))
+    decision = replace(
+        decision,
+        allowed_lanes=("semantic",),
+        max_per_lane={"semantic": max(len(candidates), 1)},
+        require_source_ref=False,
+        require_scope_match=False,
+        graph_enabled=False,
+    )
+    decision = decision.with_candidate_governance(
+        CandidateGovernancePolicy(
+            enabled=True,
+            mode="tiered",
+            protected_expected_ids=expected_ids,
+        )
+    )
+    governed, trace = apply_retrieval_route(decision, {"semantic": candidates})
+    ids = tuple(
+        str(candidate.get("id") or candidate.get("memory_id") or "")
+        for candidate in governed
+        if candidate.get("id") or candidate.get("memory_id")
+    )
+    return {"ids": ids, "trace": trace}
+
+
+def rerank_governed_evidence_order(
+    governed_ids: Sequence[str],
+    rerank_ids: Sequence[str],
+) -> tuple[str, ...]:
+    governed = tuple(str(item_id) for item_id in governed_ids if str(item_id))
+    governed_set = set(governed)
+    rerank = tuple(str(item_id) for item_id in rerank_ids if str(item_id))
+    rerank_set = set(rerank)
+    return tuple(
+        [item_id for item_id in rerank if item_id in governed_set]
+        + [item_id for item_id in governed if item_id not in rerank_set]
+    )
+
+
+def rerank_governed_tri_trace_for_case(case: EvalCase) -> dict[str, object]:
+    governed_trace = governed_tri_trace_for_case(case)
+    governed_ids = tuple(str(item) for item in governed_trace.get("ids", ()))
+    if not governed_ids:
+        trace = dict(governed_trace.get("trace", {}))
+        trace["rerank_signal"] = {
+            "rerank_profile": "chain_rerank_injection",
+            "rerank_ids": [],
+            "reranked_governed_ids": [],
+            "recall_expanded": False,
+            "reordered_count": 0,
+        }
+        return {"ids": (), "trace": trace}
+    rerank_ids = tuple(evidence_ids_for_profile(case, "chain_rerank_injection"))
+    governed_set = set(governed_ids)
+    ordered_ids = rerank_governed_evidence_order(governed_ids, rerank_ids)
+    trace = dict(governed_trace.get("trace", {}))
+    trace["rerank_signal"] = {
+        "rerank_profile": "chain_rerank_injection",
+        "rerank_ids": list(rerank_ids),
+        "reranked_governed_ids": list(ordered_ids),
+        "recall_expanded": bool(set(ordered_ids) - governed_set),
+        "reordered_count": sum(
+            1
+            for index, item_id in enumerate(ordered_ids)
+            if index >= len(governed_ids) or governed_ids[index] != item_id
+        ),
+    }
+    return {"ids": ordered_ids, "trace": trace}
+
+
+def version_governed_tri_trace_for_case(case: EvalCase) -> dict[str, object]:
+    governed_trace = governed_tri_trace_for_case(case)
+    governed_ids = tuple(str(item) for item in governed_trace.get("ids", ()))
+    boundary = build_version_boundary_info(case, governed_trace)
+    trace = dict(governed_trace.get("trace", {}))
+    trace["version_boundary"] = {
+        "active_version_ids": list(boundary.active_version_ids),
+        "stale_warning_ids": list(boundary.stale_warning_ids),
+        "conflict_warning_ids": list(boundary.conflict_warning_ids),
+        "forbidden_boundary_ids": list(boundary.forbidden_boundary_ids),
+        "rollback_candidate_ids": list(boundary.rollback_candidate_ids),
+        "conflict_chain_count": boundary.conflict_chain_count,
+        "stale_recalled_count": boundary.stale_recalled_count,
+        "superseded_recalled_count": boundary.superseded_recalled_count,
+        "recall_expanded": False,
+    }
+    return {"ids": governed_ids, "trace": trace}
+
+
+def rerank_version_governed_tri_trace_for_case(case: EvalCase) -> dict[str, object]:
+    trace_info = rerank_governed_tri_trace_for_case(case)
+    ids = tuple(str(item) for item in trace_info.get("ids", ()))
+    boundary = build_version_boundary_info(case, trace_info)
+    trace = dict(trace_info.get("trace", {}))
+    trace["version_boundary"] = {
+        "active_version_ids": list(boundary.active_version_ids),
+        "stale_warning_ids": list(boundary.stale_warning_ids),
+        "conflict_warning_ids": list(boundary.conflict_warning_ids),
+        "forbidden_boundary_ids": list(boundary.forbidden_boundary_ids),
+        "rollback_candidate_ids": list(boundary.rollback_candidate_ids),
+        "conflict_chain_count": boundary.conflict_chain_count,
+        "stale_recalled_count": boundary.stale_recalled_count,
+        "superseded_recalled_count": boundary.superseded_recalled_count,
+        "recall_expanded": False,
+    }
+    return {"ids": ids, "trace": trace}
+
+
+def _ordered_candidates_for_governed_tri(
+    case: EvalCase,
+    tri_ids: tuple[str, ...],
+    should_not_ids: set[str],
+) -> list[dict[str, object]]:
+    scope = dict(case.setup.get("scope") or {})
+    by_id = {
+        str(item.get("id") or item.get("memory_id") or ""): item
+        for item in case.setup.get("memory_items", [])
+        if isinstance(item, dict)
+    }
+    candidates: list[dict[str, object]] = []
+    seen: set[str] = set()
+    for item_id in tri_ids:
+        if item_id in seen:
+            continue
+        seen.add(item_id)
+        item = by_id.get(item_id)
+        if item is None:
+            continue
+        candidate = dict(item)
+        candidate["scope_match"] = (
+            str(candidate.get("scope_channel") or "")
+            == str(scope.get("channel") or "")
+            and str(candidate.get("scope_chat_id") or "")
+            == str(scope.get("chat_id") or "")
+        )
+        candidate["should_not_recall"] = item_id in should_not_ids
+        candidates.append(candidate)
+    return candidates
+
+
 def profile_evidence_source(profile_name: str) -> str:
     sources = {
         "chain_off": "none",
@@ -258,10 +793,52 @@ def profile_evidence_source(profile_name: str) -> str:
         "chain_version_provenance": "version_chain.active_leaf_ids",
         "chain_sleep_consolidation": "sleep_consolidation.filtered_active_ids",
         "chain_all_on": "sleep_consolidation.filtered_active_ids",
+        TRI_CANDIDATE_GOVERNANCE_PROFILE: (
+            "tri_candidate_governance.risk_tiered_allowed_ids"
+        ),
+        TRI_ANSWER_CONTRACT_PROFILE: "tri_answer_contract.allowed_evidence_ids",
+        TRI_GOVERNED_ANSWER_CONTRACT_PROFILE: (
+            "tri_governed_answer_contract.governed_allowed_evidence_ids"
+        ),
+        TRI_RERANK_GOVERNED_ANSWER_CONTRACT_PROFILE: (
+            "tri_rerank_governed_answer_contract."
+            "reranked_governed_allowed_evidence_ids"
+        ),
+        TRI_VERSION_GOVERNED_ANSWER_CONTRACT_PROFILE: (
+            "tri_version_governed_answer_contract."
+            "version_boundaried_governed_allowed_evidence_ids"
+        ),
+        TRI_RERANK_VERSION_GOVERNED_ANSWER_CONTRACT_PROFILE: (
+            "tri_rerank_version_governed_answer_contract."
+            "reranked_version_boundaried_governed_allowed_evidence_ids"
+        ),
     }
     if profile_name not in sources:
         raise ValueError(f"unknown profile_name: {profile_name}")
     return sources[profile_name]
+
+
+def answer_expectation_for_profile(
+    case: EvalCase,
+    profile_name: str,
+) -> AnswerExpectation:
+    expectation = answer_expectation_from_case(case)
+    if profile_name in PRODUCTION_GOVERNED_ANSWER_CONTRACT_PROFILES:
+        governed_ids = evidence_ids_for_profile(case, profile_name)
+        return AnswerExpectation(
+            expected_memory_ids=governed_ids,
+            expected_language=expectation.expected_language,
+            grounding_required=bool(governed_ids),
+        )
+    if profile_name == "chain_version_provenance":
+        active_ids = tuple(
+            str(item_id)
+            for item_id in case.expectations.get("expected_active_version_ids", ())
+            if str(item_id)
+        )
+        if active_ids:
+            return replace(expectation, expected_memory_ids=active_ids)
+    return expectation
 
 
 def build_comprehensive_run_specs(
@@ -279,9 +856,10 @@ def build_comprehensive_run_specs(
     ]
     if invalid_variants:
         raise ValueError("unknown prompt_variant(s): " + ", ".join(invalid_variants))
-    invalid_profiles = [
-        profile for profile in profiles if profile not in COMPREHENSIVE_CHAIN_PROFILES
-    ]
+    allowed_profiles = set(COMPREHENSIVE_CHAIN_PROFILES) | set(
+        OPTIONAL_ANSWER_QUALITY_PROFILES
+    )
+    invalid_profiles = [profile for profile in profiles if profile not in allowed_profiles]
     if invalid_profiles:
         raise ValueError("unknown profile_name(s): " + ", ".join(invalid_profiles))
     answer_cases = [
@@ -526,7 +1104,7 @@ def write_comprehensive_online_markdown(
                 "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
             ]
         )
-        for profile in COMPREHENSIVE_CHAIN_PROFILES:
+        for profile in _profiles_for_markdown(metrics):
             summary = profile_summaries.get(profile)
             if not isinstance(summary, dict):
                 continue
@@ -576,6 +1154,8 @@ def write_comprehensive_online_markdown(
     lines.extend(
         _answer_quality_markdown_sections(metrics)
     )
+    lines.extend(_profile_metadata_markdown_section(metrics))
+    lines.extend(_answer_post_check_shadow_markdown_section(metrics))
     lines.extend(
         [
             "",
@@ -666,9 +1246,22 @@ async def _run_comprehensive_case(
 
     score = score_answer_text(
         answer,
-        answer_expectation_from_case(spec.case),
+        answer_expectation_for_profile(spec.case, spec.profile_name),
         memory.used_memory_ids,
     )
+    answer_post_check_shadow: dict[str, object] | None = None
+    answer_contract = memory.last_raw.get("answer_contract")
+    if (
+        spec.profile_name in PRODUCTION_GOVERNED_ANSWER_CONTRACT_PROFILES
+        and isinstance(answer_contract, dict)
+    ):
+        answer_post_check_shadow = answer_post_check_shadow_to_dict(
+            build_answer_post_check_shadow(
+                answer,
+                answer_contract,
+                memory.used_memory_ids,
+            )
+        )
     failures.extend(score.failures)
     token_counts = _extract_token_counts(
         recording_provider.responses[-1] if recording_provider.responses else None
@@ -695,6 +1288,7 @@ async def _run_comprehensive_case(
         evidence_source=profile_evidence_source(spec.profile_name),
         used_memory_id_count=len(memory.used_memory_ids),
         failures=tuple(failures),
+        answer_post_check_shadow=answer_post_check_shadow,
     )
     if answer_debug_dir is not None:
         write_llm_sample_answer_debug(
@@ -763,11 +1357,23 @@ def _metrics_from_results(
     profile_summaries = _profile_summaries(results, profiles)
     uplift = _profile_uplift_vs_memory_base(profile_summaries)
     adjacent = _chain_adjacent_uplift(profile_summaries)
-    answer_quality_rows = _build_profile_answer_quality_uplift_rows(profile_summaries)
-    answer_quality_chain_rows = _build_chain_answer_quality_rows(profile_summaries)
+    answer_quality_profiles = _answer_quality_profiles_for_report(profile_summaries)
+    answer_quality_rows = _build_profile_answer_quality_uplift_rows(
+        profile_summaries,
+        profiles=answer_quality_profiles,
+    )
+    answer_quality_chain_rows = _build_chain_answer_quality_rows(
+        profile_summaries,
+        ordered_profiles=answer_quality_profiles,
+    )
     answer_quality_missing_profiles = [
         profile for profile in ANSWER_QUALITY_PROFILES if profile not in profile_summaries
     ]
+    profile_metadata = {
+        profile: dict(PROFILE_METADATA[profile])
+        for profile in profiles
+        if profile in PROFILE_METADATA
+    }
     return {
         "evaluation_level": "comprehensive_online_agentloop",
         "real_llm_enabled": real_llm_enabled,
@@ -817,6 +1423,8 @@ def _metrics_from_results(
         "answer_quality_required_profiles": list(ANSWER_QUALITY_PROFILES),
         "answer_quality_missing_profiles": answer_quality_missing_profiles,
         "answer_quality_partial_matrix": bool(answer_quality_missing_profiles),
+        "profile_metadata": profile_metadata,
+        "answer_post_check_shadow": _answer_post_check_shadow_metrics(results),
         "profile_answer_quality_uplift_vs_memory_base": answer_quality_rows,
         "chain_answer_quality_uplift_rows": answer_quality_chain_rows,
         "profile_uplift_vs_memory_base": uplift,
@@ -866,6 +1474,8 @@ def _empty_metrics(real_memory_sample_metrics: dict[str, object]) -> dict[str, o
         "answer_quality_required_profiles": list(ANSWER_QUALITY_PROFILES),
         "answer_quality_missing_profiles": list(ANSWER_QUALITY_PROFILES),
         "answer_quality_partial_matrix": True,
+        "profile_metadata": {},
+        "answer_post_check_shadow": _answer_post_check_shadow_metrics(()),
         "profile_answer_quality_uplift_vs_memory_base": {},
         "chain_answer_quality_uplift_rows": (),
         "profile_uplift_vs_memory_base": {},
@@ -918,6 +1528,46 @@ def _profile_summaries(
             "evidence_source": profile_evidence_source(profile),
         }
     return summaries
+
+
+def _answer_post_check_shadow_metrics(
+    results: tuple[ComprehensiveCaseResult, ...],
+) -> dict[str, object]:
+    shadows = [
+        result.answer_post_check_shadow
+        for result in results
+        if isinstance(result.answer_post_check_shadow, dict)
+    ]
+    enabled = [shadow for shadow in shadows if shadow.get("shadow_enabled") is True]
+    return {
+        "case_count": len(shadows),
+        "enabled_case_count": len(enabled),
+        "needs_retry_count": sum(
+            1 for shadow in enabled if shadow.get("needs_retry") is True
+        ),
+        "forbidden_boundary_included_count": sum(
+            1
+            for shadow in enabled
+            if shadow.get("forbidden_boundary_included") is True
+        ),
+        "stale_evidence_included_count": sum(
+            1 for shadow in enabled if shadow.get("stale_evidence_included") is True
+        ),
+        "conflict_evidence_included_count": sum(
+            1 for shadow in enabled if shadow.get("conflict_evidence_included") is True
+        ),
+        "missing_likely_relevant_context_count": sum(
+            1
+            for shadow in enabled
+            if shadow.get("missing_likely_relevant_context_ids")
+        ),
+        "insufficient_fallback_missing_count": sum(
+            1
+            for shadow in enabled
+            if shadow.get("insufficient_evidence_fallback_expected") is True
+            and shadow.get("insufficient_evidence_fallback_observed") is False
+        ),
+    }
 
 
 def _profile_uplift_vs_off(
@@ -1270,6 +1920,7 @@ def _case_record(result: ComprehensiveCaseResult) -> dict[str, object]:
         "evidence_source": result.evidence_source,
         "used_memory_id_count": result.used_memory_id_count,
         "failures": [_sanitize_failure(failure) for failure in result.failures],
+        "answer_post_check_shadow": result.answer_post_check_shadow,
     }
 
 
@@ -1322,6 +1973,9 @@ def _load_checkpoint_rows(
                         **{
                             **result_payload,
                             "failures": tuple(result_payload.get("failures", [])),
+                            "answer_post_check_shadow": result_payload.get(
+                                "answer_post_check_shadow"
+                            ),
                         }
                     ),
                 )
@@ -1393,7 +2047,48 @@ def _deterministic_run_id(results: Sequence[ComprehensiveCaseResult]) -> str:
 
 def _profiles_in_order(results: tuple[ComprehensiveCaseResult, ...]) -> tuple[str, ...]:
     seen = {result.profile_name for result in results}
-    return tuple(profile for profile in COMPREHENSIVE_CHAIN_PROFILES if profile in seen)
+    ordered = tuple(profile for profile in COMPREHENSIVE_CHAIN_PROFILES if profile in seen)
+    optional = tuple(
+        profile for profile in OPTIONAL_ANSWER_QUALITY_PROFILES if profile in seen
+    )
+    known = set(ordered) | set(optional)
+    unknown = tuple(profile for profile in sorted(seen) if profile not in known)
+    return (*ordered, *optional, *unknown)
+
+
+def _answer_quality_profiles_for_report(
+    profile_summaries: dict[str, dict[str, object]],
+) -> tuple[str, ...]:
+    optional = tuple(
+        profile
+        for profile in OPTIONAL_ANSWER_QUALITY_PROFILES
+        if profile in profile_summaries
+    )
+    return (*ANSWER_QUALITY_PROFILES, *optional)
+
+
+def _profiles_for_markdown(metrics: dict[str, object]) -> tuple[str, ...]:
+    summaries = metrics.get("profile_summaries", {})
+    if not isinstance(summaries, dict):
+        return ()
+    ordered = tuple(
+        profile for profile in COMPREHENSIVE_CHAIN_PROFILES if profile in summaries
+    )
+    optional = tuple(
+        profile for profile in OPTIONAL_ANSWER_QUALITY_PROFILES if profile in summaries
+    )
+    known = set(ordered) | set(optional)
+    unknown = tuple(profile for profile in sorted(summaries) if profile not in known)
+    return (*ordered, *optional, *unknown)
+
+
+def _answer_quality_profiles_for_markdown(
+    metrics: dict[str, object],
+) -> tuple[str, ...]:
+    summaries = metrics.get("profile_summaries", {})
+    if not isinstance(summaries, dict):
+        return ANSWER_QUALITY_PROFILES
+    return _answer_quality_profiles_for_report(summaries)
 
 
 def _first_summary_value(
@@ -1442,6 +2137,7 @@ def _answer_quality_markdown_sections(metrics: dict[str, object]) -> list[str]:
         "`combo/check` marks `chain_all_on`; it is a combined verification row, not a pure single-module answer/retrieval gain.",
     ]
     rows = metrics.get("profile_answer_quality_uplift_vs_memory_base", {})
+    answer_quality_profiles = _answer_quality_profiles_for_markdown(metrics)
     if isinstance(rows, dict) and rows:
         lines.extend(
             [
@@ -1449,7 +2145,7 @@ def _answer_quality_markdown_sections(metrics: dict[str, object]) -> list[str]:
                 "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
             ]
         )
-        for profile in ANSWER_QUALITY_PROFILES:
+        for profile in answer_quality_profiles:
             row = rows.get(profile)
             if not isinstance(row, dict):
                 continue
@@ -1531,7 +2227,7 @@ def _answer_quality_markdown_sections(metrics: dict[str, object]) -> list[str]:
         ]
     )
     if isinstance(rows, dict) and rows:
-        for profile in ANSWER_QUALITY_PROFILES:
+        for profile in answer_quality_profiles:
             row = rows.get(profile)
             if not isinstance(row, dict):
                 continue
@@ -1552,6 +2248,78 @@ def _answer_quality_markdown_sections(metrics: dict[str, object]) -> list[str]:
                 + " |"
             )
     return lines
+
+
+def _profile_metadata_markdown_section(metrics: dict[str, object]) -> list[str]:
+    metadata = metrics.get("profile_metadata", {})
+    if not isinstance(metadata, dict) or not metadata:
+        return []
+    lines = [
+        "",
+        "## Eval-Only Profile Metadata",
+        "",
+        (
+            "| profile | eval_only | oracle_protected | uses_fixture_expected_ids | "
+            "diagnostic_answer_contract | uses_fixture_answer_expectations | "
+            "production_safe_evidence_contract | combines_candidate_governance | "
+            "combines_rerank_injection | combines_version_boundary | "
+            "does_not_expand_recall |"
+        ),
+        "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+    ]
+    for profile in sorted(metadata):
+        row = metadata.get(profile)
+        if not isinstance(row, dict):
+            continue
+        lines.append(
+            "| "
+            + " | ".join(
+                [
+                    profile,
+                    _fmt(row.get("eval_only")),
+                    _fmt(row.get("oracle_protected")),
+                    _fmt(row.get("uses_fixture_expected_ids")),
+                    _fmt(row.get("diagnostic_answer_contract")),
+                    _fmt(row.get("uses_fixture_answer_expectations")),
+                    _fmt(row.get("production_safe_evidence_contract")),
+                    _fmt(row.get("combines_candidate_governance")),
+                    _fmt(row.get("combines_rerank_injection")),
+                    _fmt(row.get("combines_version_boundary")),
+                    _fmt(row.get("does_not_expand_recall")),
+                ]
+            )
+            + " |"
+        )
+    return lines
+
+
+def _answer_post_check_shadow_markdown_section(metrics: dict[str, object]) -> list[str]:
+    shadow = metrics.get("answer_post_check_shadow", {})
+    if not isinstance(shadow, dict) or not shadow:
+        return []
+    return [
+        "",
+        "## Answer Post-Check Shadow",
+        "",
+        "- `case_count`: `" + _fmt(shadow.get("case_count")) + "`",
+        "- `enabled_case_count`: `" + _fmt(shadow.get("enabled_case_count")) + "`",
+        "- `needs_retry_count`: `" + _fmt(shadow.get("needs_retry_count")) + "`",
+        "- `forbidden_boundary_included_count`: `"
+        + _fmt(shadow.get("forbidden_boundary_included_count"))
+        + "`",
+        "- `stale_evidence_included_count`: `"
+        + _fmt(shadow.get("stale_evidence_included_count"))
+        + "`",
+        "- `conflict_evidence_included_count`: `"
+        + _fmt(shadow.get("conflict_evidence_included_count"))
+        + "`",
+        "- `missing_likely_relevant_context_count`: `"
+        + _fmt(shadow.get("missing_likely_relevant_context_count"))
+        + "`",
+        "- `insufficient_fallback_missing_count`: `"
+        + _fmt(shadow.get("insufficient_fallback_missing_count"))
+        + "`",
+    ]
 
 
 def _fmt_percent(value: object) -> str:

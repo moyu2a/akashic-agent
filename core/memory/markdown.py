@@ -11,7 +11,7 @@ from collections import deque
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Protocol, TypeVar, runtime_checkable
 
 from agent.llm_json import load_json_object_loose
 from agent.memory import MemoryStore
@@ -24,6 +24,17 @@ if TYPE_CHECKING:
     from bus.event_bus import EventBus
 
 logger = logging.getLogger("memory.markdown")
+
+T = TypeVar("T")
+
+
+async def _run_blocking_io(
+    func: Callable[..., T],
+    /,
+    *args: object,
+    **kwargs: object,
+) -> T:
+    return func(*args, **kwargs)
 
 
 @dataclass(frozen=True)
@@ -575,7 +586,7 @@ ongoing_threads 严格限制：
         old_recent_context = ""
         if hasattr(profile_maint, "read_recent_context"):
             old_recent_context = str(
-                await asyncio.to_thread(profile_maint.read_recent_context) or ""
+                await _run_blocking_io(profile_maint.read_recent_context) or ""
             )
         conversation = _format_conversation_for_recent_context(compact_source)
         compression: dict[str, list[str]] | None = None
@@ -641,10 +652,10 @@ ongoing_threads 严格限制：
         rendered_recent_turns = _format_recent_context_messages(recent_turns)
         existing_text = ""
         if hasattr(profile, "read_recent_context"):
-            existing_text = str(await asyncio.to_thread(profile.read_recent_context) or "")
+            existing_text = str(await _run_blocking_io(profile.read_recent_context) or "")
         updated = _replace_recent_turns_block(existing_text, rendered_recent_turns)
         if hasattr(profile, "write_recent_context"):
-            await asyncio.to_thread(profile.write_recent_context, updated)
+            await _run_blocking_io(profile.write_recent_context, updated)
 
     # 只做窗口选择和 LLM 提取，写入由 MemoryEngine 统一提交。
     async def prepare_consolidation(
@@ -703,11 +714,11 @@ ongoing_threads 严格限制：
         # 2. 把窗口消息格式化成一段对话文本，并准备好 source_ref / 现有长期记忆 / 最近 history。
         source_ref = _build_consolidation_source_ref(window)
         conversation = _format_conversation_for_consolidation(window.old_messages)
-        current_memory = await asyncio.to_thread(profile_maint.read_long_term)
+        current_memory = await _run_blocking_io(profile_maint.read_long_term)
         history_text = ""
         if hasattr(profile_maint, "read_history"):
             history_text = _coerce_history_text(
-                await asyncio.to_thread(profile_maint.read_history, 16000)
+                await _run_blocking_io(profile_maint.read_history, 16000)
             )
         recent_history_entries = _select_recent_history_entries(
             history_text,
@@ -1053,14 +1064,14 @@ class MarkdownMemoryMaintenance:
     ) -> None:
         history_entries = [entry for entry, _ in draft.history_entry_payloads]
         if history_entries:
-            await asyncio.to_thread(
+            await _run_blocking_io(
                 self._store.append_history_once,
                 "\n".join(history_entries),
                 source_ref=draft.source_ref,
                 kind="history_entry",
             )
         if draft.pending_items:
-            appended = await asyncio.to_thread(
+            appended = await _run_blocking_io(
                 self._store.append_pending_once,
                 draft.pending_items,
                 source_ref=draft.source_ref,
@@ -1073,7 +1084,7 @@ class MarkdownMemoryMaintenance:
                 )
         self._store.write_recent_context(draft.recent_context_text)
         if history_entries:
-            await asyncio.to_thread(
+            await _run_blocking_io(
                 _append_entries_to_journal,
                 self._store,
                 history_entries,

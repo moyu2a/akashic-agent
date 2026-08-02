@@ -4,8 +4,10 @@ import json
 from pathlib import Path
 
 from memory2.eval_cases import load_eval_case
+from memory2.eval_cases import EvalCase
 from memory2.eval_quantitative_cases import build_quantitative_eval_cases
 from memory2.eval_runner import (
+    _candidate_lanes,
     run_eval_case,
     run_eval_case_files,
     run_eval_cases,
@@ -38,11 +40,53 @@ def test_phase2_profile_emits_required_tri_retrieval_metrics() -> None:
     assert "tri_retrieval" in phase2.trace_features
     assert "graph_retrieval" in phase2.trace_features
     tri = phase2.traces["tri_retrieval"]
-    assert tri.metrics["provenance_hit_count"] >= 1
     assert tri.metrics["fused_hit_count"] >= 1
+    assert tri.metrics["retrieval_scene"] == "fuzzy_reference"
+    assert tri.metrics["route_decision"]["graph_enabled"] is True
+    assert tri.metrics["candidate_drop_counts"]["duplicate"] >= 1
+    assert tri.metrics["candidate_accept_rate"] < 1.0
+    assert tri.metrics["route_hit_rate"] == 1.0
+    assert tri.metrics["graph_lane_used"] is False
     graph = phase2.traces["graph_retrieval"]
-    assert graph.metrics["graph_hit_count"] >= 1
+    assert graph.metrics["graph_fused_hit_count"] >= 1
     assert "baseline_graph_overlap_rate" in graph.metrics
+    assert graph.metrics["graph_lane_used"] is False
+
+
+def test_route_governance_deduplicates_candidates_across_lanes() -> None:
+    case = EvalCase(
+        id="route_dedupe",
+        title="route dedupe",
+        category="memory",
+        phase_targets=("phase2a",),
+        config_profiles=("phase2",),
+        setup={
+            "scope": {
+                "session_key": "cli:local",
+                "channel": "cli",
+                "chat_id": "local",
+            },
+            "query": "alpha",
+            "memory_items": [
+                {
+                    "id": "m_alpha",
+                    "memory_type": "preference",
+                    "summary": "alpha workflow preference",
+                    "status": "active",
+                    "scope_channel": "cli",
+                    "scope_chat_id": "local",
+                }
+            ],
+        },
+        expectations={"should_recall_ids": ["m_alpha"]},
+    )
+
+    lanes = _candidate_lanes(case)
+
+    assert [item["id"] for item in lanes.semantic_items] == ["m_alpha"]
+    assert lanes.keyword_items == []
+    assert lanes.route_trace["dropped_by_reason"]["duplicate"] == 1
+    assert lanes.route_trace["candidate_accept_rate"] == 0.3333
 
 
 def test_phase3_profile_emits_rerank_and_injection_metrics() -> None:
@@ -55,6 +99,10 @@ def test_phase3_profile_emits_rerank_and_injection_metrics() -> None:
     assert "rerank_shadow" in phase3.trace_features
     assert "injection_governance_shadow" in phase3.trace_features
     assert "rerank_changed_count" in phase3.traces["rerank_shadow"].metrics
+    rerank_metrics = phase3.traces["rerank_shadow"].metrics
+    assert rerank_metrics["retrieval_scene"] == "unknown"
+    assert rerank_metrics["route_decision"]["graph_enabled"] is False
+    assert rerank_metrics["graph_lane_used"] is False
     injection_metrics = phase3.traces["injection_governance_shadow"].metrics
     assert "prompt_token_delta" in injection_metrics
     assert "dropped_by_reason" in injection_metrics
@@ -147,3 +195,8 @@ def test_write_eval_report_serializes_stable_json(tmp_path: Path) -> None:
     assert payload["cases"][0]["profiles"]["off"]["trace_features"] == []
     assert payload["cases"][0]["profiles"]["off"]["passed"] is True
     assert payload["cases"][0]["profiles"]["off"]["failures"] == []
+    tri_metrics = payload["cases"][0]["profiles"]["phase2"]["traces"][
+        "tri_retrieval"
+    ]["metrics"]
+    assert tri_metrics["retrieval_scene"] == "unknown"
+    assert tri_metrics["route_decision"]["allowed_lanes"] == ["semantic", "keyword"]

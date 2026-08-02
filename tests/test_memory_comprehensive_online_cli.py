@@ -108,6 +108,217 @@ def test_comprehensive_online_cli_fake_provider_writes_report(
     assert "## Cost And Latency Observation" in markdown
 
 
+def test_comprehensive_online_cli_balanced_small_selects_common_and_hard(
+    tmp_path: Path,
+) -> None:
+    output_dir = tmp_path / "reports"
+    workspace = tmp_path / "workspace"
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "scripts/run_memory_comprehensive_online_eval.py",
+            "--workspace",
+            str(workspace),
+            "--out-dir",
+            str(output_dir),
+            "--fake-provider",
+            "--case-pack",
+            "standard",
+            "--balanced-small",
+            "--common-limit",
+            "2",
+            "--hard-limit",
+            "2",
+            "--profiles",
+            "chain_memory_base,chain_tri_retrieval,chain_tri_candidate_governance",
+            "--prompt-variants",
+            "baseline",
+            "--repeats",
+            "1",
+            "--real-memory-workspace",
+            str(tmp_path / "empty-real-workspace"),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    payload = json.loads(
+        (output_dir / "memory_comprehensive_online_eval.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert payload["metrics"]["unique_case_count"] == 4
+    assert payload["metrics"]["profile_count"] == 3
+    assert payload["metrics"]["case_count"] == 12
+    ids = {row["case_id"] for row in payload["case_records"]}
+    assert any(case_id.startswith("common_") for case_id in ids)
+    assert any(case_id.startswith("hard_") for case_id in ids)
+
+
+def test_comprehensive_online_cli_p6o7_version_governed_fake_provider_matrix_shape(
+    tmp_path: Path,
+) -> None:
+    output_dir = tmp_path / "reports"
+    workspace = tmp_path / "workspace"
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "scripts/run_memory_comprehensive_online_eval.py",
+            "--workspace",
+            str(workspace),
+            "--out-dir",
+            str(output_dir),
+            "--fake-provider",
+            "--case-pack",
+            "standard",
+            "--balanced-small",
+            "--common-limit",
+            "2",
+            "--hard-limit",
+            "2",
+            "--profiles",
+            (
+                "chain_tri_governed_answer_contract,"
+                "chain_tri_version_governed_answer_contract"
+            ),
+            "--prompt-variants",
+            "baseline",
+            "--repeats",
+            "1",
+            "--checkpoint-jsonl",
+            str(tmp_path / "checkpoint.jsonl"),
+            "--real-memory-workspace",
+            str(tmp_path / "empty-real-workspace"),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    payload = json.loads(
+        (output_dir / "memory_comprehensive_online_eval.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    markdown = (output_dir / "memory_comprehensive_online_eval.md").read_text(
+        encoding="utf-8"
+    )
+
+    assert payload["metrics"]["case_count"] == 8
+    assert payload["metrics"]["unique_case_count"] == 4
+    assert payload["metrics"]["completed_call_count"] == 8
+    assert payload["metrics"]["profile_count"] == 2
+    assert payload["metrics"]["prompt_variant_count"] == 1
+    assert payload["metrics"]["repeat_count"] == 1
+    assert payload["metrics"]["provider_error_count"] == 0
+    assert payload["metrics"]["timeout_count"] == 0
+    assert payload["metrics"]["answer_post_check_shadow"]["case_count"] == 8
+    assert set(payload["metrics"]["profile_summaries"]) == {
+        "chain_tri_governed_answer_contract",
+        "chain_tri_version_governed_answer_contract",
+    }
+    metadata = payload["metrics"]["profile_metadata"][
+        "chain_tri_version_governed_answer_contract"
+    ]
+    assert metadata["production_safe_evidence_contract"] is True
+    assert metadata["combines_version_boundary"] is True
+    assert metadata["does_not_expand_recall"] is True
+    assert "chain_tri_version_governed_answer_contract" in markdown
+    assert "combines_version_boundary" in markdown
+    assert "raw_prompt" not in markdown
+    assert "full_answer" not in markdown
+    assert "session_text" not in markdown
+
+
+def test_comprehensive_online_cli_p6o8_safe_boundary_fake_provider_matrix_shape(
+    tmp_path: Path,
+) -> None:
+    output_dir = tmp_path / "reports"
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "scripts/run_memory_comprehensive_online_eval.py",
+            "--workspace",
+            str(tmp_path / "workspace"),
+            "--out-dir",
+            str(output_dir),
+            "--fake-provider",
+            "--case-pack",
+            "standard",
+            "--balanced-small",
+            "--common-limit",
+            "2",
+            "--hard-limit",
+            "2",
+            "--profiles",
+            (
+                "chain_tri_governed_answer_contract,"
+                "chain_tri_version_governed_answer_contract"
+            ),
+            "--prompt-variants",
+            "baseline",
+            "--repeats",
+            "1",
+            "--checkpoint-jsonl",
+            str(tmp_path / "checkpoint.jsonl"),
+            "--real-memory-workspace",
+            str(tmp_path / "empty-real-workspace"),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    payload = json.loads(
+        (output_dir / "memory_comprehensive_online_eval.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    markdown = (output_dir / "memory_comprehensive_online_eval.md").read_text(
+        encoding="utf-8"
+    )
+    assert payload["metrics"]["case_count"] == 8
+    assert payload["metrics"]["profile_count"] == 2
+    assert payload["metrics"]["provider_error_count"] == 0
+    assert payload["metrics"]["timeout_count"] == 0
+    assert "chain_tri_version_governed_answer_contract" in markdown
+
+
+def test_comprehensive_online_cli_balanced_small_rejects_negative_limits(
+    tmp_path: Path,
+) -> None:
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "scripts/run_memory_comprehensive_online_eval.py",
+            "--workspace",
+            str(tmp_path / "workspace"),
+            "--out-dir",
+            str(tmp_path / "reports"),
+            "--fake-provider",
+            "--balanced-small",
+            "--common-limit",
+            "-1",
+            "--hard-limit",
+            "2",
+            "--real-memory-workspace",
+            str(tmp_path / "empty-real-workspace"),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode != 0
+    assert "common-limit and hard-limit must be non-negative" in completed.stderr
+
+
 def test_comprehensive_online_cli_accepts_comprehensive_case_pack_core_matrix(
     tmp_path: Path,
 ) -> None:
@@ -329,3 +540,247 @@ def test_comprehensive_online_debug_dir_must_stay_under_workspace(
             include_answer_debug=True,
             answer_debug_dir=tmp_path / "reports" / "answer_debug",
         )
+
+
+def test_comprehensive_online_cli_p6o5_scaled_fake_provider_matrix_shape(
+    tmp_path: Path,
+) -> None:
+    output_dir = tmp_path / "reports"
+    workspace = tmp_path / "workspace"
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "scripts/run_memory_comprehensive_online_eval.py",
+            "--workspace",
+            str(workspace),
+            "--out-dir",
+            str(output_dir),
+            "--fake-provider",
+            "--case-pack",
+            "standard",
+            "--balanced-small",
+            "--common-limit",
+            "2",
+            "--hard-limit",
+            "2",
+            "--profiles",
+            (
+                "chain_tri_retrieval,"
+                "chain_tri_candidate_governance,"
+                "chain_tri_answer_contract,"
+                "chain_tri_governed_answer_contract"
+            ),
+            "--prompt-variants",
+            "baseline",
+            "--repeats",
+            "1",
+            "--checkpoint-jsonl",
+            str(tmp_path / "checkpoint.jsonl"),
+            "--real-memory-workspace",
+            str(tmp_path / "empty-real-workspace"),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    payload = json.loads(
+        (output_dir / "memory_comprehensive_online_eval.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    markdown = (output_dir / "memory_comprehensive_online_eval.md").read_text(
+        encoding="utf-8"
+    )
+
+    assert payload["metrics"]["case_count"] == 16
+    assert payload["metrics"]["unique_case_count"] == 4
+    assert payload["metrics"]["completed_call_count"] == 16
+    assert payload["metrics"]["profile_count"] == 4
+    assert payload["metrics"]["prompt_variant_count"] == 1
+    assert payload["metrics"]["repeat_count"] == 1
+    assert payload["metrics"]["provider_error_count"] == 0
+    assert payload["metrics"]["timeout_count"] == 0
+    assert set(payload["metrics"]["profile_summaries"]) == {
+        "chain_tri_retrieval",
+        "chain_tri_candidate_governance",
+        "chain_tri_answer_contract",
+        "chain_tri_governed_answer_contract",
+    }
+    assert payload["metrics"]["answer_post_check_shadow"]["case_count"] == 4
+    assert payload["metrics"]["answer_post_check_shadow"]["enabled_case_count"] == 4
+    assert payload["metrics"]["profile_metadata"][
+        "chain_tri_governed_answer_contract"
+    ]["production_safe_evidence_contract"] is True
+    case_records = payload["case_records"]
+    unique_common_ids = {
+        row["case_id"]
+        for row in case_records
+        if str(row["case_id"]).startswith("common_")
+    }
+    unique_hard_ids = {
+        row["case_id"]
+        for row in case_records
+        if str(row["case_id"]).startswith("hard_")
+    }
+    assert len(unique_common_ids) == 2
+    assert len(unique_hard_ids) == 2
+    assert {row["prompt_variant"] for row in case_records} == {"baseline"}
+    assert {row["repeat_index"] for row in case_records} == {0}
+    assert "## Answer Post-Check Shadow" in markdown
+    assert "production_safe_evidence_contract" in markdown
+    assert "raw_prompt" not in markdown
+    assert "full_answer" not in markdown
+    assert "session_text" not in markdown
+
+
+def test_comprehensive_online_cli_p6o6_rerank_governed_fake_provider_matrix_shape(
+    tmp_path: Path,
+) -> None:
+    output_dir = tmp_path / "reports"
+    workspace = tmp_path / "workspace"
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "scripts/run_memory_comprehensive_online_eval.py",
+            "--workspace",
+            str(workspace),
+            "--out-dir",
+            str(output_dir),
+            "--fake-provider",
+            "--case-pack",
+            "standard",
+            "--balanced-small",
+            "--common-limit",
+            "2",
+            "--hard-limit",
+            "2",
+            "--profiles",
+            (
+                "chain_tri_governed_answer_contract,"
+                "chain_tri_rerank_governed_answer_contract"
+            ),
+            "--prompt-variants",
+            "baseline",
+            "--repeats",
+            "1",
+            "--checkpoint-jsonl",
+            str(tmp_path / "checkpoint.jsonl"),
+            "--real-memory-workspace",
+            str(tmp_path / "empty-real-workspace"),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    payload = json.loads(
+        (output_dir / "memory_comprehensive_online_eval.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    markdown = (output_dir / "memory_comprehensive_online_eval.md").read_text(
+        encoding="utf-8"
+    )
+
+    assert payload["metrics"]["case_count"] == 8
+    assert payload["metrics"]["unique_case_count"] == 4
+    assert payload["metrics"]["completed_call_count"] == 8
+    assert payload["metrics"]["profile_count"] == 2
+    assert payload["metrics"]["prompt_variant_count"] == 1
+    assert payload["metrics"]["repeat_count"] == 1
+    assert payload["metrics"]["provider_error_count"] == 0
+    assert payload["metrics"]["timeout_count"] == 0
+    assert payload["metrics"]["answer_post_check_shadow"]["case_count"] == 8
+    assert set(payload["metrics"]["profile_summaries"]) == {
+        "chain_tri_governed_answer_contract",
+        "chain_tri_rerank_governed_answer_contract",
+    }
+    metadata = payload["metrics"]["profile_metadata"][
+        "chain_tri_rerank_governed_answer_contract"
+    ]
+    assert metadata["production_safe_evidence_contract"] is True
+    assert metadata["combines_rerank_injection"] is True
+    assert metadata["does_not_expand_recall"] is True
+    assert "chain_tri_rerank_governed_answer_contract" in markdown
+    assert "combines_rerank_injection" in markdown
+    assert "raw_prompt" not in markdown
+    assert "full_answer" not in markdown
+    assert "session_text" not in markdown
+
+
+def test_comprehensive_online_cli_p6o10_combo_fake_provider_matrix_shape(
+    tmp_path: Path,
+) -> None:
+    output_dir = tmp_path / "reports"
+    workspace = tmp_path / "workspace"
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "scripts/run_memory_comprehensive_online_eval.py",
+            "--workspace",
+            str(workspace),
+            "--out-dir",
+            str(output_dir),
+            "--fake-provider",
+            "--case-pack",
+            "standard",
+            "--balanced-small",
+            "--common-limit",
+            "2",
+            "--hard-limit",
+            "2",
+            "--profiles",
+            (
+                "chain_tri_governed_answer_contract,"
+                "chain_tri_rerank_governed_answer_contract,"
+                "chain_tri_version_governed_answer_contract,"
+                "chain_tri_rerank_version_governed_answer_contract"
+            ),
+            "--prompt-variants",
+            "baseline",
+            "--repeats",
+            "1",
+            "--checkpoint-jsonl",
+            str(tmp_path / "checkpoint.jsonl"),
+            "--real-memory-workspace",
+            str(tmp_path / "empty-real-workspace"),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    payload = json.loads(
+        (output_dir / "memory_comprehensive_online_eval.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    markdown = (output_dir / "memory_comprehensive_online_eval.md").read_text(
+        encoding="utf-8"
+    )
+
+    assert payload["metrics"]["case_count"] == 16
+    assert payload["metrics"]["unique_case_count"] == 4
+    assert payload["metrics"]["completed_call_count"] == 16
+    assert payload["metrics"]["profile_count"] == 4
+    assert payload["metrics"]["provider_error_count"] == 0
+    assert payload["metrics"]["timeout_count"] == 0
+    metadata = payload["metrics"]["profile_metadata"][
+        "chain_tri_rerank_version_governed_answer_contract"
+    ]
+    assert metadata["production_safe_evidence_contract"] is True
+    assert metadata["combines_candidate_governance"] is True
+    assert metadata["combines_rerank_injection"] is True
+    assert metadata["combines_version_boundary"] is True
+    assert metadata["does_not_expand_recall"] is True
+    assert "chain_tri_rerank_version_governed_answer_contract" in markdown
+    assert "raw_prompt" not in markdown
+    assert "full_answer" not in markdown
+    assert "session_text" not in markdown

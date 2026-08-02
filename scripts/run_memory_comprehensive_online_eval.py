@@ -36,6 +36,12 @@ class ScriptedComprehensiveOnlineProvider:
         )
         if "memory_id=" not in text:
             answer = "没有可用记忆，无法确认。"
+        elif "Evidence Contract: chain_tri_" in text:
+            answer = "根据 production-safe evidence contract，应使用 allowed_evidence，并在证据不足时说明无法确认。"
+        elif "Answer Contract: chain_tri_governed_answer_contract" in text:
+            answer = "根据 governed Answer Contract，应使用治理后的 allowed_evidence，并避免 forbidden_terms。"
+        elif "Answer Contract: chain_tri_answer_contract" in text:
+            answer = "根据 Answer Contract，应使用 must_use_memory_ids 中的证据回答，并避免 forbidden_terms。"
         elif "RRF" in text:
             answer = "三路召回使用 RRF 融合排序，并用中文回答。"
         elif "NetworkX" in text:
@@ -113,6 +119,9 @@ async def _amain() -> int:
         default="standard",
     )
     parser.add_argument("--limit", type=int, default=0)
+    parser.add_argument("--balanced-small", action="store_true")
+    parser.add_argument("--common-limit", type=int, default=20)
+    parser.add_argument("--hard-limit", type=int, default=20)
     parser.add_argument("--repeats", type=int, default=2)
     parser.add_argument("--prompt-variants", default="baseline,coached")
     parser.add_argument("--profiles", default=",".join(COMPREHENSIVE_CHAIN_PROFILES))
@@ -131,6 +140,8 @@ async def _amain() -> int:
     args = parser.parse_args()
     if bool(args.fake_provider) and bool(args.enable_real_llm):
         parser.error("--fake-provider and --enable-real-llm cannot be used together")
+    if int(args.common_limit) < 0 or int(args.hard_limit) < 0:
+        parser.error("common-limit and hard-limit must be non-negative")
 
     out_dir = Path(args.out_dir)
     json_path = out_dir / "memory_comprehensive_online_eval.json"
@@ -164,11 +175,24 @@ async def _amain() -> int:
         else:
             profiles = _split_csv(args.profiles)
             prompt_variants = _split_csv(args.prompt_variants)
-            cases = build_quantitative_eval_cases(
-                case_set=str(args.case_set),
-                limit=int(args.limit),
-                case_pack=str(args.case_pack),
-            )
+            if bool(args.balanced_small):
+                common_cases = build_quantitative_eval_cases(
+                    case_set="common",
+                    limit=int(args.common_limit),
+                    case_pack=str(args.case_pack),
+                )
+                hard_cases = build_quantitative_eval_cases(
+                    case_set="hard",
+                    limit=int(args.hard_limit),
+                    case_pack=str(args.case_pack),
+                )
+                cases = [*common_cases, *hard_cases]
+            else:
+                cases = build_quantitative_eval_cases(
+                    case_set=str(args.case_set),
+                    limit=int(args.limit),
+                    case_pack=str(args.case_pack),
+                )
             specs = build_comprehensive_run_specs(
                 cases,
                 repeats=int(args.repeats),
