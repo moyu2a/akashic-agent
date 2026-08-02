@@ -242,14 +242,14 @@ def _build_trace(case: EvalCase, feature_name: str) -> EvalTrace | None:
         metrics.update(_route_metrics(case, lanes, graph_lane_used=False))
         return EvalTrace(feature_name, result.baseline_result, result.experimental_result, metrics)
     if feature_name == "graph_retrieval":
-        lanes = _candidate_lanes(case)
         baseline_miss = _baseline_miss_ids(case)
+        lanes = _candidate_lanes(case, baseline_lane_excluded_ids=baseline_miss)
         result = build_graph_retrieval_shadow_result(
             query=_query(case),
             baseline_items=_baseline_recalled_items(case),
-            semantic_items=_without_ids(lanes.semantic_items, baseline_miss),
-            keyword_items=_without_ids(lanes.keyword_items, baseline_miss),
-            provenance_items=_without_ids(lanes.provenance_items, baseline_miss),
+            semantic_items=lanes.semantic_items,
+            keyword_items=lanes.keyword_items,
+            provenance_items=lanes.provenance_items,
             graph_items=lanes.graph_items,
             latency_ms=0.0,
             top_n=max(8, len(_active_memory_items(case))),
@@ -617,6 +617,8 @@ def _without_ids(
 
 def _candidate_lanes(
     case: EvalCase,
+    *,
+    baseline_lane_excluded_ids: set[str] | None = None,
 ) -> _CandidateLanes:
     scope = _scope(case)
     active = [item for item in _active_memory_items(case) if _same_scope(item, scope)]
@@ -654,6 +656,15 @@ def _candidate_lanes(
         "provenance": provenance_items,
         "graph": graph_items,
     }
+    if baseline_lane_excluded_ids:
+        raw_lanes = {
+            lane: (
+                _without_ids(list(items), baseline_lane_excluded_ids)
+                if lane != "graph"
+                else list(items)
+            )
+            for lane, items in raw_lanes.items()
+        }
     input_counts = {lane: len(items) for lane, items in raw_lanes.items()}
     _routed_items, raw_route_trace = apply_retrieval_route(
         decision,

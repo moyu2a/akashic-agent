@@ -111,7 +111,20 @@ def classify_retrieval_scene(query: str) -> str:
     is_tool_related = _contains_any(text, ("工具", "tool", "技能", "skill", "命令"))
     if is_preference and is_tool_related:
         return "tool_preference"
-    if _contains_any(text, ("上次", "刚才", "之前那个", "那个方案", "提到的", "还记得")):
+    if _contains_any(
+        text,
+        (
+            "上次",
+            "刚才",
+            "之前那个",
+            "那个方案",
+            "那个图谱",
+            "图谱路由",
+            "图谱关联",
+            "提到的",
+            "还记得",
+        ),
+    ):
         return "fuzzy_reference"
     if _contains_any(text, ("精确", "具体", "准确", "exact", "找一下", "查找", "查询")):
         return "exact_recall"

@@ -40,6 +40,27 @@ def test_fuzzy_reference_enables_graph_and_keeps_graph_candidates() -> None:
     assert trace["accepted_by_lane"]["graph"] == 1
 
 
+def test_graph_route_query_enables_graph_candidates() -> None:
+    decision = build_retrieval_routing_decision("那个图谱路由怎么接？")
+    candidates, trace = apply_retrieval_route(
+        decision,
+        {
+            "semantic": [_candidate("semantic-1")],
+            "keyword": [_candidate("keyword-1")],
+            "graph": [_candidate("graph-1")],
+        },
+    )
+
+    assert decision.scene == "fuzzy_reference"
+    assert decision.graph_enabled is True
+    assert [item["id"] for item in candidates] == [
+        "semantic-1",
+        "keyword-1",
+        "graph-1",
+    ]
+    assert trace["accepted_by_lane"]["graph"] == 1
+
+
 def test_tool_preference_routes_to_semantic_and_keyword_without_graph() -> None:
     decision = build_retrieval_routing_decision("以后遇到网页搜索时优先用哪个工具？")
     candidates, trace = apply_retrieval_route(

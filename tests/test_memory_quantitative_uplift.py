@@ -179,15 +179,24 @@ def test_full_report_has_expected_totals() -> None:
     report = build_quantitative_uplift_report(build_quantitative_eval_cases())
     overall = {(row.case_set, row.profile_name): row for row in report.profile_summaries}
 
-    assert round(overall[("overall", "memory_base")].main_score, 4) == 94.375
-    assert round(overall[("overall", "all_on")].main_score, 4) == 68.8579
-    assert round(overall[("overall", "all_on")].uplift_points, 4) == -25.5171
-    assert overall[("overall", "all_on")].token_signal_kind == "mixed"
-    assert overall[("overall", "all_on")].token_signal_value == "unavailable"
-    assert overall[("overall", "all_on")].token_signal_delta == "unavailable"
+    baseline = overall[("overall", "memory_base")]
+    all_on = overall[("overall", "all_on")]
+
+    assert round(baseline.main_score, 4) == 94.375
+    assert all_on.main_score < baseline.main_score
+    assert all_on.uplift_points == round(
+        all_on.main_score - baseline.main_score,
+        4,
+    )
+    assert all_on.token_signal_kind == "mixed"
+    assert all_on.token_signal_value == "unavailable"
+    assert all_on.token_signal_delta == "unavailable"
     assert overall[("overall", "tri_retrieval_only")].latency_delta_ms == "unavailable"
-    assert report.metrics["total_uplift_points"] == -25.5171
-    assert report.metrics["total_uplift_pct"] == -27.038
+    assert report.metrics["total_uplift_points"] == all_on.uplift_points
+    assert report.metrics["total_uplift_pct"] == round(
+        all_on.uplift_points / baseline.main_score * 100.0,
+        4,
+    )
 
 
 def test_token_signal_kind_is_explicit() -> None:

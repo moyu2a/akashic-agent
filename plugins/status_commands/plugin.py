@@ -778,7 +778,7 @@ class StatusCommands(Plugin):
                     audit_ledger_store=audit_ledger_store,
                     shell_sandbox_runner=DockerPodmanSandboxRunner.find_available(),
                     task_execution_service=task_execution_service,
-                    tool_registry=self.context.tool_registry,
+                    tool_registry=getattr(self.context, "tool_registry", None),
                 )
             )
         return cast(

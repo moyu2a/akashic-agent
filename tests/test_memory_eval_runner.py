@@ -158,6 +158,24 @@ def test_baseline_miss_recall_ids_do_not_fail_should_recall_validation() -> None
     )
 
 
+def test_graph_baseline_miss_is_restored_by_graph_lane_before_deduping() -> None:
+    case = next(
+        case
+        for case in build_quantitative_eval_cases()
+        if case.id == "hard_graph_bridge_03"
+    )
+
+    result = run_eval_case(case)
+    missed_id = str(case.expectations["baseline_miss_recall_ids"][0])
+    trace = result.profiles["all"].traces["graph_retrieval"]
+
+    assert result.passed is True
+    assert missed_id not in trace.baseline_result["baseline_fused_ids"]
+    assert missed_id in trace.experimental_result["graph_ids"]
+    assert missed_id in trace.experimental_result["graph_fused_ids"]
+    assert trace.metrics["graph_lane_used"] is True
+
+
 def test_eval_runner_reports_validation_failures_for_bad_expectations() -> None:
     case = load_eval_case(FIXTURE_ROOT / "preference_recall.json")
     bad_expectations = dict(case.expectations)

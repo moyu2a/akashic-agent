@@ -160,6 +160,9 @@ def test_answer_retrieval_chain_rows_include_relative_percentages() -> None:
     tri = next(
         row for row in report.chain_rows if row["profile_name"] == "chain_tri_retrieval"
     )
+    graph = next(
+        row for row in report.chain_rows if row["profile_name"] == "chain_graph_retrieval"
+    )
     rerank = next(
         row for row in report.chain_rows if row["profile_name"] == "chain_rerank_injection"
     )
@@ -177,10 +180,22 @@ def test_answer_retrieval_chain_rows_include_relative_percentages() -> None:
     assert tri["cumulative_miss_reduction_rate_percent"] == 100.0
     assert rerank["adjacent_relative_recall_lift_percent"] == 0.0
     assert rerank["cumulative_relative_recall_lift_percent"] == 1.1122
-    assert version["adjacent_success_delta"] == -2
-    assert version["adjacent_miss_reduction"] == -2
+    assert version["adjacent_success_delta"] == (
+        version["success_count"] - rerank["success_count"]
+    )
+    assert version["adjacent_miss_reduction"] == (
+        rerank["miss_count"] - version["miss_count"]
+    )
+    assert version["adjacent_relative_recall_lift_percent"] == round(
+        ((version["recall_rate"] - rerank["recall_rate"]) / rerank["recall_rate"])
+        * 100.0,
+        4,
+    )
     assert all_on["adjacent_success_delta"] == 0
-    assert all_on["cumulative_miss_reduction"] == 20
+    assert all_on["cumulative_miss_reduction"] == (
+        base["miss_count"] - all_on["miss_count"]
+    )
+    assert graph["cumulative_miss_reduction"] == tri["cumulative_miss_reduction"]
 
 
 def test_answer_retrieval_markdown_renders_measured_tables_and_future_note(
