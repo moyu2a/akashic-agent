@@ -73,7 +73,7 @@ def build_tool_audit_event(
         policy_action=policy_action,
         policy_reason=policy_reason,
         args_hash=canonical_args_hash(arguments),
-        args_summary=summarize_arguments(arguments),
+        args_summary=summarize_arguments(arguments, tool_name=tool_name),
         invoker_reached=invoker_reached,
         invoker_succeeded=invoker_succeeded,
     )

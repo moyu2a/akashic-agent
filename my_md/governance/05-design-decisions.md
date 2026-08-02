@@ -147,3 +147,35 @@ CapabilityScope
 
 - LA-002 第一版可以声明 recoverable controlled read-only execution，不能声明 side-effect execution。
 - P2 前需要填充 defer attempt 的 structured `requested_*` columns，并定义 approve/deny/expiry/audit；P3 前不开放真实文件写入。
+
+## DD-006 工具治理当前停靠点采用 P4c + 小型 P4d，而不是直接进入 P5
+
+日期：2026-07-28
+
+状态：accepted。
+
+决策：
+
+- 当前工具治理主线以 P4c 作为能力完成点：policy gate、resource policy、durable approval、approved file preview/apply/rollback、approved shell sandbox 和 persistent redacted `ToolAuditLedger` 已形成闭环。
+- 短期如果继续精进，只做小型 P4d 运维收尾，例如 `/tool_audit` 输出体验、retention/prune 运维、真实 smoke 和工具治理使用手册。
+- 不因为“能力平台还可以更完整”就直接实现 P5 external API side-effect replay。
+- P5 只有在出现明确产品需求时才 design-first；不能跳过 spec/plan/review 直接打开 replay。
+
+原因：
+
+- 当前已经有文件 rollback，也已经有 approved shell sandbox；这覆盖了本地 agent 最重要的两个副作用安全场景。
+- external API 副作用通常不可逆，并涉及凭证治理、网络策略、幂等性、第三方未知状态和失败恢复；复杂度明显高于当前收益。
+- destructive execution、shell rollback、network-enabled shell sandbox 和 TaskExecution shell/external resume 都属于高风险能力，不应为追求完整性提前开放。
+- P4c 的 ledger 是审计投影，不是状态所有者；approval store 和 side-effect store 继续作为 source-of-truth，避免审计系统反过来驱动执行状态。
+
+当前边界：
+
+- 已有 sandbox：approved shell 只走 Docker/Podman sandbox runner，workspace read-only，network off，non-root，read-only rootfs，cap drop，no-new-privileges，并带 pids/memory/cpu/timeout limits；sandbox 不可用时 fail closed。
+- 已有 rollback：仅覆盖 approved `write_file/edit_file` 文件副作用。
+- 未开放：external API replay、destructive execution、TaskExecution shell/external resume、shell rollback、network-enabled shell sandbox、跨 session admin audit search。
+
+影响：
+
+- 后续工具治理的默认下一步不是 P5，而是 P4d 运维收尾。
+- 如果后续确实进入 P5，需要先回答哪些 external-side-effect 工具允许 replay、payload 如何绑定/脱敏、如何重新跑 policy、如何处理幂等和未知结果、哪些外部操作永久禁止。
+- 当前能力总览以 [09-tool-governance-current-state.md](./09-tool-governance-current-state.md) 为恢复入口。

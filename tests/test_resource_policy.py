@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from agent.policies.resource_policy import (
     ResourcePolicyContext,
     ResourcePolicyEngine,
@@ -328,7 +330,7 @@ def test_shell_quoted_semicolon_is_not_treated_as_compound(tmp_path: Path) -> No
     decision = ResourcePolicyEngine().evaluate(
         ResourcePolicyContext(
             tool_name="shell",
-            arguments={"command": "python -c \"print('a;b')\""},
+            arguments={"command": "printf '%s' 'a;b'"},
             resource_roots=(str(tmp_path),),
         )
     )
@@ -337,17 +339,61 @@ def test_shell_quoted_semicolon_is_not_treated_as_compound(tmp_path: Path) -> No
     assert decision.reason == "resource_policy_shell_command_allowed"
 
 
-def test_shell_quoted_command_substitution_text_is_allowed(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    "command",
+    [
+        'eval "rm -rf /tmp/x"',
+        "find . -exec rm -rf {} +",
+        "busybox rm -rf /tmp/x",
+        "printf safe\nrm -rf /tmp/x",
+        "$cmd -rf /tmp/x",
+    ],
+)
+def test_shell_rejects_dangerous_indirection_patterns(
+    tmp_path: Path, command: str
+) -> None:
     decision = ResourcePolicyEngine().evaluate(
         ResourcePolicyContext(
             tool_name="shell",
-            arguments={"command": "python -c \"print('$(not shell)')\""},
+            arguments={"command": command},
             resource_roots=(str(tmp_path),),
         )
     )
 
-    assert decision.action == "allow"
-    assert decision.reason == "resource_policy_shell_command_allowed"
+    assert decision.action == "deny"
+    assert decision.reason.startswith("resource_policy_shell_")
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "sh -c 'rm -rf /tmp/x'",
+        "dash -c 'rm -rf /tmp/x'",
+        "sudo -u nobody sh -c 'rm -rf /tmp/x'",
+        "env -u HOME sh -c 'rm -rf /tmp/x'",
+        "echo $(rm -rf /tmp/x)",
+        "echo `rm -rf /tmp/x`",
+        "if true; then rm -rf /tmp/x; fi",
+        "cat <<'EOF'\nsecret\nEOF",
+        "echo ok && rm -rf /tmp/x",
+        "(echo hi)",
+        "cat <(echo hi)",
+        "python -c \"print('not destructive')\"",
+    ],
+)
+def test_shell_rejects_nested_or_unsupported_syntax(
+    tmp_path: Path, command: str
+) -> None:
+    decision = ResourcePolicyEngine().evaluate(
+        ResourcePolicyContext(
+            tool_name="shell",
+            arguments={"command": command},
+            resource_roots=(str(tmp_path),),
+        )
+    )
+
+    assert decision.action == "deny"
+    assert decision.reason.startswith("resource_policy_shell_")
 
 
 def test_public_https_url_is_allowed(tmp_path: Path) -> None:

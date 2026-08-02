@@ -1,0 +1,606 @@
+from __future__ import annotations
+
+import io
+import hashlib
+import os
+import subprocess
+import time
+from dataclasses import replace
+from pathlib import Path
+
+import pytest
+
+from agent.policies.shell_sandbox_plan import prepare_shell_sandbox_preview
+from agent.policies.shell_sandbox_runner import (
+    DockerPodmanSandboxRunner,
+    _open_managed_artifact_directory,
+    _stream_output,
+    _write_private_file,
+    _write_private_file_at_directory_fd,
+)
+
+
+def test_docker_podman_runner_builds_fail_closed_read_only_no_network_command(
+    tmp_path: Path,
+) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    preview = prepare_shell_sandbox_preview(
+        workspace_root=workspace,
+        artifact_root=workspace / "tool_side_effects" / "artifacts",
+        arguments={"command": "echo hi", "description": "say hi"},
+    )
+    runner = DockerPodmanSandboxRunner(binary="podman")
+
+    argv = runner.build_argv(preview)
+
+    assert argv[:3] == ["podman", "run", "--rm"]
+    assert "--network" in argv
+    assert "none" in argv
+    assert "--pull" in argv
+    assert "never" in argv
+    assert "--read-only" in argv
+    assert "--cap-drop" in argv
+    assert "ALL" in argv
+    assert "--security-opt" in argv
+    assert "no-new-privileges" in argv
+    assert "--pids-limit" in argv
+    assert "128" in argv
+    assert "--memory" in argv
+    assert "512m" in argv
+    assert "--cpus" in argv
+    assert "1.0" in argv
+    assert "--user" in argv
+    assert "65532:65532" in argv
+    joined = " ".join(argv)
+    assert f"{workspace}:/workspace:ro" in joined
+    assert "echo hi" not in joined
+    assert f"{preview.artifact_dir}:/artifacts:rw" not in joined
+    assert "--privileged" not in argv
+    assert "/var/run/docker.sock" not in joined
+    assert "--entrypoint" in argv
+    assert argv[argv.index("--entrypoint") + 1] == "sh"
+    assert argv[-1] == "-s"
+
+
+def test_docker_podman_runner_returns_unavailable_without_binary(monkeypatch) -> None:
+    monkeypatch.setattr("shutil.which", lambda name: None)
+
+    assert DockerPodmanSandboxRunner.find_available() is None
+
+
+def test_docker_podman_runner_checks_local_image_without_pull(
+    monkeypatch, tmp_path: Path
+) -> None:
+    calls = []
+
+    def fake_run(argv, **kwargs):
+        calls.append(argv)
+        return type("Completed", (), {"returncode": 0})()
+
+    monkeypatch.setattr("subprocess.run", fake_run)
+    runner = DockerPodmanSandboxRunner(binary="podman")
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    preview = prepare_shell_sandbox_preview(
+        workspace_root=workspace,
+        artifact_root=workspace / "tool_side_effects" / "artifacts",
+        arguments={"command": "echo hi", "description": "say hi"},
+    )
+
+    assert runner.image_available(preview) is True
+    assert calls == [["podman", "image", "inspect", "python:3.14-slim"]]
+
+
+def test_docker_podman_runner_reports_image_unavailable_without_running(
+    monkeypatch, tmp_path: Path
+) -> None:
+    calls = []
+
+    def fake_run(argv, **kwargs):
+        calls.append(argv)
+        return type("Completed", (), {"returncode": 1})()
+
+    monkeypatch.setattr("subprocess.run", fake_run)
+    runner = DockerPodmanSandboxRunner(binary="podman")
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    preview = prepare_shell_sandbox_preview(
+        workspace_root=workspace,
+        artifact_root=workspace / "tool_side_effects" / "artifacts",
+        arguments={"command": "echo hi", "description": "say hi"},
+    )
+
+    result = runner.run(preview, "echo hi")
+
+    assert result.ok is False
+    assert result.reason == "shell_sandbox_image_unavailable"
+    assert calls == [["podman", "image", "inspect", "python:3.14-slim"]]
+
+
+def test_docker_podman_runner_handles_image_inspect_errors(
+    monkeypatch, tmp_path: Path
+) -> None:
+    def fake_run(argv, **kwargs):
+        raise FileNotFoundError("podman")
+
+    monkeypatch.setattr("subprocess.run", fake_run)
+    runner = DockerPodmanSandboxRunner(binary="podman")
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    preview = prepare_shell_sandbox_preview(
+        workspace_root=workspace,
+        artifact_root=workspace / "tool_side_effects" / "artifacts",
+        arguments={"command": "echo hi", "description": "say hi"},
+    )
+
+    result = runner.run(preview, "echo hi")
+
+    assert result.ok is False
+    assert result.reason == "shell_sandbox_launch_failed"
+
+
+def test_docker_podman_runner_streams_large_output_incrementally(
+    monkeypatch, tmp_path: Path
+) -> None:
+    import io
+
+    class FakeProc:
+        def __init__(self) -> None:
+            self.stdin = io.BytesIO()
+            self.stdout = io.BytesIO(b"x" * 40000)
+            self.stderr = io.BytesIO(b"y" * 5)
+            self.returncode = 0
+
+        def wait(self, timeout=None) -> int:
+            return 0
+
+        def poll(self) -> int:
+            return 0
+
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    preview = prepare_shell_sandbox_preview(
+        workspace_root=workspace,
+        artifact_root=workspace / "tool_side_effects" / "artifacts",
+        arguments={"command": "echo hi", "description": "say hi"},
+    )
+    runner = DockerPodmanSandboxRunner(binary="podman")
+    monkeypatch.setattr(runner, "image_available", lambda preview: True)
+    monkeypatch.setattr("subprocess.Popen", lambda *args, **kwargs: FakeProc())
+
+    result = runner.run(preview, "echo hi")
+
+    assert result.ok is True
+    assert result.reason == "sandbox_executed"
+    assert result.stdout_bytes == 40000
+    assert result.stdout_truncated is True
+    assert result.stderr_bytes == 5
+    assert result.stderr_truncated is False
+
+
+def test_docker_podman_runner_writes_private_output_artifacts(
+    monkeypatch, tmp_path: Path
+) -> None:
+    class FakeProc:
+        def __init__(self) -> None:
+            self.stdin = io.BytesIO()
+            self.stdout = io.BytesIO(b"real runner stdout\n")
+            self.stderr = io.BytesIO(b"real runner stderr\n")
+            self.returncode = 0
+
+        def wait(self, timeout=None) -> int:
+            return self.returncode
+
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    preview = prepare_shell_sandbox_preview(
+        workspace_root=workspace,
+        artifact_root=workspace / "tool_side_effects" / "artifacts",
+        arguments={"command": "echo hi", "description": "say hi"},
+    )
+    runner = DockerPodmanSandboxRunner(binary="podman")
+    monkeypatch.setattr(runner, "image_available", lambda preview: True)
+    monkeypatch.setattr("subprocess.Popen", lambda *args, **kwargs: FakeProc())
+
+    result = runner.run(preview, "echo hi")
+
+    stdout_path = preview.artifact_dir / result.stdout_path
+    stderr_path = preview.artifact_dir / result.stderr_path
+    assert stdout_path.read_bytes() == b"real runner stdout\n"
+    assert stderr_path.read_bytes() == b"real runner stderr\n"
+    assert stdout_path.stat().st_mode & 0o777 == 0o600
+    assert stderr_path.stat().st_mode & 0o777 == 0o600
+    assert result.stdout_hash == hashlib.sha256(stdout_path.read_bytes()).hexdigest()
+    assert result.stderr_hash == hashlib.sha256(stderr_path.read_bytes()).hexdigest()
+    assert result.stdout_bytes == stdout_path.stat().st_size
+    assert result.stderr_bytes == stderr_path.stat().st_size
+
+
+def test_docker_podman_runner_surfaces_launch_failure_without_consuming_output(
+    monkeypatch, tmp_path: Path
+) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    preview = prepare_shell_sandbox_preview(
+        workspace_root=workspace,
+        artifact_root=workspace / "tool_side_effects" / "artifacts",
+        arguments={"command": "echo hi", "description": "say hi"},
+    )
+    runner = DockerPodmanSandboxRunner(binary="podman")
+    monkeypatch.setattr(runner, "image_available", lambda preview: True)
+
+    def fake_popen(*args, **kwargs):
+        raise FileNotFoundError("podman")
+
+    monkeypatch.setattr("subprocess.Popen", fake_popen)
+
+    result = runner.run(preview, "echo hi")
+
+    assert result.ok is False
+    assert result.reason == "shell_sandbox_launch_failed"
+
+
+@pytest.mark.parametrize(
+    ("policy_field", "unsafe_value"),
+    [("network_mode", "bridge"), ("workspace_mount_mode", "rw")],
+)
+def test_docker_podman_runner_rejects_unsafe_preview_policy(
+    monkeypatch, tmp_path: Path, policy_field: str, unsafe_value: str
+) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    preview = prepare_shell_sandbox_preview(
+        workspace_root=workspace,
+        artifact_root=workspace / "tool_side_effects" / "artifacts",
+        arguments={"command": "echo hi", "description": "say hi"},
+    )
+    unsafe_preview = replace(preview, **{policy_field: unsafe_value})
+    runner = DockerPodmanSandboxRunner(binary="podman")
+    popen_calls = []
+    monkeypatch.setattr(runner, "image_available", lambda preview: True)
+    monkeypatch.setattr(
+        "subprocess.Popen", lambda *args, **kwargs: popen_calls.append(args)
+    )
+
+    with pytest.raises(ValueError, match="unsupported shell sandbox policy"):
+        runner.build_argv(unsafe_preview)
+
+    result = runner.run(unsafe_preview, "echo hi")
+
+    assert result.ok is False
+    assert result.reason == "shell_sandbox_policy_invalid"
+    assert popen_calls == []
+
+
+def test_docker_podman_runner_cleans_up_named_container_after_timeout(
+    monkeypatch, tmp_path: Path
+) -> None:
+    class TimeoutProc:
+        def __init__(self) -> None:
+            self.args = ["podman", "run"]
+            self.stdin = io.BytesIO()
+            self.stdout = io.BytesIO(b"partial stdout")
+            self.stderr = io.BytesIO(b"partial stderr")
+            self.returncode = 137
+            self.killed = False
+
+        def wait(self, timeout=None) -> int:
+            if timeout is not None:
+                raise subprocess.TimeoutExpired(self.args, timeout)
+            return self.returncode
+
+        def kill(self) -> None:
+            self.killed = True
+
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    preview = prepare_shell_sandbox_preview(
+        workspace_root=workspace,
+        artifact_root=workspace / "tool_side_effects" / "artifacts",
+        arguments={"command": "echo hi", "description": "say hi"},
+    )
+    runner = DockerPodmanSandboxRunner(binary="podman")
+    proc = TimeoutProc()
+    cleaned_containers = []
+    monkeypatch.setattr(runner, "image_available", lambda preview: True)
+    monkeypatch.setattr("subprocess.Popen", lambda *args, **kwargs: proc)
+    monkeypatch.setattr(runner, "_cleanup_container", cleaned_containers.append)
+
+    result = runner.run(preview, "echo hi")
+
+    assert result.reason == "sandbox_timeout"
+    assert proc.killed is True
+    assert cleaned_containers == [runner.container_name(preview)]
+
+
+def test_docker_podman_runner_returns_timeout_when_cleanup_times_out(
+    monkeypatch, tmp_path: Path
+) -> None:
+    class TimeoutProc:
+        def __init__(self) -> None:
+            self.args = ["podman", "run"]
+            self.stdin = io.BytesIO()
+            self.stdout = io.BytesIO()
+            self.stderr = io.BytesIO()
+            self.returncode = 137
+
+        def wait(self, timeout=None) -> int:
+            if timeout is not None:
+                raise subprocess.TimeoutExpired(self.args, timeout)
+            return self.returncode
+
+        def kill(self) -> None:
+            return None
+
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    preview = prepare_shell_sandbox_preview(
+        workspace_root=workspace,
+        artifact_root=workspace / "tool_side_effects" / "artifacts",
+        arguments={"command": "echo hi", "description": "say hi"},
+    )
+    runner = DockerPodmanSandboxRunner(binary="podman")
+    cleanup_calls = []
+
+    def cleanup_timeout(argv, **kwargs):
+        cleanup_calls.append((argv, kwargs))
+        raise subprocess.TimeoutExpired(argv, kwargs["timeout"])
+
+    monkeypatch.setattr(runner, "image_available", lambda preview: True)
+    monkeypatch.setattr("subprocess.Popen", lambda *args, **kwargs: TimeoutProc())
+    monkeypatch.setattr("subprocess.run", cleanup_timeout)
+
+    result = runner.run(preview, "echo hi")
+
+    assert result.reason == "sandbox_timeout"
+    assert cleanup_calls == [
+        (
+            ["podman", "rm", "-f", runner.container_name(preview)],
+            {
+                "stdout": subprocess.DEVNULL,
+                "stderr": subprocess.DEVNULL,
+                "check": False,
+                "timeout": 5,
+            },
+        )
+    ]
+
+
+def test_docker_podman_runner_times_out_when_stdin_write_blocks(
+    monkeypatch, tmp_path: Path
+) -> None:
+    class BlockingStdin:
+        def write(self, data: bytes) -> int:
+            time.sleep(1.05)
+            return len(data)
+
+        def close(self) -> None:
+            return None
+
+    class ExitedProc:
+        def __init__(self) -> None:
+            self.args = ["podman", "run"]
+            self.stdin = BlockingStdin()
+            self.stdout = io.BytesIO()
+            self.stderr = io.BytesIO()
+            self.returncode = 0
+            self.killed = False
+
+        def wait(self, timeout=None) -> int:
+            return self.returncode
+
+        def kill(self) -> None:
+            self.killed = True
+
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    preview = replace(
+        prepare_shell_sandbox_preview(
+            workspace_root=workspace,
+            artifact_root=workspace / "tool_side_effects" / "artifacts",
+            arguments={"command": "echo hi", "description": "say hi"},
+        ),
+        timeout_seconds=1,
+    )
+    runner = DockerPodmanSandboxRunner(binary="podman")
+    proc = ExitedProc()
+    cleaned_containers = []
+    monkeypatch.setattr(runner, "image_available", lambda preview: True)
+    monkeypatch.setattr("subprocess.Popen", lambda *args, **kwargs: proc)
+    monkeypatch.setattr(runner, "_cleanup_container", cleaned_containers.append)
+
+    result = runner.run(preview, "echo hi")
+
+    assert result.reason == "sandbox_timeout"
+    assert proc.killed is True
+    assert cleaned_containers == [runner.container_name(preview)]
+
+
+def test_stream_output_preserves_partial_streams_on_timeout() -> None:
+    class TimeoutProc:
+        def __init__(self) -> None:
+            self.args = ["podman", "run"]
+            self.stdin = io.BytesIO()
+            self.stdout = io.BytesIO(b"partial stdout")
+            self.stderr = io.BytesIO(b"partial stderr")
+            self.returncode = 137
+
+        def wait(self, timeout=None) -> int:
+            if timeout is not None:
+                raise subprocess.TimeoutExpired(self.args, timeout)
+            return self.returncode
+
+        def kill(self) -> None:
+            return None
+
+    with pytest.raises(subprocess.TimeoutExpired) as raised:
+        _stream_output(TimeoutProc(), b"echo hi", timeout_seconds=1)
+
+    assert raised.value.output == b"partial stdout"
+    assert raised.value.stderr == b"partial stderr"
+
+
+@pytest.mark.parametrize(
+    ("policy_field", "unsafe_value"),
+    [
+        ("user", "0:0"),
+        ("user", "root"),
+        ("image", "attacker/image:latest"),
+        ("memory_limit", "0"),
+        ("memory_limit", "unlimited"),
+        ("memory_limit", "513m"),
+        ("cpus", "0"),
+        ("cpus", "unlimited"),
+        ("cpus", "1.1"),
+        ("pids_limit", 0),
+        ("pids_limit", 129),
+        ("timeout_seconds", 0),
+        ("timeout_seconds", 121),
+        ("background_requested", True),
+        ("background_allowed", True),
+    ],
+)
+def test_docker_podman_runner_rejects_forged_resource_policy_fields(
+    tmp_path: Path, policy_field: str, unsafe_value: object
+) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    preview = prepare_shell_sandbox_preview(
+        workspace_root=workspace,
+        artifact_root=workspace / "tool_side_effects" / "artifacts",
+        arguments={"command": "echo hi"},
+    )
+    forged = replace(preview, **{policy_field: unsafe_value})
+
+    with pytest.raises(ValueError, match="unsupported shell sandbox policy"):
+        DockerPodmanSandboxRunner(binary="podman").build_argv(forged)
+
+
+def test_docker_podman_runner_bounds_image_inspect_timeout(
+    monkeypatch, tmp_path: Path
+) -> None:
+    calls = []
+
+    def hanging_inspect(argv, **kwargs):
+        calls.append((argv, kwargs))
+        raise subprocess.TimeoutExpired(argv, kwargs.get("timeout"))
+
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    preview = prepare_shell_sandbox_preview(
+        workspace_root=workspace,
+        artifact_root=workspace / "tool_side_effects" / "artifacts",
+        arguments={"command": "echo hi"},
+    )
+    runner = DockerPodmanSandboxRunner(binary="podman")
+    monkeypatch.setattr("subprocess.run", hanging_inspect)
+
+    result = runner.run(preview, "echo hi")
+
+    assert result.reason == "shell_sandbox_launch_failed"
+    assert calls[0][1]["timeout"] == 5
+
+
+def test_docker_podman_runner_cleans_up_after_post_launch_stream_error(
+    monkeypatch, tmp_path: Path
+) -> None:
+    class FailingStdin:
+        def write(self, data: bytes) -> int:
+            raise OSError("stdin stream failed")
+
+        def close(self) -> None:
+            return None
+
+    class StreamErrorProc:
+        def __init__(self) -> None:
+            self.args = ["podman", "run"]
+            self.stdin = FailingStdin()
+            self.stdout = io.BytesIO()
+            self.stderr = io.BytesIO()
+            self.returncode = 0
+            self.killed = False
+
+        def wait(self, timeout=None) -> int:
+            return self.returncode
+
+        def kill(self) -> None:
+            self.killed = True
+
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    preview = prepare_shell_sandbox_preview(
+        workspace_root=workspace,
+        artifact_root=workspace / "tool_side_effects" / "artifacts",
+        arguments={"command": "echo hi"},
+    )
+    runner = DockerPodmanSandboxRunner(binary="podman")
+    proc = StreamErrorProc()
+    cleanup_calls = []
+    monkeypatch.setattr(runner, "image_available", lambda preview: True)
+    monkeypatch.setattr("subprocess.Popen", lambda *args, **kwargs: proc)
+    monkeypatch.setattr(runner, "_cleanup_container", cleanup_calls.append)
+
+    result = runner.run(preview, "echo hi")
+
+    assert result.reason == "sandbox_execution_failed"
+    assert proc.killed is True
+    assert cleanup_calls == [runner.container_name(preview)]
+
+
+def test_private_artifact_creation_rejects_existing_symlink_leaf(
+    tmp_path: Path,
+) -> None:
+    outside = tmp_path / "outside.txt"
+    outside.write_bytes(b"must remain unchanged")
+    artifact = tmp_path / "stdout.txt"
+    artifact.symlink_to(outside)
+
+    with pytest.raises(FileExistsError):
+        _write_private_file(artifact, b"secret output")
+
+    assert outside.read_bytes() == b"must remain unchanged"
+    assert artifact.is_symlink()
+
+
+def test_private_artifact_creation_rejects_existing_regular_leaf(
+    tmp_path: Path,
+) -> None:
+    artifact = tmp_path / "stdout.txt"
+    artifact.write_bytes(b"must remain unchanged")
+
+    with pytest.raises(FileExistsError):
+        _write_private_file(artifact, b"secret output")
+
+    assert artifact.read_bytes() == b"must remain unchanged"
+
+
+def test_private_artifact_write_is_anchored_to_open_directory_fd(
+    tmp_path: Path,
+) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    preview = prepare_shell_sandbox_preview(
+        workspace_root=workspace,
+        artifact_root=workspace / "tool_side_effects" / "artifacts",
+        arguments={"command": "echo hi"},
+    )
+    dir_fd = _open_managed_artifact_directory(preview)
+    try:
+        original_dir = preview.artifact_dir.parent / "artifact-dir"
+        preview.artifact_dir.rename(original_dir)
+        outside = tmp_path / "outside"
+        outside.mkdir()
+        if preview.artifact_dir.exists() or preview.artifact_dir.is_symlink():
+            preview.artifact_dir.unlink()
+        preview.artifact_dir.symlink_to(outside, target_is_directory=True)
+
+        _write_private_file_at_directory_fd(dir_fd, "stdout.txt", b"secret output")
+
+        assert (original_dir / "stdout.txt").read_bytes() == b"secret output"
+        assert not (outside / "stdout.txt").exists()
+    finally:
+        try:
+            os.close(dir_fd)
+        except OSError:
+            pass

@@ -639,6 +639,7 @@ def build_core_runtime(
         workspace=workspace,
         session_manager=session_manager,
         memory_engine=memory_runtime.engine,
+        task_execution_service=task_execution_service,
         app_config=config,
     )
 

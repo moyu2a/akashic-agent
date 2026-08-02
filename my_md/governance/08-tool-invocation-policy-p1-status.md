@@ -174,6 +174,107 @@ P1.2 已接入 `ToolExecutor` 和 passive reasoner 的真实执行路径。P1.3a
 - P3 不提供 filesystem snapshot/diff/rollback，也不承诺 `/approve_tool` 后自动重放 passive 工具调用或自动恢复 TaskExecution 副作用执行；status command 当前只负责 trusted approve/deny 状态变更。
 - P3 不是完整企业级 `ToolAuditLedger`；当前是随 turn trace/observe 传播的 bounded lifecycle metadata。可查询持久审计账本、retention 和 dashboard/admin 审计检索属于 P4/P5。
 
+## P4 Approved File Side-Effect Execution 接入结果
+
+日期：2026-07-26
+
+P4 已完成第一版 approved file side-effect execution safety loop：`write_file/edit_file` 的 approved request 不再由普通 ToolExecutor 直接执行，而是进入 managed side-effect runtime。该 runtime 从 workspace 私有 payload vault 读取原始参数，重新执行 P1 resource policy，生成 snapshot/diff preview，通过 trusted status/admin command apply，记录 rollback handle，并在成功后 finalize approval。TaskExecution `waiting_authorization` 仅对 P4 文件工具开放恢复；shell、external side-effect、destructive 操作仍不恢复。
+
+实现范围：
+
+- `SideEffectPayloadVault` 只接收 `write_file/edit_file` 原始参数，存放在 workspace 私有 `tool_side_effects/payloads` 下，payload 文件权限为 `0600`；approval store、audit row 和 observe slim trace 不保存原始文件内容。
+- `file_change_plan` 负责 workspace 内路径解析、before snapshot、after artifact、unified diff preview、apply 前 snapshot hash 冲突检查和 rollback。
+- `ApprovedSideEffectRuntime` 统一校验 approval record、payload hash、session、P1 resource policy、preview/apply/rollback 状态，并在 apply 成功后 finalize approval。
+- `/prepare_tool <approval_id>`、`/run_approved_tool <approval_id>`、`/rollback_tool <approval_id>` 是 trusted status/admin execution surface；`/approve_tool` 和 `/deny_tool` 仍只做 decision，不执行副作用。
+- TaskExecution file side-effect resume 只在 managed runtime apply 成功后原子完成对应 `waiting_authorization` attempt，不自动 claim 或推进下一步。
+- observe slim trace 增加 `approved_side_effect_lifecycle` allowlist，只保留 bounded metadata：approval/request/session/tool/scope、args hash、preview id、target path hash、before/after hash、diff truncated、rollback id、execution/rollback status 和 actor/status/timestamp；不保留 raw path、payload path、diff text、raw args/content/command/body/cookie/token。
+
+非范围：
+
+- P4a 不开放 shell approved execution、external API side-effect replay、destructive 操作恢复。
+- P4a 不是 Docker/Podman/chroot/seccomp sandbox，不提供 non-root user、read-only rootfs 或 resource limits。
+- P4a 不是完整可查询 `ToolAuditLedger`；完整 ledger、retention、dashboard/admin 审计检索仍属 P5。
+
+## P4b Sandboxed Approved Shell Execution 接入结果
+
+日期：2026-07-27
+
+P4b 已完成第一版 sandboxed approved shell execution：approved `shell` request 不再能由普通 ToolExecutor 直接执行，而是进入 approved shell side-effect runtime。该 runtime 从 workspace 私有 payload vault 读取原始 shell 参数，重新执行 P1/P2 resource policy，生成 sandbox preview，并只通过 Docker/Podman sandbox runner 执行。第一版 fail closed：Docker/Podman 不可用时不回退宿主 shell；workspace 只读挂载；network off；non-root user；read-only rootfs；cap drop；no-new-privileges；pids/memory/cpu/timeout limits。P4b 不支持 shell rollback，不开放 TaskExecution shell resume，不开放 external API side-effect replay。
+
+范围与非范围：
+
+- approved `shell` 只通过 approved shell side-effect runtime 和 Docker/Podman sandbox runner 执行；普通 ToolExecutor 不直接执行 approved shell request。
+- Docker/Podman 不可用时 fail closed，不回退宿主 shell。
+- workspace 只读挂载，network off，使用 non-root user、read-only rootfs、cap drop、no-new-privileges 和 pids/memory/cpu/timeout limits。
+- 不开放 external API side-effect replay、destructive execution、TaskExecution shell resume、shell rollback 或 network-enabled shell sandbox。
+- 完整可查询 `ToolAuditLedger`、retention、dashboard/admin 审计检索仍属于 P5。
+
+P4b 验证结果：
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 uv run --with pytest --with pytest-asyncio --with json-repair --with docstring-parser pytest tests/test_side_effect_payload_vault.py tests/test_shell_sandbox_plan.py tests/test_shell_sandbox_runner.py tests/test_approved_side_effect_store.py tests/test_approved_shell_side_effect_runtime.py tests/test_status_commands_approved_side_effects.py tests/test_task_execution_file_side_effect_resume.py tests/test_tool_governance_p4b_contract.py -q -p no:cacheprovider
+PYTHONDONTWRITEBYTECODE=1 uv run --with pytest --with pytest-asyncio --with json-repair --with docstring-parser pytest tests/test_tool_approval.py tests/test_tool_approval_store.py tests/test_tool_approval_runtime.py tests/test_tool_executor_approval_workflow.py tests/test_tool_approval_wiring.py tests/test_task_execution_approval_bridge.py tests/test_tool_audit.py tests/test_observe_writer.py tests/test_tool_governance_p1_p2_contract.py tests/test_tool_governance_p3_contract.py tests/test_tool_governance_p4_contract.py tests/test_tool_governance_p4b_contract.py -q -p no:cacheprovider
+PYTHONDONTWRITEBYTECODE=1 uv run --with pytest --with pytest-asyncio --with json-repair --with docstring-parser pytest tests/test_tool_invocation_policy.py tests/test_tool_invocation_policy_gate.py tests/test_tool_invocation_resource_policy.py tests/test_resource_policy.py tests/test_tool_executor.py tests/test_tool_boundary_manager.py tests/test_task_execution_access.py tests/test_task_execution_reasoner.py tests/test_task_execution_store.py tests/test_task_execution_contract.py tests/test_shell_safety_plugin.py tests/test_tool_access_gateway.py tests/test_observe_writer.py tests/test_lifecycle_phases.py tests/test_status_commands_approved_side_effects.py tests/test_task_execution_file_side_effect_resume.py -q -p no:cacheprovider
+PYTHONDONTWRITEBYTECODE=1 uv run python -m compileall agent/policies agent/tool_hooks plugins/status_commands plugins/observe tests/test_shell_sandbox_plan.py tests/test_shell_sandbox_runner.py tests/test_approved_shell_side_effect_runtime.py tests/test_tool_governance_p4b_contract.py
+git diff --check
+```
+
+```text
+P4b focused suite: 61 passed in 3.36s
+P1/P2/P3/P4/P4b focused baseline: 86 passed in 3.52s
+Compatibility suite: 275 passed in 9.07s
+Compileall: exit 0
+git diff --check: no output
+```
+
+## P4c Queryable ToolAuditLedger 接入结果
+
+日期：2026-07-28
+
+P4c 已完成第一版 workspace-scoped、queryable、persistent、redacted `ToolAuditLedger`。Ledger 作为 SQLite sidecar 位于 `<workspace>/tool_audit/tool_audit.db`，记录工具 policy decision、approval lifecycle、approved file side-effect lifecycle 和 approved shell sandbox lifecycle 的脱敏审计投影；approval store 和 approved side-effect store 仍是状态 source-of-truth。
+
+当前总览：
+
+- 工具安全治理底座已完成约 `80%`：policy gate、resource policy、durable approval、file preview/apply/rollback、approved shell sandbox 和 persistent redacted audit ledger 均已具备。
+- 完整工具能力平台约完成 `60% - 65%`：external API replay、跨 session admin audit、TaskExecution shell/external resume、network-enabled shell sandbox 等仍未开放。
+- 当前推荐停靠点是 P4c，再补一个小型 P4d 运维收尾即可。详见 [09-tool-governance-current-state.md](./09-tool-governance-current-state.md)。
+
+实现范围：
+
+- 新增 `agent/policies/tool_audit_ledger.py`，提供 `ToolAuditLedgerEvent`、`ToolAuditLedgerQuery`、`ToolAuditLedgerStore`、allowlist/value-level metadata sanitizer、query/prune API 和 fail-open recorder helper。
+- `ToolExecutor` 在 allow/deny/defer/error policy paths 写入 `tool_invocation_policy_decision` ledger event；ledger 写失败不改变工具执行结果。
+- `ToolApprovalRuntime` 写入 requested、approved、denied、expired、consumed、executed 和 execution_failed lifecycle events。
+- `ApprovedSideEffectRuntime` 和 `ApprovedShellSideEffectRuntime` 写入 file preview/apply/rollback 与 shell preview/sandbox execution lifecycle events。
+- `ApprovedSideEffectRuntime` 在 preview/apply/rollback helper 抛出异常时写入 bounded failure ledger event；ledger 不保存异常文本、raw path 或 payload 内容。
+- `DefaultReasoner.run_turn()` 和 `StatusCommands.before_turn_modules()` 按 workspace 构造并注入同一个 sidecar ledger 路径。
+- 新增只读 `/tool_audit` status command，支持 `/tool_audit [limit]`、`request <request_id>`、`approval <approval_id>`、`tool <tool_name> [limit]` 和 `event <event_type> [limit]`，所有查询默认绑定当前 `session_key`。
+
+红线：
+
+- Ledger 不保存 raw tool args、raw shell command、raw file path/content、raw diff、payload path、stdout/stderr text、token、cookie、secret、authorization 或 API key。
+- Metadata sanitizer 同时校验 key 和 value；allowlisted key 下看起来像路径、命令、payload、凭据 URL 或 secret 的值也会被丢弃。
+- `/tool_audit` 不提供跨 session admin 查询，不暴露 `since/until`，不修改 `ToolDiscoveryState`、LRU preload、approval state 或 side-effect state。
+- P4c 不开放 external API side-effect replay、destructive execution、TaskExecution shell resume、shell rollback 或 network-enabled shell sandbox。
+- Dashboard/admin 审计检索和更完整 retention 运维策略仍属于后续工作。
+
+P4c 验证结果：
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 uv run --with pytest --with pytest-asyncio --with json-repair --with docstring-parser --with pyyaml --with html2text --with lxml pytest tests/test_tool_audit.py tests/test_tool_audit_ledger.py tests/test_tool_executor.py tests/test_tool_approval_runtime.py tests/test_approved_side_effect_runtime.py tests/test_approved_shell_side_effect_runtime.py tests/test_status_commands_approved_side_effects.py tests/test_tool_governance_p4b_contract.py tests/test_lifecycle_phases.py tests/test_plugin_manager.py -q -p no:cacheprovider
+PYTHONDONTWRITEBYTECODE=1 uv run --with pytest --with pytest-asyncio --with json-repair --with docstring-parser --with pyyaml --with html2text --with lxml pytest tests/test_resource_policy.py tests/test_tool_invocation_resource_policy.py tests/test_tool_invocation_policy.py tests/test_tool_approval.py tests/test_tool_executor_approval_workflow.py tests/test_tool_governance_p3_contract.py tests/test_tool_governance_p4_contract.py tests/test_tool_governance_p4b_contract.py tests/test_tool_audit_ledger.py tests/test_lifecycle_phases.py tests/test_plugin_manager.py -q -p no:cacheprovider
+PYTHONDONTWRITEBYTECODE=1 uv run python -m compileall agent/policies/tool_audit_ledger.py agent/policies/approved_side_effect_runtime.py plugins/status_commands/plugin.py tests/test_tool_audit_ledger.py tests/test_approved_side_effect_runtime.py tests/test_status_commands_approved_side_effects.py
+git diff --check
+```
+
+```text
+P4c focused regression suite: 58 passed in 3.59s
+P4c focused governance suite: 160 passed in 6.05s
+P1-P4c baseline: 197 passed in 4.04s
+Compileall: exit 0
+git diff --check: no output
+git diff --check 7794819..HEAD: no output
+```
+
 ## 验证结果
 
 P1.1 目标测试：
@@ -362,12 +463,56 @@ git diff --check
 
 结果：compileall 退出码 0；`git diff --check` 无输出。
 
+P4 focused suite：
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 uv run --with pytest --with pytest-asyncio --with json-repair --with docstring-parser pytest tests/test_side_effect_payload_vault.py tests/test_file_change_plan.py tests/test_approved_side_effect_store.py tests/test_approved_side_effect_runtime.py tests/test_status_commands_approved_side_effects.py tests/test_task_execution_file_side_effect_resume.py tests/test_tool_governance_p4_contract.py -q -p no:cacheprovider
+```
+
+结果：
+
+```text
+21 passed in 1.74s
+```
+
+P1/P2/P3/P4 focused baseline：
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 uv run --with pytest --with pytest-asyncio --with json-repair --with docstring-parser pytest tests/test_tool_approval.py tests/test_tool_approval_store.py tests/test_tool_approval_runtime.py tests/test_tool_executor_approval_workflow.py tests/test_tool_approval_wiring.py tests/test_task_execution_approval_bridge.py tests/test_tool_audit.py tests/test_observe_writer.py tests/test_tool_governance_p1_p2_contract.py tests/test_tool_governance_p3_contract.py tests/test_tool_governance_p4_contract.py -q -p no:cacheprovider
+```
+
+结果：
+
+```text
+72 passed in 2.86s
+```
+
+P3 compatibility plus P4 coverage：
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 uv run --with pytest --with pytest-asyncio --with json-repair --with docstring-parser pytest tests/test_tool_invocation_policy.py tests/test_tool_invocation_policy_gate.py tests/test_tool_invocation_resource_policy.py tests/test_resource_policy.py tests/test_tool_executor.py tests/test_tool_boundary_manager.py tests/test_task_execution_access.py tests/test_task_execution_reasoner.py tests/test_task_execution_store.py tests/test_task_execution_contract.py tests/test_shell_safety_plugin.py tests/test_tool_access_gateway.py tests/test_observe_writer.py tests/test_lifecycle_phases.py tests/test_status_commands_approved_side_effects.py tests/test_task_execution_file_side_effect_resume.py -q -p no:cacheprovider
+```
+
+结果：
+
+```text
+270 passed in 8.68s
+```
+
+P4 compileall 与 whitespace 检查：
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 uv run python -m compileall agent/policies agent/tool_hooks agent/task_plan plugins/status_commands plugins/observe tests/test_side_effect_payload_vault.py tests/test_file_change_plan.py tests/test_approved_side_effect_store.py tests/test_approved_side_effect_runtime.py tests/test_status_commands_approved_side_effects.py tests/test_task_execution_file_side_effect_resume.py tests/test_tool_governance_p4_contract.py
+git diff --check
+```
+
+结果：compileall 退出码 0；`git diff --check` 无输出。
+
 ## 后续步骤
 
-P3 已完成 trusted approval workflow、executor API 级 single-use consume、status command approve/deny、TaskExecution bounded authorization metadata 和 approval lifecycle trace。下一步不应直接声称生产级安全，而是进入 P4/P5，把“批准后安全执行环境”“真实 passive/admin replay 入口”和“可查询持久审计账本”补成闭环：
+P4a/P4b/P4c 已完成文件工具受控执行、sandboxed approved shell execution 和第一版可查询持久审计 ledger，但不应直接声称生产级通用安全。下一步顺序如下：
 
-1. P4 设计 sandbox/diff/snapshot/rollback：Docker/Podman、non-root user、read-only rootfs、resource limits、filesystem snapshot/diff/rollback。
-2. P4/P5 设计可查询持久 `ToolAuditLedger`：timestamp、actor、request id、policy decision、args hash、脱敏摘要、执行结果预览和 retention 策略。
+1. 设计 external API side-effect replay/admin 执行入口：在不把 raw args 写入 approval/audit store 的前提下，明确如何由可信 runtime 取回原始调用、展示风险预览、执行或取消。
+2. 为 `ToolAuditLedger` 继续补 dashboard/admin 审计检索和更明确的 retention 运维入口。
 3. 继续收敛 no-root 兼容 allow，只让明确无法提供 workspace 的直接调用方走兼容路径。
-4. 设计真实 replay/admin 执行入口：在不把 raw args 写入 approval/audit store 的前提下，明确如何由可信 runtime 取回原始调用、展示 diff、执行或取消。
-5. 评估 TaskExecution side-effect resume 的开放条件：只有 P4 具备 diff/snapshot/rollback 后，才允许 approved write/edit/shell 从 `waiting_authorization` 继续真实执行。
+4. 评估 TaskExecution shell/external side-effect resume、shell rollback 和 network-enabled shell sandbox 的开放条件；当前不开放。

@@ -350,8 +350,10 @@ Task 10 最终复审结果：focused `195 passed`，compatibility `278 passed`�
    - P3 已完成 durable trusted approval workflow：workspace SQLite approval store、status command approve/deny、完整 tuple 绑定、过期检查、executor API 级 single-use consume 和 execution finalize。
    - P3 已完成 `DefaultReasoner` workspace runtime wiring：普通 passive executor 与 `/approvals` / `/approve_tool` / `/deny_tool` 使用同一 approval DB。
    - P3 已完成 trusted context 隔离：模型工具参数中的 `approval_request_id` 不可信，只有 runtime code 构造的 `TrustedApprovalContext` 能触发 consume。
-   - P3 已完成 TaskExecution metadata bridge：`waiting_authorization` 持久化 approval id、expires_at、scope、args_hash、args_summary、policy_reason；但不开放 write/edit/shell side-effect resume。
-   - P3 边界：`/approve_tool` 当前只改变 approval store 状态，不自动重放 passive 工具调用；真实 replay/admin 执行入口、TaskExecution 副作用恢复、sandbox、diff/snapshot/rollback 留到 P4。
+   - P3 已完成 TaskExecution metadata bridge：`waiting_authorization` 持久化 approval id、expires_at、scope、args_hash、args_summary、policy_reason；P3 本身不开放 write/edit/shell side-effect resume。
+   - P4a 已完成 approved file side-effect execution safety loop：`write_file/edit_file` approved request 只能通过 managed side-effect runtime 执行；runtime 从 workspace 私有 payload vault 读取原始参数，重新执行 P1 resource policy，生成 snapshot/diff preview，通过 trusted `/prepare_tool`、`/run_approved_tool`、`/rollback_tool` apply/rollback，并在成功后 finalize approval。
+   - P4a 已开放 TaskExecution `waiting_authorization` 的文件工具恢复：仅限 P4 managed `write_file/edit_file` 成功 apply 后原子完成等待 attempt；shell、external-side-effect、destructive 操作仍不恢复。
+   - P4b 已完成第一版 sandboxed approved shell execution：approved `shell` request 不再能由普通 ToolExecutor 直接执行，而是进入 approved shell side-effect runtime。该 runtime 从 workspace 私有 payload vault 读取原始 shell 参数，重新执行 P1/P2 resource policy，生成 sandbox preview，并只通过 Docker/Podman sandbox runner 执行。第一版 fail closed：Docker/Podman 不可用时不回退宿主 shell；workspace 只读挂载；network off；non-root user；read-only rootfs；cap drop；no-new-privileges；pids/memory/cpu/timeout limits。P4b 不支持 shell rollback，不开放 TaskExecution shell resume，不开放 external API side-effect replay。
 4. 统一 `ToolAuditLedger`
    - 将普通工具调用的审计提升到接近 TaskExecution attempt/event 的结构化程度。
    - 记录 request/turn/session/tool/policy/argument hash/result preview/hook trace/invoker 状态。
@@ -359,8 +361,13 @@ Task 10 最终复审结果：focused `195 passed`，compatibility `278 passed`�
    - P2 已完成 minimal audit trace，不落持久 ledger：`ToolExecutionResult.audit_trace` 记录 request/session/channel/chat/tool/source/risk/policy action/reason/args hash/invoker reached/succeeded。
    - P2 已接入 passive turn trace 与 observe slim trace；observe 只保留固定白名单审计字段，不保存 `args_summary`。
    - P3 已完成 bounded approval lifecycle trace：requested、approved、denied、expired、consumed、executed、execution_failed 进入 executor trace、status command metadata 和 observe slim trace。
-   - P3 observe 仍只保留 allowlist 字段，不保存 raw args、`args_summary`、command、content、code、body、secret、cookie、token。
-   - 完整可查询 `ToolAuditLedger`、retention、dashboard/admin 审计检索仍属于后续 P4/P5。
+   - P4a 已完成 approved side-effect lifecycle trace allowlist：preview/apply/rollback 状态、approval id、request/session/tool/scope、args hash、preview id、path hash、before/after hash、rollback id 和执行/回滚状态进入 observe slim trace；raw args、`args_summary`、command、content、code、body、secret、cookie、token、payload path、真实 target path 和完整 diff 不进入 observe slim trace。
+   - P4c 已完成第一版 workspace-scoped 可查询持久 `ToolAuditLedger`：SQLite sidecar 位于 `<workspace>/tool_audit/tool_audit.db`，记录 policy decision、approval lifecycle、approved file side-effect lifecycle 和 approved shell sandbox lifecycle 的脱敏投影。
+   - P4c ledger 是 fail-open audit projection；approval store 和 approved side-effect store 仍是状态 source-of-truth。
+   - P4c `/tool_audit` status command 只读查询当前 session 的 ledger events，支持 request、approval、tool 和 event 类型过滤；不修改 `ToolDiscoveryState`、LRU、approval state 或 side-effect state。
+   - P4c ledger redaction 已覆盖 generic metadata、preview/rollback ids、credential-prefix tokens 和 `/tool_audit` display；managed file preview/apply/rollback 异常路径会写 bounded failure event，不保存异常文本。
+   - 当前能力总览见 [09-tool-governance-current-state.md](./09-tool-governance-current-state.md)。推荐短期只做 P4d 运维收尾，不默认进入 P5 external API side-effect replay。
+   - Dashboard/admin 审计检索和更完整 retention 运维策略仍属于后续工作。
 
 验收方式：
 
@@ -374,12 +381,17 @@ Task 10 最终复审结果：focused `195 passed`，compatibility `278 passed`�
 - P3 focused 回归已覆盖：durable store/runtime、single-use consume、reasoner workspace wiring、status commands、TaskExecution metadata bridge、bounded lifecycle audit、P1/P2 contract 和 P3 contract；结果 `65 passed in 2.24s`。
 - P3 compatibility 回归已覆盖：invocation/resource policy、executor、boundary manager、TaskExecution、shell safety、ToolAccessGateway、observe 和 lifecycle；结果 `262 passed in 6.79s`。
 - P3 contract 验证已补齐短测试集 `tests/test_tool_governance_p3_contract.py`，覆盖 defer/approve/resume 单次执行、变参/拒绝/过期/复用不执行、P1 deny 优先、TaskExecution 不恢复副作用、lifecycle audit bounded；结果 `5 passed in 0.59s`。
+- P4 focused 回归已覆盖 payload vault、file snapshot/diff/apply/rollback、side-effect store/runtime、status commands、TaskExecution file resume 和 P4 contract；结果 `21 passed in 1.74s`。
+- P1/P2/P3/P4 focused baseline 结果 `72 passed in 2.86s`；compatibility plus P4 coverage 结果 `270 passed in 8.68s`；compileall 退出码 `0`，`git diff --check` 无输出。
+- P4b focused suite 结果 `61 passed in 3.36s`；P1/P2/P3/P4/P4b focused baseline 结果 `86 passed in 3.52s`；compatibility suite 结果 `275 passed in 9.07s`；compileall 退出码 `0`，`git diff --check` 无输出。
+- P4c final-review fix 后 focused regression suite 结果 `58 passed in 3.59s`；focused governance suite 结果 `160 passed in 6.05s`；P1-P4c baseline 结果 `197 passed in 4.04s`；compileall 退出码 `0`，`git diff --check` 和 `git diff --check 7794819..HEAD` 无输出。验证命令使用临时测试依赖 `pyyaml/html2text/lxml` 以满足 `tests/test_plugin_manager.py` 的 import 链。
 - 回归测试确认 Document RAG、TaskPlan、TaskExecution 现有工具边界不被破坏。
 
 边界：
 
-- P1/P2/P3 不承诺完整 Docker/chroot/seccomp 隔离；它们先建立统一裁决、资源判断、默认 workspace scope、结构化授权请求、trusted approval workflow 和 bounded lifecycle audit。
-- 后续 P4/P5 再引入持久可查询 `ToolAuditLedger`、Docker/Podman sandbox、non-root user、read-only rootfs、resource limits、filesystem snapshot/diff/rollback。
+- P1/P2/P3/P4a 不承诺完整 Docker/chroot/seccomp 隔离；它们先建立统一裁决、资源判断、默认 workspace scope、结构化授权请求、trusted approval workflow、文件 snapshot/diff/rollback 和 bounded lifecycle audit。
+- P4b 已将 approved shell execution 收束为 Docker/Podman sandbox first-version scope；P4c 已完成第一版持久可查询 `ToolAuditLedger`，但它是审计投影，不是执行状态所有者。
+- P4c 后仍不开放 external API side-effect replay、destructive execution、TaskExecution shell resume、shell rollback 或 network-enabled shell sandbox。当前推荐停靠点是 P4c + 小型 P4d 运维收尾；P5 只有在出现明确产品需求时才 design-first。
 - shell 黑名单只能作为辅助 preflight，不作为最终生产安全边界。
 
 ## 暂不处理

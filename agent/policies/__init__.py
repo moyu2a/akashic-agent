@@ -20,6 +20,19 @@ from agent.policies.history_route import (
     RouteDecisionReasonCode,
     RouteDecisionSource,
 )
+from agent.policies.approved_side_effect_store import (
+    ApprovedSideEffectAuditEvent,
+    ApprovedSideEffectRecord,
+    ApprovedSideEffectStore,
+)
+from agent.policies.approved_side_effect_runtime import (
+    ApprovedSideEffectResult,
+    ApprovedSideEffectRuntime,
+)
+from agent.policies.approved_shell_side_effect_runtime import (
+    ApprovedShellSideEffectResult,
+    ApprovedShellSideEffectRuntime,
+)
 from agent.policies.task_control_arbiter import (
     TaskControlIntentArbiter,
     TaskControlIntentDecision,
@@ -33,6 +46,25 @@ from agent.policies.resource_policy import (
     ResourcePolicyContext,
     ResourcePolicyDecision,
     ResourcePolicyEngine,
+)
+from agent.policies.shell_sandbox_plan import (
+    ShellSandboxPolicy,
+    ShellSandboxPreview,
+    prepare_shell_sandbox_preview,
+    shell_command_hash,
+)
+from agent.policies.shell_sandbox_runner import (
+    DockerPodmanSandboxRunner,
+    SandboxRunner,
+    SandboxRunResult,
+)
+from agent.policies.side_effect_payload_vault import (
+    MANAGED_FILE_SIDE_EFFECT_TOOLS,
+    MANAGED_SHELL_SIDE_EFFECT_TOOLS,
+    MANAGED_SIDE_EFFECT_TOOLS,
+    SideEffectPayload,
+    SideEffectPayloadRecord,
+    SideEffectPayloadVault,
 )
 from agent.policies.tool_access import ToolAccessGateway
 from agent.policies.tool_access_types import (
@@ -73,13 +105,24 @@ from agent.policies.tool_risk_strategy import (
 )
 
 __all__ = [
+    "ApprovedSideEffectAuditEvent",
+    "ApprovedSideEffectRecord",
+    "ApprovedSideEffectResult",
+    "ApprovedSideEffectRuntime",
+    "ApprovedSideEffectStore",
+    "ApprovedShellSideEffectResult",
+    "ApprovedShellSideEffectRuntime",
     "DecisionMeta",
     "DelegationPolicy",
     "DOC_RAG_TOOL_NAMES",
     "DocRagIntentConfidence",
     "DocRagPreloadDecision",
     "DefaultToolRiskStrategy",
+    "DockerPodmanSandboxRunner",
     "HistoryRoutePolicy",
+    "MANAGED_FILE_SIDE_EFFECT_TOOLS",
+    "MANAGED_SHELL_SIDE_EFFECT_TOOLS",
+    "MANAGED_SIDE_EFFECT_TOOLS",
     "RouteDecision",
     "RouteDecisionConfidence",
     "RouteDecisionReasonCode",
@@ -89,6 +132,13 @@ __all__ = [
     "ResourcePolicyEngine",
     "RiskStrategyContext",
     "RiskStrategyDecision",
+    "ShellSandboxPolicy",
+    "ShellSandboxPreview",
+    "SandboxRunner",
+    "SandboxRunResult",
+    "SideEffectPayload",
+    "SideEffectPayloadRecord",
+    "SideEffectPayloadVault",
     "SpawnDecision",
     "SpawnDecisionConfidence",
     "SpawnDecisionMeta",
@@ -118,6 +168,8 @@ __all__ = [
     "canonical_args_hash",
     "decide_doc_rag_preload",
     "infer_task_execution_contract",
+    "prepare_shell_sandbox_preview",
+    "shell_command_hash",
     "summarize_arguments",
     "trusted_approval_from_runtime",
 ]

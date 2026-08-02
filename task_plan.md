@@ -230,6 +230,83 @@ Constraints:
 - Keep the dashboard ASGI replacement test-only.
 - Do not enable network-backed `npx` compilation during ordinary dashboard app startup.
 - Do not reinterpret the current `all_on` score as a regression unless write-governance semantics change again.
+## 2026-07-28 Tool Governance P4c/P5a Queryable ToolAuditLedger Design
+
+Goal: create a design-first specification for a workspace-scoped, queryable, persistent, redacted `ToolAuditLedger` before expanding any new tool execution capability.
+
+1. Create isolated branch/worktree from latest merged `origin/main` - complete (`tool-governance-p4c-audit-ledger` at `7794819`).
+2. Restore planning context and inspect P4b follow-up records - complete.
+3. Inspect current audit, approval, side-effect, status command, and observe surfaces - complete.
+4. Write design spec for P4c/P5a queryable ToolAuditLedger - complete (`docs/superpowers/specs/2026-07-28-tool-governance-p4c-audit-ledger-design.md`).
+5. Self-review and commit design/planning docs - complete.
+6. Write P4c implementation plan with `writing-plans` skill - complete (`docs/superpowers/plans/2026-07-28-tool-governance-p4c-audit-ledger.md`).
+7. Review plan with `requesting-code-review` skill and revise issues - complete.
+8. Execute P4c implementation tasks - complete (`08f6e4d` through `8b2df28`; final verification documented).
+
+Current result:
+
+- P4c implements a first-version workspace-scoped, queryable, persistent, redacted `ToolAuditLedger` sidecar at `<workspace>/tool_audit/tool_audit.db`.
+- Tool policy decisions, approval lifecycle, approved file side-effect lifecycle, and approved shell sandbox lifecycle write bounded ledger events fail-open.
+- `/tool_audit` is a trusted read-only current-session status command for recent ledger events and request/approval/tool/event filters.
+- Approval and side-effect stores remain source-of-truth; the ledger is an audit projection.
+- External API side-effect replay remains the next closed follow-up.
+- Destructive execution, TaskExecution shell resume, shell rollback, and network-enabled shell sandbox remain unavailable.
+- Verification after final review fixes: focused regression suite `58 passed in 3.59s`; P4c focused governance suite `160 passed in 6.05s`; P1-P4c baseline `197 passed in 4.04s`; compileall exit `0`; `git diff --check` and `git diff --check 7794819..HEAD` no output.
+- Current capability/conclusion record added at `my_md/governance/09-tool-governance-current-state.md`: recommends P4c as the current mainline completion point, with only a small P4d operational/documentation follow-up before any optional P5 external API replay design.
+
+## 2026-07-27 Tool Governance P4b Documentation and Final Verification
+
+Goal: record the completed first-version sandboxed approved shell workflow and final measured verification without modifying production code or tests.
+
+1. Run P4b focused suite - complete (`61 passed in 3.36s`)
+2. Run P1/P2/P3/P4/P4b focused baseline - complete (`86 passed in 3.52s`)
+3. Run compatibility suite - complete (`275 passed in 9.07s`)
+4. Run compileall and whitespace checks - complete (compileall exit `0`; `git diff --check` no output)
+5. Record governance boundary and follow-up order - complete
+6. Commit Task 8 documentation - complete (`8d3076a docs: record p4b sandboxed approved shell workflow`)
+
+Current result:
+
+- P4b 已完成第一版 sandboxed approved shell execution：approved `shell` request 不再能由普通 ToolExecutor 直接执行，而是进入 approved shell side-effect runtime。该 runtime 从 workspace 私有 payload vault 读取原始 shell 参数，重新执行 P1/P2 resource policy，生成 sandbox preview，并只通过 Docker/Podman sandbox runner 执行。第一版 fail closed：Docker/Podman 不可用时不回退宿主 shell；workspace 只读挂载；network off；non-root user；read-only rootfs；cap drop；no-new-privileges；pids/memory/cpu/timeout limits。P4b 不支持 shell rollback，不开放 TaskExecution shell resume，不开放 external API side-effect replay。
+- Remaining follow-ups: P5 queryable `ToolAuditLedger`, then external API side-effect replay; destructive execution, TaskExecution shell resume, shell rollback, and network-enabled shell sandbox remain unavailable.
+
+## 2026-07-26 Tool Governance P4 Approved File Side Effects
+
+Goal: implement the first approved side-effect execution safety loop for file writes while preserving P1/P2/P3 guarantees.
+
+1. Private side-effect payload vault - complete
+2. File snapshot/diff/apply/rollback primitives - complete
+3. Approved side-effect store - complete
+4. Managed file side-effect routing in ToolExecutor - complete
+5. Approved side-effect runtime - complete
+6. Trusted status commands `/prepare_tool`, `/run_approved_tool`, `/rollback_tool` - complete
+7. TaskExecution file side-effect resume bridge - complete
+8. Observe slim trace and P4 contract tests - complete
+9. Governance docs and final verification - in progress
+
+Current result:
+
+- P4 已完成第一版 approved file side-effect execution safety loop：`write_file/edit_file` 的 approved request 不再由普通 ToolExecutor 直接执行，而是进入 managed side-effect runtime。该 runtime 从 workspace 私有 payload vault 读取原始参数，重新执行 P1 resource policy，生成 snapshot/diff preview，通过 trusted status/admin command apply，记录 rollback handle，并在成功后 finalize approval。TaskExecution `waiting_authorization` 仅对 P4 文件工具开放恢复；shell、external side-effect、destructive 操作仍不恢复。
+- Latest commits:
+  - `5cb0c79 feat: add side effect payload vault`
+  - `93392e3 feat: add file side effect change planning`
+  - `55f9d27 feat: add approved side effect store`
+  - `006c841 feat: route approved file side effects through managed runtime`
+  - `465668d feat: add approved side effect runtime`
+  - `f51e91c feat: add approved side effect status commands`
+  - `13fc952 feat: resume task execution approved file side effects`
+  - `95a58db test: add p4 side effect governance contract`
+- Verification recorded for Task 9:
+  - P4 focused suite: `21 passed in 1.74s`
+  - P1/P2/P3/P4 focused baseline: `72 passed in 2.86s`
+  - compatibility plus P4 coverage: `270 passed in 8.68s`
+  - compileall exited `0`; `git diff --check` emitted no output
+- Remaining boundaries after P4a:
+  - shell approved execution and sandbox are not implemented;
+  - external API side-effect replay is not implemented;
+  - destructive operations remain denied/not restored;
+  - Docker/Podman, non-root user, read-only rootfs, and resource limits remain P4b/P5;
+  - complete queryable `ToolAuditLedger`, retention, and dashboard/admin audit search remain P5.
 
 Errors Encountered:
 
@@ -241,6 +318,9 @@ Errors Encountered:
 | Sync dashboard endpoints still entered threadpool under ASGI transport | 1 | Wrapped sync FastAPI route calls as async handlers and updated the route coroutine flag. |
 | Background optimizer test lost task state across requests | 1 | Kept a per-client event loop for the test client lifetime and drained pending tasks on close. |
 | Parallel dashboard request test hit event-loop reentrancy | 1 | Added a per-client lock to serialize calls through the shared sync test client. |
+| Task 8 RED failed with missing `approved_side_effect_lifecycle` in slim observe output | 1 | Added observe allowlist handling for call-attached P4 lifecycle metadata. |
+| Review found status-command P4 lifecycle events in `TurnCommitted.extra` were not observed | 1 | Added synthetic bounded lifecycle group from turn extra and regression coverage. |
+| Review found P4 contract did not cover executor defer/direct-block integration | 1 | Added contract test for real `ToolExecutor` defer payload storage, approved direct file blocking, and managed runtime apply. |
 
 ## Goal
 

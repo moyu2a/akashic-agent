@@ -80,7 +80,7 @@ def _emit_turn_trace(writer: _ObserveWriter, event: TurnCommitted) -> None:
 
     post_reply_budget = event.post_reply_budget
     react_stats = event.react_stats
-    tool_chain = event.tool_chain_raw
+    tool_chain = _tool_chain_with_extra_lifecycle(event.tool_chain_raw, event.extra)
     tool_chain_json = (
         json.dumps(_slim_tool_chain(tool_chain), ensure_ascii=False)
         if tool_chain
@@ -119,6 +119,34 @@ def _emit_turn_trace(writer: _ObserveWriter, event: TurnCommitted) -> None:
         event.session_key,
         len(tool_calls),
     )
+
+
+def _tool_chain_with_extra_lifecycle(
+    tool_chain: list[dict[str, object]],
+    extra: Mapping[str, object],
+) -> list[dict[str, object]]:
+    side_effect_lifecycle = extra.get("approved_side_effect_lifecycle")
+    if not isinstance(side_effect_lifecycle, list):
+        return tool_chain
+    events = [
+        event for event in side_effect_lifecycle if isinstance(event, Mapping)
+    ]
+    if not events:
+        return tool_chain
+    return [
+        *tool_chain,
+        {
+            "text": "",
+            "calls": [
+                {
+                    "name": "approved_side_effect_lifecycle",
+                    "arguments": {},
+                    "result": "",
+                    "approved_side_effect_lifecycle": events,
+                }
+            ],
+        },
+    ]
 
 
 def _to_rag_query_log(event: RetrievalCompleted):
@@ -203,7 +231,11 @@ def _slim_call(
 ) -> dict[str, object]:
     out = {
         "name": str(call.get("name", "")),
-        "args": _slim_arguments(call.get("arguments"), limit=args_limit),
+        "args": _slim_arguments(
+            call.get("arguments"),
+            tool_name=str(call.get("name") or ""),
+            limit=args_limit,
+        ),
         "result": str(call.get("result", ""))[:result_limit],
     }
     for key in ("status", "boundary_reason", "boundary_action"):
@@ -243,17 +275,27 @@ def _slim_call(
         ]
         if events:
             out["approval_lifecycle"] = events
+    side_effect_lifecycle = call.get("approved_side_effect_lifecycle")
+    if isinstance(side_effect_lifecycle, list):
+        events = [
+            _slim_approved_side_effect_lifecycle_event(event)
+            for event in side_effect_lifecycle
+            if isinstance(event, Mapping)
+        ]
+        if events:
+            out["approved_side_effect_lifecycle"] = events
     return out
 
 
-def _slim_arguments(arguments: object, *, limit: int) -> str:
+def _slim_arguments(arguments: object, *, tool_name: str, limit: int) -> str:
     if isinstance(arguments, Mapping):
         safe_args = summarize_arguments(
             {
                 str(key): value
                 for key, value in arguments.items()
                 if isinstance(key, str)
-            }
+            },
+            tool_name=tool_name,
         )
         return json.dumps(safe_args, ensure_ascii=False, sort_keys=True)[:limit]
     if arguments is None or arguments == "":
@@ -281,6 +323,49 @@ def _slim_approval_lifecycle_event(event: Mapping[object, object]) -> dict[str, 
             "decided_at",
             "consumed_at",
             "executed_at",
+        )
+        if key in event
+    }
+
+
+def _slim_approved_side_effect_lifecycle_event(
+    event: Mapping[object, object],
+) -> dict[str, object]:
+    return {
+        key: event.get(key)
+        for key in (
+            "event_type",
+            "approval_request_id",
+            "request_id",
+            "session_key",
+            "tool_name",
+            "approval_scope",
+            "args_hash",
+            "status",
+            "actor",
+            "preview_id",
+            "target_path_hash",
+            "before_hash",
+            "after_hash",
+            "diff_truncated",
+            "rollback_id",
+            "execution_status",
+            "rollback_status",
+            "created_at",
+            "command_hash",
+            "sandbox_backend",
+            "sandbox_image",
+            "network_mode",
+            "workspace_mount_mode",
+            "timeout_seconds",
+            "exit_code",
+            "stdout_hash",
+            "stderr_hash",
+            "stdout_bytes",
+            "stderr_bytes",
+            "stdout_truncated",
+            "stderr_truncated",
+            "duration_ms",
         )
         if key in event
     }

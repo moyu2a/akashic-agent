@@ -22,6 +22,8 @@
 - [05-design-decisions.md](./05-design-decisions.md): 重要设计取舍记录。
 - [06-star-log.md](./06-star-log.md): 通用 STAR 复盘案例库。
 - [08-tool-invocation-policy-p1-status.md](./08-tool-invocation-policy-p1-status.md): Tool Safety Gateway P1.1 调用级策略接口状态、规则和验证结果。
+- [09-tool-governance-current-state.md](./09-tool-governance-current-state.md): 工具治理 P1-P4c 当前能力、sandbox/rollback 现状、未开放能力和后续推荐停止点。
+- [10-tool-governance-operator-manual.md](./10-tool-governance-operator-manual.md): 工具治理操作手册，说明 allow/defer/deny、approval、file rollback、shell sandbox、hook 和 audit 边界。
 
 ## 映射规则
 

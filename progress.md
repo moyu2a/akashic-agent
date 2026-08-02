@@ -339,6 +339,136 @@
   - this is a test-environment compatibility repair, not a production dashboard behavior redesign;
   - the new ASGI client is test-only;
   - no commit or push has been made in this step.
+## 2026-07-28 Tool Governance P4c/P5a Queryable ToolAuditLedger Design
+
+- Created isolated worktree from merged `origin/main`: `/home/jjh/git_work/akashic-agent/.worktrees/tool-governance-p4c-audit-ledger`.
+- Branch: `tool-governance-p4c-audit-ledger`, tracking `origin/main`.
+- Starting commit: `7794819 Merge pull request #3 from moyu2a/tool-approval-next`.
+- Restored planning context from `task_plan.md`, `progress.md`, and `findings.md`.
+- Confirmed roadmap says P4b follow-up order is queryable persistent `ToolAuditLedger` first, then external API side-effect replay.
+- Inspected current audit surfaces:
+  - `agent/policies/tool_audit.py` builds bounded trace metadata only.
+  - `ToolApprovalStore` owns durable approval source-of-truth.
+  - `ApprovedSideEffectStore` owns durable approved side-effect source-of-truth and local lifecycle rows.
+  - status commands expose approval and managed side-effect trusted operations but no audit query command yet.
+- Wrote design spec: `docs/superpowers/specs/2026-07-28-tool-governance-p4c-audit-ledger-design.md`.
+- Self-reviewed the spec for placeholders, contradictions, ambiguity, and scope.
+- `docs/` is ignored by `.gitignore`, so the design spec must be staged with `git add -f`.
+- `git diff --check` emitted no output before committing the design/planning docs.
+- Committed design and planning records: `9cdd0e8 docs: design queryable tool audit ledger`.
+- Wrote implementation plan: `docs/superpowers/plans/2026-07-28-tool-governance-p4c-audit-ledger.md`.
+- Self-reviewed the plan for placeholder text, scope creep, type-name consistency, and a bad limit assertion; fixed the assertion inline.
+- Requested independent plan review. Reviewer verdict: ready to execute with fixes.
+- Revised plan to add value-level metadata validation, runtime-wide fail-open tests, real status plugin/passive turn wiring coverage, session-scoped `/tool_audit` filters, side-effect failure lifecycle tests, and schema `user_version` coverage.
+- Task 1 implemented `agent/policies/tool_audit_ledger.py` with schema/query/prune/redaction/fail-open helper and focused ledger coverage; initial review found allowlisted-value bypass risk, fixed by rejecting path/command/secret-like scalar values under allowed keys.
+- Task 2 wired `ToolExecutor` and `DefaultReasoner.run_turn()` to record policy decision ledger events fail-open.
+- Task 3 wired `ToolApprovalRuntime` and status-command approval paths to record requested/approved/denied/expired/consumed/executed/execution_failed lifecycle events.
+- Task 4 wired approved file and shell side-effect runtimes to record preview/apply/rollback/sandbox lifecycle events.
+- Task 5 added `/tool_audit` trusted read-only status command and README docs; RED failed with missing `session:ctx`, GREEN `tests/test_status_commands_approved_side_effects.py` -> `11 passed in 0.89s`; compileall for status command plugin/tests exited `0`; commit `8b2df28 feat: add tool audit status command`.
+- Task 6 verification:
+  - first focused governance run exposed missing temporary test imports `yaml`, `html2text`, then `lxml` from `tests/test_plugin_manager.py` import chain; this was environment/dependency setup, not a P4c behavior regression.
+  - focused governance suite with temporary `--with pyyaml --with html2text --with lxml` -> `144 passed in 4.87s`.
+  - P1-P4c baseline with the same temporary test dependencies -> `187 passed in 3.39s`.
+  - compileall for `agent/policies`, `agent/tool_hooks`, `agent/core/passive_turn.py`, `plugins/status_commands`, and `tests/test_tool_audit_ledger.py` exited `0`.
+  - `git diff --check` emitted no output.
+- Final whole-branch review found blocking gaps: top-level ledger fields were not sanitized, passive reasoner did not pass the ledger into `ToolApprovalRuntime`, ledger construction could fail closed, shell failure lifecycle events could be written before source-of-truth persistence, and the design spec had range-level trailing whitespace.
+- Final-review fixes added top-level structured field sanitization, key-specific metadata validation, artifact ref preservation, fail-open ledger construction, shared reasoner approval/executor ledger wiring, shell failure ledger ordering after persistence, and design spec whitespace cleanup.
+- Final-review fix verification:
+  - focused regression suite `tests/test_tool_audit_ledger.py tests/test_tool_approval_wiring.py tests/test_approved_shell_side_effect_runtime.py tests/test_status_commands_approved_side_effects.py` -> `52 passed in 3.13s`.
+  - P4c focused governance suite including `tests/test_tool_approval_wiring.py` -> `151 passed in 5.40s`.
+  - P1-P4c baseline including `tests/test_tool_approval_wiring.py` -> `193 passed in 3.74s`.
+  - compileall exited `0`.
+- Second final-review pass found remaining redaction gaps for token-shaped secrets, single-token raw output, arbitrary relative artifact refs, and missing shell persistence-failure audit event on fallback persistence failure.
+- Second final-review fixes added field-specific ledger validators, managed artifact ref shape requirements, and persistence-failure audit events on every shell state-persistence failure path.
+- Third final-review fix verification: targeted three-test RED pair -> `3 passed`; focused regression suite -> `54 passed in 3.31s`; P4c focused governance suite -> `153 passed in 5.66s`; P1-P4c baseline -> `194 passed in 3.80s`; compileall exited `0`; `git diff --check` emitted no output.
+- Fourth final-review fixes closed remaining audit-ledger gaps: credential-prefix values are rejected in generic metadata and preview/rollback ids, valid `cli`/`test` channel fields and `model`/`proactive` producer values are preserved, file/shell lifecycle statuses now survive enum validation, and managed file preview/apply/rollback exceptions produce bounded failure ledger events without persisting exception text.
+- Fourth final-review fix verification:
+  - focused regression suite `tests/test_tool_audit_ledger.py tests/test_tool_approval_wiring.py tests/test_approved_shell_side_effect_runtime.py tests/test_status_commands_approved_side_effects.py` -> `58 passed in 3.59s`.
+  - P4c focused governance suite including `tests/test_approved_side_effect_runtime.py` -> `160 passed in 6.05s`.
+  - P1-P4c baseline -> `197 passed in 4.04s`.
+  - compileall for touched policy/plugin/test files exited `0`.
+  - `git diff --check` and `git diff --check 7794819..HEAD` emitted no output.
+- Current P4c conclusion: first-version queryable persistent redacted ledger is implemented as fail-open audit projection; approval and side-effect stores remain source-of-truth; external API side-effect replay, destructive execution, TaskExecution shell resume, shell rollback, and network-enabled shell sandbox remain closed.
+- Documentation closeout after user asked whether to continue tool governance:
+  - Added `my_md/governance/09-tool-governance-current-state.md` with current P1-P4c capabilities, sandbox/rollback status, not-yet-open capabilities, completion estimate, and recommended stopping point.
+  - Updated governance README, roadmap, P1-P4c status, and design decisions.
+  - Recorded DD-006: current recommended stopping point is P4c plus a small P4d operational/documentation closeout; P5 external API side-effect replay should be design-first only when a concrete product need appears.
+
+## 2026-07-27 Tool Governance P4b Documentation and Final Verification
+
+- P4b 已完成第一版 sandboxed approved shell execution：approved `shell` request 不再能由普通 ToolExecutor 直接执行，而是进入 approved shell side-effect runtime。该 runtime 从 workspace 私有 payload vault 读取原始 shell 参数，重新执行 P1/P2 resource policy，生成 sandbox preview，并只通过 Docker/Podman sandbox runner 执行。第一版 fail closed：Docker/Podman 不可用时不回退宿主 shell；workspace 只读挂载；network off；non-root user；read-only rootfs；cap drop；no-new-privileges；pids/memory/cpu/timeout limits。P4b 不支持 shell rollback，不开放 TaskExecution shell resume，不开放 external API side-effect replay。
+- Verification:
+  - P4b focused suite: `61 passed in 3.36s`.
+  - P1/P2/P3/P4/P4b focused baseline: `86 passed in 3.52s`.
+  - compatibility suite: `275 passed in 9.07s`.
+  - compileall exited `0`; `git diff --check` emitted no output.
+- Open follow-ups: P5 queryable `ToolAuditLedger`, then external API side-effect replay; destructive execution, TaskExecution shell resume, shell rollback, and network-enabled shell sandbox remain unavailable.
+- Documentation commit: `8d3076a docs: record p4b sandboxed approved shell workflow`.
+
+## 2026-07-26 Tool Governance P4 Approved File Side Effects
+
+- User requested plan review with review skill, revision if needed, then execution in `tool-approval-next`.
+- Plan reviewed locally; a reviewer subagent was also dispatched for read-only plan review.
+- Plan revisions made before execution:
+  - normalized `/rollback_tool` to take `<approval_id>`;
+  - removed unnecessary `agent/tool_hooks/types.py` modification from Task 4;
+  - clarified direct managed-file blocking applies only when a non-P4 trusted approval context is present, while unapproved file writes still defer and save payloads.
+- Task 1 RED: `tests/test_side_effect_payload_vault.py` failed with missing `agent.policies.side_effect_payload_vault`.
+- Task 1 GREEN: `tests/test_side_effect_payload_vault.py` -> `3 passed in 0.11s`.
+- Task 1 commit: `5cb0c79 feat: add side effect payload vault`.
+- Task 2 RED: `tests/test_file_change_plan.py` failed with missing `agent.policies.file_change_plan`.
+- Task 2 GREEN: `tests/test_file_change_plan.py` -> `4 passed in 0.13s`.
+- Task 2 commit: `93392e3 feat: add file side effect change planning`.
+- Task 3 RED: `tests/test_approved_side_effect_store.py` failed with missing `agent.policies.approved_side_effect_store`.
+- Task 3 GREEN: `tests/test_approved_side_effect_store.py` -> `2 passed in 0.16s`.
+- Task 3 commit: `55f9d27 feat: add approved side effect store`.
+- Task 4 RED: `tests/test_tool_executor_approval_workflow.py tests/test_tool_governance_p3_contract.py` failed because `ToolApprovalRuntime.__init__()` did not accept `side_effect_vault`.
+- Task 4 GREEN: `tests/test_tool_executor_approval_workflow.py tests/test_tool_governance_p3_contract.py` -> `15 passed in 0.90s`.
+- Task 4 commit: `006c841 feat: route approved file side effects through managed runtime`.
+- Task 5 RED: `tests/test_approved_side_effect_runtime.py` failed with missing `agent.policies.approved_side_effect_runtime`.
+- Task 5 first GREEN attempt found a plan test-order bug: the test rolled back before asserting the applied file content; fixed test and plan.
+- Task 5 GREEN: `tests/test_approved_side_effect_runtime.py` -> `2 passed in 0.20s`; compileall for `agent/policies/approved_side_effect_runtime.py` exited `0`.
+- Task 5 commit: `465668d feat: add approved side effect runtime`.
+- Plan reviewer returned Critical feedback:
+  - Task 7 must modify `agent/task_plan/store.py`, not `agent/task_plan/execution_store.py`;
+  - Task 7 needs an atomic waiting-authorization completion path because ordinary `record_tool_event()` / `finish_attempt()` require a running leased attempt;
+  - status commands need a way to pass `TaskExecutionService` into `ApprovedSideEffectRuntime`.
+- Plan reviewer Important feedback applied:
+  - direct managed-file block now keeps the standard approval payload envelope;
+  - status command tests now include an end-to-end `edit_file` apply/rollback case.
+- Task 6 RED: `tests/test_status_commands_approved_side_effects.py` failed because `ToolApprovalCommandModule.__init__()` did not accept `workspace`.
+- Task 6 first GREEN attempt failed because fixed 2026-07-26 test time made approvals expired against real current UTC command runtime; test fixture was changed to current UTC.
+- Task 6 GREEN plus Task 4 follow-up: `tests/test_tool_executor_approval_workflow.py tests/test_tool_governance_p3_contract.py tests/test_status_commands_approved_side_effects.py tests/test_lifecycle_phases.py` -> `55 passed in 1.78s`; compileall for touched status/executor/tests exited `0`.
+- Task 6 commit: `f51e91c feat: add approved side effect status commands`.
+- Task 7 RED: `tests/test_task_execution_file_side_effect_resume.py` failed with `managed_side_effect_payload_missing`, proving TaskExecution defer did not preserve P4 file payloads.
+- Task 7 implementation added TaskExecution defer payload capture, PluginContext/PluginManager/bootstrap service wiring, `TaskPlanStore.get_waiting_execution_attempt_by_approval_id(...)`, and atomic `complete_authorized_file_side_effect_attempt(...)`.
+- Task 7 GREEN: `tests/test_task_execution_file_side_effect_resume.py` -> `3 passed in 0.81s`; TaskExecution regression combo -> `8 passed in 1.34s`; compileall for touched TaskExecution/status/runtime files exited `0`.
+- Task 7 commit: `13fc952 feat: resume task execution approved file side effects`.
+- Task 8 RED: `tests/test_tool_governance_p4_contract.py tests/test_observe_writer.py` failed with `KeyError: 'approved_side_effect_lifecycle'`, proving observe slim traces did not preserve P4 lifecycle metadata.
+- Task 8 implementation added `approved_side_effect_lifecycle` slimming in `plugins/observe/plugin.py`, preserving only bounded approval/runtime metadata and dropping raw content, args summaries, commands, body/cookie/token fields, diff refs, and diff text.
+- Task 8 GREEN: `tests/test_tool_governance_p4_contract.py tests/test_observe_writer.py` -> `18 passed in 0.57s`.
+- Task 8 compile/diff gates: `PYTHONDONTWRITEBYTECODE=1 uv run python -m compileall plugins/observe tests/test_tool_governance_p4_contract.py tests/test_observe_writer.py` exited `0`; `git diff --check` exited `0`.
+- Task 8 review found two Important gaps:
+  - real status-command P4 lifecycle events were written to `TurnCommitted.extra` but observe only slimmed lifecycle events attached to tool calls;
+  - P4 contract tests used direct runtime setup and did not themselves cover normal `ToolExecutor` defer payload capture plus direct approved file execution blocking.
+- Task 8 review follow-up RED: `tests/test_tool_governance_p4_contract.py tests/test_observe_writer.py` failed with `AssertionError: assert []` for empty emitted observe `tool_calls`, proving status-command extra lifecycle was not observed.
+- Task 8 review follow-up implementation:
+  - `_emit_turn_trace` now appends a synthetic bounded `approved_side_effect_lifecycle` trace group from `TurnCommitted.extra`;
+  - observe redaction test now includes raw path-shaped fields;
+  - P4 contract now covers real `ToolExecutor` defer payload storage, approved direct managed-file blocking, and successful managed runtime apply.
+- Task 8 final GREEN: `tests/test_tool_governance_p4_contract.py tests/test_observe_writer.py` -> `20 passed in 0.78s`; compileall for observe/P4 tests exited `0`; `git diff --check` exited `0`.
+- Task 8 amended commit: `95a58db test: add p4 side effect governance contract`.
+- Task 9 verification:
+  - P4 focused suite -> `21 passed in 1.74s`;
+  - P1/P2/P3/P4 focused baseline -> `72 passed in 2.86s`;
+  - compatibility plus P4 coverage -> `270 passed in 8.68s`;
+  - P4 compileall exited `0`;
+  - `git diff --check` emitted no output.
+- Task 9 docs updated:
+  - `my_md/governance/02-current-issues.md`;
+  - `my_md/governance/04-fix-roadmap.md`;
+  - `my_md/governance/08-tool-invocation-policy-p1-status.md`.
+- P4 boundary recorded: file-only approved side-effect execution is implemented for `write_file/edit_file`; shell, external side effects, destructive operations, Docker/Podman sandbox, and full queryable `ToolAuditLedger` remain follow-up work.
 
 ## 2026-07-22 Memory Phase 6s Sleep Hygiene Source-Backed Evidence
 
