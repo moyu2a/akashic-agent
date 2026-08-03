@@ -146,6 +146,7 @@ def build_approval_payload(
         "reason": reason,
         "approval_scope": approval_scope or "tool_call",
         "required_user_action": "approve_or_deny",
+        "next_action": "reply_1_approve_2_deny_3_details",
         "args_hash": args_hash,
         "args_summary": args_summary,
     }
@@ -158,7 +159,11 @@ def build_approval_payload(
         "blocked": True,
         "deferred": action == "defer",
         "error_code": reason,
-        "message": "工具调用需要用户授权后才能执行。",
+        "message": (
+            "工具调用需要用户授权后才能执行。"
+            "审批按顺序逐项处理，不会一次批准全部待审批操作。"
+            "可回复 1 批准当前项、2 拒绝当前项、3 查看详情。"
+        ),
         "invoker_reached": False,
         "approval_request": approval_request,
     }

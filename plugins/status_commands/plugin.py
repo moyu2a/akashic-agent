@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any, cast
 from zoneinfo import ZoneInfo
 
-from agent.lifecycle.types import BeforeTurnCtx, TurnState
+from agent.lifecycle.types import AfterReasoningCtx, BeforeTurnCtx, TurnState
 from agent.policies.approved_side_effect_runtime import ApprovedSideEffectRuntime
 from agent.policies.approved_shell_side_effect_runtime import (
     ApprovedShellSideEffectRuntime,
@@ -46,8 +46,10 @@ logger = logging.getLogger("plugin.status_commands")
 
 _SESSION_SLOT = "session:session"
 _CTX_SLOT = "session:ctx"
+_REASONING_CTX_SLOT = "reasoning:ctx"
 _TS_PATTERN = re.compile(r"(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})")
 _BEIJING_TZ = ZoneInfo("Asia/Shanghai")
+_APPROVAL_REMINDER_META_KEY = "approval_choice_reminder"
 
 
 class MemoryStatusCommandModule:
@@ -225,6 +227,9 @@ class ToolApprovalCommandModule:
             return self._handle_rollback(frame, state)
         if command == "/tool_audit":
             return self._handle_tool_audit(frame, state)
+        choice = _numeric_approval_choice(state.msg.content)
+        if choice:
+            return await self._handle_numeric_choice(frame, state, choice)
         return frame
 
     def _handle_list(self, frame, state: TurnState) -> object:
@@ -245,8 +250,18 @@ class ToolApprovalCommandModule:
             lines.append(f"expired: {len(expired)}")
         if not records:
             lines.append("pending: none")
-        for record in records:
-            lines.extend(["", _format_approval_record(record)])
+        for index, record in enumerate(records):
+            lines.extend(
+                [
+                    "",
+                    _format_approval_record(
+                        record,
+                        current=index == 0,
+                        position=index + 1,
+                        total=len(records),
+                    ),
+                ]
+            )
         frame.slots[_CTX_SLOT] = _abort_ctx(
             state,
             "\n".join(lines),
@@ -297,8 +312,29 @@ class ToolApprovalCommandModule:
             )
             return frame
         record = pending[-1]
+        await self._handle_approve_and_run_record(frame, state, record)
+        return frame
+
+    async def _handle_approve_and_run_record(
+        self,
+        frame,
+        state: TurnState,
+        record: ToolApprovalRequestRecord,
+        *,
+        allow_unsupported_approval: bool = False,
+    ) -> ToolApprovalDecision:
         unsupported_reason = self._approve_last_unsupported_reason(record)
-        if unsupported_reason:
+        if unsupported_reason and not allow_unsupported_approval:
+            decision = ToolApprovalDecision(
+                action="not_applicable",
+                reason=unsupported_reason,
+                approval_request_id=record.approval_request_id,
+                request_id=record.request_id,
+                session_key=record.session_key,
+                tool_name=record.tool_name,
+                approval_scope=record.approval_scope,
+                args_hash=record.args_hash,
+            )
             frame.slots[_CTX_SLOT] = _abort_ctx(
                 state,
                 "\n".join(
@@ -311,7 +347,32 @@ class ToolApprovalCommandModule:
                     ]
                 ),
             )
-            return frame
+            return decision
+        if unsupported_reason:
+            decision = self._approve_or_reject(
+                state=state,
+                approval_request_id=record.approval_request_id,
+                action="approve",
+            )
+            reply = _format_approval_decision(decision)
+            if decision.action == "approved":
+                reply = "\n".join(
+                    [
+                        reply,
+                        f"next: /prepare_tool {record.approval_request_id}",
+                        f"next: /run_approved_tool {record.approval_request_id}",
+                    ]
+                )
+            frame.slots[_CTX_SLOT] = _abort_ctx(
+                state,
+                reply,
+                approval_lifecycle=_approval_lifecycle_from_decisions(
+                    self._approval_store,
+                    [decision],
+                    actor="status_command",
+                ),
+            )
+            return decision
         decision = self._approve_or_reject(
             state=state,
             approval_request_id=record.approval_request_id,
@@ -327,7 +388,7 @@ class ToolApprovalCommandModule:
                     actor="status_command",
                 ),
             )
-            return frame
+            return decision
         await self._handle_run_approved_deferred_tool(
             frame,
             state,
@@ -342,7 +403,7 @@ class ToolApprovalCommandModule:
                     ctx.abort_reply,
                 ]
             )
-        return frame
+        return decision
 
     def _approve_last_unsupported_reason(
         self,
@@ -371,6 +432,65 @@ class ToolApprovalCommandModule:
         if registry_risk != record.risk:
             return "approve_last_tool_risk_mismatch"
         return ""
+
+    async def _handle_numeric_choice(
+        self,
+        frame,
+        state: TurnState,
+        choice: str,
+    ) -> object:
+        record = self._current_pending_request(state.session_key)
+        if record is None:
+            return frame
+
+        if choice == "1":
+            decision = await self._handle_approve_and_run_record(
+                frame,
+                state,
+                record,
+                allow_unsupported_approval=True,
+            )
+            if decision.action == "approved":
+                _append_pending_progress(frame, self._pending_requests(state.session_key))
+            return frame
+
+        if choice == "2":
+            decision = self._approve_or_reject(
+                state=state,
+                approval_request_id=record.approval_request_id,
+                action="deny",
+                reason="numeric_choice_denied",
+            )
+            frame.slots[_CTX_SLOT] = _abort_ctx(
+                state,
+                _format_approval_decision(decision),
+                approval_lifecycle=_approval_lifecycle_from_decisions(
+                    self._approval_store,
+                    [decision],
+                    actor="status_command",
+                ),
+            )
+            if decision.action == "denied":
+                _append_pending_progress(frame, self._pending_requests(state.session_key))
+            return frame
+
+        return self._handle_list(frame, state)
+
+    def _pending_requests(
+        self,
+        session_key: str,
+    ) -> list[ToolApprovalRequestRecord]:
+        return self._approval_store.list_pending_requests(
+            session_key=session_key,
+            now=_approval_now(),
+        )
+
+    def _current_pending_request(
+        self,
+        session_key: str,
+    ) -> ToolApprovalRequestRecord | None:
+        pending = self._pending_requests(session_key)
+        return pending[0] if pending else None
 
     def _handle_deny(self, frame, state: TurnState) -> object:
         logger.info(
@@ -786,6 +906,93 @@ class StatusCommands(Plugin):
             modules,
         )
 
+    def after_reasoning_modules(self) -> list[object]:
+        if self.context.workspace is None:
+            return []
+        plugin_name = self.name or "status_commands"
+        approval_store = ToolApprovalStore(
+            ToolApprovalRuntime.approval_db_path_from_workspace(
+                self.context.workspace
+            )
+        )
+        return [ApprovalReminderAfterReasoningModule(plugin_name, approval_store)]
+
+
+class ApprovalReminderAfterReasoningModule:
+    slot = "status_commands.approval_reminder"
+    requires = ("after_reasoning.emit", _REASONING_CTX_SLOT)
+    produces = (_REASONING_CTX_SLOT,)
+
+    def __init__(
+        self,
+        plugin_name: str,
+        approval_store: ToolApprovalStore,
+    ) -> None:
+        self._plugin_name = plugin_name
+        self._approval_store = approval_store
+
+    async def run(self, frame) -> object:
+        ctx = frame.slots.get(_REASONING_CTX_SLOT)
+        if not isinstance(ctx, AfterReasoningCtx):
+            return frame
+        state = frame.input.state
+        session = state.session
+        if session is None:
+            return frame
+        metadata = getattr(session, "metadata", None)
+        if not isinstance(metadata, dict):
+            return frame
+
+        records = self._approval_store.list_pending_requests(
+            session_key=state.session_key,
+            now=_approval_now(),
+        )
+        if not records:
+            metadata.pop(_APPROVAL_REMINDER_META_KEY, None)
+            return frame
+
+        record = records[0]
+        requested_ids = _requested_approval_ids(ctx.tool_chain)
+        reminder_state = metadata.get(_APPROVAL_REMINDER_META_KEY)
+        if not isinstance(reminder_state, dict):
+            reminder_state = {}
+
+        if record.approval_request_id in requested_ids:
+            if "审批按顺序逐项处理" not in ctx.reply:
+                ctx.reply = _append_approval_choice_block(
+                    ctx.reply,
+                    record,
+                    len(records),
+                )
+            metadata[_APPROVAL_REMINDER_META_KEY] = {
+                "approval_id": record.approval_request_id,
+                "reminded": False,
+            }
+            return frame
+
+        if (
+            reminder_state.get("approval_id") == record.approval_request_id
+            and reminder_state.get("reminded") is True
+        ):
+            return frame
+
+        ctx.reply = _append_approval_light_reminder(
+            ctx.reply,
+            len(records),
+            record,
+        )
+        metadata[_APPROVAL_REMINDER_META_KEY] = {
+            "approval_id": record.approval_request_id,
+            "reminded": True,
+        }
+        logger.info(
+            "[%s:%s] added pending approval reminder for session %s",
+            self._plugin_name,
+            self.__class__.__name__,
+            state.session_key,
+        )
+        return frame
+
 
 def _normalize_command(content: str) -> str:
     parts = (content or "").strip().split(maxsplit=1)
@@ -795,6 +1002,130 @@ def _normalize_command(content: str) -> str:
     if "@" in head:
         head = head.split("@", 1)[0]
     return head
+
+
+def _numeric_approval_choice(content: str) -> str:
+    value = (content or "").strip()
+    return value if value in {"1", "2", "3"} else ""
+
+
+def _requested_approval_ids(
+    tool_chain: tuple[dict[str, Any], ...],
+) -> set[str]:
+    ids: set[str] = set()
+    for group in tool_chain:
+        calls = group.get("calls")
+        if not isinstance(calls, list):
+            continue
+        for call in calls:
+            if not isinstance(call, dict):
+                continue
+            _collect_approval_ids_from_lifecycle(call.get("approval_lifecycle"), ids)
+            _collect_approval_ids_from_tool_result(call.get("result"), ids)
+    return ids
+
+
+def _collect_approval_ids_from_lifecycle(
+    lifecycle: object,
+    ids: set[str],
+) -> None:
+    if not isinstance(lifecycle, list):
+        return
+    for event in lifecycle:
+        if not isinstance(event, dict):
+            continue
+        approval_id = event.get("approval_request_id")
+        status = str(event.get("status") or "")
+        if isinstance(approval_id, str) and approval_id and status == "pending":
+            ids.add(approval_id)
+
+
+def _collect_approval_ids_from_tool_result(result: object, ids: set[str]) -> None:
+    if isinstance(result, str):
+        try:
+            parsed = json.loads(result)
+        except (TypeError, ValueError, json.JSONDecodeError):
+            return
+    else:
+        parsed = result
+    if not isinstance(parsed, dict):
+        return
+    approval_request = parsed.get("approval_request")
+    if not isinstance(approval_request, dict):
+        return
+    approval_id = approval_request.get("approval_request_id")
+    if isinstance(approval_id, str) and approval_id:
+        ids.add(approval_id)
+
+
+def _append_approval_choice_block(
+    reply: str,
+    record: ToolApprovalRequestRecord,
+    count: int,
+) -> str:
+    return _append_reply_block(
+        reply,
+        "\n".join(
+            [
+                "",
+                f"当前处理第 1/{max(1, count)} 项：{record.tool_name}",
+                "审批按顺序逐项处理，不会一次批准全部待审批操作。",
+                "可回复 1 批准当前项、2 拒绝当前项、3 查看详情。",
+                _format_approval_actions(record),
+            ]
+        ),
+    )
+
+
+def _append_approval_light_reminder(
+    reply: str,
+    count: int,
+    record: ToolApprovalRequestRecord,
+) -> str:
+    count = max(1, count)
+    return _append_reply_block(
+        reply,
+        "\n".join(
+            [
+                f"还有 {count} 个待审批操作，当前项：{record.tool_name}。",
+                "可回复 1 批准当前项、2 拒绝当前项、3 查看详情。",
+            ]
+        ),
+    )
+
+
+def _append_reply_block(reply: str, block: str) -> str:
+    reply = str(reply or "").rstrip()
+    block = str(block or "").strip()
+    if not reply:
+        return block
+    return f"{reply}\n\n{block}"
+
+
+def _append_pending_progress(
+    frame,
+    records: list[ToolApprovalRequestRecord],
+) -> None:
+    ctx = frame.slots.get(_CTX_SLOT)
+    if ctx is None:
+        return
+    if records:
+        progress = "\n".join(
+            [
+                "本次只处理当前项。",
+                f"剩余待审批 {len(records)} 项。",
+                f"下一项：{records[0].tool_name}",
+                "可回复 1 批准当前项、2 拒绝当前项、3 查看详情。",
+            ]
+        )
+    else:
+        progress = "\n".join(
+            [
+                "本次只处理当前项。",
+                "当前 session 已无待审批操作。",
+            ]
+        )
+    ctx.abort_reply = _append_reply_block(ctx.abort_reply, progress)
 
 
 def _approval_command_id(content: str) -> str:
@@ -914,17 +1245,42 @@ def _safe_tool_result_status(output: object) -> str:
     return value
 
 
-def _format_approval_record(record: ToolApprovalRequestRecord) -> str:
+def _format_approval_record(
+    record: ToolApprovalRequestRecord,
+    *,
+    current: bool = False,
+    position: int | None = None,
+    total: int | None = None,
+) -> str:
+    lines = [
+        f"id: {record.approval_request_id}",
+        f"status: {record.status}",
+        f"tool: {record.tool_name}",
+        f"risk: {record.risk}",
+        f"scope: {record.approval_scope}",
+        f"args_hash: {record.args_hash}",
+        f"expires_at: {record.expires_at}",
+        f"policy_reason: {record.policy_reason}",
+    ]
+    if position is not None and total is not None:
+        lines.append(f"queue_position: {position}/{total}")
+    if current:
+        lines.extend(["current: yes", "", _format_approval_actions(record)])
+    else:
+        lines.append("queue: waiting_for_previous_approval")
+    return "\n".join(lines)
+
+
+def _format_approval_actions(record: ToolApprovalRequestRecord) -> str:
+    if record.tool_name in MANAGED_SIDE_EFFECT_TOOLS or record.risk != "write":
+        approve_text = "1. 批准当前项（之后按提示 prepare/run）"
+    else:
+        approve_text = "1. 批准并执行当前项"
     return "\n".join(
         [
-            f"id: {record.approval_request_id}",
-            f"status: {record.status}",
-            f"tool: {record.tool_name}",
-            f"risk: {record.risk}",
-            f"scope: {record.approval_scope}",
-            f"args_hash: {record.args_hash}",
-            f"expires_at: {record.expires_at}",
-            f"policy_reason: {record.policy_reason}",
+            approve_text,
+            "2. 拒绝当前项",
+            "3. 查看详情",
         ]
     )
 

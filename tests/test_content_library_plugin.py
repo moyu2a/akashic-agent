@@ -208,6 +208,21 @@ class RecordingScheduleTool(Tool):
         return "已注册定时任务 「content_daily_review」"
 
 
+def _content_plugin_context(
+    *,
+    tmp_path: Path,
+    registry: ToolRegistry | None = None,
+) -> PluginContext:
+    return PluginContext(
+        event_bus=EventBus(),
+        tool_registry=registry or ToolRegistry(),
+        plugin_id="content_library",
+        plugin_dir=tmp_path / "plugins" / "content_library",
+        kv_store=PluginKVStore(tmp_path / "kv.json"),
+        workspace=tmp_path,
+    )
+
+
 async def _run_content_command(module, content: str):
     msg = InboundMessage(
         channel="cli",
@@ -307,6 +322,98 @@ async def test_content_review_daily_command_registers_soft_schedule(
             "session_key": "cli:local",
         }
     ]
+
+
+@pytest.mark.asyncio
+async def test_content_review_status_reports_missing_schedule(tmp_path: Path) -> None:
+    from agent.scheduler import LatencyTracker, SchedulerService
+    from agent.tools.message_push import MessagePushTool
+    from agent.tools.schedule import ListSchedulesTool
+    from plugins.content_library.plugin import ContentLibrary
+
+    scheduler = SchedulerService(
+        store_path=tmp_path / "schedules.json",
+        push_tool=MessagePushTool(),
+        tracker=LatencyTracker(default=25.0),
+    )
+    registry = ToolRegistry()
+    registry.register(ListSchedulesTool(scheduler), risk="read-only")
+    plugin = ContentLibrary()
+    plugin.context = _content_plugin_context(tmp_path=tmp_path, registry=registry)
+    await plugin.initialize()
+    module = plugin.before_turn_modules()[0]
+
+    ctx = await _run_content_command(module, "/content_review_status")
+
+    assert "内容回顾状态" in ctx.abort_reply
+    assert "status: not_scheduled" in ctx.abort_reply
+    assert "/content_review_daily HH:MM" in ctx.abort_reply
+
+
+@pytest.mark.asyncio
+async def test_content_review_status_reports_schedule_and_recent_count(
+    tmp_path: Path,
+) -> None:
+    from agent.scheduler import LatencyTracker, SchedulerService
+    from agent.tools.message_push import MessagePushTool
+    from agent.tools.schedule import ListSchedulesTool
+    from plugins.content_library.plugin import ContentLibrary
+    from tests.conftest import make_job
+
+    scheduler = SchedulerService(
+        store_path=tmp_path / "schedules.json",
+        push_tool=MessagePushTool(),
+        tracker=LatencyTracker(default=25.0),
+    )
+    target = make_job(
+        name="content_daily_review",
+        tier="soft",
+        channel="cli",
+        chat_id="local",
+        prompt="内容回顾",
+        timezone_="Asia/Shanghai",
+    )
+    target.run_count = 1
+    target.last_status = "pushed"
+    target.last_push_result = "文本已发送"
+    target.last_content_preview = "最近你保存了 1 条内容"
+    other = make_job(
+        name="content_daily_review",
+        tier="soft",
+        channel="telegram",
+        chat_id="other",
+        prompt="内容回顾",
+    )
+    other.last_status = "failed"
+    other.last_error = "boom"
+    scheduler._jobs[target.id] = target
+    scheduler._jobs[other.id] = other
+
+    registry = ToolRegistry()
+    registry.register(ListSchedulesTool(scheduler), risk="read-only")
+    plugin = ContentLibrary()
+    plugin.context = _content_plugin_context(tmp_path=tmp_path, registry=registry)
+    await plugin.initialize()
+    store = plugin._require_store()
+    store.save_item(
+        channel="cli",
+        chat_id="local",
+        url="https://www.bilibili.com/video/BV123/",
+        title="英雄联盟 TheShy 视频",
+        tags=["英雄联盟"],
+        captured_at=datetime.now(timezone.utc) - timedelta(hours=1),
+    )
+    module = plugin.before_turn_modules()[0]
+
+    ctx = await _run_content_command(module, "/content_review_status")
+
+    assert "内容回顾状态" in ctx.abort_reply
+    assert "content_daily_review" in ctx.abort_reply
+    assert "最近: pushed" in ctx.abort_reply
+    assert "文本已发送" in ctx.abort_reply
+    assert "最近你保存了 1 条内容" in ctx.abort_reply
+    assert "最近 24 小时可回顾内容: 1 条" in ctx.abort_reply
+    assert "boom" not in ctx.abort_reply
 
 
 @pytest.mark.asyncio

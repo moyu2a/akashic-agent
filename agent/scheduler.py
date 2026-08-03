@@ -278,6 +278,14 @@ class ScheduledJob:
     enabled: bool = True
     id: str = field(default_factory=lambda: str(uuid.uuid4()))
 
+    last_started_at: datetime | None = None
+    last_finished_at: datetime | None = None
+    last_status: str = ""
+    last_error: str = ""
+    last_push_result: str = ""
+    last_content_preview: str = ""
+    last_duration_seconds: float | None = None
+
 
 # ── JobStore ─────────────────────────────────────────────────────
 
@@ -310,12 +318,24 @@ class JobStore:
         d = asdict(job)
         d["fire_at"] = job.fire_at.isoformat()
         d["created_at"] = job.created_at.isoformat()
+        d["last_started_at"] = (
+            job.last_started_at.isoformat() if job.last_started_at is not None else None
+        )
+        d["last_finished_at"] = (
+            job.last_finished_at.isoformat()
+            if job.last_finished_at is not None
+            else None
+        )
         return d
 
     def _from_dict(self, d: dict[str, Any]) -> ScheduledJob:
         d = dict(d)
         d["fire_at"] = self._parse_dt(d["fire_at"])
         d["created_at"] = self._parse_dt(d["created_at"])
+        if d.get("last_started_at") is not None:
+            d["last_started_at"] = self._parse_dt(d["last_started_at"])
+        if d.get("last_finished_at") is not None:
+            d["last_finished_at"] = self._parse_dt(d["last_finished_at"])
         return ScheduledJob(**d)
 
     @staticmethod
@@ -451,10 +471,17 @@ class SchedulerService:
                 asyncio.create_task(self._execute_and_reschedule(job))
 
     async def _execute_and_reschedule(self, job: ScheduledJob) -> None:
+        started_monotonic = self._mark_started(job)
         try:
-            await self._execute(job)
+            await self._execute(job, started_monotonic)
             job.run_count += 1
         except Exception as e:
+            self._finish_job(
+                job,
+                status="failed",
+                error=_clip_text(str(e)),
+                started_monotonic=started_monotonic,
+            )
             logger.error(f"Job {job.id[:8]} execution failed: {e}", exc_info=True)
         finally:
             self._in_flight.discard(job.id)
@@ -471,13 +498,21 @@ class SchedulerService:
                 self._jobs.pop(job.id, None)
             self.store.save(self._jobs)
 
-    async def _execute(self, job: ScheduledJob) -> None:
+    async def _execute(self, job: ScheduledJob, started_monotonic: float) -> None:
         label = job.name or job.id[:8]
         if job.tier == "instant":
             result = await self.push_tool.execute(
                 channel=job.channel,
                 chat_id=job.chat_id,
                 message=job.message,
+            )
+            result_text = str(result)
+            self._finish_job(
+                job,
+                status="push_failed" if _is_push_failure(result_text) else "pushed",
+                push_result=_clip_text(result_text),
+                content_preview=_preview_text(job.message),
+                started_monotonic=started_monotonic,
             )
             logger.info(f"[scheduler] instant 推送完成 {label!r}: {result}")
         else:
@@ -504,9 +539,58 @@ class SchedulerService:
                     chat_id=job.chat_id,
                     message=content,
                 )
+                result_text = str(result)
+                self._finish_job(
+                    job,
+                    status=(
+                        "push_failed" if _is_push_failure(result_text) else "pushed"
+                    ),
+                    push_result=_clip_text(result_text),
+                    content_preview=_preview_text(content),
+                    duration_seconds=elapsed,
+                    started_monotonic=started_monotonic,
+                )
                 logger.info(f"[scheduler] soft 推送完成 {label!r}: {result}")
             else:
+                self._finish_job(
+                    job,
+                    status="skipped_empty",
+                    duration_seconds=elapsed,
+                    started_monotonic=started_monotonic,
+                )
                 logger.warning(f"[scheduler] soft AI 返回空内容 {label!r}，跳过推送")
+
+    def _mark_started(self, job: ScheduledJob) -> float:
+        job.last_started_at = self._now()
+        job.last_finished_at = None
+        job.last_status = "running"
+        job.last_error = ""
+        job.last_push_result = ""
+        job.last_content_preview = ""
+        job.last_duration_seconds = None
+        return time.monotonic()
+
+    def _finish_job(
+        self,
+        job: ScheduledJob,
+        *,
+        status: str,
+        error: str = "",
+        push_result: str = "",
+        content_preview: str = "",
+        duration_seconds: float | None = None,
+        started_monotonic: float,
+    ) -> None:
+        job.last_finished_at = self._now()
+        job.last_status = status
+        job.last_error = error
+        job.last_push_result = push_result
+        job.last_content_preview = content_preview
+        job.last_duration_seconds = (
+            duration_seconds
+            if duration_seconds is not None
+            else max(0.0, time.monotonic() - started_monotonic)
+        )
 
     def _get_agent_loop(self) -> Any:
         loop = (
@@ -527,3 +611,22 @@ class SchedulerService:
         while next_fire <= after:
             next_fire += interval
         return next_fire
+
+
+def _clip_text(value: str | None, limit: int = 240) -> str:
+    text = _single_line(value)
+    if len(text) <= limit:
+        return text
+    return text[: limit - 1] + "…"
+
+
+def _preview_text(value: str | None, limit: int = 120) -> str:
+    return _clip_text(value, limit=limit)
+
+
+def _single_line(value: str | None) -> str:
+    return " ".join(str(value or "").split())
+
+
+def _is_push_failure(result: str) -> bool:
+    return result.strip().startswith("发送失败")

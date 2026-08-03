@@ -179,14 +179,42 @@ class ScheduleTool(Tool):
 class ListSchedulesTool(Tool):
     name = "list_schedules"
     description = "列出所有待执行的定时任务"
-    parameters = {"type": "object", "properties": {}}
+    parameters = {
+        "type": "object",
+        "properties": {
+            "name": {
+                "type": "string",
+                "description": "按任务名过滤",
+            },
+            "channel": {
+                "type": "string",
+                "description": "按渠道过滤",
+            },
+            "chat_id": {
+                "type": "string",
+                "description": "按会话过滤",
+            },
+        },
+    }
 
     def __init__(self, service: SchedulerService) -> None:
         self._service = service
 
     async def execute(self, **kwargs: Any) -> str:
-        jobs = self._service.list_jobs()
+        name = str(kwargs.get("name") or "").strip()
+        channel = str(kwargs.get("channel") or "").strip()
+        chat_id = str(kwargs.get("chat_id") or "").strip()
+
+        jobs = [
+            job
+            for job in self._service.list_jobs()
+            if (not name or job.name == name)
+            and (not channel or job.channel == channel)
+            and (not chat_id or job.chat_id == chat_id)
+        ]
         if not jobs:
+            if name or channel or chat_id:
+                return "当前没有匹配的定时任务"
             return "当前没有待执行的定时任务"
 
         lines = [f"定时任务列表（共 {len(jobs)} 个）："]
@@ -207,8 +235,15 @@ class ListSchedulesTool(Tool):
                 f"• {label}  [{job.tier}/{job.trigger}]  "
                 f"下次: {time_str}  "
                 f"内容: {action}  "
-                f"已运行: {job.run_count}次"
+                f"已运行: {job.run_count}次  "
+                f"最近: {job.last_status or 'none'}"
             )
+            if job.last_push_result:
+                lines.append(f"  推送: {job.last_push_result}")
+            if job.last_content_preview:
+                lines.append(f"  摘要: {job.last_content_preview}")
+            if job.last_error:
+                lines.append(f"  错误: {job.last_error}")
         return "\n".join(lines)
 
 

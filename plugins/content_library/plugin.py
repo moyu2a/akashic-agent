@@ -182,6 +182,8 @@ class ContentReviewCommandModule:
             return self._handle_review_now(frame, state)
         if command == "/content_review_daily":
             return await self._handle_review_daily(frame, state)
+        if command == "/content_review_status":
+            return await self._handle_review_status(frame, state)
         return frame
 
     def _handle_review_now(self, frame, state: TurnState) -> object:
@@ -231,6 +233,57 @@ class ContentReviewCommandModule:
             },
         )
         frame.slots[_CTX_SLOT] = _abort_ctx(state, str(result))
+        return frame
+
+    async def _handle_review_status(self, frame, state: TurnState) -> object:
+        registry = self._plugin.context.tool_registry
+        if registry is None or not getattr(registry, "has_tool", lambda name: False)(
+            "list_schedules"
+        ):
+            frame.slots[_CTX_SLOT] = _abort_ctx(
+                state,
+                "内容回顾状态\nstatus: error\nreason: list_schedules_tool_unavailable",
+            )
+            return frame
+
+        schedules = await registry.execute(
+            "list_schedules",
+            {
+                "name": "content_daily_review",
+                "channel": state.msg.channel,
+                "chat_id": state.msg.chat_id,
+            },
+        )
+        recent = self._plugin._require_store().list_recent_items(
+            channel=state.msg.channel,
+            chat_id=state.msg.chat_id,
+            hours=24,
+            limit=20,
+            for_push=True,
+        )
+
+        if "没有匹配的定时任务" in str(schedules) or "当前没有待执行的定时任务" in str(
+            schedules
+        ):
+            reply = "\n".join(
+                [
+                    "内容回顾状态",
+                    "status: not_scheduled",
+                    "说明: 当前会话还没有每日内容回顾任务",
+                    "创建: /content_review_daily HH:MM",
+                    f"最近 24 小时可回顾内容: {recent.count} 条",
+                ]
+            )
+        else:
+            reply = "\n".join(
+                [
+                    "内容回顾状态",
+                    str(schedules),
+                    f"最近 24 小时可回顾内容: {recent.count} 条",
+                ]
+            )
+
+        frame.slots[_CTX_SLOT] = _abort_ctx(state, reply)
         return frame
 
 

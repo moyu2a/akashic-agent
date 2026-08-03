@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, call
 
 import pytest
 
-from agent.scheduler import LatencyTracker, SchedulerService, ScheduledJob
+from agent.scheduler import JobStore, LatencyTracker, SchedulerService, ScheduledJob
 from tests.conftest import drain_tasks, make_job
 
 # ── Helpers ──────────────────────────────────────────────────────
@@ -58,6 +58,27 @@ async def test_instant_push_receives_correct_args(
     )
 
 
+async def test_instant_records_last_pushed_result(
+    tmp_path, mock_push, mock_loop, fixed_now
+):
+    svc = make_service(tmp_path, mock_push, mock_loop, fixed_now)
+    job = make_job(
+        tier="instant",
+        fire_at=fixed_now - timedelta(seconds=1),
+        message="喝水了",
+    )
+    svc._jobs[job.id] = job
+
+    await svc._tick()
+    await drain_tasks()
+
+    assert job.last_status == "pushed"
+    assert job.last_push_result == "文本已发送"
+    assert job.last_error == ""
+    assert job.last_started_at is not None
+    assert job.last_finished_at is not None
+
+
 # ── Execution: SOFT ──────────────────────────────────────────────
 
 
@@ -107,6 +128,100 @@ async def test_soft_sends_ai_response_via_push(
     mock_push.execute.assert_called_once_with(
         channel=job.channel, chat_id=job.chat_id, message="北京今天晴，15°C"
     )
+
+
+async def test_soft_records_push_diagnostics(
+    tmp_path, mock_push, mock_loop, fixed_now
+):
+    mock_loop.process_direct = AsyncMock(return_value="北京今天晴，15°C")
+    svc = make_service(tmp_path, mock_push, mock_loop, fixed_now)
+    job = make_job(
+        trigger="every",
+        tier="soft",
+        fire_at=fixed_now - timedelta(seconds=30),
+        interval_seconds=3600,
+        prompt="查询北京天气",
+    )
+    svc._jobs[job.id] = job
+
+    await svc._tick()
+    await drain_tasks()
+
+    stored = svc._jobs[job.id]
+    assert stored.last_status == "pushed"
+    assert stored.last_push_result == "文本已发送"
+    assert stored.last_content_preview == "北京今天晴，15°C"
+    assert stored.last_duration_seconds is not None
+
+
+async def test_soft_records_empty_skip_without_push(
+    tmp_path, mock_push, mock_loop, fixed_now
+):
+    mock_loop.process_direct = AsyncMock(return_value="")
+    svc = make_service(tmp_path, mock_push, mock_loop, fixed_now)
+    job = make_job(
+        trigger="every",
+        tier="soft",
+        fire_at=fixed_now - timedelta(seconds=30),
+        interval_seconds=3600,
+        prompt="内容回顾",
+    )
+    svc._jobs[job.id] = job
+
+    await svc._tick()
+    await drain_tasks()
+
+    stored = svc._jobs[job.id]
+    assert stored.last_status == "skipped_empty"
+    assert stored.last_error == ""
+    assert stored.last_push_result == ""
+    mock_push.execute.assert_not_called()
+
+
+async def test_soft_records_push_failed_result(
+    tmp_path, mock_push, mock_loop, fixed_now
+):
+    mock_loop.process_direct = AsyncMock(return_value="摘要")
+    mock_push.execute = AsyncMock(return_value="发送失败：network")
+    svc = make_service(tmp_path, mock_push, mock_loop, fixed_now)
+    job = make_job(
+        trigger="every",
+        tier="soft",
+        fire_at=fixed_now - timedelta(seconds=30),
+        interval_seconds=3600,
+        prompt="内容回顾",
+    )
+    svc._jobs[job.id] = job
+
+    await svc._tick()
+    await drain_tasks()
+
+    stored = svc._jobs[job.id]
+    assert stored.last_status == "push_failed"
+    assert stored.last_push_result == "发送失败：network"
+
+
+async def test_soft_records_execution_failure(
+    tmp_path, mock_push, mock_loop, fixed_now
+):
+    mock_loop.process_direct = AsyncMock(side_effect=RuntimeError("boom"))
+    svc = make_service(tmp_path, mock_push, mock_loop, fixed_now)
+    job = make_job(
+        trigger="every",
+        tier="soft",
+        fire_at=fixed_now - timedelta(seconds=30),
+        interval_seconds=3600,
+        prompt="内容回顾",
+    )
+    svc._jobs[job.id] = job
+
+    await svc._tick()
+    await drain_tasks()
+
+    stored = svc._jobs[job.id]
+    assert stored.last_status == "failed"
+    assert "boom" in stored.last_error
+    assert stored.last_finished_at is not None
 
 
 async def test_soft_records_latency(tmp_path, mock_push, mock_loop, fixed_now):
@@ -336,6 +451,28 @@ def test_every_misfire_advances_to_future(tmp_path, mock_push, mock_loop, fixed_
 
     assert job.id in svc._jobs
     assert svc._jobs[job.id].fire_at > fixed_now
+
+
+def test_job_store_round_trips_scheduler_diagnostics(tmp_path):
+    path = tmp_path / "jobs.json"
+    store = JobStore(path)
+    job = make_job(name="daily")
+    job.last_started_at = datetime(2025, 6, 1, 12, 0, 0, tzinfo=timezone.utc)
+    job.last_finished_at = datetime(2025, 6, 1, 12, 0, 2, tzinfo=timezone.utc)
+    job.last_status = "pushed"
+    job.last_push_result = "文本已发送"
+    job.last_content_preview = "摘要"
+    job.last_duration_seconds = 2.0
+    store.save({job.id: job})
+
+    loaded = store.load()[0]
+
+    assert loaded.last_started_at == job.last_started_at
+    assert loaded.last_finished_at == job.last_finished_at
+    assert loaded.last_status == "pushed"
+    assert loaded.last_push_result == "文本已发送"
+    assert loaded.last_content_preview == "摘要"
+    assert loaded.last_duration_seconds == 2.0
 
 
 # ── Cancel ───────────────────────────────────────────────────────

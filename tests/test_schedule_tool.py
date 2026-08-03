@@ -211,6 +211,47 @@ async def test_list_shows_jobs(tmp_path, mock_push, mock_loop):
     assert "喝水提醒" in result
 
 
+async def test_list_shows_last_status_and_filters_jobs(tmp_path, mock_push, mock_loop):
+    svc = make_svc(tmp_path, mock_push, mock_loop)
+    target = make_job(
+        name="content_daily_review",
+        tier="soft",
+        channel="cli",
+        chat_id="local",
+        prompt="内容回顾",
+    )
+    target.last_status = "pushed"
+    target.last_push_result = "文本已发送"
+    target.last_content_preview = "最近你保存了 1 条内容"
+    target.last_duration_seconds = 1.25
+    other = make_job(
+        name="content_daily_review",
+        tier="soft",
+        channel="telegram",
+        chat_id="other",
+        prompt="内容回顾",
+    )
+    other.last_status = "failed"
+    other.last_error = "boom"
+    svc._jobs[target.id] = target
+    svc._jobs[other.id] = other
+
+    tool = ListSchedulesTool(svc)
+    result = await tool.execute(
+        name="content_daily_review",
+        channel="cli",
+        chat_id="local",
+    )
+
+    assert "共 1 个" in result
+    assert "content_daily_review" in result
+    assert "最近: pushed" in result
+    assert "文本已发送" in result
+    assert "最近你保存了 1 条内容" in result
+    assert "boom" not in result
+    assert "telegram" not in result
+
+
 # ── CancelScheduleTool ───────────────────────────────────────────
 
 

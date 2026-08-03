@@ -243,6 +243,9 @@ def test_deferred_write_persists_pending_approval_id(tmp_path: Path) -> None:
     assert record is not None
     assert record.status == "pending"
     assert payload["approval_request"]["expires_at"] == record.expires_at
+    assert "批准当前项" in payload["message"]
+    assert "不会一次批准全部" in payload["message"]
+    assert payload["approval_request"]["next_action"] == "reply_1_approve_2_deny_3_details"
     assert "hello" not in str(payload["approval_request"]["args_summary"])
 
 

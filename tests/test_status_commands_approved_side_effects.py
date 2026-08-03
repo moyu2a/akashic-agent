@@ -8,6 +8,8 @@ from types import SimpleNamespace
 
 import pytest
 
+from agent.core.response_parser import ResponseMetadata
+from agent.lifecycle.types import AfterReasoningCtx, AfterReasoningInput
 from agent.lifecycle.types import TurnState
 from agent.plugins.context import PluginContext, PluginKVStore
 from agent.policies.approved_side_effect_store import ApprovedSideEffectStore
@@ -24,7 +26,11 @@ from agent.tool_hooks import ToolExecutionRequest, ToolExecutor
 from agent.tools.base import Tool
 from agent.tools.registry import ToolRegistry
 from bus.events import InboundMessage
-from plugins.status_commands.plugin import StatusCommands, ToolApprovalCommandModule
+from plugins.status_commands.plugin import (
+    ApprovalReminderAfterReasoningModule,
+    StatusCommands,
+    ToolApprovalCommandModule,
+)
 
 
 @dataclass
@@ -108,6 +114,60 @@ async def _run_command(
     assert ctx.abort is True
     assert "raw-secret-content" not in ctx.abort_reply
     return ctx
+
+
+async def _run_command_frame(
+    module: ToolApprovalCommandModule,
+    content: str,
+    *,
+    session_key: str = "cli:local",
+):
+    msg = InboundMessage(
+        channel="cli",
+        sender="user",
+        chat_id="local",
+        content=content,
+        timestamp=datetime(2026, 7, 26, 9, 2, tzinfo=UTC),
+    )
+    state = TurnState(msg=msg, session_key=session_key, dispatch_outbound=True)
+    frame = SimpleNamespace(slots={}, input=state)
+    return await module.run(frame)
+
+
+async def _run_approval_reminder(
+    module: ApprovalReminderAfterReasoningModule,
+    *,
+    session,
+    reply: str,
+    tool_chain: tuple[dict[str, object], ...] = (),
+) -> AfterReasoningCtx:
+    msg = InboundMessage(
+        channel="cli",
+        sender="user",
+        chat_id="local",
+        content="普通对话",
+        timestamp=datetime(2026, 7, 26, 9, 2, tzinfo=UTC),
+    )
+    state = TurnState(msg=msg, session_key=session.key, dispatch_outbound=True)
+    state.session = session
+    ctx = AfterReasoningCtx(
+        session_key=session.key,
+        channel="cli",
+        chat_id="local",
+        tools_used=(),
+        thinking=None,
+        response_metadata=ResponseMetadata(raw_text=reply),
+        streamed=False,
+        tool_chain=tool_chain,
+        context_retry={},
+        reply=reply,
+    )
+    frame = SimpleNamespace(
+        slots={"reasoning:ctx": ctx},
+        input=AfterReasoningInput(state=state, turn_result=SimpleNamespace()),
+    )
+    await module.run(frame)
+    return frame.slots["reasoning:ctx"]
 
 
 def _approved_file(
@@ -439,6 +499,352 @@ async def test_approve_last_approves_and_executes_latest_plugin_write_tool(
     assert runtime.store.get_request(first_id).status == "pending"
     assert runtime.store.get_request(second_id).status == "executed"
     assert "latest-secret-content" not in ran.abort_reply
+
+
+@pytest.mark.asyncio
+async def test_numeric_choice_approves_and_executes_latest_plugin_write_tool(
+    tmp_path: Path,
+) -> None:
+    workspace = tmp_path
+    runtime = _approval_runtime(workspace)
+    registry = ToolRegistry()
+    tool = RecordingPluginWriteTool()
+    registry.register(tool, risk="write")
+    registry.set_context(channel="cli", chat_id="local", session_key="cli:local")
+    metadata = registry.get_invocation_metadata("save_content_item")
+
+    async def invoke(tool_name: str, args: dict[str, object]) -> object:
+        return await registry.execute(tool_name, args)
+
+    deferred = await ToolExecutor(approval_runtime=runtime).execute(
+        ToolExecutionRequest(
+            call_id="call-plugin-write-choice",
+            tool_name="save_content_item",
+            arguments={
+                "url": "https://www.bilibili.com/video/BV333/",
+                "note": "choice-secret-content",
+            },
+            source="passive",
+            session_key="cli:local",
+            channel="cli",
+            chat_id="local",
+            registered=bool(metadata["registered"]),
+            registry_risk=str(metadata["registry_risk"]),
+            registry_capabilities=metadata["registry_capabilities"],
+        ),
+        invoke,
+    )
+    approval_id = json.loads(deferred.output)["approval_request"]["approval_request_id"]
+    module = ToolApprovalCommandModule(
+        "status_commands",
+        runtime.store,
+        workspace=workspace,
+        side_effect_store=ApprovedSideEffectStore(
+            ApprovedSideEffectStore.db_path_from_workspace(workspace)
+        ),
+        side_effect_vault=runtime.side_effect_vault,
+        tool_registry=registry,
+    )
+
+    ran = await _run_command(module, "1")
+
+    assert "save_content_item" in ran.abort_reply
+    assert "created" in ran.abort_reply
+    assert tool.calls == [
+        {
+            "channel": "cli",
+            "chat_id": "local",
+            "session_key": "cli:local",
+            "url": "https://www.bilibili.com/video/BV333/",
+            "note": "choice-secret-content",
+        }
+    ]
+    assert runtime.store.get_request(approval_id).status == "executed"
+    assert "choice-secret-content" not in ran.abort_reply
+
+
+@pytest.mark.asyncio
+async def test_numeric_choice_approves_first_pending_plugin_write_tool(
+    tmp_path: Path,
+) -> None:
+    workspace = tmp_path
+    runtime = _approval_runtime(workspace)
+    registry = ToolRegistry()
+    tool = RecordingPluginWriteTool()
+    registry.register(tool, risk="write")
+    registry.set_context(channel="cli", chat_id="local", session_key="cli:local")
+    metadata = registry.get_invocation_metadata("save_content_item")
+
+    async def invoke(tool_name: str, args: dict[str, object]) -> object:
+        return await registry.execute(tool_name, args)
+
+    first = await ToolExecutor(approval_runtime=runtime).execute(
+        ToolExecutionRequest(
+            call_id="call-plugin-write-first",
+            tool_name="save_content_item",
+            arguments={
+                "url": "https://www.bilibili.com/video/BV-FIRST/",
+                "note": "first-choice-content",
+            },
+            source="passive",
+            session_key="cli:local",
+            channel="cli",
+            chat_id="local",
+            registered=bool(metadata["registered"]),
+            registry_risk=str(metadata["registry_risk"]),
+            registry_capabilities=metadata["registry_capabilities"],
+        ),
+        invoke,
+    )
+    second = await ToolExecutor(approval_runtime=runtime).execute(
+        ToolExecutionRequest(
+            call_id="call-plugin-write-second",
+            tool_name="save_content_item",
+            arguments={
+                "url": "https://www.bilibili.com/video/BV-SECOND/",
+                "note": "second-choice-content",
+            },
+            source="passive",
+            session_key="cli:local",
+            channel="cli",
+            chat_id="local",
+            registered=bool(metadata["registered"]),
+            registry_risk=str(metadata["registry_risk"]),
+            registry_capabilities=metadata["registry_capabilities"],
+        ),
+        invoke,
+    )
+    first_id = json.loads(first.output)["approval_request"]["approval_request_id"]
+    second_id = json.loads(second.output)["approval_request"]["approval_request_id"]
+    module = ToolApprovalCommandModule(
+        "status_commands",
+        runtime.store,
+        workspace=workspace,
+        side_effect_store=ApprovedSideEffectStore(
+            ApprovedSideEffectStore.db_path_from_workspace(workspace)
+        ),
+        side_effect_vault=runtime.side_effect_vault,
+        tool_registry=registry,
+    )
+
+    ran = await _run_command(module, "1")
+
+    assert tool.calls == [
+        {
+            "channel": "cli",
+            "chat_id": "local",
+            "session_key": "cli:local",
+            "url": "https://www.bilibili.com/video/BV-FIRST/",
+            "note": "first-choice-content",
+        }
+    ]
+    assert runtime.store.get_request(first_id).status == "executed"
+    assert runtime.store.get_request(second_id).status == "pending"
+    assert "剩余待审批 1 项" in ran.abort_reply
+    assert "下一项：save_content_item" in ran.abort_reply
+
+
+@pytest.mark.asyncio
+async def test_numeric_choice_denies_latest_pending_request(tmp_path: Path) -> None:
+    runtime = _approval_runtime(tmp_path)
+    record = runtime.record_defer_request(
+        request_id="call-deny-choice",
+        session_key="cli:local",
+        channel="cli",
+        chat_id="local",
+        source="passive",
+        tool_name="save_content_item",
+        risk="write",
+        approval_scope="tool_call",
+        policy_reason="risk_strategy_write_requires_approval",
+        arguments={"url": "https://example.com/secret"},
+    )
+    module = ToolApprovalCommandModule("status_commands", runtime.store)
+
+    denied = await _run_command(module, "2")
+
+    assert "status: denied" in denied.abort_reply
+    assert record.approval_request_id in denied.abort_reply
+    assert runtime.store.get_request(record.approval_request_id).status == "denied"
+
+
+@pytest.mark.asyncio
+async def test_numeric_choice_denies_first_pending_request_only(
+    tmp_path: Path,
+) -> None:
+    runtime = _approval_runtime(tmp_path)
+    first = runtime.record_defer_request(
+        request_id="call-deny-first",
+        session_key="cli:local",
+        channel="cli",
+        chat_id="local",
+        source="passive",
+        tool_name="save_content_item",
+        risk="write",
+        approval_scope="tool_call",
+        policy_reason="risk_strategy_write_requires_approval",
+        arguments={"url": "https://example.com/first"},
+    )
+    second = runtime.record_defer_request(
+        request_id="call-deny-second",
+        session_key="cli:local",
+        channel="cli",
+        chat_id="local",
+        source="passive",
+        tool_name="memorize",
+        risk="write",
+        approval_scope="tool_call",
+        policy_reason="risk_strategy_write_requires_approval",
+        arguments={"summary": "second"},
+    )
+    module = ToolApprovalCommandModule("status_commands", runtime.store)
+
+    denied = await _run_command(module, "2")
+
+    assert runtime.store.get_request(first.approval_request_id).status == "denied"
+    assert runtime.store.get_request(second.approval_request_id).status == "pending"
+    assert "剩余待审批 1 项" in denied.abort_reply
+    assert "下一项：memorize" in denied.abort_reply
+
+
+@pytest.mark.asyncio
+async def test_numeric_choice_lists_pending_details(tmp_path: Path) -> None:
+    runtime = _approval_runtime(tmp_path)
+    record = runtime.record_defer_request(
+        request_id="call-details-choice",
+        session_key="cli:local",
+        channel="cli",
+        chat_id="local",
+        source="passive",
+        tool_name="save_content_item",
+        risk="write",
+        approval_scope="tool_call",
+        policy_reason="risk_strategy_write_requires_approval",
+        arguments={"url": "https://example.com/secret"},
+    )
+    module = ToolApprovalCommandModule("status_commands", runtime.store)
+
+    details = await _run_command(module, "3")
+
+    assert "Tool approvals" in details.abort_reply
+    assert record.approval_request_id in details.abort_reply
+    assert "1. 批准" in details.abort_reply
+
+
+@pytest.mark.asyncio
+async def test_numeric_choice_lists_pending_details_marks_first_item_current(
+    tmp_path: Path,
+) -> None:
+    runtime = _approval_runtime(tmp_path)
+    first = runtime.record_defer_request(
+        request_id="call-details-first",
+        session_key="cli:local",
+        channel="cli",
+        chat_id="local",
+        source="passive",
+        tool_name="save_content_item",
+        risk="write",
+        approval_scope="tool_call",
+        policy_reason="risk_strategy_write_requires_approval",
+        arguments={"url": "https://example.com/first"},
+    )
+    second = runtime.record_defer_request(
+        request_id="call-details-second",
+        session_key="cli:local",
+        channel="cli",
+        chat_id="local",
+        source="passive",
+        tool_name="memorize",
+        risk="write",
+        approval_scope="tool_call",
+        policy_reason="risk_strategy_write_requires_approval",
+        arguments={"summary": "second"},
+    )
+    module = ToolApprovalCommandModule("status_commands", runtime.store)
+
+    details = await _run_command(module, "3")
+
+    assert first.approval_request_id in details.abort_reply
+    assert second.approval_request_id in details.abort_reply
+    assert "current: yes" in details.abort_reply
+    assert "queue: waiting_for_previous_approval" in details.abort_reply
+
+
+@pytest.mark.asyncio
+async def test_numeric_choice_without_pending_request_does_not_intercept(
+    tmp_path: Path,
+) -> None:
+    runtime = _approval_runtime(tmp_path)
+    module = ToolApprovalCommandModule("status_commands", runtime.store)
+
+    frame = await _run_command_frame(module, "1")
+
+    assert "session:ctx" not in frame.slots
+
+
+@pytest.mark.asyncio
+async def test_pending_request_does_not_intercept_regular_message(
+    tmp_path: Path,
+) -> None:
+    runtime = _approval_runtime(tmp_path)
+    runtime.record_defer_request(
+        request_id="call-regular-message",
+        session_key="cli:local",
+        channel="cli",
+        chat_id="local",
+        source="passive",
+        tool_name="save_content_item",
+        risk="write",
+        approval_scope="tool_call",
+        policy_reason="risk_strategy_write_requires_approval",
+        arguments={"url": "https://example.com/secret"},
+    )
+    module = ToolApprovalCommandModule("status_commands", runtime.store)
+
+    frame = await _run_command_frame(module, "继续聊别的")
+
+    assert "session:ctx" not in frame.slots
+
+
+@pytest.mark.asyncio
+async def test_numeric_choice_for_file_write_approves_without_applying_file(
+    tmp_path: Path,
+) -> None:
+    workspace = tmp_path
+    runtime = _approval_runtime(workspace)
+    record = runtime.record_defer_request(
+        request_id="call-file-choice",
+        session_key="cli:local",
+        channel="cli",
+        chat_id="local",
+        source="passive",
+        tool_name="write_file",
+        risk="write",
+        approval_scope="tool_call",
+        policy_reason="risk_strategy_write_requires_approval",
+        arguments={"path": "notes.md", "content": "raw-secret-content"},
+    )
+    runtime.record_managed_side_effect_payload(
+        record, arguments={"path": "notes.md", "content": "raw-secret-content"}
+    )
+    module = ToolApprovalCommandModule(
+        "status_commands",
+        runtime.store,
+        workspace=workspace,
+        side_effect_store=ApprovedSideEffectStore(
+            ApprovedSideEffectStore.db_path_from_workspace(workspace)
+        ),
+        side_effect_vault=runtime.side_effect_vault,
+    )
+
+    approved = await _run_command(module, "1")
+
+    assert "status: approved" in approved.abort_reply
+    assert "/prepare_tool" in approved.abort_reply
+    assert "/run_approved_tool" in approved.abort_reply
+    assert runtime.store.get_request(record.approval_request_id).status == "approved"
+    assert not (workspace / "notes.md").exists()
+    assert "raw-secret-content" not in approved.abort_reply
 
 
 @pytest.mark.asyncio
@@ -785,6 +1191,171 @@ async def test_approve_tool_expiration_records_tool_audit_event(tmp_path: Path) 
     assert events[0].approval_status == "expired"
 
 
+@pytest.mark.asyncio
+async def test_approval_reminder_appends_once_for_pending_request(
+    tmp_path: Path,
+) -> None:
+    runtime = _approval_runtime(tmp_path)
+    record = runtime.record_defer_request(
+        request_id="call-reminder",
+        session_key="cli:local",
+        channel="cli",
+        chat_id="local",
+        source="passive",
+        tool_name="save_content_item",
+        risk="write",
+        approval_scope="tool_call",
+        policy_reason="risk_strategy_write_requires_approval",
+        arguments={"url": "https://example.com/secret"},
+    )
+    session = SimpleNamespace(key="cli:local", metadata={})
+    module = ApprovalReminderAfterReasoningModule("status_commands", runtime.store)
+
+    first = await _run_approval_reminder(module, session=session, reply="这是新的回答")
+    second = await _run_approval_reminder(module, session=session, reply="第二次回答")
+
+    assert "这是新的回答" in first.reply
+    assert "还有 1 个待审批操作" in first.reply
+    assert "当前项：save_content_item" in first.reply
+    assert "可回复 1 批准当前项、2 拒绝当前项、3 查看详情" in first.reply
+    assert "第二次回答" == second.reply
+    assert session.metadata["approval_choice_reminder"]["approval_id"] == record.approval_request_id
+    assert session.metadata["approval_choice_reminder"]["reminded"] is True
+
+
+@pytest.mark.asyncio
+async def test_approval_reminder_reports_multiple_pending_current_item(
+    tmp_path: Path,
+) -> None:
+    runtime = _approval_runtime(tmp_path)
+    runtime.record_defer_request(
+        request_id="call-reminder-first",
+        session_key="cli:local",
+        channel="cli",
+        chat_id="local",
+        source="passive",
+        tool_name="save_content_item",
+        risk="write",
+        approval_scope="tool_call",
+        policy_reason="risk_strategy_write_requires_approval",
+        arguments={"url": "https://example.com/first"},
+    )
+    runtime.record_defer_request(
+        request_id="call-reminder-second",
+        session_key="cli:local",
+        channel="cli",
+        chat_id="local",
+        source="passive",
+        tool_name="memorize",
+        risk="write",
+        approval_scope="tool_call",
+        policy_reason="risk_strategy_write_requires_approval",
+        arguments={"summary": "second"},
+    )
+    session = SimpleNamespace(key="cli:local", metadata={})
+    module = ApprovalReminderAfterReasoningModule("status_commands", runtime.store)
+
+    result = await _run_approval_reminder(module, session=session, reply="继续回答")
+
+    assert "还有 2 个待审批操作" in result.reply
+    assert "当前项：save_content_item" in result.reply
+    assert "可回复 1 批准当前项、2 拒绝当前项、3 查看详情" in result.reply
+
+
+@pytest.mark.asyncio
+async def test_approval_reminder_adds_authoritative_block_for_new_multiple_pending(
+    tmp_path: Path,
+) -> None:
+    runtime = _approval_runtime(tmp_path)
+    first = runtime.record_defer_request(
+        request_id="call-initial-first",
+        session_key="cli:local",
+        channel="cli",
+        chat_id="local",
+        source="passive",
+        tool_name="save_content_item",
+        risk="write",
+        approval_scope="tool_call",
+        policy_reason="risk_strategy_write_requires_approval",
+        arguments={"url": "https://example.com/first"},
+    )
+    runtime.record_defer_request(
+        request_id="call-initial-second",
+        session_key="cli:local",
+        channel="cli",
+        chat_id="local",
+        source="passive",
+        tool_name="memorize",
+        risk="write",
+        approval_scope="tool_call",
+        policy_reason="risk_strategy_write_requires_approval",
+        arguments={"summary": "second"},
+    )
+    session = SimpleNamespace(key="cli:local", metadata={})
+    module = ApprovalReminderAfterReasoningModule("status_commands", runtime.store)
+
+    result = await _run_approval_reminder(
+        module,
+        session=session,
+        reply="两个操作可以直接回 1 一起批准",
+        tool_chain=(
+            {
+                "calls": [
+                    {
+                        "result": json.dumps(
+                            {
+                                "approval_request": {
+                                    "approval_request_id": first.approval_request_id
+                                }
+                            }
+                        )
+                    }
+                ]
+            },
+        ),
+    )
+
+    assert "当前处理第 1/2 项：save_content_item" in result.reply
+    assert "审批按顺序逐项处理，不会一次批准全部待审批操作。" in result.reply
+    assert "可回复 1 批准当前项、2 拒绝当前项、3 查看详情。" in result.reply
+
+
+@pytest.mark.asyncio
+async def test_approval_reminder_skips_after_request_is_no_longer_pending(
+    tmp_path: Path,
+) -> None:
+    runtime = _approval_runtime(tmp_path)
+    record = runtime.record_defer_request(
+        request_id="call-reminder-approved",
+        session_key="cli:local",
+        channel="cli",
+        chat_id="local",
+        source="passive",
+        tool_name="save_content_item",
+        risk="write",
+        approval_scope="tool_call",
+        policy_reason="risk_strategy_write_requires_approval",
+        arguments={"url": "https://example.com/secret"},
+    )
+    runtime.store.approve_request(
+        approval_request_id=record.approval_request_id,
+        request_id=record.request_id,
+        session_key=record.session_key,
+        tool_name=record.tool_name,
+        approval_scope=record.approval_scope,
+        args_hash=record.args_hash,
+        actor="status_command",
+        now=runtime._now(),
+    )
+    session = SimpleNamespace(key="cli:local", metadata={})
+    module = ApprovalReminderAfterReasoningModule("status_commands", runtime.store)
+
+    result = await _run_approval_reminder(module, session=session, reply="已继续")
+
+    assert result.reply == "已继续"
+    assert "approval_choice_reminder" not in session.metadata
+
+
 def test_status_commands_plugin_wires_workspace_tool_audit_ledger(
     tmp_path: Path,
 ) -> None:
@@ -807,4 +1378,31 @@ def test_status_commands_plugin_wires_workspace_tool_audit_ledger(
     assert (
         approval_module._audit_ledger_store.db_path
         == ToolAuditLedgerStore.db_path_from_workspace(tmp_path)
+    )
+
+
+def test_status_commands_plugin_wires_workspace_approval_reminder(
+    tmp_path: Path,
+) -> None:
+    plugin = StatusCommands()
+    plugin.context = PluginContext(
+        event_bus=None,
+        tool_registry=None,
+        plugin_id="status_commands",
+        plugin_dir=tmp_path,
+        kv_store=PluginKVStore(tmp_path / "kv.json"),
+        workspace=tmp_path,
+    )
+
+    modules = plugin.after_reasoning_modules()
+
+    reminder_modules = [
+        module
+        for module in modules
+        if isinstance(module, ApprovalReminderAfterReasoningModule)
+    ]
+    assert len(reminder_modules) == 1
+    assert (
+        reminder_modules[0]._approval_store.db_path
+        == ToolApprovalRuntime.approval_db_path_from_workspace(tmp_path)
     )
