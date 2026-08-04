@@ -622,6 +622,7 @@ def build_core_runtime(
             memory=MemoryConfig(
                 window=config.memory_window,
             ),
+            optimization=config.optimization,
         ),
     )
     loop_ref["loop"] = loop

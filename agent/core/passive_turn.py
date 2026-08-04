@@ -6,12 +6,18 @@ import logging
 import time
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Awaitable, Callable, cast
 
 import agent.core.passive_support as support
+from agent.config_models import OptimizationConfig
+from agent.optimization.profiles import (
+    OPTIMIZATION_PROFILE_METADATA_KEY,
+    ResolvedOptimizationProfile,
+    resolve_optimization_profile,
+)
 from agent.policies.evidence_contract import (
     EvidenceAssessment,
     EvidenceContractManager,
@@ -362,6 +368,30 @@ def _disabled_tools_from_msg(msg: object) -> set[str]:
     return set()
 
 
+def _merge_metadata(
+    first: Mapping[str, object] | None,
+    second: Mapping[str, object] | None,
+) -> dict[str, object]:
+    merged: dict[str, object] = {}
+    if isinstance(first, Mapping):
+        merged.update(first)
+    if isinstance(second, Mapping):
+        merged.update(second)
+    return merged
+
+
+def _limit_tool_result_text(text: str, limit: int) -> tuple[str, bool]:
+    safe_limit = max(200, int(limit))
+    if len(text) <= safe_limit:
+        return text, False
+    suffix = (
+        f"\n[tool_result_limit] truncated from {len(text)} to "
+        f"{safe_limit} chars for this LLM turn."
+    )
+    head_limit = max(0, safe_limit - len(suffix))
+    return text[:head_limit] + suffix, True
+
+
 class _NoopOutboundPort:
     async def dispatch(self, outbound: OutboundDispatch) -> bool:
         return False
@@ -377,6 +407,7 @@ class AgentCoreDeps:
     event_bus: "EventBus | None" = None
     outbound_port: "OutboundPort | None" = None
     history_window: int = 500
+    optimization: OptimizationConfig = field(default_factory=OptimizationConfig)
     before_turn_plugin_modules: list[object] | None = None
     before_reasoning_plugin_modules: list[object] | None = None
     before_step_plugin_modules: list[object] | None = None
@@ -468,6 +499,7 @@ class PassiveTurnPipeline:
             add_after_step(list(deps.after_step_plugin_modules or []))
         self._outbound_port = deps.outbound_port or _NoopOutboundPort()
         self._history_window = deps.history_window
+        self._optimization = deps.optimization
         self._before_turn_plugin_modules = list(deps.before_turn_plugin_modules or [])
         self._before_reasoning_plugin_modules = list(
             deps.before_reasoning_plugin_modules or []
@@ -518,6 +550,15 @@ class PassiveTurnPipeline:
                 self._bus,
                 self._session.session_manager,
                 self._context_store,
+                optimization=self._optimization,
+                base_history_window=self._history_window,
+                session_metadata_defaults={
+                    OPTIMIZATION_PROFILE_METADATA_KEY: (
+                        self._optimization.default_profile
+                        if self._optimization.enabled
+                        else "baseline"
+                    )
+                },
                 plugin_modules=cast("list[Any]", self._before_turn_plugin_modules),
             ),
             frame_factory=BeforeTurnFrame,
@@ -558,6 +599,7 @@ class PassiveTurnPipeline:
                 self._outbound_port,
                 self._context,
                 self._history_window,
+                optimization=self._optimization,
                 plugin_modules=cast("list[Any]", self._after_turn_plugin_modules),
             ),
             frame_factory=AfterTurnFrame,
@@ -618,6 +660,7 @@ class PassiveTurnPipeline:
                 base_history=None,
                 retrieved_memory_block=before_reasoning.retrieved_memory_block,
                 extra_hints=list(before_reasoning.extra_hints) or None,
+                turn_metadata=state.extra_metadata,
             )
         except Exception:
             logger.exception("PassiveTurnPipeline.run failed before dispatch session=%s", key)
@@ -713,6 +756,7 @@ class ContextStore(ABC):
         msg: "InboundMessage",
         session_key: str,
         session: "SessionLike",
+        history_window: int | None = None,
     ) -> ContextBundle:
         """准备本轮对话需要的上下文。"""
 
@@ -735,9 +779,11 @@ class DefaultContextStore(ContextStore):
         msg: "InboundMessage",
         session_key: str,
         session: "SessionLike",
+        history_window: int | None = None,
     ) -> ContextBundle:
         # 1. 先读取 session history，并转换成 retrieval pipeline 需要的结构。
-        raw_history = list(session.get_history())
+        hw = self._history_window if history_window is None else max(1, int(history_window))
+        raw_history = list(session.get_history(max_messages=hw))
         history_messages = support.to_history_messages(raw_history)
 
         # 2. 再执行 retrieval，保持当前 pipeline 行为不变。
@@ -791,6 +837,7 @@ class Reasoner(ABC):
         tool_event_channel: str = "",
         tool_event_chat_id: str = "",
         disabled_tools: set[str] | None = None,
+        optimization_profile: object | None = None,
     ) -> ReasonerResult:
         """执行多轮 tool loop，并返回本轮结果。"""
 
@@ -804,6 +851,7 @@ class Reasoner(ABC):
         base_history: list[dict] | None = None,
         retrieved_memory_block: str = "",
         extra_hints: list[str] | None = None,
+        turn_metadata: Mapping[str, object] | None = None,
     ) -> "TurnRunResult":
         """执行完整被动 turn，包括 retry / trim / tool loop。"""
 
@@ -850,6 +898,7 @@ class DefaultReasoner(Reasoner):
         event_bus: "EventBus | None" = None,
         task_plan_service: "TaskPlanService | None" = None,
         task_execution_coordinator: TaskExecutionRuntimeCoordinator | None = None,
+        optimization: OptimizationConfig | None = None,
     ) -> None:
         self._llm = llm
         self._llm_config = llm_config
@@ -862,6 +911,7 @@ class DefaultReasoner(Reasoner):
         self._event_bus = event_bus
         self._task_plan_service = task_plan_service
         self._task_execution_coordinator = task_execution_coordinator
+        self._optimization = optimization or OptimizationConfig()
         self._prompt_render_plugin_modules: list[object] = []
         self._before_step_plugin_modules: list[object] = []
         self._after_step_plugin_modules: list[object] = []
@@ -994,6 +1044,7 @@ class DefaultReasoner(Reasoner):
         base_history: list[dict] | None = None,
         retrieved_memory_block: str = "",
         extra_hints: list[str] | None = None,
+        turn_metadata: Mapping[str, object] | None = None,
     ) -> "TurnRunResult":
         from agent.core.runtime_support import TurnRunResult
 
@@ -1027,10 +1078,28 @@ class DefaultReasoner(Reasoner):
             retry_trace["task_execution"] = self._task_execution_coordinator.trace(
                 task_execution_turn
             )
+        optimization_profile = resolve_optimization_profile(
+            self._optimization,
+            base_memory_window=self._memory_window,
+            session_metadata=(
+                getattr(session, "metadata", {})
+                if isinstance(getattr(session, "metadata", {}), Mapping)
+                else {}
+            ),
+            msg_metadata=_merge_metadata(
+                getattr(msg, "metadata", {})
+                if isinstance(getattr(msg, "metadata", {}), Mapping)
+                else {},
+                turn_metadata,
+            ),
+        )
         source_history = (
             base_history
             if base_history is not None
-            else get_history_since_consolidated(session, self._memory_window)
+            else get_history_since_consolidated(
+                session,
+                optimization_profile.memory_window,
+            )
         )
         total_history = len(source_history)
         disabled_tools = _disabled_tools_from_msg(msg)
@@ -1174,6 +1243,7 @@ class DefaultReasoner(Reasoner):
                         tool_event_channel=msg.channel,
                         tool_event_chat_id=msg.chat_id,
                         disabled_tools=disabled_tools,
+                        optimization_profile=optimization_profile,
                         task_execution_turn=task_execution_turn,
                     )
                 except BaseException as exc:
@@ -1249,6 +1319,7 @@ class DefaultReasoner(Reasoner):
                 if isinstance(llm_context_frame, str) and llm_context_frame.strip():
                     retry_trace["llm_context_frame"] = llm_context_frame
                 retry_trace["react_stats"] = dict(result.metadata.get("react_stats") or {})
+                retry_trace["optimization_profile"] = optimization_profile.name
                 if result.metadata.get("tool_boundary"):
                     retry_trace["tool_boundary"] = result.metadata["tool_boundary"]
                     retry_trace["tool_access"] = result.metadata["tool_boundary"].get(
@@ -1370,11 +1441,22 @@ class DefaultReasoner(Reasoner):
         tool_event_chat_id: str = "",
         disabled_tools: set[str] | None = None,
         task_execution_turn: PreparedTaskExecutionTurn | None = None,
+        optimization_profile: object | None = None,
     ) -> ReasonerResult:
         # 1. 初始化消息上下文、本轮工具轨迹。
         messages = initial_messages
         user_text = _latest_user_text(messages)
-        simple_fast_path = _should_use_simple_fast_path(user_text)
+        profile = (
+            optimization_profile
+            if isinstance(optimization_profile, ResolvedOptimizationProfile)
+            else None
+        )
+        if profile is None:
+            profile = resolve_optimization_profile(
+                self._optimization,
+                base_memory_window=self._memory_window,
+            )
+        simple_fast_path = bool(profile.simple_fast_path) and _should_use_simple_fast_path(user_text)
         tools_used: list[str] = []
         tool_chain: list[dict[str, Any]] = []
         # 2. 初始化本轮可见工具集合。
@@ -1390,6 +1472,7 @@ class DefaultReasoner(Reasoner):
         actual_cache_hit_tokens_sum = 0
         actual_cache_miss_tokens_sum = 0
         actual_prompt_tokens_peak = 0
+        tool_result_truncated_count = 0
         llm_duration_samples: list[int] = []
         tool_duration_samples: list[int] = []
         disabled = set(disabled_tools or set())
@@ -1485,6 +1568,8 @@ class DefaultReasoner(Reasoner):
                     cache_prompt_tokens=react_cache_prompt_tokens,
                     cache_hit_tokens=react_cache_hit_tokens,
                     cache_seen=react_cache_seen,
+                    optimization_profile_name=profile.name,
+                    tool_result_truncated_count=tool_result_truncated_count,
                     tool_boundary_trace=(
                         self._tool_boundary.trace(tool_boundary_context)
                         if tool_boundary_context is not None
@@ -1604,6 +1689,8 @@ class DefaultReasoner(Reasoner):
                     cache_prompt_tokens=react_cache_prompt_tokens,
                     cache_hit_tokens=react_cache_hit_tokens,
                     cache_seen=react_cache_seen,
+                    optimization_profile_name=profile.name,
+                    tool_result_truncated_count=tool_result_truncated_count,
                     tool_boundary_trace=(
                         self._tool_boundary.trace(tool_boundary_context)
                         if tool_boundary_context is not None
@@ -1984,6 +2071,8 @@ class DefaultReasoner(Reasoner):
                                 cache_prompt_tokens=react_cache_prompt_tokens,
                                 cache_hit_tokens=react_cache_hit_tokens,
                                 cache_seen=react_cache_seen,
+                                optimization_profile_name=profile.name,
+                                tool_result_truncated_count=tool_result_truncated_count,
                                 tool_boundary_trace=(
                                     self._tool_boundary.trace(tool_boundary_context)
                                     if tool_boundary_context is not None
@@ -2196,6 +2285,15 @@ class DefaultReasoner(Reasoner):
                             )
                         )
                     normalized = normalize_tool_result(result)
+                    if profile.tool_result_limit_chars is not None:
+                        limited_text, truncated = _limit_tool_result_text(
+                            normalized.text,
+                            profile.tool_result_limit_chars,
+                        )
+                        if truncated:
+                            tool_result_truncated_count += 1
+                        result = limited_text
+                        normalized = normalize_tool_result(result)
                     await self._bus.fanout(AfterToolResultCtx(
                         session_key=tool_event_session_key,
                         channel=tool_event_channel,
@@ -2473,6 +2571,8 @@ class DefaultReasoner(Reasoner):
                             cache_prompt_tokens=react_cache_prompt_tokens,
                             cache_hit_tokens=react_cache_hit_tokens,
                             cache_seen=react_cache_seen,
+                            optimization_profile_name=profile.name,
+                            tool_result_truncated_count=tool_result_truncated_count,
                             tool_boundary_trace=(
                                 self._tool_boundary.trace(tool_boundary_context)
                                 if tool_boundary_context is not None
@@ -2537,6 +2637,8 @@ class DefaultReasoner(Reasoner):
                         cache_prompt_tokens=react_cache_prompt_tokens,
                         cache_hit_tokens=react_cache_hit_tokens,
                         cache_seen=react_cache_seen,
+                        optimization_profile_name=profile.name,
+                        tool_result_truncated_count=tool_result_truncated_count,
                         tool_boundary_trace=(
                             self._tool_boundary.trace(tool_boundary_context)
                             if tool_boundary_context is not None
@@ -2665,6 +2767,8 @@ class DefaultReasoner(Reasoner):
                 llm_duration_samples=llm_duration_samples,
                 tool_duration_samples=tool_duration_samples,
                 simple_fast_path=simple_fast_path,
+                optimization_profile_name=profile.name,
+                tool_result_truncated_count=tool_result_truncated_count,
                 tool_boundary_trace=(
                     self._tool_boundary.trace(tool_boundary_context)
                     if tool_boundary_context is not None
@@ -2715,6 +2819,8 @@ class DefaultReasoner(Reasoner):
             tool_duration_samples=tool_duration_samples,
             exit_reason="max_iterations",
             simple_fast_path=simple_fast_path,
+            optimization_profile_name=profile.name,
+            tool_result_truncated_count=tool_result_truncated_count,
             tool_boundary_trace=(
                 self._tool_boundary.trace(tool_boundary_context)
                 if tool_boundary_context is not None
@@ -2847,6 +2953,8 @@ class DefaultReasoner(Reasoner):
         tool_duration_samples: list[int] | None = None,
         exit_reason: str = "completed",
         simple_fast_path: bool = False,
+        optimization_profile_name: str = "baseline",
+        tool_result_truncated_count: int = 0,
         tool_boundary_trace: dict[str, object] | None = None,
         turn_completion_trace: dict[str, object] | None = None,
         evidence_contract_trace: dict[str, object] | None = None,
@@ -2880,6 +2988,7 @@ class DefaultReasoner(Reasoner):
             "llm_duration_ms_peak": max(llm_duration_samples or [], default=0),
             "tool_duration_ms_sum": sum(tool_duration_samples or []),
             "tool_duration_ms_peak": max(tool_duration_samples or [], default=0),
+            "tool_result_truncated_count": tool_result_truncated_count,
             "memory_duration_ms_sum": 0,
             "exit_reason": exit_reason,
             "tool_error_count": _count_tool_errors(tool_chain),
@@ -2888,6 +2997,8 @@ class DefaultReasoner(Reasoner):
         }
         if simple_fast_path:
             react_stats["simple_fast_path"] = 1
+        if optimization_profile_name != "baseline":
+            react_stats["optimization_profile"] = optimization_profile_name
         if cache_seen:
             react_stats["cache_prompt_tokens"] = cache_prompt_tokens
             react_stats["cache_hit_tokens"] = cache_hit_tokens

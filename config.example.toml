@@ -42,6 +42,12 @@ dev_mode = false
 [agent.context]
 memory_window = 40
 
+[agent.optimization]
+# 默认关闭优化实验；开启后仍默认 baseline，需用 /usage_profile 切换。
+enabled = false
+# 可选：baseline / simple_fast_path / context20 / context12 / tool_result_limit / combined_p1
+default_profile = "baseline"
+
 [agent.tools]
 search_enabled = true
 

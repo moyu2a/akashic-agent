@@ -6,6 +6,7 @@ from typing import Any, cast
 
 from agent.core.passive_turn import DefaultReasoner
 from agent.core.runtime_support import LLMServices, ToolDiscoveryState
+from agent.config_models import OptimizationConfig
 from agent.looping.ports import LLMConfig
 from agent.provider import LLMResponse, ToolCall
 from agent.tools.base import Tool
@@ -46,6 +47,15 @@ class _InflateTool(Tool):
 
     async def execute(self, **kwargs: Any) -> str:
         return f"payload-{kwargs.get('value', '')}-" + ("x" * 2400)
+
+
+class _LongResultTool(Tool):
+    name = "long_result_probe"
+    description = "long_result_probe"
+    parameters = {"type": "object", "properties": {}, "required": []}
+
+    async def execute(self, **kwargs: Any) -> str:
+        return f"payload-{kwargs.get('value', '')}-" + ("x" * 8_000)
 
 
 class _Provider:
@@ -92,6 +102,7 @@ def test_default_reasoner_uses_simple_fast_path_for_explicit_no_tool_request():
         discovery=ToolDiscoveryState(),
         tool_search_enabled=False,
         memory_window=40,
+        optimization=OptimizationConfig(enabled=True, default_profile="simple_fast_path"),
     )
 
     result = asyncio.run(
@@ -133,6 +144,7 @@ def test_default_reasoner_uses_simple_fast_path_with_time_anchor_prefix():
         discovery=ToolDiscoveryState(),
         tool_search_enabled=False,
         memory_window=40,
+        optimization=OptimizationConfig(enabled=True, default_profile="simple_fast_path"),
     )
 
     result = asyncio.run(
@@ -158,6 +170,76 @@ def test_default_reasoner_uses_simple_fast_path_with_time_anchor_prefix():
     assert len(fast_provider.calls) == 1
     assert fast_provider.calls[0]["tools"] == []
     assert result.metadata["react_stats"]["simple_fast_path"] == 1
+
+
+def test_default_reasoner_baseline_profile_disables_simple_fast_path():
+    main_provider = _Provider([LLMResponse(content="我是 Akashic。", tool_calls=[])])
+    fast_provider = _Provider([])
+    tools = ToolRegistry()
+    tools.register(_DummyTool(), always_on=True, risk="read-only")
+    reasoner = DefaultReasoner(
+        llm=cast(
+            Any,
+            LLMServices(
+                provider=cast(Any, main_provider),
+                light_provider=cast(Any, fast_provider),
+            ),
+        ),
+        llm_config=LLMConfig(
+            model="main-model",
+            light_model="fast-model",
+            max_iterations=4,
+            max_tokens=8192,
+        ),
+        tools=tools,
+        discovery=ToolDiscoveryState(),
+        tool_search_enabled=False,
+        memory_window=40,
+        optimization=OptimizationConfig(enabled=True, default_profile="baseline"),
+    )
+
+    result = asyncio.run(
+        reasoner.run([{"role": "user", "content": "不用工具，一句话回答：你是谁？"}])
+    )
+
+    assert result.reply == "我是 Akashic。"
+    assert len(main_provider.calls) == 1
+    assert fast_provider.calls == []
+    assert "disable_thinking" not in main_provider.calls[0]
+    assert "simple_fast_path" not in result.metadata["react_stats"]
+
+
+def test_default_reasoner_tool_result_limit_profile_truncates_before_next_llm_call():
+    provider = _Provider(
+        [
+            LLMResponse(
+                content="",
+                tool_calls=[ToolCall("c1", "long_result_probe", {"value": "demo"})],
+            ),
+            LLMResponse(content="final", tool_calls=[]),
+        ]
+    )
+    tools = ToolRegistry()
+    tools.register(_LongResultTool(), always_on=True, risk="read-only")
+    reasoner = DefaultReasoner(
+        llm=cast(Any, LLMServices(provider=cast(Any, provider), light_provider=cast(Any, provider))),
+        llm_config=LLMConfig(model="m", max_iterations=4, max_tokens=512),
+        tools=tools,
+        discovery=ToolDiscoveryState(),
+        tool_search_enabled=False,
+        memory_window=40,
+        optimization=OptimizationConfig(enabled=True, default_profile="tool_result_limit"),
+    )
+
+    result = asyncio.run(reasoner.run([{"role": "user", "content": "inflate"}]))
+
+    assert result.reply == "final"
+    second_call_messages = provider.calls[1]["messages"]
+    tool_messages = [m for m in second_call_messages if m.get("role") == "tool"]
+    assert len(tool_messages) == 1
+    assert len(str(tool_messages[0]["content"])) <= 4_300
+    assert "[tool_result_limit]" in str(tool_messages[0]["content"])
+    assert result.metadata["react_stats"]["tool_result_truncated_count"] == 1
 
 
 def test_default_reasoner_does_not_fast_path_links_even_with_no_tool_phrase():

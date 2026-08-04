@@ -10,6 +10,11 @@ from typing import Any, cast
 from zoneinfo import ZoneInfo
 
 from agent.lifecycle.types import AfterReasoningCtx, BeforeTurnCtx, TurnState
+from agent.optimization.profiles import (
+    DEFAULT_OPTIMIZATION_PROFILES,
+    OPTIMIZATION_PROFILE_METADATA_KEY,
+    resolve_optimization_profile,
+)
 from agent.policies.approved_side_effect_runtime import ApprovedSideEffectRuntime
 from agent.policies.approved_shell_side_effect_runtime import (
     ApprovedShellSideEffectRuntime,
@@ -205,6 +210,7 @@ class UsageCommandModule:
             "/usage_compare",
             "/usage_turn",
             "/usage_tag",
+            "/usage_profile",
         }:
             return frame
         logger.info(
@@ -224,6 +230,8 @@ class UsageCommandModule:
             return self._usage_arch_reply()
         if command == "/usage_tag":
             return self._usage_tag_reply(state, args)
+        if command == "/usage_profile":
+            return self._usage_profile_reply(state, args)
         if not self._db_path or not self._db_path.exists():
             return "usage: no observe database"
         try:
@@ -262,6 +270,8 @@ class UsageCommandModule:
             f"max_iterations: {getattr(cfg, 'max_iterations', '-')}",
             f"memory_window: {getattr(cfg, 'memory_window', '-')}",
             f"tool_search_enabled: {getattr(cfg, 'tool_search_enabled', '-')}",
+            f"optimization.enabled: {getattr(getattr(cfg, 'optimization', None), 'enabled', '-')}",
+            f"optimization.default_profile: {getattr(getattr(cfg, 'optimization', None), 'default_profile', '-')}",
             "experiment default: baseline",
             "sensitive fields: hidden",
         ]
@@ -293,6 +303,66 @@ class UsageCommandModule:
                 return "usage tag: session metadata unavailable"
         metadata["usage_experiment_tag"] = tag
         return f"usage tag: {tag}"
+
+    def _usage_profile_reply(self, state: TurnState, args: list[str]) -> str:
+        session = state.session
+        if session is None:
+            return "usage profile: session unavailable"
+        metadata = getattr(session, "metadata", None)
+        if not isinstance(metadata, dict):
+            metadata = {}
+            try:
+                session.metadata = metadata
+            except Exception:
+                return "usage profile: session metadata unavailable"
+
+        if len(args) < 2 or args[1].lower() in {"show", "list", "current"}:
+            return self._usage_profile_show_reply(session)
+
+        profile = _usage_profile_name(args[1])
+        if profile not in DEFAULT_OPTIMIZATION_PROFILES:
+            return (
+                "usage profile: unknown profile\n"
+                f"available: {', '.join(DEFAULT_OPTIMIZATION_PROFILES)}"
+            )
+
+        metadata[OPTIMIZATION_PROFILE_METADATA_KEY] = profile
+        metadata["usage_experiment_tag"] = profile
+        opt_config = getattr(self._app_config, "optimization", None)
+        resolved = resolve_optimization_profile(
+            opt_config,
+            base_memory_window=getattr(self._app_config, "memory_window", 24),
+            session_metadata=metadata,
+            msg_metadata={},
+        )
+        metadata["experiment_overrides"] = dict(resolved.overrides)
+        note = (
+            "\nnote: optimization disabled by config"
+            if opt_config is not None and not bool(getattr(opt_config, "enabled", False))
+            else ""
+        )
+        return f"usage profile: {profile}{note}"
+
+    def _usage_profile_show_reply(self, session: object) -> str:
+        metadata = getattr(session, "metadata", None)
+        if not isinstance(metadata, dict):
+            metadata = {}
+        profile = _usage_profile_name(
+            metadata.get(OPTIMIZATION_PROFILE_METADATA_KEY, "baseline")
+        )
+        lines = [
+            "usage profile",
+            f"current: {profile}",
+            f"available: {', '.join(DEFAULT_OPTIMIZATION_PROFILES)}",
+        ]
+        if self._app_config is not None:
+            opt = getattr(self._app_config, "optimization", None)
+            if opt is not None:
+                lines.append(f"enabled: {getattr(opt, 'enabled', False)}")
+                lines.append(
+                    f"default_profile: {_usage_sanitize_tag(getattr(opt, 'default_profile', 'baseline'))}"
+                )
+        return "\n".join(lines)
 
     def _usage_experiments_reply(self, conn: sqlite3.Connection) -> str:
         rows = conn.execute(
@@ -1090,6 +1160,7 @@ class StatusCommands(Plugin):
             ("kvcache", "查看 KVCache 状态"),
             ("usage_baseline", "查看成本/时延基线"),
             ("usage_experiments", "查看成本/时延实验"),
+            ("usage_profile", "查看或切换优化 profile"),
             ("approvals", "查看待审批工具调用"),
             ("tool_audit", "查看工具治理审计记录"),
         ]
@@ -1245,6 +1316,10 @@ _USAGE_TAG_RE = re.compile(r"[^A-Za-z0-9_.:-]+")
 def _usage_sanitize_tag(raw: object) -> str:
     text = _USAGE_TAG_RE.sub("_", str(raw or "baseline").strip())[:64].strip("_")
     return text or "baseline"
+
+
+def _usage_profile_name(raw: object) -> str:
+    return _usage_sanitize_tag(raw).lower().replace("-", "_")
 
 
 def _usage_limit(args: list[str], *, default: int) -> int:

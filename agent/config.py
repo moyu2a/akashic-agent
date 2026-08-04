@@ -27,6 +27,7 @@ from agent.config_models import (
     FitbitIntegrationConfig,
     MemoryConfig,
     MemoryEmbeddingConfig,
+    OptimizationConfig,
     PeerAgentConfig,
     QQBotChannelConfig,
     QQBotGroupConfig,
@@ -101,6 +102,7 @@ def load_config(path: str | Path = "config.toml") -> Config:
     wiring = _load_wiring_config(data)
     doc_rag = _load_doc_rag_config(data)
     task_execution = _load_task_execution_config(data)
+    optimization = _load_optimization_config(data)
 
     return Config(
         provider=provider,
@@ -173,6 +175,22 @@ def load_config(path: str | Path = "config.toml") -> Config:
         wiring=wiring,
         doc_rag=doc_rag,
         task_execution=task_execution,
+        optimization=optimization,
+    )
+
+
+def _load_optimization_config(data: dict) -> OptimizationConfig:
+    agent_cfg = _as_dict(data.get("agent"))
+    optimization = _as_dict(agent_cfg.get("optimization"))
+    legacy = _as_dict(data.get("optimization"))
+    return OptimizationConfig(
+        enabled=bool(optimization.get("enabled", legacy.get("enabled", False))),
+        default_profile=str(
+            optimization.get(
+                "default_profile",
+                legacy.get("default_profile", "baseline"),
+            )
+        ),
     )
 
 

@@ -4,6 +4,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from agent.config_models import OptimizationConfig
+
 if TYPE_CHECKING:
     from agent.context import ContextBuilder
     from agent.core.passive_turn import Reasoner
@@ -101,3 +103,4 @@ class AgentLoopDeps:
 class AgentLoopConfig:
     llm: LLMConfig = field(default_factory=LLMConfig)
     memory: MemoryConfig = field(default_factory=MemoryConfig)
+    optimization: OptimizationConfig = field(default_factory=OptimizationConfig)

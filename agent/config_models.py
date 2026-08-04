@@ -172,6 +172,17 @@ class TaskExecutionConfig:
 
 
 @dataclass
+class OptimizationConfig:
+    enabled: bool = False
+    default_profile: str = "baseline"
+
+    def __post_init__(self) -> None:
+        self.default_profile = str(self.default_profile or "baseline").strip()
+        if not self.default_profile:
+            self.default_profile = "baseline"
+
+
+@dataclass
 class FitbitIntegrationConfig:
     enabled: bool = False
 
@@ -238,6 +249,7 @@ class Config:
     wiring: WiringConfig = field(default_factory=WiringConfig)
     doc_rag: DocRagConfig = field(default_factory=DocRagConfig)
     task_execution: TaskExecutionConfig = field(default_factory=TaskExecutionConfig)
+    optimization: OptimizationConfig = field(default_factory=OptimizationConfig)
 
     @classmethod
     def load(cls, path: str | Path = "config.toml") -> Config:
@@ -260,6 +272,7 @@ __all__ = [
     "FitbitIntegrationConfig",
     "MemoryConfig",
     "MemoryEmbeddingConfig",
+    "OptimizationConfig",
     "PeerAgentConfig",
     "QQChannelConfig",
     "QQBotChannelConfig",

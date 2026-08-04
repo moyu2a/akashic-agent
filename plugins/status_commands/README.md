@@ -36,6 +36,17 @@
 
 计算每轮命中率和总体命中率，格式化为表格后返回。若 observe 数据库不存在则返回提示信息。
 
+### UsageCommandModule
+
+- `/usage_arch`: 查看当前模型、窗口、工具搜索和优化 profile 配置。
+- `/usage_profile`: 查看当前 session 的优化 profile。
+- `/usage_profile <profile>`: 切换当前 session 的优化 profile，并同步设置 observe 的 experiment tag。
+- `/usage_tag <tag>`: 手动设置当前 session 的 observe experiment tag。
+- `/usage_experiments`: 查看 observe 中已有实验分组。
+- `/usage_compare <tag_a> <tag_b>`: 对比两个实验分组的 token 和时延。
+
+内置 profile：`baseline`、`simple_fast_path`、`context20`、`context12`、`tool_result_limit`、`combined_p1`。`baseline` 关闭全部优化；`combined_p1` 叠加简单任务轻量化、`memory_window=20` 和工具结果长度限制。`/usage_tag` 仍可覆盖实验标签，适合临时 A/B；`/usage_profile` 更适合长期可复现对比。
+
 ### ToolApprovalCommandModule
 
 - `/approvals`: 查看当前 session 待审批工具调用。

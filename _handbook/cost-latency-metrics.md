@@ -9,6 +9,7 @@
 ```text
 /usage_arch
 /usage_tag <tag>
+/usage_profile [profile]
 /usage_experiments
 /usage_baseline [N]
 /usage_compare <tag_a> <tag_b>
@@ -21,6 +22,72 @@
 - `cache_hit/miss`：从厂商 usage 或兼容字段提取，受厂商返回字段影响。
 - `estimated_*`：本地估算，只用于辅助定位，不作为最终成本结论。
 - `turn_duration_ms` / `llm_duration_ms_sum` / `tool_duration_ms_sum`：用于区分慢在模型、工具还是整体链路。
+
+## Profile 控制
+
+优化实验通过 profile 切换，不需要改代码。默认配置建议保持保守：
+
+```toml
+[agent.optimization]
+enabled = false
+default_profile = "baseline"
+```
+
+开启后，当前内置 profile：
+
+| profile | 行为 |
+| --- | --- |
+| `baseline` | 关闭全部优化，使用原始 memory window、完整工具 schema 和完整工具结果。 |
+| `simple_fast_path` | 仅对明确简单、无工具意图的问题启用轻量路径。 |
+| `context20` | 将本轮 history/memory window 设为 20。 |
+| `context12` | 将本轮 history/memory window 设为 12。 |
+| `tool_result_limit` | 限制进入下一次 LLM 调用的单条工具结果长度。 |
+| `combined_p1` | 同时启用 `simple_fast_path`、`context20`、`tool_result_limit`。 |
+
+命令：
+
+```text
+/usage_profile
+/usage_profile baseline
+/usage_profile simple_fast_path
+/usage_profile context20
+/usage_profile context12
+/usage_profile tool_result_limit
+/usage_profile combined_p1
+```
+
+`/usage_profile <profile>` 只影响当前 session，并自动把 observe 的 `experiment_tag` 设为同名 profile。`/usage_tag <tag>` 仍可用于手动实验分组，手动 tag 的优先级高于 profile 默认 tag。
+
+## Profile 框架实现记录
+
+本次更新完成的是“可切换、可观测、可回退”的 profile 实验框架，不是新的线上性能 A/B 结论。它解决的问题是：后续对比不再靠临时改代码，而是通过 `/usage_profile` 在同一套主链路中切换行为。
+
+实现内容：
+
+- 新增 `agent.optimization` profile 解析模块，集中定义内置 profile。
+- 新增 `[agent.optimization]` 配置，默认 `enabled=false`、`default_profile="baseline"`。
+- `baseline` 明确关闭所有优化，用原始 memory window、完整工具 schema 和完整工具结果。
+- `simple_fast_path` 只允许明确简单、无工具意图的问题走轻量路径。
+- `context20` / `context12` 真实影响 before-turn context prepare、reasoner history 和 after-turn budget 统计。
+- `tool_result_limit` 会在工具结果进入下一次 LLM 调用前截断单条长结果；原始工具执行和审计链路不因此绕过。
+- `combined_p1` 叠加 `simple_fast_path`、`context20`、`tool_result_limit`。
+- `/usage_profile [profile]` 支持当前 session 查看和切换，并同步写入 observe `experiment_tag`。
+- `/usage_arch` 会显示 `optimization.enabled` 和 `optimization.default_profile`，方便排查 profile 未生效的原因。
+
+测试验证：
+
+| command | result |
+| --- | --- |
+| `uv run pytest tests/test_optimization_profiles.py tests/test_optimization_config.py tests/test_agent_core_p2_reasoner.py tests/test_lifecycle_phases.py::test_usage_command_compares_experiment_tags tests/test_lifecycle_phases.py::test_usage_compare_ignores_legacy_rows_without_actual_usage tests/test_bootstrap_wiring_p2.py::test_config_load_reads_memory_window_and_socket -q` | `34 passed` |
+| `uv run pytest tests/test_agent_core_p5_agent_core.py tests/test_turn_pipelines.py tests/test_bootstrap_wiring_p2.py tests/test_observe_writer.py tests/test_lifecycle_phases.py -q` | `114 passed` |
+| `uv run pytest -q` | `2799 passed, 3 skipped, 2 warnings in 315.76s` |
+| `git diff --check` | passed |
+
+当前结论：
+
+- 代码层面已经具备 profile 切换和 observe 分组能力。
+- 单元测试覆盖了 baseline 禁用优化、profile metadata 记录、session 隔离、memory window 覆盖、工具结果截断和 simple fast path 开关。
+- 这次还没有产生新的真实成本/时延对比数据；下一步需要用相同问题集分别跑 `baseline`、`simple_fast_path`、`context20`、`tool_result_limit`、`combined_p1`，再用 `/usage_compare` 生成实际数据。
 
 ## 当前观察
 

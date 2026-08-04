@@ -3,8 +3,10 @@ from __future__ import annotations
 import copy
 from dataclasses import dataclass, replace
 import logging
+from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any, TypeAlias, cast
 
+from agent.config_models import OptimizationConfig
 from agent.core.passive_support import (
     build_post_reply_context_budget,
     extract_react_stats,
@@ -12,6 +14,7 @@ from agent.core.passive_support import (
     log_react_context_budget,
 )
 from agent.core.types import to_tool_call_groups
+from agent.optimization.profiles import resolve_optimization_profile
 from agent.lifecycle.phase import (
     PhaseFrame,
     PhaseModule,
@@ -29,6 +32,18 @@ if TYPE_CHECKING:
     from session.manager import Session
 
 logger = logging.getLogger(__name__)
+
+
+def _merge_metadata(
+    first: Mapping[str, object] | None,
+    second: Mapping[str, object] | None,
+) -> dict[str, object]:
+    merged: dict[str, object] = {}
+    if isinstance(first, Mapping):
+        merged.update(first)
+    if isinstance(second, Mapping):
+        merged.update(second)
+    return merged
 
 
 @dataclass
@@ -59,9 +74,11 @@ class _BuildTurnWorkModule:
         self,
         context: ContextBuilder,
         history_window: int = 500,
+        optimization: OptimizationConfig | None = None,
     ) -> None:
         self._context = context
         self._history_window = max(1, int(history_window))
+        self._optimization = optimization or OptimizationConfig()
 
     produces = (
         _BUDGET_SLOT,
@@ -79,7 +96,18 @@ class _BuildTurnWorkModule:
         if raw_session is None:
             raise RuntimeError("AfterTurn requires TurnState.session")
         session = cast("Session", raw_session)
-        hw = self._history_window
+        msg_metadata = msg.metadata if isinstance(msg.metadata, Mapping) else {}
+        turn_metadata = _merge_metadata(msg_metadata, state.extra_metadata)
+        session_metadata = (
+            session.metadata if isinstance(session.metadata, Mapping) else {}
+        )
+        profile = resolve_optimization_profile(
+            self._optimization,
+            base_memory_window=self._history_window,
+            session_metadata=session_metadata,
+            msg_metadata=turn_metadata,
+        )
+        hw = profile.memory_window
         frame.slots[_BUDGET_SLOT] = build_post_reply_context_budget(
             context=self._context,
             history=session.get_history(max_messages=hw),
@@ -91,17 +119,24 @@ class _BuildTurnWorkModule:
             if (msg.metadata or {}).get("skip_post_memory")
             else {}
         )
-        metadata = getattr(session, "metadata", None)
         session_experiment = (
-            metadata.get("usage_experiment_tag") if isinstance(metadata, dict) else None
+            session_metadata.get("usage_experiment_tag")
+            if isinstance(session_metadata, Mapping)
+            else None
         )
         tag = (
-            (msg.metadata or {}).get("experiment_tag")
+            msg_metadata.get("experiment_tag")
             or session_experiment
+            or state.extra_metadata.get("experiment_tag")
+            or profile.name
             or "baseline"
         )
         extra["experiment_tag"] = str(tag or "baseline")
-        overrides = (msg.metadata or {}).get("experiment_overrides")
+        overrides = (
+            msg_metadata.get("experiment_overrides")
+            or state.extra_metadata.get("experiment_overrides")
+            or profile.overrides
+        )
         if isinstance(overrides, dict):
             extra["experiment_overrides"] = dict(overrides)
         frame.slots[_EXTRA_SLOT] = extra
@@ -278,10 +313,12 @@ def default_after_turn_modules(
     outbound: OutboundPort,
     context: ContextBuilder,
     history_window: int = 500,
+    *,
+    optimization: OptimizationConfig | None = None,
     plugin_modules: AfterTurnModules | None = None,
 ) -> AfterTurnModules:
     builtins: AfterTurnModules = [
-        _BuildTurnWorkModule(context, history_window),
+        _BuildTurnWorkModule(context, history_window, optimization=optimization),
         _CollectAfterTurnExtraSlotsModule(),
         _BuildTurnCommittedModule(),
         _FanoutTurnCommittedModule(bus),

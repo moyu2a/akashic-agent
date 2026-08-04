@@ -299,6 +299,7 @@ class AgentLoop:
             event_bus=self._event_bus,
             task_plan_service=deps.task_plan_service,
             task_execution_coordinator=deps.task_execution_coordinator,
+            optimization=config.optimization,
         )
 
         # 3. 最后串 passive prepare / execute / commit 主链。
@@ -331,6 +332,7 @@ class AgentLoop:
                 event_bus=self._event_bus,
                 outbound_port=BusOutboundPort(self.bus),
                 history_window=config.memory.keep_count,
+                optimization=config.optimization,
             )
         )
         self._agent_core = agent_core
