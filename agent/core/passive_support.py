@@ -128,11 +128,11 @@ def log_post_reply_context_budget(
     )
 
 
-def extract_react_stats(context_retry: dict[str, object]) -> dict[str, int]:
+def extract_react_stats(context_retry: dict[str, object]) -> dict[str, object]:
     raw = context_retry.get("react_stats")
     if not isinstance(raw, dict):
         return {}
-    out: dict[str, int] = {}
+    out: dict[str, object] = {}
     for key in (
         "iteration_count",
         "turn_input_sum_tokens",
@@ -140,6 +140,22 @@ def extract_react_stats(context_retry: dict[str, object]) -> dict[str, int]:
         "final_call_input_tokens",
         "cache_prompt_tokens",
         "cache_hit_tokens",
+        "actual_prompt_tokens_sum",
+        "actual_completion_tokens_sum",
+        "actual_total_tokens_sum",
+        "actual_cache_hit_tokens_sum",
+        "actual_cache_miss_tokens_sum",
+        "actual_prompt_tokens_peak",
+        "turn_duration_ms",
+        "llm_duration_ms_sum",
+        "llm_duration_ms_peak",
+        "tool_duration_ms_sum",
+        "tool_duration_ms_peak",
+        "memory_duration_ms_sum",
+        "tool_error_count",
+        "max_iterations_hit",
+        "empty_reply",
+        "simple_fast_path",
     ):
         value = raw.get(key)
         if value is None:
@@ -148,13 +164,16 @@ def extract_react_stats(context_retry: dict[str, object]) -> dict[str, int]:
             out[key] = int(value)
         except (TypeError, ValueError):
             continue
+    exit_reason = raw.get("exit_reason")
+    if isinstance(exit_reason, str) and exit_reason:
+        out["exit_reason"] = exit_reason
     return out
 
 
 def log_react_context_budget(
     *,
     session_key: str,
-    react_stats: dict[str, int],
+    react_stats: dict[str, object],
 ) -> None:
     if not react_stats:
         return
@@ -227,5 +246,3 @@ def predict_current_user_source_ref(
         if last_id:
             return last_id
     return ""
-
-

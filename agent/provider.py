@@ -69,6 +69,8 @@ class LLMResponse:
     provider_fields: dict[str, Any] = field(default_factory=dict)
     cache_prompt_tokens: int | None = None
     cache_hit_tokens: int | None = None
+    cache_miss_tokens: int | None = None
+    usage: dict[str, int] = field(default_factory=dict)
 
 
 class ProviderStrategy:
@@ -290,6 +292,11 @@ class LLMProvider:
         cache_prompt_tokens, cache_hit_tokens = _extract_cache_usage(
             getattr(resp, "usage", None)
         )
+        cache_miss_tokens = (
+            None
+            if cache_prompt_tokens is None
+            else cache_prompt_tokens - (cache_hit_tokens or 0)
+        )
         usage_fields = _extract_standard_usage(getattr(resp, "usage", None))
         if usage_fields:
             provider_fields = {**provider_fields, "usage": usage_fields}
@@ -305,6 +312,8 @@ class LLMProvider:
             provider_fields=provider_fields,
             cache_prompt_tokens=cache_prompt_tokens,
             cache_hit_tokens=cache_hit_tokens,
+            cache_miss_tokens=cache_miss_tokens,
+            usage=usage_fields,
         )
 
     async def _chat_streaming(
@@ -323,6 +332,8 @@ class LLMProvider:
         tool_call_seen = False
         cache_prompt_tokens: int | None = None
         cache_hit_tokens: int | None = None
+        cache_miss_tokens: int | None = None
+        usage_fields: dict[str, int] = {}
 
         stream_iter = aiter(stream)
         while True:
@@ -339,6 +350,10 @@ class LLMProvider:
             if prompt_tokens is not None:
                 cache_prompt_tokens = prompt_tokens
                 cache_hit_tokens = hit_tokens
+                cache_miss_tokens = prompt_tokens - (hit_tokens or 0)
+            chunk_usage = _extract_standard_usage(getattr(chunk, "usage", None))
+            if chunk_usage:
+                usage_fields = chunk_usage
             choices = getattr(chunk, "choices", None) or []
             if not choices:
                 continue
@@ -404,6 +419,8 @@ class LLMProvider:
             provider_fields=provider_fields,
             cache_prompt_tokens=cache_prompt_tokens,
             cache_hit_tokens=cache_hit_tokens,
+            cache_miss_tokens=cache_miss_tokens,
+            usage=usage_fields,
         )
 
     async def _create_with_retry(self, kwargs: dict) -> object:

@@ -178,6 +178,244 @@ class KVCacheCommandModule:
         return "\n".join(lines)
 
 
+class UsageCommandModule:
+    slot = "status_commands.usage"
+    requires = ("before_turn.acquire_session", _SESSION_SLOT)
+    produces = (_CTX_SLOT,)
+
+    def __init__(
+        self,
+        plugin_name: str,
+        db_path: Path | None,
+        app_config: Any = None,
+    ) -> None:
+        self._plugin_name = plugin_name
+        self._db_path = db_path
+        self._app_config = app_config
+
+    async def run(self, frame) -> object:
+        if _CTX_SLOT in frame.slots:
+            return frame
+        state = frame.input
+        command = _normalize_command(state.msg.content)
+        if command not in {
+            "/usage_arch",
+            "/usage_experiments",
+            "/usage_baseline",
+            "/usage_compare",
+            "/usage_turn",
+            "/usage_tag",
+        }:
+            return frame
+        logger.info(
+            "[%s:%s] 命中命令: %s",
+            self._plugin_name,
+            self.__class__.__name__,
+            command,
+        )
+        reply = self._build_reply(state)
+        frame.slots[_CTX_SLOT] = _abort_ctx(state, reply)
+        return frame
+
+    def _build_reply(self, state: TurnState) -> str:
+        args = (state.msg.content or "").strip().split()
+        command = args[0].lower() if args else ""
+        if command == "/usage_arch":
+            return self._usage_arch_reply()
+        if command == "/usage_tag":
+            return self._usage_tag_reply(state, args)
+        if not self._db_path or not self._db_path.exists():
+            return "usage: no observe database"
+        try:
+            conn = sqlite3.connect(str(self._db_path))
+            conn.row_factory = sqlite3.Row
+            try:
+                if command == "/usage_experiments":
+                    return self._usage_experiments_reply(conn)
+                if command == "/usage_baseline":
+                    limit = _usage_limit(args, default=100)
+                    return self._usage_baseline_reply(conn, limit)
+                if command == "/usage_compare":
+                    if len(args) < 3:
+                        return "usage: /usage_compare <tag_a> <tag_b>"
+                    return self._usage_compare_reply(conn, args[1], args[2])
+                if command == "/usage_turn":
+                    if len(args) < 2:
+                        return "usage: /usage_turn <turn_id>"
+                    return self._usage_turn_reply(conn, args[1])
+            finally:
+                conn.close()
+        except Exception:
+            logger.exception("usage 查询失败")
+            return "usage: query_failed"
+        return "usage: unknown command"
+
+    def _usage_arch_reply(self) -> str:
+        cfg = self._app_config
+        if cfg is None:
+            return "usage arch\nconfig: unavailable\nexperiment default: baseline"
+        lines = [
+            "usage arch",
+            f"model: {_safe_config_value(getattr(cfg, 'model', ''))}",
+            f"light_model: {_safe_config_value(getattr(cfg, 'light_model', '')) or 'disabled'}",
+            f"max_tokens: {getattr(cfg, 'max_tokens', '-')}",
+            f"max_iterations: {getattr(cfg, 'max_iterations', '-')}",
+            f"memory_window: {getattr(cfg, 'memory_window', '-')}",
+            f"tool_search_enabled: {getattr(cfg, 'tool_search_enabled', '-')}",
+            "experiment default: baseline",
+            "sensitive fields: hidden",
+        ]
+        proactive = getattr(cfg, "proactive", None)
+        if proactive is not None:
+            agent_cfg = getattr(proactive, "agent", None)
+            if agent_cfg is not None:
+                lines.extend(
+                    [
+                        f"proactive.max_steps: {getattr(agent_cfg, 'max_steps', '-')}",
+                        f"proactive.content_limit: {getattr(agent_cfg, 'content_limit', '-')}",
+                    ]
+                )
+        return "\n".join(lines)
+
+    def _usage_tag_reply(self, state: TurnState, args: list[str]) -> str:
+        if len(args) < 2:
+            return "usage: /usage_tag <tag>"
+        tag = _usage_sanitize_tag(args[1])
+        session = state.session
+        if session is None:
+            return "usage tag: session unavailable"
+        metadata = getattr(session, "metadata", None)
+        if not isinstance(metadata, dict):
+            metadata = {}
+            try:
+                session.metadata = metadata
+            except Exception:
+                return "usage tag: session metadata unavailable"
+        metadata["usage_experiment_tag"] = tag
+        return f"usage tag: {tag}"
+
+    def _usage_experiments_reply(self, conn: sqlite3.Connection) -> str:
+        rows = conn.execute(
+            """
+            SELECT COALESCE(experiment_tag, 'baseline') AS tag,
+                   COUNT(*) AS n,
+                   MAX(ts) AS last_ts
+            FROM turns
+            WHERE source='agent'
+            GROUP BY COALESCE(experiment_tag, 'baseline')
+            ORDER BY n DESC, tag ASC
+            """
+        ).fetchall()
+        if not rows:
+            return "usage experiments: no data"
+        lines = ["usage experiments"]
+        for row in rows:
+            lines.append(
+                f"- {row['tag']}: n={row['n']} last={_format_ts(str(row['last_ts']))}"
+            )
+        return "\n".join(lines)
+
+    def _usage_baseline_reply(self, conn: sqlite3.Connection, limit: int) -> str:
+        rows = conn.execute(
+            """
+            SELECT * FROM (
+                SELECT * FROM turns
+                WHERE source='agent'
+                  AND COALESCE(experiment_tag, 'baseline')='baseline'
+                  AND actual_prompt_tokens_sum IS NOT NULL
+                ORDER BY id DESC LIMIT ?
+            ) ORDER BY id ASC
+            """,
+            (limit,),
+        ).fetchall()
+        if not rows:
+            return "usage baseline: no data"
+        return _format_usage_summary("usage baseline", _usage_stats(rows))
+
+    def _usage_compare_reply(
+        self,
+        conn: sqlite3.Connection,
+        tag_a: str,
+        tag_b: str,
+    ) -> str:
+        a_rows = _usage_rows_for_tag(conn, tag_a)
+        b_rows = _usage_rows_for_tag(conn, tag_b)
+        if not a_rows or not b_rows:
+            return (
+                "usage compare: insufficient data\n"
+                f"{tag_a}: n={len(a_rows)}\n{tag_b}: n={len(b_rows)}"
+            )
+        a = _usage_stats(a_rows)
+        b = _usage_stats(b_rows)
+        lines = [
+            "usage compare",
+            f"{tag_a} -> {tag_b}",
+            f"samples: {a['n']} -> {b['n']}",
+            "",
+        ]
+        for metric in (
+            "actual_prompt_tokens_sum",
+            "actual_completion_tokens_sum",
+            "actual_total_tokens_sum",
+            "turn_duration_ms",
+            "llm_duration_ms_sum",
+            "tool_duration_ms_sum",
+            "react_iteration_count",
+            "tool_error_count",
+        ):
+            lines.append(_format_metric_delta(metric, a, b))
+        lines.append(
+            "cache hit rate: "
+            f"{a['cache_hit_rate']:.1f}% -> {b['cache_hit_rate']:.1f}% "
+            f"({_format_point_delta(b['cache_hit_rate'] - a['cache_hit_rate'])})"
+        )
+        return "\n".join(lines)
+
+    def _usage_turn_reply(self, conn: sqlite3.Connection, raw_turn_id: str) -> str:
+        try:
+            turn_id = int(raw_turn_id)
+        except ValueError:
+            return "usage: /usage_turn <turn_id>"
+        row = conn.execute(
+            """
+            SELECT id, ts, session_key, COALESCE(experiment_tag, 'baseline') AS experiment_tag,
+                   actual_prompt_tokens_sum, actual_completion_tokens_sum,
+                   actual_total_tokens_sum, actual_cache_hit_tokens_sum,
+                   actual_cache_miss_tokens_sum, actual_prompt_tokens_peak,
+                   history_tokens, prompt_tokens, react_input_sum_tokens,
+                   react_input_peak_tokens, turn_duration_ms, llm_duration_ms_sum,
+                   tool_duration_ms_sum, react_iteration_count, exit_reason,
+                   tool_error_count, max_iterations_hit, empty_reply,
+                   simple_fast_path
+            FROM turns
+            WHERE id=? AND source='agent'
+            """,
+            (turn_id,),
+        ).fetchone()
+        if row is None:
+            return "usage turn: not found"
+        hit = int(row["actual_cache_hit_tokens_sum"] or 0)
+        miss = int(row["actual_cache_miss_tokens_sum"] or 0)
+        denom = hit + miss
+        hit_rate = (hit / denom * 100) if denom else 0.0
+        return "\n".join(
+            [
+                f"usage turn #{row['id']}",
+                f"ts: {_format_ts(str(row['ts']))}",
+                f"session: {_usage_session_kind(str(row['session_key']))}",
+                f"experiment: {row['experiment_tag']}",
+                f"actual prompt/completion/total: {row['actual_prompt_tokens_sum'] or 0:,} / {row['actual_completion_tokens_sum'] or 0:,} / {row['actual_total_tokens_sum'] or 0:,}",
+                f"actual cache hit/miss/rate: {hit:,} / {miss:,} / {hit_rate:.1f}%",
+                f"estimated history/prompt/react_sum: {row['history_tokens'] or 0:,} / {row['prompt_tokens'] or 0:,} / {row['react_input_sum_tokens'] or 0:,}",
+                f"duration turn/llm/tool: {row['turn_duration_ms'] or 0:,} / {row['llm_duration_ms_sum'] or 0:,} / {row['tool_duration_ms_sum'] or 0:,} ms",
+                f"iterations: {row['react_iteration_count'] or 0}",
+                f"simple_fast_path: {row['simple_fast_path'] or 0}",
+                f"exit: {row['exit_reason'] or 'unknown'}",
+                f"tool_errors: {row['tool_error_count'] or 0}",
+            ]
+        )
+
+
 class ToolApprovalCommandModule:
     slot = "status_commands.tool_approval"
     requires = ("before_turn.acquire_session", _SESSION_SLOT)
@@ -850,6 +1088,8 @@ class StatusCommands(Plugin):
         return [
             ("memorystatus", "查看记忆整理状态"),
             ("kvcache", "查看 KVCache 状态"),
+            ("usage_baseline", "查看成本/时延基线"),
+            ("usage_experiments", "查看成本/时延实验"),
             ("approvals", "查看待审批工具调用"),
             ("tool_audit", "查看工具治理审计记录"),
         ]
@@ -886,6 +1126,11 @@ class StatusCommands(Plugin):
         modules: list[object] = [
             MemoryStatusCommandModule(plugin_name),
             KVCacheCommandModule(plugin_name, db_path),
+            UsageCommandModule(
+                plugin_name,
+                db_path,
+                app_config=getattr(self.context, "app_config", None),
+            ),
         ]
         if approval_store is not None:
             modules.append(
@@ -992,6 +1237,143 @@ class ApprovalReminderAfterReasoningModule:
             state.session_key,
         )
         return frame
+
+
+_USAGE_TAG_RE = re.compile(r"[^A-Za-z0-9_.:-]+")
+
+
+def _usage_sanitize_tag(raw: object) -> str:
+    text = _USAGE_TAG_RE.sub("_", str(raw or "baseline").strip())[:64].strip("_")
+    return text or "baseline"
+
+
+def _usage_limit(args: list[str], *, default: int) -> int:
+    if len(args) < 2:
+        return default
+    try:
+        return max(1, min(500, int(args[1])))
+    except ValueError:
+        return default
+
+
+def _usage_rows_for_tag(
+    conn: sqlite3.Connection,
+    tag: str,
+    *,
+    limit: int = 500,
+) -> list[sqlite3.Row]:
+    return conn.execute(
+        """
+        SELECT * FROM (
+            SELECT * FROM turns
+            WHERE source='agent'
+              AND COALESCE(experiment_tag, 'baseline')=?
+              AND actual_prompt_tokens_sum IS NOT NULL
+            ORDER BY id DESC LIMIT ?
+        ) ORDER BY id ASC
+        """,
+        (_usage_sanitize_tag(tag), limit),
+    ).fetchall()
+
+
+def _usage_stats(rows: list[sqlite3.Row]) -> dict[str, float]:
+    metrics = (
+        "actual_prompt_tokens_sum",
+        "actual_completion_tokens_sum",
+        "actual_total_tokens_sum",
+        "turn_duration_ms",
+        "llm_duration_ms_sum",
+        "tool_duration_ms_sum",
+        "react_iteration_count",
+        "tool_error_count",
+    )
+    stats: dict[str, float] = {"n": float(len(rows))}
+    for metric in metrics:
+        values = [float(row[metric] or 0) for row in rows]
+        stats[f"{metric}.avg"] = sum(values) / len(values) if values else 0.0
+        stats[f"{metric}.p50"] = _usage_percentile(values, 0.5)
+        stats[f"{metric}.p90"] = _usage_percentile(values, 0.9)
+        stats[f"{metric}.max"] = max(values, default=0.0)
+    hit = sum(float(row["actual_cache_hit_tokens_sum"] or 0) for row in rows)
+    miss = sum(float(row["actual_cache_miss_tokens_sum"] or 0) for row in rows)
+    if hit == 0 and miss == 0:
+        hit = sum(float(row["react_cache_hit_tokens"] or 0) for row in rows)
+        prompt = sum(float(row["react_cache_prompt_tokens"] or 0) for row in rows)
+        miss = max(0.0, prompt - hit)
+    stats["cache_hit_rate"] = (hit / (hit + miss) * 100) if (hit + miss) else 0.0
+    return stats
+
+
+def _usage_percentile(values: list[float], q: float) -> float:
+    if not values:
+        return 0.0
+    ordered = sorted(values)
+    index = min(len(ordered) - 1, round((len(ordered) - 1) * q))
+    return ordered[index]
+
+
+def _format_usage_summary(title: str, stats: dict[str, float]) -> str:
+    lines = [title, f"samples: {int(stats['n'])}"]
+    for metric in (
+        "actual_prompt_tokens_sum",
+        "actual_completion_tokens_sum",
+        "actual_total_tokens_sum",
+        "turn_duration_ms",
+        "llm_duration_ms_sum",
+        "tool_duration_ms_sum",
+        "react_iteration_count",
+    ):
+        lines.append(
+            f"{metric}: avg={stats[f'{metric}.avg']:,.1f} "
+            f"p50={stats[f'{metric}.p50']:,.0f} "
+            f"p90={stats[f'{metric}.p90']:,.0f} "
+            f"max={stats[f'{metric}.max']:,.0f}"
+        )
+    lines.append(f"cache hit rate: {stats['cache_hit_rate']:.1f}%")
+    return "\n".join(lines)
+
+
+def _format_metric_delta(
+    metric: str,
+    before: dict[str, float],
+    after: dict[str, float],
+) -> str:
+    a = before[f"{metric}.avg"]
+    b = after[f"{metric}.avg"]
+    return (
+        f"{metric}: {a:,.1f} -> {b:,.1f} "
+        f"({_format_pct_delta(a, b)})"
+    )
+
+
+def _format_pct_delta(before: float, after: float) -> str:
+    if before == 0:
+        return "+inf" if after else "0.0%"
+    return f"{((after - before) / before * 100):+.1f}%"
+
+
+def _format_point_delta(delta: float) -> str:
+    return f"{delta:+.1f}pt"
+
+
+def _safe_config_value(value: object) -> str:
+    text = str(value or "")
+    if not text:
+        return ""
+    lowered = text.lower()
+    if any(marker in lowered for marker in ("sk-", "secret", "token", "key")):
+        return "<hidden>"
+    return text
+
+
+def _usage_session_kind(session_key: str) -> str:
+    if session_key.startswith("qqbot:"):
+        return "qqbot:*"
+    if session_key.startswith("scheduler:"):
+        return "scheduler:*"
+    if session_key.startswith("cli:"):
+        return "cli:*"
+    return session_key.split(":", 1)[0] + ":*" if ":" in session_key else session_key
 
 
 def _normalize_command(content: str) -> str:
@@ -1233,7 +1615,7 @@ def _safe_tool_result_status(output: object) -> str:
     else:
         try:
             parsed = json.loads(str(output))
-        except TypeError, ValueError:
+        except (TypeError, ValueError):
             return ""
     if not isinstance(parsed, dict):
         return ""

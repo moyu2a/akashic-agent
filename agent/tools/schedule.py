@@ -16,6 +16,7 @@ from agent.scheduler import (
     parse_duration,
 )
 from agent.tools.base import Tool
+from agent.tools.channel_names import normalize_channel_chat
 
 
 class ScheduleTool(Tool):
@@ -61,7 +62,7 @@ class ScheduleTool(Tool):
             },
             "channel": {
                 "type": "string",
-                "description": "目标渠道，如 telegram、qq",
+                "description": "目标渠道，如 telegram、qqbot、qq",
             },
             "chat_id": {
                 "type": "string",
@@ -96,8 +97,10 @@ class ScheduleTool(Tool):
         when = kwargs.get("when", "")
         message = kwargs.get("message")
         prompt = kwargs.get("prompt")
-        channel = kwargs.get("channel", "")
-        chat_id = str(kwargs.get("chat_id", ""))
+        channel, chat_id = normalize_channel_chat(
+            str(kwargs.get("channel", "")),
+            str(kwargs.get("chat_id", "")),
+        )
         tz = kwargs.get("timezone") or self._default_tz
         name = kwargs.get("name")
         request_time = kwargs.get("request_time")

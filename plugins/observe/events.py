@@ -59,6 +59,25 @@ class TurnTrace:
     react_final_input_tokens: int | None = None
     react_cache_prompt_tokens: int | None = None
     react_cache_hit_tokens: int | None = None
+    experiment_tag: str | None = None
+    experiment_overrides_json: str | None = None
+    actual_prompt_tokens_sum: int | None = None
+    actual_completion_tokens_sum: int | None = None
+    actual_total_tokens_sum: int | None = None
+    actual_cache_hit_tokens_sum: int | None = None
+    actual_cache_miss_tokens_sum: int | None = None
+    actual_prompt_tokens_peak: int | None = None
+    turn_duration_ms: int | None = None
+    llm_duration_ms_sum: int | None = None
+    llm_duration_ms_peak: int | None = None
+    tool_duration_ms_sum: int | None = None
+    tool_duration_ms_peak: int | None = None
+    memory_duration_ms_sum: int | None = None
+    exit_reason: str | None = None
+    tool_error_count: int | None = None
+    max_iterations_hit: int | None = None
+    empty_reply: int | None = None
+    simple_fast_path: int | None = None
 
 
 @dataclass

@@ -69,6 +69,126 @@ class _TimeoutProvider:
         raise asyncio.TimeoutError
 
 
+def test_default_reasoner_uses_simple_fast_path_for_explicit_no_tool_request():
+    main_provider = _Provider([])
+    fast_provider = _Provider([LLMResponse(content="我是 Akashic。", tool_calls=[])])
+    tools = ToolRegistry()
+    tools.register(_DummyTool(), always_on=True, risk="read-only")
+    reasoner = DefaultReasoner(
+        llm=cast(
+            Any,
+            LLMServices(
+                provider=cast(Any, main_provider),
+                light_provider=cast(Any, fast_provider),
+            ),
+        ),
+        llm_config=LLMConfig(
+            model="main-model",
+            light_model="fast-model",
+            max_iterations=4,
+            max_tokens=8192,
+        ),
+        tools=tools,
+        discovery=ToolDiscoveryState(),
+        tool_search_enabled=False,
+        memory_window=40,
+    )
+
+    result = asyncio.run(
+        reasoner.run([{"role": "user", "content": "不用工具，一句话回答：你是谁？"}])
+    )
+
+    assert result.reply == "我是 Akashic。"
+    assert main_provider.calls == []
+    assert len(fast_provider.calls) == 1
+    call = fast_provider.calls[0]
+    assert call["model"] == "fast-model"
+    assert call["tools"] == []
+    assert "tool_choice" not in call
+    assert call["max_tokens"] == 1024
+    assert call["disable_thinking"] is True
+    assert result.metadata["react_stats"]["simple_fast_path"] == 1
+
+
+def test_default_reasoner_uses_simple_fast_path_with_time_anchor_prefix():
+    main_provider = _Provider([])
+    fast_provider = _Provider([LLMResponse(content="我是 Akashic。", tool_calls=[])])
+    tools = ToolRegistry()
+    tools.register(_DummyTool(), always_on=True, risk="read-only")
+    reasoner = DefaultReasoner(
+        llm=cast(
+            Any,
+            LLMServices(
+                provider=cast(Any, main_provider),
+                light_provider=cast(Any, fast_provider),
+            ),
+        ),
+        llm_config=LLMConfig(
+            model="main-model",
+            light_model="fast-model",
+            max_iterations=4,
+            max_tokens=8192,
+        ),
+        tools=tools,
+        discovery=ToolDiscoveryState(),
+        tool_search_enabled=False,
+        memory_window=40,
+    )
+
+    result = asyncio.run(
+        reasoner.run(
+            [
+                {
+                    "role": "user",
+                    "content": (
+                        "[当前消息时间: 2026-08-04 11:38:41 CST | "
+                        "request_time=2026-08-04T11:38:41.202353+08:00 | "
+                        "今天=2026-08-04（周二） | 昨天=2026-08-03（周一） | "
+                        "明天=2026-08-05（周三） | 后天=2026-08-06（周四） | "
+                        "weekday=Tuesday | 相对时间以此为准]\n"
+                        "不用工具，一句话回答：你是谁？"
+                    ),
+                }
+            ]
+        )
+    )
+
+    assert result.reply == "我是 Akashic。"
+    assert main_provider.calls == []
+    assert len(fast_provider.calls) == 1
+    assert fast_provider.calls[0]["tools"] == []
+    assert result.metadata["react_stats"]["simple_fast_path"] == 1
+
+
+def test_default_reasoner_does_not_fast_path_links_even_with_no_tool_phrase():
+    provider = _Provider([LLMResponse(content="已处理", tool_calls=[])])
+    tools = ToolRegistry()
+    tools.register(_DummyTool("save_content_item"), always_on=True, risk="write")
+    reasoner = DefaultReasoner(
+        llm=cast(Any, LLMServices(provider=cast(Any, provider), light_provider=cast(Any, provider))),
+        llm_config=LLMConfig(model="main-model", max_iterations=4, max_tokens=8192),
+        tools=tools,
+        discovery=ToolDiscoveryState(),
+        tool_search_enabled=False,
+        memory_window=40,
+    )
+
+    result = asyncio.run(
+        reasoner.run(
+            [{"role": "user", "content": "不用工具，帮我保存这个链接 https://example.com/a"}]
+        )
+    )
+
+    assert result.reply == "已处理"
+    call = provider.calls[0]
+    assert [schema["function"]["name"] for schema in call["tools"]] == [
+        "save_content_item"
+    ]
+    assert call["max_tokens"] == 8192
+    assert "disable_thinking" not in call
+    assert "simple_fast_path" not in result.metadata["react_stats"]
+
+
 def test_default_reasoner_runs_tool_loop_and_returns_reasoner_result():
     provider = _Provider(
         [
@@ -77,12 +197,16 @@ def test_default_reasoner_runs_tool_loop_and_returns_reasoner_result():
                 tool_calls=[ToolCall("c1", "dummy", {})],
                 cache_prompt_tokens=100,
                 cache_hit_tokens=40,
+                usage={"prompt_tokens": 100, "completion_tokens": 5, "total_tokens": 105},
+                cache_miss_tokens=60,
             ),
             LLMResponse(
                 content="final",
                 tool_calls=[],
                 cache_prompt_tokens=120,
                 cache_hit_tokens=60,
+                usage={"prompt_tokens": 120, "completion_tokens": 8, "total_tokens": 128},
+                cache_miss_tokens=60,
             ),
         ]
     )
@@ -109,6 +233,16 @@ def test_default_reasoner_runs_tool_loop_and_returns_reasoner_result():
     assert react_stats["final_call_input_tokens"] == react_stats["turn_input_peak_tokens"]
     assert react_stats["cache_prompt_tokens"] == 220
     assert react_stats["cache_hit_tokens"] == 100
+    assert react_stats["actual_prompt_tokens_sum"] == 220
+    assert react_stats["actual_completion_tokens_sum"] == 13
+    assert react_stats["actual_total_tokens_sum"] == 233
+    assert react_stats["actual_cache_hit_tokens_sum"] == 100
+    assert react_stats["actual_cache_miss_tokens_sum"] == 120
+    assert react_stats["actual_prompt_tokens_peak"] == 120
+    assert react_stats["llm_duration_ms_sum"] >= 0
+    assert react_stats["llm_duration_ms_peak"] >= 0
+    assert react_stats["tool_duration_ms_sum"] >= 0
+    assert react_stats["tool_duration_ms_peak"] >= 0
     first_messages = provider.calls[0]["messages"]
     assert not any("未加载工具目录" in str(m.get("content", "")) for m in first_messages)
 

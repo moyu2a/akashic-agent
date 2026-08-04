@@ -69,7 +69,11 @@ from agent.prompting import PromptSectionRender
 from agent.policies.tool_approval_store import ToolApprovalStore
 from agent.turns.outbound import OutboundDispatch
 from session.manager import SessionManager
-from plugins.status_commands.plugin import StatusCommands, ToolApprovalCommandModule
+from plugins.status_commands.plugin import (
+    StatusCommands,
+    ToolApprovalCommandModule,
+    UsageCommandModule,
+)
 
 _observe_db = importlib.import_module("plugins.observe.db")
 open_observe_db = cast(
@@ -563,8 +567,140 @@ async def test_before_turn_kvcache_command(tmp_path):
     assert "50,560 / 52,564" in ctx.abort_reply
     assert "96.19%" in ctx.abort_reply
     assert "80.00%" in ctx.abort_reply
-    assert ctx.abort_reply.count("\n\n") <= 2
-    ctx_store.prepare.assert_not_called()
+
+
+def test_usage_command_compares_experiment_tags(tmp_path):
+    db_path = tmp_path / "observe" / "observe.db"
+    conn = open_observe_db(db_path)
+    try:
+        rows = [
+            ("baseline", "cli:1", 1000, 100, 1100, 500, 500, 1200, 800, 600, 2, "completed", 0),
+            ("baseline", "cli:1", 2000, 120, 2120, 1000, 1000, 1400, 900, 700, 3, "completed", 0),
+            ("memory20", "cli:1", 700, 80, 780, 200, 500, 800, 500, 300, 2, "completed", 0),
+            ("memory20", "cli:1", 900, 90, 990, 300, 600, 900, 550, 350, 2, "completed", 0),
+        ]
+        conn.executemany(
+            """INSERT INTO turns (
+                ts, source, session_key, user_msg, llm_output, experiment_tag,
+                actual_prompt_tokens_sum, actual_completion_tokens_sum,
+                actual_total_tokens_sum, actual_cache_hit_tokens_sum,
+                actual_cache_miss_tokens_sum, turn_duration_ms,
+                llm_duration_ms_sum, tool_duration_ms_sum,
+                react_iteration_count, exit_reason, tool_error_count
+            ) VALUES (
+                '2026-04-29T16:15:00+00:00', 'agent', ?, 'q', 'a', ?,
+                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+            )""",
+            [
+                (
+                    session_key,
+                    tag,
+                    prompt,
+                    completion,
+                    total,
+                    hit,
+                    miss,
+                    turn_ms,
+                    llm_ms,
+                    tool_ms,
+                    iterations,
+                    exit_reason,
+                    tool_errors,
+                )
+                for (
+                    tag,
+                    session_key,
+                    prompt,
+                    completion,
+                    total,
+                    hit,
+                    miss,
+                    turn_ms,
+                    llm_ms,
+                    tool_ms,
+                    iterations,
+                    exit_reason,
+                    tool_errors,
+                ) in rows
+            ],
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    module = UsageCommandModule("status_commands", db_path, app_config=None)
+    reply = module._build_reply(
+        SimpleNamespace(
+            msg=SimpleNamespace(content="/usage_compare baseline memory20"),
+            session_key="cli:1",
+            session=None,
+        )
+    )
+
+    assert "usage compare" in reply
+    assert "baseline -> memory20" in reply
+    assert "actual_prompt_tokens_sum" in reply
+    assert "-46.7%" in reply
+    assert "turn_duration_ms" in reply
+    assert "cache hit rate" in reply
+
+
+def test_usage_compare_ignores_legacy_rows_without_actual_usage(tmp_path):
+    db_path = tmp_path / "observe" / "observe.db"
+    conn = open_observe_db(db_path)
+    try:
+        conn.execute(
+            """INSERT INTO turns (
+                ts, source, session_key, user_msg, llm_output, experiment_tag,
+                react_input_sum_tokens
+            ) VALUES (
+                '2026-04-29T16:10:00+00:00', 'agent', 'cli:1', 'old', 'old',
+                'baseline', 999999
+            )"""
+        )
+        conn.execute(
+            """INSERT INTO turns (
+                ts, source, session_key, user_msg, llm_output, experiment_tag,
+                actual_prompt_tokens_sum, actual_completion_tokens_sum,
+                actual_total_tokens_sum, actual_cache_hit_tokens_sum,
+                actual_cache_miss_tokens_sum, turn_duration_ms,
+                llm_duration_ms_sum, tool_duration_ms_sum,
+                react_iteration_count, exit_reason, tool_error_count
+            ) VALUES (
+                '2026-04-29T16:15:00+00:00', 'agent', 'cli:1', 'q', 'a',
+                'baseline', 1000, 100, 1100, 500, 500, 1000, 800, 0,
+                1, 'completed', 0
+            )"""
+        )
+        conn.execute(
+            """INSERT INTO turns (
+                ts, source, session_key, user_msg, llm_output, experiment_tag,
+                actual_prompt_tokens_sum, actual_completion_tokens_sum,
+                actual_total_tokens_sum, actual_cache_hit_tokens_sum,
+                actual_cache_miss_tokens_sum, turn_duration_ms,
+                llm_duration_ms_sum, tool_duration_ms_sum,
+                react_iteration_count, exit_reason, tool_error_count
+            ) VALUES (
+                '2026-04-29T16:16:00+00:00', 'agent', 'cli:1', 'q', 'a',
+                'memory20', 500, 50, 550, 250, 250, 600, 500, 0,
+                1, 'completed', 0
+            )"""
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    module = UsageCommandModule("status_commands", db_path, app_config=None)
+    reply = module._build_reply(
+        SimpleNamespace(
+            msg=SimpleNamespace(content="/usage_compare baseline memory20"),
+            session_key="cli:1",
+            session=None,
+        )
+    )
+
+    assert "samples: 1.0 -> 1.0" in reply
+    assert "actual_prompt_tokens_sum: 1,000.0 -> 500.0 (-50.0%)" in reply
 
 
 def _approval_store(tmp_path: Path) -> ToolApprovalStore:

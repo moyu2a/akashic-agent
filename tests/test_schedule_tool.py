@@ -107,6 +107,27 @@ async def test_instant_after_registers_job(tmp_path, mock_push, mock_loop):
     assert job.message == "喝水了"
 
 
+async def test_qq_channel_with_qqbot_c2c_chat_id_registers_as_qqbot(
+    tmp_path, mock_push, mock_loop
+):
+    svc = make_svc(tmp_path, mock_push, mock_loop)
+    tool = ScheduleTool(svc, default_tz="UTC")
+    result = await tool.execute(
+        tier="instant",
+        trigger="after",
+        when="5m",
+        channel="qq",
+        chat_id="c2c:user-openid",
+        message="喝水了",
+        request_time=_NOW.isoformat(),
+    )
+
+    assert "错误" not in result
+    job = list(svc._jobs.values())[0]
+    assert job.channel == "qqbot"
+    assert job.chat_id == "c2c:user-openid"
+
+
 async def test_after_request_time_used_for_fire_at(tmp_path, mock_push, mock_loop):
     svc = make_svc(tmp_path, mock_push, mock_loop)
     tool = ScheduleTool(svc, default_tz="UTC")

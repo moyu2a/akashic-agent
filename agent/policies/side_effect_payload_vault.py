@@ -182,7 +182,7 @@ class SideEffectPayloadVault:
         path = self._payload_path(approval_request_id)
         try:
             raw = json.loads(self._read_private_file(path).decode("utf-8"))
-        except OSError, ValueError:
+        except (OSError, ValueError):
             return None
         if not isinstance(raw, dict):
             return None

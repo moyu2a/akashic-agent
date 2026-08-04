@@ -29,6 +29,7 @@ from typing import Any, Callable
 from zoneinfo import ZoneInfo
 
 from core.common.timekit import parse_iso as _parse_iso
+from agent.tools.channel_names import normalize_channel_chat
 from infra.persistence.json_store import load_json, save_json
 
 logger = logging.getLogger(__name__)
@@ -500,10 +501,11 @@ class SchedulerService:
 
     async def _execute(self, job: ScheduledJob, started_monotonic: float) -> None:
         label = job.name or job.id[:8]
+        channel, chat_id = normalize_channel_chat(job.channel, job.chat_id)
         if job.tier == "instant":
             result = await self.push_tool.execute(
-                channel=job.channel,
-                chat_id=job.chat_id,
+                channel=channel,
+                chat_id=chat_id,
                 message=job.message,
             )
             result_text = str(result)
@@ -535,8 +537,8 @@ class SchedulerService:
             )
             if content:
                 result = await self.push_tool.execute(
-                    channel=job.channel,
-                    chat_id=job.chat_id,
+                    channel=channel,
+                    chat_id=chat_id,
                     message=content,
                 )
                 result_text = str(result)
@@ -629,4 +631,9 @@ def _single_line(value: str | None) -> str:
 
 
 def _is_push_failure(result: str) -> bool:
-    return result.strip().startswith("发送失败")
+    text = result.strip()
+    return (
+        text.startswith("发送失败")
+        or "未注册" in text
+        or "没有可用的 sender" in text
+    )

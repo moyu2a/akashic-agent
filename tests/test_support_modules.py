@@ -124,6 +124,15 @@ async def test_message_push_tool_covers_success_failure_and_fallbacks():
     )
     assert "未注册" in await tool.execute(channel="qq", chat_id=1, message="x")
 
+    tool.register_channel("qqbot", text=text)
+    qqbot_alias = await tool.execute(
+        channel="qq",
+        chat_id="c2c:user-openid",
+        message="喝水了",
+    )
+    assert "文本已发送" in qqbot_alias
+    assert sent["text"][-1] == ("c2c:user-openid", "喝水了")
+
     tool.register_channel("limited", text=text)
     limited = await tool.execute(
         channel="limited", chat_id=1, file="/tmp/a.txt", image="/tmp/a.png"

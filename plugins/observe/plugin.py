@@ -80,6 +80,13 @@ def _emit_turn_trace(writer: _ObserveWriter, event: TurnCommitted) -> None:
 
     post_reply_budget = event.post_reply_budget
     react_stats = event.react_stats
+    experiment_tag = str(event.extra.get("experiment_tag") or "baseline")
+    experiment_overrides = event.extra.get("experiment_overrides")
+    experiment_overrides_json = (
+        json.dumps(experiment_overrides, ensure_ascii=False, sort_keys=True)
+        if isinstance(experiment_overrides, dict)
+        else None
+    )
     tool_chain = _tool_chain_with_extra_lifecycle(event.tool_chain_raw, event.extra)
     tool_chain_json = (
         json.dumps(_slim_tool_chain(tool_chain), ensure_ascii=False)
@@ -112,6 +119,35 @@ def _emit_turn_trace(writer: _ObserveWriter, event: TurnCommitted) -> None:
             react_final_input_tokens=react_stats.get("final_call_input_tokens"),
             react_cache_prompt_tokens=react_stats.get("cache_prompt_tokens"),
             react_cache_hit_tokens=react_stats.get("cache_hit_tokens"),
+            experiment_tag=experiment_tag,
+            experiment_overrides_json=experiment_overrides_json,
+            actual_prompt_tokens_sum=react_stats.get("actual_prompt_tokens_sum"),
+            actual_completion_tokens_sum=react_stats.get(
+                "actual_completion_tokens_sum"
+            ),
+            actual_total_tokens_sum=react_stats.get("actual_total_tokens_sum"),
+            actual_cache_hit_tokens_sum=react_stats.get(
+                "actual_cache_hit_tokens_sum"
+            ),
+            actual_cache_miss_tokens_sum=react_stats.get(
+                "actual_cache_miss_tokens_sum"
+            ),
+            actual_prompt_tokens_peak=react_stats.get("actual_prompt_tokens_peak"),
+            turn_duration_ms=react_stats.get("turn_duration_ms"),
+            llm_duration_ms_sum=react_stats.get("llm_duration_ms_sum"),
+            llm_duration_ms_peak=react_stats.get("llm_duration_ms_peak"),
+            tool_duration_ms_sum=react_stats.get("tool_duration_ms_sum"),
+            tool_duration_ms_peak=react_stats.get("tool_duration_ms_peak"),
+            memory_duration_ms_sum=react_stats.get("memory_duration_ms_sum"),
+            exit_reason=(
+                str(react_stats.get("exit_reason"))
+                if react_stats.get("exit_reason") is not None
+                else None
+            ),
+            tool_error_count=react_stats.get("tool_error_count"),
+            max_iterations_hit=react_stats.get("max_iterations_hit"),
+            empty_reply=react_stats.get("empty_reply"),
+            simple_fast_path=react_stats.get("simple_fast_path"),
         )
     )
     logger.info(

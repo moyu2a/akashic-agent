@@ -226,7 +226,7 @@ def _coerce_emotional_weight(value: object) -> int:
         return 0
     try:
         return max(0, min(10, int(value)))
-    except TypeError, ValueError:
+    except (TypeError, ValueError):
         return 0
 
 

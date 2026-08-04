@@ -16,7 +16,7 @@ def _empty_metadata() -> dict[str, Any]:
     return {}
 
 
-def _empty_int_metadata() -> dict[str, int]:
+def _empty_int_metadata() -> dict[str, Any]:
     return {}
 
 
@@ -79,7 +79,7 @@ class TurnCommitted:
     )
     timestamp: datetime | None = None
     post_reply_budget: dict[str, int] = field(default_factory=_empty_int_metadata)
-    react_stats: dict[str, int] = field(default_factory=_empty_int_metadata)
+    react_stats: dict[str, Any] = field(default_factory=_empty_int_metadata)
     extra: dict[str, Any] = field(default_factory=_empty_metadata)
 
 

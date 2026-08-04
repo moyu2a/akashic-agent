@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import time
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -152,6 +153,18 @@ def _is_tool_loop_guard_denial(exec_result: object) -> bool:
     )
 
 
+def _count_tool_errors(tool_chain: list[dict[str, Any]]) -> int:
+    count = 0
+    for group in tool_chain:
+        for call in group.get("calls") or []:
+            if not isinstance(call, dict):
+                continue
+            status = str(call.get("status", "") or "").lower()
+            if status in {"error", "failed"} or status.endswith("_failed"):
+                count += 1
+    return count
+
+
 def _invocation_capabilities(value: object) -> frozenset[str]:
     if isinstance(value, frozenset):
         return value
@@ -251,6 +264,78 @@ def _latest_user_text(messages: list[dict]) -> str:
         if isinstance(content, str):
             return content
     return ""
+
+
+_SIMPLE_FAST_PATH_MAX_CHARS = 160
+_SIMPLE_FAST_PATH_MAX_TOKENS = 1024
+_SIMPLE_FAST_PATH_MARKERS = (
+    "不用工具",
+    "不要用工具",
+    "不要调用工具",
+    "无需工具",
+    "不需要工具",
+    "一句话",
+    "简单回答",
+    "简单解释",
+    "简短回答",
+)
+_SIMPLE_FAST_PATH_BLOCKERS = (
+    "http://",
+    "https://",
+    "www.",
+    "/content_review",
+    "/approve",
+    "/approvals",
+    "/approve_last",
+    "/approve_tool",
+    "/reject_tool",
+    "/schedule",
+    "/proactive",
+    "/undo",
+    "收藏",
+    "保存",
+    "链接",
+    "小红书",
+    "抖音",
+    "b站",
+    "bilibili",
+    "我之前",
+    "之前说",
+    "之前收藏",
+    "收藏过",
+    "根据我的",
+    "最近讨论",
+    "查一下",
+    "搜索",
+    "检索",
+    "读取",
+    "读文件",
+    "写文件",
+    "shell",
+    "执行",
+    "运行",
+    "审批",
+    "推送",
+    "日程",
+    "提醒",
+)
+
+
+def _should_use_simple_fast_path(user_text: str) -> bool:
+    text = _strip_model_time_anchor(user_text)
+    if not text or len(text) > _SIMPLE_FAST_PATH_MAX_CHARS:
+        return False
+    folded = text.casefold()
+    if not any(marker in folded for marker in _SIMPLE_FAST_PATH_MARKERS):
+        return False
+    return not any(blocker in folded for blocker in _SIMPLE_FAST_PATH_BLOCKERS)
+
+
+def _strip_model_time_anchor(user_text: str) -> str:
+    text = (user_text or "").strip()
+    if text.startswith("[当前消息时间:") and "]\n" in text:
+        return text.split("]\n", 1)[1].strip()
+    return text
 
 
 def _task_execution_exit_kind(exc: BaseException) -> str:
@@ -486,6 +571,7 @@ class PassiveTurnPipeline:
         *,
         dispatch_outbound: bool = True,
     ) -> OutboundMessage:
+        turn_started = time.monotonic()
         state = TurnState(
             msg=msg,
             session_key=key,
@@ -548,6 +634,10 @@ class PassiveTurnPipeline:
         after_reasoning = await self._after_reasoning.run(
             AfterReasoningInput(state=state, turn_result=turn_result)
         )
+        after_reasoning.ctx.context_retry.setdefault(
+            "react_stats",
+            {},
+        )["turn_duration_ms"] = int((time.monotonic() - turn_started) * 1000)
 
         # Phase 6: AfterTurn 模块链（TurnCommitted fanout、AfterTurn fanout、dispatch）。
         return await self._after_turn.run(
@@ -1284,6 +1374,7 @@ class DefaultReasoner(Reasoner):
         # 1. 初始化消息上下文、本轮工具轨迹。
         messages = initial_messages
         user_text = _latest_user_text(messages)
+        simple_fast_path = _should_use_simple_fast_path(user_text)
         tools_used: list[str] = []
         tool_chain: list[dict[str, Any]] = []
         # 2. 初始化本轮可见工具集合。
@@ -1293,6 +1384,14 @@ class DefaultReasoner(Reasoner):
         react_cache_prompt_tokens = 0
         react_cache_hit_tokens = 0
         react_cache_seen = False
+        actual_prompt_tokens_sum = 0
+        actual_completion_tokens_sum = 0
+        actual_total_tokens_sum = 0
+        actual_cache_hit_tokens_sum = 0
+        actual_cache_miss_tokens_sum = 0
+        actual_prompt_tokens_peak = 0
+        llm_duration_samples: list[int] = []
+        tool_duration_samples: list[int] = []
         disabled = set(disabled_tools or set())
         turn_completion_decision: TurnCompletionDecision | None = None
         evidence_assessment: EvidenceAssessment | None = None
@@ -1319,12 +1418,44 @@ class DefaultReasoner(Reasoner):
                 "yes" if len(visible_names) == len(always_on) else "maybe",
             )
 
+        async def _chat_with_current_mode(
+            *,
+            tools_for_call: list[dict[str, object]],
+            stream_to_user: bool = True,
+        ) -> LLMResponse:
+            provider = self._llm.provider
+            model = self._llm_config.model
+            max_tokens = self._llm_config.max_tokens
+            disable_thinking = False
+            if simple_fast_path:
+                provider = getattr(self._llm, "light_provider", None) or provider
+                model = self._llm_config.light_model or model
+                max_tokens = min(
+                    self._llm_config.max_tokens,
+                    _SIMPLE_FAST_PATH_MAX_TOKENS,
+                )
+                disable_thinking = True
+            kwargs: dict[str, object] = {
+                "messages": messages,
+                "tools": tools_for_call,
+                "model": model,
+                "max_tokens": max_tokens,
+            }
+            if tools_for_call:
+                kwargs["tool_choice"] = "auto"
+            if disable_thinking:
+                kwargs["disable_thinking"] = True
+            if stream_to_user and on_content_delta is not None:
+                kwargs["on_content_delta"] = on_content_delta
+            return await provider.chat(**kwargs)
+
         iteration = -1
         while True:
             iteration += 1
             if (
-                self._llm_config.max_iterations > 0
-                and iteration >= self._llm_config.max_iterations
+                (1 if simple_fast_path else self._llm_config.max_iterations) > 0
+                and iteration
+                >= (1 if simple_fast_path else self._llm_config.max_iterations)
             ):
                 break
             # 3. BeforeStep 模块链：token 估算、BeforeStep 事件、提示注入。
@@ -1404,7 +1535,7 @@ class DefaultReasoner(Reasoner):
                 schema_names -= disabled
             tools_for_call = (
                 []
-                if final_only_next_call
+                if simple_fast_path or final_only_next_call
                 else self._tools.get_schemas(names=schema_names)
             )
             if (
@@ -1414,22 +1545,35 @@ class DefaultReasoner(Reasoner):
                 async with self._task_execution_coordinator.lease_guard(
                     task_execution_turn
                 ):
-                    response = await self._llm.provider.chat(
-                        messages=messages,
-                        tools=tools_for_call,
-                        model=self._llm_config.model,
-                        max_tokens=self._llm_config.max_tokens,
-                        tool_choice="auto",
-                        on_content_delta=on_content_delta,
+                    llm_started = time.monotonic()
+                    response = await _chat_with_current_mode(
+                        tools_for_call=tools_for_call,
+                    )
+                    llm_duration_samples.append(
+                        int((time.monotonic() - llm_started) * 1000)
                     )
             else:
-                response = await self._llm.provider.chat(
-                    messages=messages,
-                    tools=tools_for_call,
-                    model=self._llm_config.model,
-                    max_tokens=self._llm_config.max_tokens,
-                    tool_choice="auto",
-                    on_content_delta=on_content_delta,
+                llm_started = time.monotonic()
+                response = await _chat_with_current_mode(
+                    tools_for_call=tools_for_call,
+                )
+                llm_duration_samples.append(
+                    int((time.monotonic() - llm_started) * 1000)
+                )
+            usage = dict(getattr(response, "usage", {}) or {})
+            prompt_tokens = int(usage.get("prompt_tokens", 0) or 0)
+            completion_tokens = int(usage.get("completion_tokens", 0) or 0)
+            total_tokens = int(usage.get("total_tokens", 0) or 0)
+            actual_prompt_tokens_sum += prompt_tokens
+            actual_completion_tokens_sum += completion_tokens
+            actual_total_tokens_sum += total_tokens
+            actual_prompt_tokens_peak = max(actual_prompt_tokens_peak, prompt_tokens)
+            actual_cache_hit_tokens_sum += int(response.cache_hit_tokens or 0)
+            if response.cache_miss_tokens is not None:
+                actual_cache_miss_tokens_sum += int(response.cache_miss_tokens)
+            elif response.cache_prompt_tokens is not None:
+                actual_cache_miss_tokens_sum += int(
+                    response.cache_prompt_tokens - (response.cache_hit_tokens or 0)
                 )
             if on_content_delta is not None and response.content:
                 streamed = True
@@ -2012,16 +2156,24 @@ class DefaultReasoner(Reasoner):
                         async with self._task_execution_coordinator.lease_guard(
                             task_execution_turn
                         ):
+                            tool_started = time.monotonic()
                             exec_result = await self._tool_executor.execute(
                                 execution_request,
                                 _invoke_tool,
                             )
+                            tool_duration_samples.append(
+                                int((time.monotonic() - tool_started) * 1000)
+                            )
                     else:
+                        tool_started = time.monotonic()
                         exec_result = await self._tool_executor.execute(
                             execution_request,
                             # 真实工具执行入口仍是 ToolRegistry.execute；
                             # hook 只负责拦截与记录，不替代 registry。
                             _invoke_tool,
+                        )
+                        tool_duration_samples.append(
+                            int((time.monotonic() - tool_started) * 1000)
                         )
                     real_tool_executed = (
                         exec_result.status == "success"
@@ -2437,13 +2589,29 @@ class DefaultReasoner(Reasoner):
                     "role": "user",
                     "content": "你刚才只输出了思考过程，没有给出正式回复。请直接回复用户，不要重复思考。",
                 })
-                retry_response = await self._llm.provider.chat(
-                    messages=messages,
-                    tools=[],
-                    model=self._llm_config.model,
-                    max_tokens=self._llm_config.max_tokens,
-                    on_content_delta=on_content_delta,
+                llm_started = time.monotonic()
+                retry_response = await _chat_with_current_mode(
+                    tools_for_call=[],
                 )
+                llm_duration_samples.append(
+                    int((time.monotonic() - llm_started) * 1000)
+                )
+                usage = dict(getattr(retry_response, "usage", {}) or {})
+                prompt_tokens = int(usage.get("prompt_tokens", 0) or 0)
+                completion_tokens = int(usage.get("completion_tokens", 0) or 0)
+                total_tokens = int(usage.get("total_tokens", 0) or 0)
+                actual_prompt_tokens_sum += prompt_tokens
+                actual_completion_tokens_sum += completion_tokens
+                actual_total_tokens_sum += total_tokens
+                actual_prompt_tokens_peak = max(actual_prompt_tokens_peak, prompt_tokens)
+                actual_cache_hit_tokens_sum += int(retry_response.cache_hit_tokens or 0)
+                if retry_response.cache_miss_tokens is not None:
+                    actual_cache_miss_tokens_sum += int(retry_response.cache_miss_tokens)
+                elif retry_response.cache_prompt_tokens is not None:
+                    actual_cache_miss_tokens_sum += int(
+                        retry_response.cache_prompt_tokens
+                        - (retry_response.cache_hit_tokens or 0)
+                    )
                 if retry_response.cache_prompt_tokens is not None:
                     react_cache_seen = True
                     react_cache_prompt_tokens += retry_response.cache_prompt_tokens
@@ -2488,6 +2656,15 @@ class DefaultReasoner(Reasoner):
                 cache_prompt_tokens=react_cache_prompt_tokens,
                 cache_hit_tokens=react_cache_hit_tokens,
                 cache_seen=react_cache_seen,
+                actual_prompt_tokens_sum=actual_prompt_tokens_sum,
+                actual_completion_tokens_sum=actual_completion_tokens_sum,
+                actual_total_tokens_sum=actual_total_tokens_sum,
+                actual_cache_hit_tokens_sum=actual_cache_hit_tokens_sum,
+                actual_cache_miss_tokens_sum=actual_cache_miss_tokens_sum,
+                actual_prompt_tokens_peak=actual_prompt_tokens_peak,
+                llm_duration_samples=llm_duration_samples,
+                tool_duration_samples=tool_duration_samples,
+                simple_fast_path=simple_fast_path,
                 tool_boundary_trace=(
                     self._tool_boundary.trace(tool_boundary_context)
                     if tool_boundary_context is not None
@@ -2528,6 +2705,16 @@ class DefaultReasoner(Reasoner):
             cache_prompt_tokens=react_cache_prompt_tokens,
             cache_hit_tokens=react_cache_hit_tokens,
             cache_seen=react_cache_seen,
+            actual_prompt_tokens_sum=actual_prompt_tokens_sum,
+            actual_completion_tokens_sum=actual_completion_tokens_sum,
+            actual_total_tokens_sum=actual_total_tokens_sum,
+            actual_cache_hit_tokens_sum=actual_cache_hit_tokens_sum,
+            actual_cache_miss_tokens_sum=actual_cache_miss_tokens_sum,
+            actual_prompt_tokens_peak=actual_prompt_tokens_peak,
+            llm_duration_samples=llm_duration_samples,
+            tool_duration_samples=tool_duration_samples,
+            exit_reason="max_iterations",
+            simple_fast_path=simple_fast_path,
             tool_boundary_trace=(
                 self._tool_boundary.trace(tool_boundary_context)
                 if tool_boundary_context is not None
@@ -2650,6 +2837,16 @@ class DefaultReasoner(Reasoner):
         cache_prompt_tokens: int,
         cache_hit_tokens: int,
         cache_seen: bool,
+        actual_prompt_tokens_sum: int = 0,
+        actual_completion_tokens_sum: int = 0,
+        actual_total_tokens_sum: int = 0,
+        actual_cache_hit_tokens_sum: int = 0,
+        actual_cache_miss_tokens_sum: int = 0,
+        actual_prompt_tokens_peak: int = 0,
+        llm_duration_samples: list[int] | None = None,
+        tool_duration_samples: list[int] | None = None,
+        exit_reason: str = "completed",
+        simple_fast_path: bool = False,
         tool_boundary_trace: dict[str, object] | None = None,
         turn_completion_trace: dict[str, object] | None = None,
         evidence_contract_trace: dict[str, object] | None = None,
@@ -2673,7 +2870,24 @@ class DefaultReasoner(Reasoner):
             "turn_input_sum_tokens": sum(react_input_samples),
             "turn_input_peak_tokens": max(react_input_samples, default=0),
             "final_call_input_tokens": react_input_samples[-1] if react_input_samples else 0,
+            "actual_prompt_tokens_sum": actual_prompt_tokens_sum,
+            "actual_completion_tokens_sum": actual_completion_tokens_sum,
+            "actual_total_tokens_sum": actual_total_tokens_sum,
+            "actual_cache_hit_tokens_sum": actual_cache_hit_tokens_sum,
+            "actual_cache_miss_tokens_sum": actual_cache_miss_tokens_sum,
+            "actual_prompt_tokens_peak": actual_prompt_tokens_peak,
+            "llm_duration_ms_sum": sum(llm_duration_samples or []),
+            "llm_duration_ms_peak": max(llm_duration_samples or [], default=0),
+            "tool_duration_ms_sum": sum(tool_duration_samples or []),
+            "tool_duration_ms_peak": max(tool_duration_samples or [], default=0),
+            "memory_duration_ms_sum": 0,
+            "exit_reason": exit_reason,
+            "tool_error_count": _count_tool_errors(tool_chain),
+            "max_iterations_hit": 1 if exit_reason == "max_iterations" else 0,
+            "empty_reply": 0 if reply.strip() else 1,
         }
+        if simple_fast_path:
+            react_stats["simple_fast_path"] = 1
         if cache_seen:
             react_stats["cache_prompt_tokens"] = cache_prompt_tokens
             react_stats["cache_hit_tokens"] = cache_hit_tokens

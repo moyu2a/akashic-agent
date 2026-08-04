@@ -107,6 +107,7 @@ uv run python main.py
 | 怎么写后台任务让 agent 空闲时自动干活 | [_handbook/drift-guide.md](./_handbook/drift-guide.md) |
 | MEMORY.md / SELF.md / consolidation / 记忆怎么流转 | [_handbook/memory-markdown.md](./_handbook/memory-markdown.md) |
 | 怎么写插件介入生命周期、注册工具 | [_handbook/plugins-tutorial.md](./_handbook/plugins-tutorial.md) |
+| 怎么观测和优化 token 成本、时延、cache 命中 | [_handbook/cost-latency-metrics.md](./_handbook/cost-latency-metrics.md) |
 
 ---
 

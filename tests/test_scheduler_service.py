@@ -201,6 +201,29 @@ async def test_soft_records_push_failed_result(
     assert stored.last_push_result == "发送失败：network"
 
 
+async def test_soft_records_unregistered_channel_as_push_failed(
+    tmp_path, mock_push, mock_loop, fixed_now
+):
+    mock_loop.process_direct = AsyncMock(return_value="摘要")
+    mock_push.execute = AsyncMock(return_value="渠道 'qq' 未注册，可用渠道：['cli', 'qqbot']")
+    svc = make_service(tmp_path, mock_push, mock_loop, fixed_now)
+    job = make_job(
+        trigger="every",
+        tier="soft",
+        fire_at=fixed_now - timedelta(seconds=30),
+        interval_seconds=3600,
+        prompt="内容回顾",
+    )
+    svc._jobs[job.id] = job
+
+    await svc._tick()
+    await drain_tasks()
+
+    stored = svc._jobs[job.id]
+    assert stored.last_status == "push_failed"
+    assert "未注册" in stored.last_push_result
+
+
 async def test_soft_records_execution_failure(
     tmp_path, mock_push, mock_loop, fixed_now
 ):

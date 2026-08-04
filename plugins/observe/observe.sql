@@ -32,6 +32,25 @@ CREATE TABLE IF NOT EXISTS turns (
     react_final_input_tokens INTEGER,       -- 最后一次 LLM 输入估算 token
     react_cache_prompt_tokens INTEGER,      -- DeepSeek KV cache: 本轮输入中 hit+miss tokens
     react_cache_hit_tokens INTEGER,         -- DeepSeek KV cache: 本轮缓存命中 tokens
+    experiment_tag TEXT,                    -- 成本/时延实验标签
+    experiment_overrides_json TEXT,         -- 本轮实验覆盖项快照
+    actual_prompt_tokens_sum INTEGER,       -- 厂商 usage: 本轮输入 token 累计
+    actual_completion_tokens_sum INTEGER,   -- 厂商 usage: 本轮输出 token 累计
+    actual_total_tokens_sum INTEGER,        -- 厂商 usage: 本轮 total token 累计
+    actual_cache_hit_tokens_sum INTEGER,    -- 厂商 usage: 本轮 KV cache hit 累计
+    actual_cache_miss_tokens_sum INTEGER,   -- 厂商 usage: 本轮 KV cache miss 累计
+    actual_prompt_tokens_peak INTEGER,      -- 厂商 usage: 单次 LLM 输入 token 峰值
+    turn_duration_ms INTEGER,               -- 本轮总耗时
+    llm_duration_ms_sum INTEGER,            -- LLM 请求耗时累计
+    llm_duration_ms_peak INTEGER,           -- 单次 LLM 请求耗时峰值
+    tool_duration_ms_sum INTEGER,           -- 工具执行耗时累计
+    tool_duration_ms_peak INTEGER,          -- 单次工具执行耗时峰值
+    memory_duration_ms_sum INTEGER,         -- 记忆链路耗时累计（预留）
+    exit_reason TEXT,                       -- completed / max_iterations 等
+    tool_error_count INTEGER,               -- 本轮工具错误数
+    max_iterations_hit INTEGER,             -- 是否命中迭代上限
+    empty_reply INTEGER,                    -- 是否空回复
+    simple_fast_path INTEGER,               -- 是否命中简单任务轻量路径
     error       TEXT                        -- NULL = 正常
 );
 

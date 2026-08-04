@@ -7,6 +7,7 @@ from collections.abc import Awaitable, Callable
 from typing import Any
 
 from agent.tools.base import Tool
+from agent.tools.channel_names import normalize_channel_chat
 
 logger = logging.getLogger(__name__)
 
@@ -15,7 +16,7 @@ class MessagePushTool(Tool):
     name = "message_push"
     description = (
         "向指定渠道的用户主动发送消息、文件或图片。"
-        "需要提供渠道名（如 telegram、qq）和目标 chat_id。"
+        "需要提供渠道名（如 telegram、qqbot、qq）和目标 chat_id。"
         "message/file/image 三者至少提供一个。"
     )
     parameters = {
@@ -23,7 +24,7 @@ class MessagePushTool(Tool):
         "properties": {
             "channel": {
                 "type": "string",
-                "description": "目标渠道名，如 telegram、qq",
+                "description": "目标渠道名，如 telegram、qqbot、qq",
             },
             "chat_id": {
                 "type": "string",
@@ -77,8 +78,10 @@ class MessagePushTool(Tool):
         )
 
     async def execute(self, **kwargs: Any) -> str:
-        channel: str = kwargs["channel"]
-        chat_id: str = str(kwargs["chat_id"])
+        channel, chat_id = normalize_channel_chat(
+            str(kwargs["channel"]),
+            str(kwargs["chat_id"]),
+        )
         message: str | None = kwargs.get("message")
         file: str | None = kwargs.get("file")
         image: str | None = kwargs.get("image")

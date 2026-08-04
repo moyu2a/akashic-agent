@@ -86,11 +86,25 @@ class _BuildTurnWorkModule:
             history_window=hw,
         )
         frame.slots[_REACT_STATS_SLOT] = extract_react_stats(snap.ctx.context_retry)
-        frame.slots[_EXTRA_SLOT] = (
+        extra: dict[str, object] = (
             {"skip_post_memory": True}
             if (msg.metadata or {}).get("skip_post_memory")
             else {}
         )
+        metadata = getattr(session, "metadata", None)
+        session_experiment = (
+            metadata.get("usage_experiment_tag") if isinstance(metadata, dict) else None
+        )
+        tag = (
+            (msg.metadata or {}).get("experiment_tag")
+            or session_experiment
+            or "baseline"
+        )
+        extra["experiment_tag"] = str(tag or "baseline")
+        overrides = (msg.metadata or {}).get("experiment_overrides")
+        if isinstance(overrides, dict):
+            extra["experiment_overrides"] = dict(overrides)
+        frame.slots[_EXTRA_SLOT] = extra
         frame.slots[_TOOL_CHAIN_SLOT] = list(snap.ctx.tool_chain)
         frame.slots[_OMIT_USER_TURN_SLOT] = bool(
             (msg.metadata or {}).get("omit_user_turn")
@@ -133,7 +147,7 @@ class _BuildTurnCommittedModule:
             tool_call_groups=to_tool_call_groups(tool_chain_list),
             timestamp=msg.timestamp,
             post_reply_budget=dict(cast(dict[str, int], frame.slots[_BUDGET_SLOT])),
-            react_stats=dict(cast(dict[str, int], frame.slots[_REACT_STATS_SLOT])),
+            react_stats=dict(cast(dict[str, object], frame.slots[_REACT_STATS_SLOT])),
             extra=dict(cast(dict[str, object], frame.slots[_EXTRA_SLOT])),
         )
         return frame
@@ -176,7 +190,7 @@ class _LogBudgetModule:
         )
         log_react_context_budget(
             session_key=state.session_key,
-            react_stats=cast(dict[str, int], frame.slots[_REACT_STATS_SLOT]),
+            react_stats=cast(dict[str, object], frame.slots[_REACT_STATS_SLOT]),
         )
         return frame
 

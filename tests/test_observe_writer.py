@@ -531,6 +531,78 @@ def test_write_turn_persists_react_budget_fields(tmp_path):
     assert row[5] == 18000
 
 
+def test_write_turn_persists_usage_experiment_and_latency_fields(tmp_path):
+    db_path = tmp_path / "observe.db"
+    conn = open_db(db_path)
+    try:
+        _write_turn(
+            conn,
+            TurnTrace(
+                source="agent",
+                session_key="telegram:1",
+                user_msg="你好",
+                llm_output="收到",
+                experiment_tag="memory_window_20",
+                experiment_overrides_json='{"memory_window":20}',
+                actual_prompt_tokens_sum=1200,
+                actual_completion_tokens_sum=80,
+                actual_total_tokens_sum=1280,
+                actual_cache_hit_tokens_sum=400,
+                actual_cache_miss_tokens_sum=800,
+                actual_prompt_tokens_peak=900,
+                turn_duration_ms=1500,
+                llm_duration_ms_sum=1100,
+                llm_duration_ms_peak=700,
+                tool_duration_ms_sum=200,
+                tool_duration_ms_peak=200,
+                memory_duration_ms_sum=0,
+                exit_reason="completed",
+                tool_error_count=0,
+                max_iterations_hit=0,
+                empty_reply=0,
+            ),
+            "2026-04-12T00:00:00+00:00",
+        )
+        row = conn.execute(
+            """
+            select experiment_tag, experiment_overrides_json,
+                   actual_prompt_tokens_sum, actual_completion_tokens_sum,
+                   actual_total_tokens_sum, actual_cache_hit_tokens_sum,
+                   actual_cache_miss_tokens_sum, actual_prompt_tokens_peak,
+                   turn_duration_ms, llm_duration_ms_sum, llm_duration_ms_peak,
+                   tool_duration_ms_sum, tool_duration_ms_peak,
+                   memory_duration_ms_sum, exit_reason, tool_error_count,
+                   max_iterations_hit, empty_reply
+            from turns
+            where session_key = ?
+            """,
+            ("telegram:1",),
+        ).fetchone()
+    finally:
+        conn.close()
+
+    assert row == (
+        "memory_window_20",
+        '{"memory_window":20}',
+        1200,
+        80,
+        1280,
+        400,
+        800,
+        900,
+        1500,
+        1100,
+        700,
+        200,
+        200,
+        0,
+        "completed",
+        0,
+        0,
+        0,
+    )
+
+
 def test_open_db_creates_react_budget_columns(tmp_path):
     conn = open_db(tmp_path / "observe.db")
     try:
