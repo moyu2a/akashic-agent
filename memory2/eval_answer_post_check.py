@@ -112,6 +112,12 @@ def build_answer_post_check_shadow(
         candidate_enabled
         and int(score_map.get("forbidden_contains_violation_count", 0) or 0) > 0
     )
+    answer_score_passed = (
+        not required_terms_missing
+        and not answer_choice_group_missing
+        and not language_requirement_failed
+        and not forbidden_answer_term_found
+    )
 
     included_allowed = _intersection_in_order(context_ids, allowed)
     context_set = set(context_ids)
@@ -126,11 +132,18 @@ def build_answer_post_check_shadow(
     dsml_tool_markup_in_final_answer = _contains_dsml_tool_markup(answer)
     tool_markup_in_final_answer = _contains_tool_markup(answer)
     meta_action_final_answer = _is_meta_action_final_answer(answer)
+    action_only_meta_final_answer = _is_action_only_meta_final_answer(answer)
     answerable_evidence_contract_ignored = (
         candidate_enabled
         and not expected_fallback
         and current_truth_count > 0
-        and (tool_markup_in_final_answer or meta_action_final_answer)
+        and (
+            tool_markup_in_final_answer
+            or (
+                meta_action_final_answer
+                and (not answer_score_passed or action_only_meta_final_answer)
+            )
+        )
     )
 
     retry_reasons: list[str] = []
@@ -169,9 +182,14 @@ def build_answer_post_check_shadow(
         "language_requirement_failed",
         "dsml_tool_markup_in_final_answer",
         "tool_markup_in_final_answer",
-        "meta_action_final_answer",
         "answerable_evidence_contract_ignored",
     }
+    if meta_action_final_answer and (
+        not answer_score_passed
+        or tool_markup_in_final_answer
+        or action_only_meta_final_answer
+    ):
+        actionable_retry_reasons.add("meta_action_final_answer")
     blocked_retry_reasons = {
         "forbidden_answer_term_found",
         "forbidden_boundary_included",
@@ -322,6 +340,26 @@ def _is_meta_action_final_answer(answer: str) -> bool:
         "翻一下记忆",
     )
     return any(marker in stripped for marker in markers)
+
+
+def _is_action_only_meta_final_answer(answer: str) -> bool:
+    stripped = answer.strip()
+    if not stripped:
+        return False
+    starters = (
+        "我先查",
+        "先查",
+        "我先翻",
+        "先翻",
+        "我需要先查",
+        "需要先查",
+        "先核实",
+        "确认一下",
+        "看一下记忆",
+        "查一下记忆",
+        "翻一下记忆",
+    )
+    return stripped.startswith(starters)
 
 
 def _string_tuple(value: object) -> tuple[str, ...]:

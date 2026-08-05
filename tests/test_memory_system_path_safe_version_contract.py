@@ -260,6 +260,56 @@ def test_system_path_answer_guidance_is_production_safe_and_private() -> None:
     assert "blocked-id" not in text
 
 
+def test_guided_retry_shadow_tells_model_not_to_repeat_old_values() -> None:
+    old_item = _item(
+        "style-old",
+        "用户旧回答风格偏好是长段落。",
+        status="superseded",
+        source_ref="session:old",
+    )
+    current_item = _item(
+        "style-current",
+        "用户当前回答风格偏好是短句和要点。",
+        status="active",
+        source_ref="session:new",
+    )
+    result = build_system_path_safe_version_contract(
+        query="我现在的回答风格偏好是什么？",
+        baseline_items=[old_item, current_item],
+        route_trace={
+            "candidates_by_lane": {
+                "semantic": [current_item, old_item],
+                "keyword": [],
+                "provenance": [],
+                "graph": [],
+            }
+        },
+        replacements=[
+            {
+                "old_item_id": "style-old",
+                "old_summary": "用户旧回答风格偏好是长段落。",
+                "new_item_id": "style-current",
+                "new_summary": "用户当前回答风格偏好是短句和要点。",
+                "relation_type": "supersede",
+            }
+        ],
+        answer_guidance_enabled=True,
+        answer_prompt_variant="guided_retry_shadow",
+    )
+
+    text = render_system_path_evidence_contract_block(
+        result.contract,
+        answer_guidance_enabled=True,
+        answer_prompt_variant="guided_retry_shadow",
+    )
+
+    assert "Only state the current truth" in text
+    assert "Do not repeat old, stale, or superseded values verbatim" in text
+    assert "Normally do not mention replacement history" in text
+    assert "If the user explicitly asks about old preferences" in text
+    assert "旧版本已失效" in text
+
+
 def test_answer_candidate_contract_extracts_current_truth_and_counts() -> None:
     current = _item("m-current", "用户当前默认测试框架是 pytest。")
     old = _item("m-old", "用户旧测试框架是 nose。", status="superseded")

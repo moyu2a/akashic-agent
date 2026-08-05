@@ -103,6 +103,17 @@ def test_store_searches_by_query_platform_tags_and_time(tmp_path: Path) -> None:
     assert result.count == 1
     assert result.items[0].title == "装修灵感"
 
+    recent_24h = store.search_items(
+        channel="cli",
+        chat_id="1",
+        time_range="recent_24h",
+        limit=10,
+        now=now,
+    )
+
+    assert recent_24h.count == 1
+    assert recent_24h.items[0].title == "装修灵感"
+
 
 def test_tag_feedback_escalates_and_push_listing_filters(tmp_path: Path) -> None:
     from plugins.content_library.store import ContentLibraryStore

@@ -32,6 +32,9 @@ _TAG_STATE = {
     3: "muted",
 }
 _TIME_RANGE_DAYS = {
+    "24h": 1,
+    "last_24h": 1,
+    "recent_24h": 1,
     "recent_7d": 7,
     "recent_30d": 30,
 }

@@ -639,7 +639,7 @@ def test_system_path_safe_version_cli_supports_guided_retry_shadow_mode(
         assert "raw_prompt" not in str(post)
 
 
-def test_system_path_safe_version_guided_retry_shadow_stays_single_call(
+def test_system_path_safe_version_guided_retry_shadow_retries_at_most_once(
     tmp_path: Path,
 ) -> None:
     from memory2.eval_quantitative_cases import build_quantitative_eval_cases
@@ -663,9 +663,10 @@ def test_system_path_safe_version_guided_retry_shadow_stays_single_call(
     )
 
     assert report.metrics["case_count"] == 1
-    assert len(provider.calls) == 1
+    assert len(provider.calls) in {1, 2}
     assert report.cases[0]["post_check_shadow"]["retry_if_needed_shadow_enabled"] is True
     assert report.cases[0]["post_check_shadow"]["retry_if_needed_eligible"] in {True, False}
+    assert report.cases[0]["retry_if_needed_applied"] is (len(provider.calls) == 2)
 
 
 def test_system_path_safe_version_cli_writes_answer_debug_only_when_requested(
@@ -1840,6 +1841,114 @@ def test_system_path_safe_version_fake_provider_rows_are_answer_scored(
         assert "forbidden_contains_violation_count" in row
         assert "failures" in row
         assert "answer_passed" not in row
+
+
+def test_system_path_eval_retry_if_needed_repairs_answer_choice_miss(
+    tmp_path: Path,
+) -> None:
+    from agent.provider import LLMResponse
+    from memory2.eval_system_path_safe_version import run_system_path_safe_version_cases
+
+    cases = build_quantitative_eval_cases("common", case_pack="standard", limit=40)
+    target = next(case for case in cases if case.id == "common_preference_recall_02")
+    expected = target.expectations["answer_expectations"][
+        "expected_answer_contains_any"
+    ][1][0]
+
+    class RetryProvider:
+        def __init__(self) -> None:
+            self.calls: list[str] = []
+
+        async def chat(self, **kwargs: object) -> LLMResponse:
+            text = "\n".join(
+                str(message.get("content") or "")
+                for message in kwargs["messages"]  # type: ignore[index]
+                if isinstance(message, dict)
+            )
+            self.calls.append(text)
+            answer = (
+                f"当前记录显示：{expected}。"
+                if "Targeted Answer Retry" in text
+                else "当前记录显示：偏好已记录。"
+            )
+            usage = {"prompt_tokens": 20, "completion_tokens": 10, "total_tokens": 30}
+            return LLMResponse(
+                content=answer,
+                tool_calls=[],
+                provider_fields={"usage": usage},
+            )
+
+    provider = RetryProvider()
+    report = asyncio.run(
+        run_system_path_safe_version_cases(
+            [target],
+            tmp_path / "workspace",
+            provider,
+            modes=("safe_version_replace_guided_with_retry_shadow",),
+            model="retry-test-model",
+        )
+    )
+
+    row = report.cases[0]
+    assert len(provider.calls) == 2
+    assert row["retry_if_needed_applied"] is True
+    assert row["retry_if_needed_reason"] == "answer_choice_group_missing"
+    assert row["initial_answer_rule_passed"] is False
+    assert row["answer_rule_passed"] is True
+    assert row["post_check_shadow"]["retry_if_needed_eligible"] is False
+    assert "Targeted Answer Retry" in provider.calls[1]
+
+
+def test_system_path_eval_does_not_retry_forbidden_answer_term(
+    tmp_path: Path,
+) -> None:
+    from agent.provider import LLMResponse
+    from memory2.eval_system_path_safe_version import run_system_path_safe_version_cases
+
+    target = next(
+        case
+        for case in build_quantitative_eval_cases(
+            "common",
+            case_pack="standard",
+            limit=40,
+        )
+        if case.id == "common_style_preference_04"
+    )
+    forbidden = target.expectations["answer_expectations"][
+        "forbidden_answer_contains"
+    ][0]
+
+    class ForbiddenProvider:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        async def chat(self, **kwargs: object) -> LLMResponse:
+            self.calls += 1
+            usage = {"prompt_tokens": 20, "completion_tokens": 10, "total_tokens": 30}
+            return LLMResponse(
+                content=f"当前偏好已更新，但不要使用旧说法：{forbidden}。",
+                tool_calls=[],
+                provider_fields={"usage": usage},
+            )
+
+    provider = ForbiddenProvider()
+    report = asyncio.run(
+        run_system_path_safe_version_cases(
+            [target],
+            tmp_path / "workspace",
+            provider,
+            modes=("safe_version_replace_guided_with_retry_shadow",),
+            model="retry-test-model",
+        )
+    )
+
+    row = report.cases[0]
+    assert provider.calls == 1
+    assert row["retry_if_needed_applied"] is False
+    assert row["post_check_shadow"]["retry_if_needed_eligible"] is False
+    assert row["post_check_shadow"]["retry_if_needed_blocked_reasons"] == [
+        "forbidden_answer_term_found"
+    ]
 
 
 def test_system_path_safe_version_rows_include_sanitized_scoring_counts(

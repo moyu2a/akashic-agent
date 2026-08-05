@@ -323,3 +323,68 @@ def test_post_check_does_not_mark_contract_ignored_without_current_truth() -> No
     assert payload["answerable_evidence_contract_ignored"] is False
     assert "meta_action_final_answer" in payload["retry_reasons"]
     assert "answerable_evidence_contract_ignored" not in payload["retry_reasons"]
+
+
+def test_post_check_low_risk_meta_phrase_is_telemetry_only_when_answer_passed() -> None:
+    shadow = build_answer_post_check_shadow(
+        "当前偏好是短句和要点；以后回答前我会先核实是否有更新。",
+        {
+            "production_safe_evidence_contract": True,
+            "allowed_evidence_ids": ["m-current"],
+            "likely_relevant_evidence_ids": ["m-current"],
+            "insufficient_evidence_fallback": False,
+            "answer_candidate_contract": {
+                "enabled": True,
+                "current_truth_count": 1,
+                "must_include_term_count": 1,
+                "forbidden_old_value_count": 0,
+                "language_requirement": "match_user_language",
+            },
+            "answer_score": {
+                "expected_contains_miss_count": 0,
+                "expected_any_miss_count": 0,
+                "language_passed": True,
+                "forbidden_contains_violation_count": 0,
+            },
+        },
+        ["m-current"],
+    )
+
+    payload = answer_post_check_shadow_to_dict(shadow)
+    assert payload["meta_action_final_answer"] is True
+    assert payload["answerable_evidence_contract_ignored"] is False
+    assert payload["retry_if_needed_eligible"] is False
+    assert "meta_action_final_answer" in payload["retry_reasons"]
+    assert "meta_action_final_answer" not in payload["retry_if_needed_reasons"]
+
+
+def test_post_check_action_only_meta_answer_stays_retry_eligible() -> None:
+    shadow = build_answer_post_check_shadow(
+        "先翻一下记忆文件核实。",
+        {
+            "production_safe_evidence_contract": True,
+            "allowed_evidence_ids": ["m-current"],
+            "likely_relevant_evidence_ids": ["m-current"],
+            "insufficient_evidence_fallback": False,
+            "answer_candidate_contract": {
+                "enabled": True,
+                "current_truth_count": 1,
+                "must_include_term_count": 1,
+                "forbidden_old_value_count": 0,
+                "language_requirement": "match_user_language",
+            },
+            "answer_score": {
+                "expected_contains_miss_count": 1,
+                "expected_any_miss_count": 0,
+                "language_passed": True,
+                "forbidden_contains_violation_count": 0,
+            },
+        },
+        ["m-current"],
+    )
+
+    payload = answer_post_check_shadow_to_dict(shadow)
+    assert payload["meta_action_final_answer"] is True
+    assert payload["answerable_evidence_contract_ignored"] is True
+    assert payload["retry_if_needed_eligible"] is True
+    assert "meta_action_final_answer" in payload["retry_if_needed_reasons"]

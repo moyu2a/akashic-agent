@@ -7,7 +7,7 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any, Iterable, Sequence, cast
+from typing import Any, Iterable, Mapping, Sequence, cast
 from unittest.mock import MagicMock
 
 from agent.context import ContextBuilder
@@ -595,10 +595,70 @@ async def _run_case_mode(
         post_check = answer_post_check_shadow_to_dict(
             build_answer_post_check_shadow(answer, answer_contract, context_ids)
         )
+    initial_score = score
+    initial_failures = tuple((*failures, *score.failures))
+    initial_post_check = dict(post_check)
+    retry_if_needed_applied = False
+    retry_if_needed_reason = ""
+    retry_if_needed_provider_error = False
+    retry_reason = _should_apply_retry_if_needed(post_check)
+    if retry_reason:
+        retry_if_needed_reason = retry_reason
+        try:
+            retry_response = await recording_provider.chat(
+                model=model,
+                tools=[],
+                max_tokens=8192,
+                messages=_build_retry_if_needed_messages(
+                    query=query,
+                    answer=answer,
+                    reason=retry_reason,
+                    contract=contract,
+                    memory_items=memory_items,
+                    context_ids=context_ids,
+                ),
+            )
+            retry_answer = str(retry_response.content or "")
+            retry_score = score_answer_text(
+                retry_answer,
+                answer_expectation_from_case(case),
+                context_ids,
+            )
+            retry_post_check = {"shadow_enabled": False}
+            if mode in POST_CHECK_MODES and contract:
+                retry_contract = dict(contract)
+                retry_contract["production_safe_evidence_contract"] = True
+                if mode in {
+                    "safe_version_replace_guided_with_retry_shadow",
+                    "safe_version_replace_schema_first_shadow",
+                }:
+                    retry_contract["answer_score"] = {
+                        "expected_contains_miss_count": (
+                            retry_score.expected_contains_miss_count
+                        ),
+                        "expected_any_miss_count": retry_score.expected_any_miss_count,
+                        "language_passed": retry_score.language_passed,
+                        "forbidden_contains_violation_count": (
+                            retry_score.forbidden_contains_violation_count
+                        ),
+                    }
+                retry_post_check = answer_post_check_shadow_to_dict(
+                    build_answer_post_check_shadow(
+                        retry_answer,
+                        retry_contract,
+                        context_ids,
+                    )
+                )
+            answer = retry_answer
+            score = retry_score
+            post_check = retry_post_check
+            retry_if_needed_applied = True
+        except Exception:
+            retry_if_needed_provider_error = True
+            provider_error = True
+            failures.append("provider_error")
     failures.extend(score.failures)
-    token_counts = _extract_token_counts(
-        recording_provider.responses[-1] if recording_provider.responses else None
-    )
+    token_counts = _extract_accumulated_token_counts(recording_provider.responses)
     record = {
         "case_id": case.id,
         "case_index": case_index,
@@ -628,6 +688,14 @@ async def _run_case_mode(
         "safe_version_metadata": _sanitize_metadata(metadata),
         "safe_version_contract": _sanitize_contract(contract),
         "post_check_shadow": post_check,
+        "retry_if_needed_applied": retry_if_needed_applied,
+        "retry_if_needed_reason": retry_if_needed_reason,
+        "retry_if_needed_provider_error": retry_if_needed_provider_error,
+        "initial_answer_rule_passed": initial_score.answer_rule_passed,
+        "initial_failures": tuple(
+            _sanitize_failure(failure) for failure in initial_failures
+        ),
+        "initial_post_check_shadow": initial_post_check,
     }
     if answer_debug_dir is not None:
         _write_system_path_answer_debug(
@@ -731,6 +799,115 @@ def _mode_answer_prompt_variant(mode: str) -> str:
     if mode == "safe_version_replace_schema_first_shadow":
         return "schema_first_shadow"
     return "standard"
+
+
+def _should_apply_retry_if_needed(post_check: Mapping[str, object]) -> str:
+    if not bool(post_check.get("retry_if_needed_eligible")):
+        return ""
+    blocked = post_check.get("retry_if_needed_blocked_reasons", ())
+    if isinstance(blocked, (list, tuple)) and blocked:
+        return ""
+    reasons = post_check.get("retry_if_needed_reasons", ())
+    if not isinstance(reasons, (list, tuple)):
+        return ""
+    reason_set = {str(reason) for reason in reasons if str(reason)}
+    priority = (
+        "answer_choice_group_missing",
+        "required_terms_missing",
+        "language_requirement_failed",
+        "answerable_evidence_contract_ignored",
+        "meta_action_final_answer",
+        "tool_markup_in_final_answer",
+        "dsml_tool_markup_in_final_answer",
+    )
+    return next((reason for reason in priority if reason in reason_set), "")
+
+
+def _build_retry_if_needed_messages(
+    *,
+    query: str,
+    answer: str,
+    reason: str,
+    contract: Mapping[str, object],
+    memory_items: Sequence[Mapping[str, object]],
+    context_ids: Sequence[str],
+) -> list[dict[str, str]]:
+    evidence_lines = _retry_allowed_evidence_lines(memory_items, context_ids)
+    allowed_count = len(_string_tuple(contract.get("allowed_evidence_ids", ())))
+    active_count = len(_string_tuple(contract.get("active_version_ids", ())))
+    system = "\n".join(
+        [
+            "Targeted Answer Retry",
+            "You are repairing one final answer using only the evidence below.",
+            f"retry_reason: {reason}",
+            f"allowed_evidence_count: {allowed_count}",
+            f"active_version_count: {active_count}",
+            "Use only allowed_evidence.",
+            "Directly answer the user's question in the user's language.",
+            "Include the concrete current fact that was omitted.",
+            "Do not repeat old, stale, or superseded values verbatim.",
+            "Do not output tool calls, markup, JSON, or an action plan.",
+            "allowed_evidence:",
+            *evidence_lines,
+        ]
+    )
+    user = "\n".join(
+        [
+            "Original user question:",
+            query,
+            "Previous answer to repair:",
+            answer,
+            "Write the repaired final answer only.",
+        ]
+    )
+    return [
+        {"role": "system", "content": system},
+        {"role": "user", "content": user},
+    ]
+
+
+def _retry_allowed_evidence_lines(
+    memory_items: Sequence[Mapping[str, object]],
+    context_ids: Sequence[str],
+) -> list[str]:
+    by_id = {
+        str(item.get("id") or item.get("memory_id") or "").strip(): item
+        for item in memory_items
+        if str(item.get("id") or item.get("memory_id") or "").strip()
+    }
+    lines: list[str] = []
+    for item_id in context_ids:
+        item = by_id.get(str(item_id))
+        if not item:
+            continue
+        summary = str(item.get("summary") or "").strip()
+        if summary:
+            lines.append("- " + summary)
+    return lines or ["- Available evidence is empty."]
+
+
+def _string_tuple(value: object) -> tuple[str, ...]:
+    if isinstance(value, str):
+        return (value,) if value else ()
+    if not isinstance(value, Sequence):
+        return ()
+    return tuple(str(item) for item in value if str(item))
+
+
+def _extract_accumulated_token_counts(responses: Sequence[object]) -> dict[str, object]:
+    counts = [_extract_token_counts(response) for response in responses]
+    if not counts:
+        return _extract_token_counts(None)
+    return {
+        "prompt_token_count": sum(int(item["prompt_token_count"]) for item in counts),
+        "completion_token_count": sum(
+            int(item["completion_token_count"]) for item in counts
+        ),
+        "total_token_count": sum(int(item["total_token_count"]) for item in counts),
+        "token_metrics_available": any(
+            bool(item["token_metrics_available"]) for item in counts
+        ),
+    }
 
 
 def _seed_store(

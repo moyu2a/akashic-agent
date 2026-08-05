@@ -1,0 +1,249 @@
+{
+  "metrics": {
+    "mode": "real_llm",
+    "real_llm": true,
+    "turn_count": 6,
+    "profile_count": 2,
+    "case_count": 3,
+    "gate_pass": true,
+    "profiles": [
+      "baseline",
+      "tool_result_limit"
+    ],
+    "categories": [
+      "tool_task"
+    ],
+    "run_ids": [
+      "realab-20260804T140053603295Z"
+    ]
+  },
+  "profile_summaries": {
+    "baseline": {
+      "turn_count": 3,
+      "pass_count": 3,
+      "warn_count": 0,
+      "fail_count": 0,
+      "missing_or_zero_usage_count": 0,
+      "unexpected_fast_path_count": 0,
+      "expected_tool_missing_count": 0,
+      "denied_tool_attempt_count": 0,
+      "unregistered_tool_count": 0,
+      "forbidden_reply_pattern_count": 0,
+      "tool_errors": 0,
+      "avg_prompt_tokens": 40046,
+      "avg_total_tokens": 40641.3,
+      "avg_turn_ms": 10671
+    },
+    "tool_result_limit": {
+      "turn_count": 3,
+      "pass_count": 3,
+      "warn_count": 0,
+      "fail_count": 0,
+      "missing_or_zero_usage_count": 0,
+      "unexpected_fast_path_count": 0,
+      "expected_tool_missing_count": 0,
+      "denied_tool_attempt_count": 0,
+      "unregistered_tool_count": 0,
+      "forbidden_reply_pattern_count": 0,
+      "tool_errors": 0,
+      "avg_prompt_tokens": 43868,
+      "avg_total_tokens": 44511,
+      "avg_turn_ms": 10306.7
+    }
+  },
+  "category_summaries": {
+    "tool_task": {
+      "turn_count": 6,
+      "pass_count": 6,
+      "warn_count": 0,
+      "fail_count": 0,
+      "missing_or_zero_usage_count": 0,
+      "unexpected_fast_path_count": 0,
+      "expected_tool_missing_count": 0,
+      "denied_tool_attempt_count": 0,
+      "unregistered_tool_count": 0,
+      "forbidden_reply_pattern_count": 0,
+      "tool_errors": 0,
+      "avg_prompt_tokens": 41957,
+      "avg_total_tokens": 42576.2,
+      "avg_turn_ms": 10488.8
+    }
+  },
+  "paired_deltas": {
+    "tool_result_limit": {
+      "paired_case_count": 3,
+      "total_tokens_delta_pct": 9.52,
+      "turn_latency_delta_pct": -3.41
+    }
+  },
+  "records": [
+    {
+      "run_id": "realab-20260804T140053603295Z",
+      "phase": "D",
+      "profile": "baseline",
+      "case_id": "tool_002",
+      "category": "tool_task",
+      "prompt_preview": "搜索我保存过的装修内容。",
+      "reply_preview": "没搜到。我试了\"装修\"\"家居\"\"房子设计\"几个词，都是空的，最近保存的内容列表也是空的——你的内容库里目前好像还没有装修相关的东西。 是不是之前聊过装修的事但没点保存？还是你记成在别的地方存了？如果是聊天里聊过的，我可以去翻历史记录找找。",
+      "correctness": "PASS",
+      "simple_fast_path": false,
+      "expected_fast_path": false,
+      "tool_error_count": 0,
+      "actual_prompt_tokens_sum": 43641,
+      "actual_total_tokens_sum": 44211,
+      "turn_duration_ms": 14326,
+      "llm_duration_ms_sum": 8655,
+      "react_iteration_count": 4,
+      "actual_tools": [
+        "search_content_items",
+        "list_recent_content_items"
+      ],
+      "expected_tools": [],
+      "denied_tool_attempt_count": 0,
+      "unregistered_tool_count": 0,
+      "forbidden_reply_pattern_count": 0,
+      "expected_tool_missing_count": 0,
+      "note": "real llm gated ab; isolated workspace per profile/case"
+    },
+    {
+      "run_id": "realab-20260804T140053603295Z",
+      "phase": "D",
+      "profile": "baseline",
+      "case_id": "tool_003",
+      "category": "tool_task",
+      "prompt_preview": "查看最近保存的 B 站内容。",
+      "reply_preview": "查了下，内容库里目前没有保存过 B 站的内容——按平台搜、按关键词搜都是空的，最近保存列表也是空的。 是之前没存过，还是你想让我以后看到 B 站视频就帮你记下来？",
+      "correctness": "PASS",
+      "simple_fast_path": false,
+      "expected_fast_path": false,
+      "tool_error_count": 0,
+      "actual_prompt_tokens_sum": 32551,
+      "actual_total_tokens_sum": 33081,
+      "turn_duration_ms": 7599,
+      "llm_duration_ms_sum": 6947,
+      "react_iteration_count": 3,
+      "actual_tools": [
+        "search_content_items",
+        "list_recent_content_items"
+      ],
+      "expected_tools": [],
+      "denied_tool_attempt_count": 0,
+      "unregistered_tool_count": 0,
+      "forbidden_reply_pattern_count": 0,
+      "expected_tool_missing_count": 0,
+      "note": "real llm gated ab; isolated workspace per profile/case"
+    },
+    {
+      "run_id": "realab-20260804T140053603295Z",
+      "phase": "D",
+      "profile": "baseline",
+      "case_id": "tool_004",
+      "category": "tool_task",
+      "prompt_preview": "帮我列出内容库里带游戏标签的条目。",
+      "reply_preview": "查了三次，按\"游戏\"标签、关键词搜，还有最近保存的内容列表，都是空的。 内容库里现在没有带游戏标签的条目，近期保存列表也是空的。可能之前没存过带这个标签的内容，或者内容库整体就是空的。",
+      "correctness": "PASS",
+      "simple_fast_path": false,
+      "expected_fast_path": false,
+      "tool_error_count": 0,
+      "actual_prompt_tokens_sum": 43946,
+      "actual_total_tokens_sum": 44632,
+      "turn_duration_ms": 10088,
+      "llm_duration_ms_sum": 9554,
+      "react_iteration_count": 4,
+      "actual_tools": [
+        "search_content_items",
+        "list_recent_content_items"
+      ],
+      "expected_tools": [],
+      "denied_tool_attempt_count": 0,
+      "unregistered_tool_count": 0,
+      "forbidden_reply_pattern_count": 0,
+      "expected_tool_missing_count": 0,
+      "note": "real llm gated ab; isolated workspace per profile/case"
+    },
+    {
+      "run_id": "realab-20260804T140053603295Z",
+      "phase": "D",
+      "profile": "tool_result_limit",
+      "case_id": "tool_002",
+      "category": "tool_task",
+      "prompt_preview": "搜索我保存过的装修内容。",
+      "reply_preview": "搜了\"装修\"、\"家居\"、\"家装\"，都 0 条，最近保存的内容列表也是空的。 看起来内容库里还没有存过装修相关的东西。是不是之前存的时候用了别的词，或者还没存过？你要是记得大概是什么平台或标题，我再按那个搜搜看。",
+      "correctness": "PASS",
+      "simple_fast_path": false,
+      "expected_fast_path": false,
+      "tool_error_count": 0,
+      "actual_prompt_tokens_sum": 43704,
+      "actual_total_tokens_sum": 44298,
+      "turn_duration_ms": 10175,
+      "llm_duration_ms_sum": 9646,
+      "react_iteration_count": 4,
+      "actual_tools": [
+        "search_content_items",
+        "list_recent_content_items"
+      ],
+      "expected_tools": [],
+      "denied_tool_attempt_count": 0,
+      "unregistered_tool_count": 0,
+      "forbidden_reply_pattern_count": 0,
+      "expected_tool_missing_count": 0,
+      "note": "real llm gated ab; isolated workspace per profile/case"
+    },
+    {
+      "run_id": "realab-20260804T140053603295Z",
+      "phase": "D",
+      "profile": "tool_result_limit",
+      "case_id": "tool_003",
+      "category": "tool_task",
+      "prompt_preview": "查看最近保存的 B 站内容。",
+      "reply_preview": "查了一下，内容库里目前没有找到保存的 B 站内容——最近保存列表、按平台过滤、近 30 天整体检索都是空的。 可能之前没存过，或者存的位置不在这个库。要我换个方式查吗？比如按关键词搜搜看。",
+      "correctness": "PASS",
+      "simple_fast_path": false,
+      "expected_fast_path": false,
+      "tool_error_count": 0,
+      "actual_prompt_tokens_sum": 44002,
+      "actual_total_tokens_sum": 44735,
+      "turn_duration_ms": 10030,
+      "llm_duration_ms_sum": 9526,
+      "react_iteration_count": 4,
+      "actual_tools": [
+        "search_content_items",
+        "list_recent_content_items"
+      ],
+      "expected_tools": [],
+      "denied_tool_attempt_count": 0,
+      "unregistered_tool_count": 0,
+      "forbidden_reply_pattern_count": 0,
+      "expected_tool_missing_count": 0,
+      "note": "real llm gated ab; isolated workspace per profile/case"
+    },
+    {
+      "run_id": "realab-20260804T140053603295Z",
+      "phase": "D",
+      "profile": "tool_result_limit",
+      "case_id": "tool_004",
+      "category": "tool_task",
+      "prompt_preview": "帮我列出内容库里带游戏标签的条目。",
+      "reply_preview": "查了，内容库现在是空的——带\"游戏\"标签的没有，整个库目前一条内容都没有。 所以这个列表暂时列不出来。你要是之前存过东西，可能是存到了别的库或渠道；有链接想存进来的话，跟我说一声就行。",
+      "correctness": "PASS",
+      "simple_fast_path": false,
+      "expected_fast_path": false,
+      "tool_error_count": 0,
+      "actual_prompt_tokens_sum": 43898,
+      "actual_total_tokens_sum": 44500,
+      "turn_duration_ms": 10715,
+      "llm_duration_ms_sum": 10188,
+      "react_iteration_count": 4,
+      "actual_tools": [
+        "search_content_items",
+        "list_recent_content_items"
+      ],
+      "expected_tools": [],
+      "denied_tool_attempt_count": 0,
+      "unregistered_tool_count": 0,
+      "forbidden_reply_pattern_count": 0,
+      "expected_tool_missing_count": 0,
+      "note": "real llm gated ab; isolated workspace per profile/case"
+    }
+  ]
+}
