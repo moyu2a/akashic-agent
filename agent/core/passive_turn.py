@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, Any, Awaitable, Callable, cast
 
 import agent.core.passive_support as support
 from agent.config_models import OptimizationConfig
+from agent.governance.eval_switch import resolve_tool_governance_eval_switch
 from agent.optimization.profiles import (
     OPTIMIZATION_PROFILE_METADATA_KEY,
     ResolvedOptimizationProfile,
@@ -77,8 +78,14 @@ from agent.lifecycle.phases.before_reasoning import (
     BeforeReasoningFrame,
     default_before_reasoning_modules,
 )
-from agent.lifecycle.phases.before_step import BeforeStepFrame, default_before_step_modules
-from agent.lifecycle.phases.before_turn import BeforeTurnFrame, default_before_turn_modules
+from agent.lifecycle.phases.before_step import (
+    BeforeStepFrame,
+    default_before_step_modules,
+)
+from agent.lifecycle.phases.before_turn import (
+    BeforeTurnFrame,
+    default_before_turn_modules,
+)
 from agent.lifecycle.phases.prompt_render import (
     PromptRenderFrame,
     default_prompt_render_modules,
@@ -491,7 +498,9 @@ class PassiveTurnPipeline:
         self._context = deps.context
         self._tools = deps.tools
         self._reasoner = deps.reasoner
-        add_before_step = getattr(self._reasoner, "add_before_step_plugin_modules", None)
+        add_before_step = getattr(
+            self._reasoner, "add_before_step_plugin_modules", None
+        )
         if add_before_step is not None:
             add_before_step(list(deps.before_step_plugin_modules or []))
         add_after_step = getattr(self._reasoner, "add_after_step_plugin_modules", None)
@@ -544,7 +553,9 @@ class PassiveTurnPipeline:
         self._after_turn_plugin_modules.extend(modules)
         self._after_turn = self._build_after_turn_phase()
 
-    def _build_before_turn_phase(self) -> Phase[TurnState, BeforeTurnCtx, BeforeTurnFrame]:
+    def _build_before_turn_phase(
+        self,
+    ) -> Phase[TurnState, BeforeTurnCtx, BeforeTurnFrame]:
         return Phase(
             default_before_turn_modules(
                 self._bus,
@@ -663,7 +674,9 @@ class PassiveTurnPipeline:
                 turn_metadata=state.extra_metadata,
             )
         except Exception:
-            logger.exception("PassiveTurnPipeline.run failed before dispatch session=%s", key)
+            logger.exception(
+                "PassiveTurnPipeline.run failed before dispatch session=%s", key
+            )
             return await self._control_outbound(
                 state,
                 OutboundMessage(
@@ -680,7 +693,9 @@ class PassiveTurnPipeline:
         after_reasoning.ctx.context_retry.setdefault(
             "react_stats",
             {},
-        )["turn_duration_ms"] = int((time.monotonic() - turn_started) * 1000)
+        )[
+            "turn_duration_ms"
+        ] = int((time.monotonic() - turn_started) * 1000)
 
         # Phase 6: AfterTurn 模块链（TurnCommitted fanout、AfterTurn fanout、dispatch）。
         return await self._after_turn.run(
@@ -782,7 +797,11 @@ class DefaultContextStore(ContextStore):
         history_window: int | None = None,
     ) -> ContextBundle:
         # 1. 先读取 session history，并转换成 retrieval pipeline 需要的结构。
-        hw = self._history_window if history_window is None else max(1, int(history_window))
+        hw = (
+            self._history_window
+            if history_window is None
+            else max(1, int(history_window))
+        )
         raw_history = list(session.get_history(max_messages=hw))
         history_messages = support.to_history_messages(raw_history)
 
@@ -819,6 +838,7 @@ class DefaultContextStore(ContextStore):
             retrieval_metadata=dict(retrieval_result.metadata or {}),
             history_messages=history_messages,
         )
+
 
 class Reasoner(ABC):
 
@@ -926,21 +946,23 @@ class DefaultReasoner(Reasoner):
         self._turn_completion = TurnCompletionController()
         self._evidence_contract = EvidenceContractManager()
         self._react_boundary = ReactBoundaryManager()
-        self._stream_sink_factory: Callable[
-            [object], Callable[[dict[str, str] | str], Awaitable[None]] | None
-        ] | None = None
+        self._stream_sink_factory: (
+            Callable[[object], Callable[[dict[str, str] | str], Awaitable[None]] | None]
+            | None
+        ) = None
         bus = event_bus or EventBus()
         self._bus = bus
         self._before_step = self._build_before_step_phase()
         self._after_step = self._build_after_step_phase()
-        self._prompt_render: Phase[
-            PromptRenderInput,
-            PromptRenderResult,
-            PromptRenderFrame,
-        ] | None = (
-            self._build_prompt_render_phase(context)
-            if context is not None
-            else None
+        self._prompt_render: (
+            Phase[
+                PromptRenderInput,
+                PromptRenderResult,
+                PromptRenderFrame,
+            ]
+            | None
+        ) = (
+            self._build_prompt_render_phase(context) if context is not None else None
         )
 
     def add_tool_hooks(self, hooks: list["ToolHook"]) -> None:
@@ -979,7 +1001,9 @@ class DefaultReasoner(Reasoner):
             frame_factory=BeforeStepFrame,
         )
 
-    def _build_after_step_phase(self) -> Phase[AfterStepCtx, AfterStepCtx, AfterStepFrame]:
+    def _build_after_step_phase(
+        self,
+    ) -> Phase[AfterStepCtx, AfterStepCtx, AfterStepFrame]:
         return Phase(
             default_after_step_modules(
                 self._bus,
@@ -1028,10 +1052,10 @@ class DefaultReasoner(Reasoner):
 
     def set_stream_sink_factory(
         self,
-        factory: Callable[
-            [object], Callable[[dict[str, str] | str], Awaitable[None]] | None
-        ]
-        | None,
+        factory: (
+            Callable[[object], Callable[[dict[str, str] | str], Awaitable[None]] | None]
+            | None
+        ),
     ) -> None:
         self._stream_sink_factory = factory
 
@@ -1049,7 +1073,9 @@ class DefaultReasoner(Reasoner):
         from agent.core.runtime_support import TurnRunResult
 
         if self._context is None or self._session_manager is None:
-            raise RuntimeError("DefaultReasoner.run_turn requires context and session_manager")
+            raise RuntimeError(
+                "DefaultReasoner.run_turn requires context and session_manager"
+            )
         if self._prompt_render is None:
             self._prompt_render = self._build_prompt_render_phase(self._context)
         audit_ledger_store = _tool_audit_ledger_from_context(self._context)
@@ -1087,9 +1113,11 @@ class DefaultReasoner(Reasoner):
                 else {}
             ),
             msg_metadata=_merge_metadata(
-                getattr(msg, "metadata", {})
-                if isinstance(getattr(msg, "metadata", {}), Mapping)
-                else {},
+                (
+                    getattr(msg, "metadata", {})
+                    if isinstance(getattr(msg, "metadata", {}), Mapping)
+                    else {}
+                ),
                 turn_metadata,
             ),
         )
@@ -1134,11 +1162,17 @@ class DefaultReasoner(Reasoner):
                 "[tool_search] LRU preloaded=%s",
                 sorted(preloaded) if preloaded else "[]",
             )
-        tool_access_metadata = (
-            task_execution_turn.turn_metadata
-            if task_execution_turn is not None
-            else self._build_tool_access_metadata(msg, session.key)
+        tool_access_metadata = self._build_tool_access_metadata(msg, session.key)
+        if task_execution_turn is not None:
+            tool_access_metadata = _merge_metadata(
+                tool_access_metadata,
+                task_execution_turn.turn_metadata,
+            )
+        tool_access_metadata = _merge_metadata(tool_access_metadata, turn_metadata)
+        tool_governance_switch = resolve_tool_governance_eval_switch(
+            tool_access_metadata
         )
+        retry_trace["tool_governance_eval"] = tool_governance_switch.to_trace()
         tool_access_context = ToolAccessContext(
             session_key=session.key,
             user_text=str(msg.content or ""),
@@ -1152,10 +1186,12 @@ class DefaultReasoner(Reasoner):
             tool_discovery_enabled=self._tool_search_enabled,
         )
         candidate_boundary_context = self._tool_boundary.build_context(
-            tool_access_context
+            tool_access_context,
+            tool_governance_switch,
         )
         if (
             self._tool_search_enabled
+            or tool_governance_switch.active
             or candidate_boundary_context.access_plan.strict_capability_scope
         ):
             tool_boundary_context = candidate_boundary_context
@@ -1181,7 +1217,9 @@ class DefaultReasoner(Reasoner):
                 ",".join(tool_boundary_context.access_plan.matched_terms) or "-",
             )
         stream_sink = (
-            self._stream_sink_factory(msg) if self._stream_sink_factory is not None else None
+            self._stream_sink_factory(msg)
+            if self._stream_sink_factory is not None
+            else None
         )
 
         # 2. 再按 trim plan + history window 顺序逐轮尝试。
@@ -1318,7 +1356,9 @@ class DefaultReasoner(Reasoner):
                     retry_trace["llm_user_content"] = llm_user_content
                 if isinstance(llm_context_frame, str) and llm_context_frame.strip():
                     retry_trace["llm_context_frame"] = llm_context_frame
-                retry_trace["react_stats"] = dict(result.metadata.get("react_stats") or {})
+                retry_trace["react_stats"] = dict(
+                    result.metadata.get("react_stats") or {}
+                )
                 retry_trace["optimization_profile"] = optimization_profile.name
                 if result.metadata.get("tool_boundary"):
                     retry_trace["tool_boundary"] = result.metadata["tool_boundary"]
@@ -1456,7 +1496,9 @@ class DefaultReasoner(Reasoner):
                 self._optimization,
                 base_memory_window=self._memory_window,
             )
-        simple_fast_path = bool(profile.simple_fast_path) and _should_use_simple_fast_path(user_text)
+        simple_fast_path = bool(
+            profile.simple_fast_path
+        ) and _should_use_simple_fast_path(user_text)
         tools_used: list[str] = []
         tool_chain: list[dict[str, Any]] = []
         # 2. 初始化本轮可见工具集合。
@@ -1536,20 +1578,22 @@ class DefaultReasoner(Reasoner):
         while True:
             iteration += 1
             if (
-                (1 if simple_fast_path else self._llm_config.max_iterations) > 0
-                and iteration
-                >= (1 if simple_fast_path else self._llm_config.max_iterations)
+                1 if simple_fast_path else self._llm_config.max_iterations
+            ) > 0 and iteration >= (
+                1 if simple_fast_path else self._llm_config.max_iterations
             ):
                 break
             # 3. BeforeStep 模块链：token 估算、BeforeStep 事件、提示注入。
-            step_ctx = await self._before_step.run(BeforeStepInput(
-                session_key=tool_event_session_key,
-                channel=tool_event_channel,
-                chat_id=tool_event_chat_id,
-                iteration=iteration,
-                messages=messages,
-                visible_names=visible_names,
-            ))
+            step_ctx = await self._before_step.run(
+                BeforeStepInput(
+                    session_key=tool_event_session_key,
+                    channel=tool_event_channel,
+                    chat_id=tool_event_chat_id,
+                    iteration=iteration,
+                    messages=messages,
+                    visible_names=visible_names,
+                )
+            )
             if step_ctx.early_stop:
                 summary = await self._summarize_incomplete_progress(
                     messages,
@@ -1610,7 +1654,11 @@ class DefaultReasoner(Reasoner):
             logger.info(
                 "[LLM调用] 第%d轮，可见工具=%s input_tokens~=%d",
                 iteration + 1,
-                f"{len(visible_names)}个" if visible_names is not None else "全部（tool_search未开启）",
+                (
+                    f"{len(visible_names)}个"
+                    if visible_names is not None
+                    else "全部（tool_search未开启）"
+                ),
                 step_ctx.input_tokens_estimate,
             )
             schema_names = set(visible_names) if visible_names is not None else None
@@ -1775,6 +1823,7 @@ class DefaultReasoner(Reasoner):
                             local_source_allowed=_local_source_allowed(
                                 tool_boundary_context
                             ),
+                            governance_switch=tool_boundary_context.governance_switch,
                         )
                         if batch_decision.action == "skip":
                             react_boundary_batch_skip_count += 1
@@ -1837,19 +1886,17 @@ class DefaultReasoner(Reasoner):
                             self._task_execution_coordinator is not None
                             and task_execution_turn is not None
                         ):
-                            runtime_call_decision = (
-                                await self._task_execution_coordinator.before_tool_call(
-                                    task_execution_turn,
-                                    tool_name=tool_call.name,
-                                    arguments=tool_call.arguments,
-                                    tool_capabilities=(
-                                        tool_boundary_context.access_context.tool_capabilities.get(
-                                            tool_call.name,
-                                            frozenset(),
-                                        )
-                                    ),
-                                    boundary_decision=boundary_decision,
-                                )
+                            runtime_call_decision = await self._task_execution_coordinator.before_tool_call(
+                                task_execution_turn,
+                                tool_name=tool_call.name,
+                                arguments=tool_call.arguments,
+                                tool_capabilities=(
+                                    tool_boundary_context.access_context.tool_capabilities.get(
+                                        tool_call.name,
+                                        frozenset(),
+                                    )
+                                ),
+                                boundary_decision=boundary_decision,
                             )
                             if not runtime_call_decision.execute:
                                 result = runtime_call_decision.result_payload
@@ -1888,8 +1935,10 @@ class DefaultReasoner(Reasoner):
                                         task_execution_turn.contract,
                                     )
                                 )
-                                visible_names = self._tool_boundary.compute_visible_names(
-                                    tool_boundary_context
+                                visible_names = (
+                                    self._tool_boundary.compute_visible_names(
+                                        tool_boundary_context
+                                    )
                                 )
                                 if runtime_call_decision.final_only:
                                     final_only_next_call = True
@@ -1943,24 +1992,25 @@ class DefaultReasoner(Reasoner):
                                         tool_boundary_context
                                     ),
                                 )
-                                turn_completion_decision = (
-                                    self._turn_completion.evaluate(
-                                        intent=tool_boundary_context.intent,
-                                        ledger=tool_boundary_context.ledger,
-                                        boundary_decisions=self._tool_boundary.recent_decisions(
-                                            tool_boundary_context
-                                        ),
-                                        evidence_assessment=evidence_assessment,
-                                        local_source_allowed=_local_source_allowed(
-                                            tool_boundary_context
-                                        ),
-                                        task_plan_contract=(
-                                            tool_boundary_context.task_plan_contract
-                                        ),
-                                        tool_capabilities=(
-                                            tool_boundary_context.access_context.tool_capabilities
-                                        ),
-                                    )
+                                turn_completion_decision = self._turn_completion.evaluate(
+                                    intent=tool_boundary_context.intent,
+                                    ledger=tool_boundary_context.ledger,
+                                    boundary_decisions=self._tool_boundary.recent_decisions(
+                                        tool_boundary_context
+                                    ),
+                                    evidence_assessment=evidence_assessment,
+                                    local_source_allowed=_local_source_allowed(
+                                        tool_boundary_context
+                                    ),
+                                    task_plan_contract=(
+                                        tool_boundary_context.task_plan_contract
+                                    ),
+                                    tool_capabilities=(
+                                        tool_boundary_context.access_context.tool_capabilities
+                                    ),
+                                    governance_switch=(
+                                        tool_boundary_context.governance_switch
+                                    ),
                                 )
                                 if turn_completion_decision.action == "final_only":
                                     final_only_next_call = True
@@ -1979,7 +2029,10 @@ class DefaultReasoner(Reasoner):
                             )
                         )
                     # 6.1 deferred 工具未解锁时，先回填 select: 引导错误。
-                    if visible_names is not None and tool_call.name not in visible_names:
+                    if (
+                        visible_names is not None
+                        and tool_call.name not in visible_names
+                    ):
                         exec_result = await self._tool_executor.preflight(
                             ToolExecutionRequest(
                                 call_id=tool_call.id,
@@ -2046,14 +2099,16 @@ class DefaultReasoner(Reasoner):
                                     exec_result.approval_lifecycle
                                 )
                             iter_calls.append(trace_item)
-                            for skipped in response.tool_calls[tool_batch_index + 1:]:
+                            for skipped in response.tool_calls[tool_batch_index + 1 :]:
                                 append_tool_result(
                                     messages,
                                     tool_call_id=skipped.id,
                                     content="工具调用已因重复循环检测跳过。",
                                     tool_name=skipped.name,
                                 )
-                            tool_chain.append({"text": response.content, "calls": iter_calls})
+                            tool_chain.append(
+                                {"text": response.content, "calls": iter_calls}
+                            )
                             summary = await self._summarize_incomplete_progress(
                                 messages,
                                 reason="tool_call_loop",
@@ -2085,7 +2140,7 @@ class DefaultReasoner(Reasoner):
                         )
                         result = (
                             f"工具 '{tool_call.name}' 当前未加载（schema 不可见）。"
-                            f"请先调用 tool_search(query=\"select:{tool_call.name}\") 加载，"
+                            f'请先调用 tool_search(query="select:{tool_call.name}") 加载，'
                             "然后再调用该工具。不要放弃当前任务。"
                         )
                         append_tool_result(
@@ -2127,7 +2182,9 @@ class DefaultReasoner(Reasoner):
                             visible_names | disabled
                         )
                     _args_preview = support.log_preview(tool_call.arguments, 120)
-                    logger.info("[工具执行→] %s  args=%s", tool_call.name, _args_preview)
+                    logger.info(
+                        "[工具执行→] %s  args=%s", tool_call.name, _args_preview
+                    )
                     await self._observe_tool_call_started(
                         session_key=tool_event_session_key,
                         channel=tool_event_channel,
@@ -2139,13 +2196,15 @@ class DefaultReasoner(Reasoner):
                     )
                     # 工具调用统一先过 ToolExecutor：
                     # pre_hook 可改参/拒绝，真实执行后再补 post_hook trace。
-                    await self._bus.fanout(BeforeToolCallCtx(
-                        session_key=tool_event_session_key,
-                        channel=tool_event_channel,
-                        chat_id=tool_event_chat_id,
-                        tool_name=tool_call.name,
-                        arguments=dict(tool_call.arguments),
-                    ))
+                    await self._bus.fanout(
+                        BeforeToolCallCtx(
+                            session_key=tool_event_session_key,
+                            channel=tool_event_channel,
+                            chat_id=tool_event_chat_id,
+                            tool_name=tool_call.name,
+                            arguments=dict(tool_call.arguments),
+                        )
+                    )
                     execution_context = (
                         runtime_call_decision.execution_context
                         if runtime_call_decision is not None
@@ -2158,8 +2217,7 @@ class DefaultReasoner(Reasoner):
                     )
                     if (
                         execution_context is None
-                        and
-                        tool_call.name == "tool_search"
+                        and tool_call.name == "tool_search"
                         and execution_contract is not None
                         and execution_contract.active
                         and execution_contract.phase == "work"
@@ -2227,8 +2285,7 @@ class DefaultReasoner(Reasoner):
                             invocation_metadata.get("registry_capabilities", ())
                         ),
                         task_execution_active=bool(
-                            execution_contract is not None
-                            and execution_contract.active
+                            execution_contract is not None and execution_contract.active
                         ),
                         task_execution_phase=(
                             execution_contract.phase
@@ -2294,15 +2351,17 @@ class DefaultReasoner(Reasoner):
                             tool_result_truncated_count += 1
                         result = limited_text
                         normalized = normalize_tool_result(result)
-                    await self._bus.fanout(AfterToolResultCtx(
-                        session_key=tool_event_session_key,
-                        channel=tool_event_channel,
-                        chat_id=tool_event_chat_id,
-                        tool_name=tool_call.name,
-                        arguments=dict(exec_result.final_arguments),
-                        result=normalized.preview(),
-                        status=exec_result.status,
-                    ))
+                    await self._bus.fanout(
+                        AfterToolResultCtx(
+                            session_key=tool_event_session_key,
+                            channel=tool_event_channel,
+                            chat_id=tool_event_chat_id,
+                            tool_name=tool_call.name,
+                            arguments=dict(exec_result.final_arguments),
+                            result=normalized.preview(),
+                            status=exec_result.status,
+                        )
+                    )
                     _result_preview = support.log_preview(normalized.preview())
                     _result_len = len(normalized.preview() or "")
                     await self._observe_tool_call_completed(
@@ -2414,6 +2473,9 @@ class DefaultReasoner(Reasoner):
                                 local_source_allowed=_local_source_allowed(
                                     tool_boundary_context
                                 ),
+                                governance_switch=(
+                                    tool_boundary_context.governance_switch
+                                ),
                             )
                         )
                         completion_decision = self._turn_completion.evaluate(
@@ -2441,6 +2503,7 @@ class DefaultReasoner(Reasoner):
                             tool_capabilities=(
                                 tool_boundary_context.access_context.tool_capabilities
                             ),
+                            governance_switch=tool_boundary_context.governance_switch,
                         )
                         if completion_decision.action == "final_only":
                             metadata = _react_completion_metadata(
@@ -2478,22 +2541,31 @@ class DefaultReasoner(Reasoner):
                         and tool_call.name == "tool_search"
                         and visible_names is not None
                     ):
-                        _newly_unlocked = self._discovery.unlock_from_result(normalized.text)
+                        _newly_unlocked = self._discovery.unlock_from_result(
+                            normalized.text
+                        )
                         _newly_unlocked -= visible_names  # keep only genuinely new ones
                         _newly_unlocked -= disabled
                         if tool_boundary_context is not None:
-                            visible_names = self._tool_boundary.merge_tool_search_unlocks(
-                                context=tool_boundary_context,
-                                current_visible=visible_names,
-                                unlocked=_newly_unlocked,
+                            visible_names = (
+                                self._tool_boundary.merge_tool_search_unlocks(
+                                    context=tool_boundary_context,
+                                    current_visible=visible_names,
+                                    unlocked=_newly_unlocked,
+                                )
                             )
                             _newly_unlocked = set(visible_names) - (
-                                set(schema_names or set()) if schema_names is not None else set()
+                                set(schema_names or set())
+                                if schema_names is not None
+                                else set()
                             )
                         elif _newly_unlocked:
                             visible_names.update(_newly_unlocked)
                         if _newly_unlocked:
-                            logger.info("[工具解锁] tool_search 新解锁: %s", sorted(_newly_unlocked))
+                            logger.info(
+                                "[工具解锁] tool_search 新解锁: %s",
+                                sorted(_newly_unlocked),
+                            )
                         else:
                             logger.info("[工具解锁] tool_search 未解锁新工具")
                         if tool_search_blocked:
@@ -2546,14 +2618,16 @@ class DefaultReasoner(Reasoner):
                             iteration + 1,
                             tool_call.name,
                         )
-                        for skipped in response.tool_calls[tool_batch_index + 1:]:
+                        for skipped in response.tool_calls[tool_batch_index + 1 :]:
                             append_tool_result(
                                 messages,
                                 tool_call_id=skipped.id,
                                 content="工具调用已因重复循环检测跳过。",
                                 tool_name=skipped.name,
                             )
-                        tool_chain.append({"text": response.content, "calls": iter_calls})
+                        tool_chain.append(
+                            {"text": response.content, "calls": iter_calls}
+                        )
                         summary = await self._summarize_incomplete_progress(
                             messages,
                             reason="tool_call_loop",
@@ -2600,19 +2674,21 @@ class DefaultReasoner(Reasoner):
                 )
                 pressure_tokens = support.estimate_messages_tokens(messages)
                 # 7a. AfterStep 模块链（工具分支）：通知观察者本轮工具执行完毕。
-                after_step = await self._after_step.run(AfterStepCtx(
-                    session_key=tool_event_session_key,
-                    channel=tool_event_channel,
-                    chat_id=tool_event_chat_id,
-                    iteration=iteration,
-                    context_tokens_estimate=pressure_tokens,
-                    tools_called=tuple(tc.name for tc in response.tool_calls),
-                    partial_reply=response.content or "",
-                    tools_used_so_far=tuple(tools_used),
-                    tool_chain_partial=tuple(tool_chain),
-                    partial_thinking=response.thinking,
-                    has_more=True,
-                ))
+                after_step = await self._after_step.run(
+                    AfterStepCtx(
+                        session_key=tool_event_session_key,
+                        channel=tool_event_channel,
+                        chat_id=tool_event_chat_id,
+                        iteration=iteration,
+                        context_tokens_estimate=pressure_tokens,
+                        tools_called=tuple(tc.name for tc in response.tool_calls),
+                        partial_reply=response.content or "",
+                        tools_used_so_far=tuple(tools_used),
+                        tool_chain_partial=tuple(tool_chain),
+                        partial_thinking=response.thinking,
+                        has_more=True,
+                    )
+                )
                 if after_step.early_stop:
                     reason = after_step.early_stop_reason or "after_step"
                     logger.warning(
@@ -2687,10 +2763,12 @@ class DefaultReasoner(Reasoner):
                     iteration + 1,
                 )
                 messages.append({"role": "assistant", "content": ""})
-                messages.append({
-                    "role": "user",
-                    "content": "你刚才只输出了思考过程，没有给出正式回复。请直接回复用户，不要重复思考。",
-                })
+                messages.append(
+                    {
+                        "role": "user",
+                        "content": "你刚才只输出了思考过程，没有给出正式回复。请直接回复用户，不要重复思考。",
+                    }
+                )
                 llm_started = time.monotonic()
                 retry_response = await _chat_with_current_mode(
                     tools_for_call=[],
@@ -2705,10 +2783,14 @@ class DefaultReasoner(Reasoner):
                 actual_prompt_tokens_sum += prompt_tokens
                 actual_completion_tokens_sum += completion_tokens
                 actual_total_tokens_sum += total_tokens
-                actual_prompt_tokens_peak = max(actual_prompt_tokens_peak, prompt_tokens)
+                actual_prompt_tokens_peak = max(
+                    actual_prompt_tokens_peak, prompt_tokens
+                )
                 actual_cache_hit_tokens_sum += int(retry_response.cache_hit_tokens or 0)
                 if retry_response.cache_miss_tokens is not None:
-                    actual_cache_miss_tokens_sum += int(retry_response.cache_miss_tokens)
+                    actual_cache_miss_tokens_sum += int(
+                        retry_response.cache_miss_tokens
+                    )
                 elif retry_response.cache_prompt_tokens is not None:
                     actual_cache_miss_tokens_sum += int(
                         retry_response.cache_prompt_tokens
@@ -2734,19 +2816,21 @@ class DefaultReasoner(Reasoner):
             )
             messages.append({"role": "assistant", "content": response.content})
             # 8b. AfterStep 模块链（最终回复分支）：通知观察者本轮推理结束。
-            _ = await self._after_step.run(AfterStepCtx(
-                session_key=tool_event_session_key,
-                channel=tool_event_channel,
-                chat_id=tool_event_chat_id,
-                iteration=iteration,
-                context_tokens_estimate=support.estimate_messages_tokens(messages),
-                tools_called=(),
-                partial_reply=response.content or "",
-                tools_used_so_far=tuple(tools_used),
-                tool_chain_partial=tuple(tool_chain),
-                partial_thinking=response.thinking,
-                has_more=False,
-            ))
+            _ = await self._after_step.run(
+                AfterStepCtx(
+                    session_key=tool_event_session_key,
+                    channel=tool_event_channel,
+                    chat_id=tool_event_chat_id,
+                    iteration=iteration,
+                    context_tokens_estimate=support.estimate_messages_tokens(messages),
+                    tools_called=(),
+                    partial_reply=response.content or "",
+                    tools_used_so_far=tuple(tools_used),
+                    tool_chain_partial=tuple(tool_chain),
+                    partial_thinking=response.thinking,
+                    has_more=False,
+                )
+            )
             return self._build_result(
                 reply=response.content or "（无响应）",
                 tools_used=tools_used,
@@ -2977,7 +3061,9 @@ class DefaultReasoner(Reasoner):
             "iteration_count": len(react_input_samples),
             "turn_input_sum_tokens": sum(react_input_samples),
             "turn_input_peak_tokens": max(react_input_samples, default=0),
-            "final_call_input_tokens": react_input_samples[-1] if react_input_samples else 0,
+            "final_call_input_tokens": (
+                react_input_samples[-1] if react_input_samples else 0
+            ),
             "actual_prompt_tokens_sum": actual_prompt_tokens_sum,
             "actual_completion_tokens_sum": actual_completion_tokens_sum,
             "actual_total_tokens_sum": actual_total_tokens_sum,
@@ -3094,7 +3180,6 @@ class DefaultReasoner(Reasoner):
 # ── 模块级辅助函数 ──────────────────────────────────────────────
 
 
-
 def get_history_since_consolidated(
     session: "SessionLike",
     memory_window: int,
@@ -3114,9 +3199,7 @@ def extract_model_facing_turn(
     if not messages:
         return None, None
     user_content = (
-        messages[-1].get("content")
-        if messages[-1].get("role") == "user"
-        else None
+        messages[-1].get("content") if messages[-1].get("role") == "user" else None
     )
     if len(messages) < 2:
         return user_content, None
@@ -3169,8 +3252,8 @@ def build_deferred_tools_hint(
     total = len(builtin) + sum(len(v) for v in mcp.values())
     lines.append(
         f"\n共 {total} 个。加载方式：\n"
-        "- 已知工具名 → tool_search(query=\"select:工具名\")，支持逗号分隔多个\n"
-        "- 描述功能   → tool_search(query=\"关键词\") 搜索匹配"
+        '- 已知工具名 → tool_search(query="select:工具名")，支持逗号分隔多个\n'
+        '- 描述功能   → tool_search(query="关键词") 搜索匹配'
     )
     return "\n".join(lines) + "\n\n"
 
@@ -3183,9 +3266,11 @@ def build_loop_state_hint(
         return "【当前工具状态】tool_search 未开启，本轮按现有工具继续。"
 
     unlocked_extra = visible_names - always_on_names - {"tool_search"}
-    visible_text = ", ".join(sorted(unlocked_extra)) if unlocked_extra else "仅 always-on"
+    visible_text = (
+        ", ".join(sorted(unlocked_extra)) if unlocked_extra else "仅 always-on"
+    )
     return (
         f"【当前工具状态】已解锁: {visible_text}\n"
-        "未知工具: tool_search(query=\"关键词\") 搜索\n"
-        "已知工具名但未加载: tool_search(query=\"select:工具名\")"
+        '未知工具: tool_search(query="关键词") 搜索\n'
+        '已知工具名但未加载: tool_search(query="select:工具名")'
     )

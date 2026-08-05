@@ -5,6 +5,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Literal
 
+from agent.governance.eval_switch import ToolGovernanceEvalSwitch
 from agent.policies.evidence_contract import EvidenceAssessment
 from agent.policies.tool_budget import TaskIntent
 from agent.policies.tool_ledger import ToolCallLedger
@@ -40,8 +41,21 @@ class ReactBoundaryManager:
         ledger: ToolCallLedger,
         evidence_assessment: EvidenceAssessment | None,
         local_source_allowed: bool = False,
+        governance_switch: ToolGovernanceEvalSwitch | None = None,
     ) -> ReactBoundaryDecision:
         metadata = _metadata(ledger, evidence_assessment)
+        if (
+            governance_switch is not None
+            and not governance_switch.react_boundary_enabled
+        ):
+            return ReactBoundaryDecision(
+                recommend_final_only=False,
+                reason="tool_governance_eval_react_boundary_disabled",
+                metadata={
+                    **metadata,
+                    "tool_governance_eval": governance_switch.to_trace(),
+                },
+            )
         if local_source_allowed:
             return ReactBoundaryDecision(
                 recommend_final_only=False,
@@ -99,7 +113,17 @@ class ReactBoundaryManager:
         ledger: ToolCallLedger,
         evidence_assessment: EvidenceAssessment | None,
         local_source_allowed: bool = False,
+        governance_switch: ToolGovernanceEvalSwitch | None = None,
     ) -> BatchToolDecision:
+        if (
+            governance_switch is not None
+            and not governance_switch.react_boundary_enabled
+        ):
+            return BatchToolDecision(
+                action="execute",
+                reason="tool_governance_eval_react_boundary_disabled",
+                metadata={"tool_governance_eval": governance_switch.to_trace()},
+            )
         if local_source_allowed:
             return BatchToolDecision(action="execute", reason="local_source_allowed")
         if tool_name not in DOC_RAG_RUNTIME_TOOLS:
@@ -107,7 +131,9 @@ class ReactBoundaryManager:
         if tool_batch_index == 0:
             return BatchToolDecision(action="execute", reason="first_batch_tool")
         if evidence_assessment is None:
-            return BatchToolDecision(action="execute", reason="evidence_assessment_absent")
+            return BatchToolDecision(
+                action="execute", reason="evidence_assessment_absent"
+            )
         if not evidence_assessment.sufficiency.tool_stop_allowed:
             return BatchToolDecision(action="execute", reason="evidence_incomplete")
 

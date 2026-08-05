@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 
+from agent.governance.eval_switch import ToolGovernanceEvalSwitch
 from agent.policies.evidence_contract import EvidenceAssessment
 from agent.policies.task_plan_completion import TaskPlanCompletionPolicy
 from agent.policies.task_plan_contract import TaskPlanTurnContract
@@ -39,6 +40,7 @@ class TurnCompletionController:
         task_execution_contract: TaskExecutionTurnContract | None = None,
         task_execution_snapshot: TaskExecutionSnapshot | None = None,
         tool_capabilities: Mapping[str, frozenset[str]] | None = None,
+        governance_switch: ToolGovernanceEvalSwitch | None = None,
     ) -> TurnCompletionDecision:
         task_execution_decision = self._task_execution.evaluate(
             contract=task_execution_contract,
@@ -72,6 +74,19 @@ class TurnCompletionController:
                 },
             )
 
+        if (
+            governance_switch is not None
+            and not governance_switch.evidence_completion_enabled
+        ):
+            return TurnCompletionDecision(
+                action="continue_react",
+                reason="tool_governance_eval_evidence_completion_disabled",
+                metadata={
+                    **self._metadata(ledger, boundary_decisions),
+                    "tool_governance_eval": governance_switch.to_trace(),
+                },
+            )
+
         if local_source_allowed:
             return TurnCompletionDecision(
                 action="continue_react",
@@ -93,9 +108,7 @@ class TurnCompletionController:
                         metadata={
                             **self._metadata(ledger, boundary_decisions),
                             "proactive": True,
-                            "evidence_reason": (
-                                evidence_assessment.sufficiency.reason
-                            ),
+                            "evidence_reason": (evidence_assessment.sufficiency.reason),
                         },
                     )
                 if intent == "doc_qa_with_evidence":
@@ -110,9 +123,7 @@ class TurnCompletionController:
                         metadata={
                             **self._metadata(ledger, boundary_decisions),
                             "proactive": True,
-                            "evidence_reason": (
-                                evidence_assessment.sufficiency.reason
-                            ),
+                            "evidence_reason": (evidence_assessment.sufficiency.reason),
                         },
                     )
 

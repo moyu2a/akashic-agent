@@ -6,6 +6,10 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
 from typing import Any
 
+from agent.governance.eval_switch import (
+    ToolGovernanceEvalSwitch,
+    resolve_tool_governance_eval_switch,
+)
 from agent.policies.evidence_completion import EvidenceCompletionPolicy
 from agent.policies.task_plan_context_budget import TaskPlanContextBudgetPolicy
 from agent.policies.task_plan_contract import TaskPlanTurnContract
@@ -44,6 +48,9 @@ class ToolBoundaryContext:
     access_context: ToolAccessContext
     access_plan: ToolAccessPlan
     intent: TaskIntent
+    governance_switch: ToolGovernanceEvalSwitch = field(
+        default_factory=ToolGovernanceEvalSwitch.production_default
+    )
     task_plan_contract: TaskPlanTurnContract | None = None
     task_execution_contract: TaskExecutionTurnContract | None = None
     ledger: ToolCallLedger = field(default_factory=ToolCallLedger)
@@ -86,8 +93,22 @@ class TurnToolBoundaryManager:
         )
         self._task_execution_event_classifier = TaskExecutionEventClassifier()
 
-    def build_context(self, access_context: ToolAccessContext) -> ToolBoundaryContext:
-        access_plan = self._access.build_plan(access_context)
+    def build_context(
+        self,
+        access_context: ToolAccessContext,
+        governance_switch: ToolGovernanceEvalSwitch | None = None,
+    ) -> ToolBoundaryContext:
+        switch = governance_switch or resolve_tool_governance_eval_switch(
+            access_context.turn_metadata
+        )
+        access_plan = (
+            self._access.build_plan(access_context)
+            if switch.intent_scope_enabled
+            else ToolAccessPlan(
+                reason="tool_governance_eval_intent_scope_disabled",
+                policy_metadata={"tool_governance_eval": switch.to_trace()},
+            )
+        )
         contract = access_plan.task_plan_contract
         return ToolBoundaryContext(
             access_context=access_context,
@@ -97,6 +118,7 @@ class TurnToolBoundaryManager:
                 if contract is not None and contract.active
                 else infer_task_intent(access_context.user_text)
             ),
+            governance_switch=switch,
             task_plan_contract=contract,
             task_execution_contract=access_plan.task_execution_contract,
             pending_hints=list(access_plan.model_hints),
@@ -110,7 +132,7 @@ class TurnToolBoundaryManager:
         metadata = dict(context.access_context.turn_metadata)
         metadata["task_execution_contract"] = contract
         access_context = replace(context.access_context, turn_metadata=metadata)
-        refreshed = self.build_context(access_context)
+        refreshed = self.build_context(access_context, context.governance_switch)
         if (
             contract.active
             and contract.phase == "work"
@@ -245,7 +267,9 @@ class TurnToolBoundaryManager:
                 contract=execution_contract,
                 tool_name=tool_name,
                 registered=registered,
-                registry_risk=context.access_context.tool_risks.get(tool_name, "unknown"),
+                registry_risk=context.access_context.tool_risks.get(
+                    tool_name, "unknown"
+                ),
                 registry_capabilities=context.access_context.tool_capabilities.get(
                     tool_name,
                     frozenset(),
@@ -291,6 +315,16 @@ class TurnToolBoundaryManager:
                 recommended_tools=gate.recommended_tools,
                 reason=gate.error_code or gate.reason or "tool_access_block",
             )
+
+        if not context.governance_switch.tool_budget_enabled:
+            decision = BoundaryExecutionDecision(
+                action="allow",
+                reason="tool_governance_eval_budget_disabled",
+                execute=True,
+                metadata={"tool_governance_eval": context.governance_switch.to_trace()},
+            )
+            self._record_decision(context, tool_name, decision, arguments)
+            return decision
 
         task_execution_budget_decision = self._task_execution_budget.evaluate(
             contract=execution_contract,
@@ -343,12 +377,19 @@ class TurnToolBoundaryManager:
             self._record_decision(context, tool_name, decision, arguments)
             return decision
 
-        evidence_decision = self._evidence.evaluate_call(
-            intent=context.intent,
-            ledger=context.ledger,
-            tool_name=tool_name,
-            arguments=arguments,
-        )
+        if context.governance_switch.evidence_completion_enabled:
+            evidence_decision = self._evidence.evaluate_call(
+                intent=context.intent,
+                ledger=context.ledger,
+                tool_name=tool_name,
+                arguments=arguments,
+            )
+        else:
+            evidence_decision = ToolBoundaryDecision(
+                action="allow",
+                reason="tool_governance_eval_evidence_completion_disabled",
+                metadata={"tool_governance_eval": context.governance_switch.to_trace()},
+            )
         budget_decision = self._budget.evaluate_call(
             intent=context.intent,
             ledger=context.ledger,
@@ -440,11 +481,17 @@ class TurnToolBoundaryManager:
                 result_has_citation=facts.result_has_citation,
                 result_error_code=facts.result_error_code,
                 tool_risk=event.tool_risk if is_execution_work else "",
-                tool_capabilities=tuple(
-                    sorted(context.access_context.tool_capabilities.get(tool_name, frozenset()))
-                )
-                if is_execution_work
-                else (),
+                tool_capabilities=(
+                    tuple(
+                        sorted(
+                            context.access_context.tool_capabilities.get(
+                                tool_name, frozenset()
+                            )
+                        )
+                    )
+                    if is_execution_work
+                    else ()
+                ),
                 counts_as_work=event.counts_as_work if is_execution_work else False,
                 invoker_reached=event.invoker_reached if is_execution_work else False,
                 invoker_succeeded=(
@@ -479,15 +526,11 @@ class TurnToolBoundaryManager:
             (
                 str(decision.get("reason") or "")
                 for decision in reversed(context.decisions)
-                if str(decision.get("reason") or "").startswith(
-                    "task_plan_context_"
-                )
+                if str(decision.get("reason") or "").startswith("task_plan_context_")
             ),
             "",
         )
-        task_plan_metadata = context.access_plan.policy_metadata.get(
-            "task_plan", {}
-        )
+        task_plan_metadata = context.access_plan.policy_metadata.get("task_plan", {})
         last_execution_status = (
             str(task_plan_metadata.get("context_retrieval_execution_status") or "")
             if isinstance(task_plan_metadata, Mapping)
@@ -504,6 +547,7 @@ class TurnToolBoundaryManager:
         )
         return {
             "intent": context.intent,
+            "tool_governance_eval": context.governance_switch.to_trace(),
             "task_plan_contract": (
                 contract.to_trace_metadata() if contract is not None else None
             ),

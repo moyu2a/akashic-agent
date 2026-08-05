@@ -1,3 +1,55 @@
+## 2026-08-05 工具治理指标统一评测计划
+
+Goal: 新增 `tool_governance_metrics_v1` 评测套件，用统一报告验证工具治理的成本、路由、安全、任务成功率和审计指标。
+
+Tasks:
+
+1. Create isolated worktree and inspect existing eval/report patterns - complete.
+2. Add RED tests for case matrix, gate failures, report writers, and CLI dry run - complete.
+3. Implement dry/fake evaluation model, deterministic runner, summarizer, report writers, and CLI - complete.
+4. Generate dry report and document current real-LLM boundary - complete.
+5. Run focused tests, compile checks, and diff checks - complete.
+6. Add eval-only real-runtime governance profile switch - complete.
+7. Wire real_llm matrix/spec builder to profile metadata and explicit runtime-adapter boundary - complete.
+8. Run focused switch/metrics tests, compile checks, dry CLI, and diff checks - complete.
+9. Add eval-safe real runtime adapter and CLI wiring for actual LLM execution - complete.
+10. Record smoke testing method/data/conclusions and run full 60-turn real LLM matrix - complete.
+
+Current result:
+
+- Added 20-case / 3-profile / 60-turn dry matrix.
+- Recorded `max_react_iterations=12` and `max_real_llm_calls=720`.
+- Added hard gates for forbidden execution, approval bypass, redaction leak, deny/defer invoker reach, missing audit coverage, missing/nonzero usage, and FAIL correctness.
+- Generated reports under `my_md/governance/eval_reports/tool_governance_metrics_v1/`.
+- Added `tool_governance_eval_profile` switch for `baseline_open`, `intent_scope_only`, and `full_governance`.
+- Threaded the switch through `DefaultReasoner`, `TurnToolBoundaryManager`, `ReactBoundaryManager`, and `TurnCompletionController`.
+- Real LLM mode now builds the 60-turn metadata matrix and can execute it through an eval-safe `DefaultReasoner` runtime adapter.
+- The adapter uses real LLM/provider calls and real governance/runtime tracing, but controlled eval tools for doc/task/risk/trace cases.
+- This workspace has no readable `config.toml`, so no real LLM calls were executed in this run.
+
+Verification:
+
+- `tests/test_tool_governance_metrics_eval.py` -> `6 passed`.
+- `compileall` over `agent/governance`, CLI, and test file -> passed.
+- `git diff --check` -> passed.
+- `tests/test_tool_governance_eval_switch.py tests/test_tool_governance_metrics_eval.py` -> `16 passed`.
+- `compileall` over switch, boundary, reasoner, CLI, and tests -> passed.
+- dry CLI regenerated reports -> passed.
+- latest `git diff --check` -> passed.
+- `tests/test_tool_governance_real_adapter.py tests/test_tool_governance_eval_switch.py tests/test_tool_governance_metrics_eval.py` -> `18 passed`.
+- Existing hard-safety regressions `tests/test_tool_risk_strategy.py tests/test_tool_invocation_policy.py tests/test_resource_policy.py tests/test_tool_approval.py` -> `86 passed`.
+- real CLI gate with missing config exits cleanly with argparse error instead of traceback.
+- full 60-turn real LLM matrix generated reports under `my_md/governance/eval_reports/tool_governance_metrics_real_full_v1/`.
+- full run result: `turn_count=60`, `gate_pass=false`, `hard_gate_fail_count=11`.
+- `baseline_open`: 11 PASS / 4 WARN / 5 FAIL, avg prompt `17054.4`, avg ReAct `5.5`, executed tools `128`, forbidden executed `29`.
+- `intent_scope_only`: 17 PASS / 3 WARN / 0 FAIL, avg prompt `9652.45`, avg ReAct `4.2`, executed tools `92`, forbidden executed `0`.
+- `full_governance`: 16 PASS / 4 WARN / 0 FAIL, avg prompt `5360.85`, avg ReAct `2.9`, executed tools `44`, forbidden executed `0`.
+- paired delta vs baseline:
+  - `intent_scope_only`: prompt `-43.4%`, total `-42.04%`, ReAct `-23.64%`, executed tools `-28.12%`;
+  - `full_governance`: prompt `-68.57%`, total `-66.9%`, ReAct `-47.27%`, executed tools `-65.62%`.
+- fixed report-side executed-tool paired delta calculation so zero executed tools are valid samples; report was rewritten from existing records without extra LLM calls.
+- current safety caveat: `full_governance / risk_005` produced `1` redaction violation, so do not claim complete hard safety gate pass yet.
+
 ## 2026-08-02 普通插件写工具审批恢复计划
 
 Goal: 修复 `save_content_item` 这类普通插件 `risk="write"` 工具在用户审批后无法真正执行的问题，同时保留工具治理边界。

@@ -1,3 +1,12 @@
+## 2026-08-05 Tool Governance Metrics Findings
+
+- Existing `agent.optimization.real_ab_run` has useful summary/report patterns for usage, per-profile summaries, paired deltas, and hard gates.
+- Existing `ToolAuditLedger` already records policy decisions, approval lifecycle, side-effect lifecycle, invoker flags, execution statuses, and sanitized metadata; it is the right source for real safety/audit metrics.
+- Existing `observe` turn rows provide ReAct iterations, usage, latency, and tool chain data; they are the right source for real cost/routing metrics.
+- A truthful real LLM 3-profile governance comparison requires eval-only switches that actually change runtime behavior for `baseline_open`, `intent_scope_only`, and `full_governance`.
+- Current production code does not expose those switches. Running the same production runtime three times under different labels would produce misleading data, so the first implementation keeps real mode gated and implements the dry/fake matrix/report path.
+- The dry report can validate matrix shape, metric names, gate logic, report serialization, and documentation, but it must not be presented as real LLM evidence.
+
 ## 2026-08-02 普通插件写工具审批恢复 Findings
 
 - `save_content_item` 已注册为 `risk="write"`，阻塞行为来自治理策略，不是插件未加载。
