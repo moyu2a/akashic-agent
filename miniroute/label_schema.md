@@ -55,6 +55,7 @@ MiniRoute 输出固定 JSON，用于描述当前用户请求的路由判断结�
 | `shell_tools` | 命令行工具。 |
 | `task_tools` | 任务计划、任务状态工具。 |
 | `observe_tools` | 运行轨迹、状态查询工具。 |
+| `unknown_tools` | 请求明显需要工具，但无法归入当前定义的工具域。 |
 
 ## risk_level
 
@@ -72,3 +73,5 @@ MiniRoute 输出固定 JSON，用于描述当前用户请求的路由判断结�
 - 当模型输出不合法 JSON 时，系统应回退到原路由逻辑。
 - 当小模型不确定时，应偏保守，减少工具开放范围。
 - `high_risk` 召回优先级高于 intent 准确率。
+- `none` 表示明确不需要工具；`unknown_tools` 表示需要工具但工具域未知。
+- V2 中记忆查询和画像更新会进入 `memory_tools` 能力域，因此 `need_tools=true`。

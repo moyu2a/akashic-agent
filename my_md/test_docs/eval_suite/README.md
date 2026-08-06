@@ -21,6 +21,9 @@
 - `04-future-automation-plan.md`：后续自动化实现计划。
 - `05-core-eval-dataset.md`：核心能力测试集执行说明，逐条说明 case、预期结果、关键指标和是否需要 LLM。
 - `06-large-eval-dataset.md`：150 条大测试集的设计说明、分类、执行顺序和验收口径。
+- `07-agent-evaluation-harness-v2-plan.md`：统一 Agent Evaluation Harness 的持续建设计划。
+- `08-reuse-compatibility-audit.md`：旧评测 runner 接入前的版本和接口兼容性审查。
+- `agent-harness-v2.yaml`：Harness v2 代表性 fake smoke 数据集，覆盖 4 类场景的最小可执行样本。
 - `large-eval-cases.yaml`：面向 Agent 工程、RAG/Memory、安全治理的 150 条结构化测试集。
 - `live_eval_runner.py`：在线执行脚本，连接已经启动的 agent IPC socket，自动发送安全 live case 并生成报告。
 - `deep-live-eval-cases.yaml`：当前可执行能力的深度全自动测试集，展开后 123 条 case。
