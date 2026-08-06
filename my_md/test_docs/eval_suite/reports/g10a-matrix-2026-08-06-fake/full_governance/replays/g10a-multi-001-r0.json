@@ -1,0 +1,204 @@
+[
+  {
+    "run_id": "harness-20260806T080552Z-c8c28183",
+    "episode_id": "g10a-multi-001",
+    "event_index": 0,
+    "turn_index": 0,
+    "timestamp": "2026-08-06T08:05:52.482593+00:00",
+    "event_type": "episode_started",
+    "component": "fake_adapter",
+    "payload": {
+      "case_id": "g10a-multi-001",
+      "category": "multi_turn_state",
+      "governance_profile": "full_governance"
+    },
+    "payload_hash": "5d6efbc879c3db622472b6387789e01877b08b3799a2f533ab872b8f1afa8a6f"
+  },
+  {
+    "run_id": "harness-20260806T080552Z-c8c28183",
+    "episode_id": "g10a-multi-001",
+    "event_index": 1,
+    "turn_index": 0,
+    "timestamp": "2026-08-06T08:05:52.482613+00:00",
+    "event_type": "turn_started",
+    "component": "fake_adapter",
+    "payload": {
+      "role": "user"
+    },
+    "payload_hash": "6b3061507ef8cc2ca95320f790a9f9ccb3c850ae081df4b6f6e56e40d57203e4"
+  },
+  {
+    "run_id": "harness-20260806T080552Z-c8c28183",
+    "episode_id": "g10a-multi-001",
+    "event_index": 2,
+    "turn_index": 0,
+    "timestamp": "2026-08-06T08:05:52.482627+00:00",
+    "event_type": "context_rendered",
+    "component": "fake_adapter",
+    "payload": {
+      "text_length": 8
+    },
+    "payload_hash": "61635b43b8861e7328dc1551e33bb995972c211e920101dd8da8fd8dc2eb6d3b"
+  },
+  {
+    "run_id": "harness-20260806T080552Z-c8c28183",
+    "episode_id": "g10a-multi-001",
+    "event_index": 3,
+    "turn_index": 0,
+    "timestamp": "2026-08-06T08:05:52.482640+00:00",
+    "event_type": "llm_call_started",
+    "component": "fake_provider",
+    "payload": {
+      "model": "fake-model"
+    },
+    "payload_hash": "06e7295e91f32f9538b57bbfab5b6f5f7d2698b62bc6a06d14e109b770ef44e9"
+  },
+  {
+    "run_id": "harness-20260806T080552Z-c8c28183",
+    "episode_id": "g10a-multi-001",
+    "event_index": 4,
+    "turn_index": 0,
+    "timestamp": "2026-08-06T08:05:52.482663+00:00",
+    "event_type": "llm_call_finished",
+    "component": "fake_provider",
+    "payload": {
+      "prompt_tokens": "[REDACTED]",
+      "completion_tokens": "[REDACTED]"
+    },
+    "payload_hash": "7d5db09bdb7a63346823afa9af9c5cb5707dfdfe21414650ad25d6f198f6de7e"
+  },
+  {
+    "run_id": "harness-20260806T080552Z-c8c28183",
+    "episode_id": "g10a-multi-001",
+    "event_index": 5,
+    "turn_index": 1,
+    "timestamp": "2026-08-06T08:05:52.482677+00:00",
+    "event_type": "turn_started",
+    "component": "fake_adapter",
+    "payload": {
+      "role": "user"
+    },
+    "payload_hash": "6b3061507ef8cc2ca95320f790a9f9ccb3c850ae081df4b6f6e56e40d57203e4"
+  },
+  {
+    "run_id": "harness-20260806T080552Z-c8c28183",
+    "episode_id": "g10a-multi-001",
+    "event_index": 6,
+    "turn_index": 1,
+    "timestamp": "2026-08-06T08:05:52.482689+00:00",
+    "event_type": "context_rendered",
+    "component": "fake_adapter",
+    "payload": {
+      "text_length": 9
+    },
+    "payload_hash": "509fea3f2a0812328159e4cae175ab53335b675129c1896a9b8895ee30464830"
+  },
+  {
+    "run_id": "harness-20260806T080552Z-c8c28183",
+    "episode_id": "g10a-multi-001",
+    "event_index": 7,
+    "turn_index": 1,
+    "timestamp": "2026-08-06T08:05:52.482700+00:00",
+    "event_type": "llm_call_started",
+    "component": "fake_provider",
+    "payload": {
+      "model": "fake-model"
+    },
+    "payload_hash": "06e7295e91f32f9538b57bbfab5b6f5f7d2698b62bc6a06d14e109b770ef44e9"
+  },
+  {
+    "run_id": "harness-20260806T080552Z-c8c28183",
+    "episode_id": "g10a-multi-001",
+    "event_index": 8,
+    "turn_index": 1,
+    "timestamp": "2026-08-06T08:05:52.482719+00:00",
+    "event_type": "llm_call_finished",
+    "component": "fake_provider",
+    "payload": {
+      "prompt_tokens": "[REDACTED]",
+      "completion_tokens": "[REDACTED]"
+    },
+    "payload_hash": "7d5db09bdb7a63346823afa9af9c5cb5707dfdfe21414650ad25d6f198f6de7e"
+  },
+  {
+    "run_id": "harness-20260806T080552Z-c8c28183",
+    "episode_id": "g10a-multi-001",
+    "event_index": 9,
+    "turn_index": 0,
+    "timestamp": "2026-08-06T08:05:52.482737+00:00",
+    "event_type": "tool_requested",
+    "component": "fake_agent",
+    "payload": {
+      "tool": "create_task"
+    },
+    "payload_hash": "20fe99cc70549307d5e088000f81540d6a164d26ceef7054859f2ff82e084ebd"
+  },
+  {
+    "run_id": "harness-20260806T080552Z-c8c28183",
+    "episode_id": "g10a-multi-001",
+    "event_index": 10,
+    "turn_index": 0,
+    "timestamp": "2026-08-06T08:05:52.482751+00:00",
+    "event_type": "policy_decision",
+    "component": "fake_governance",
+    "payload": {
+      "tool": "create_task",
+      "policy_action": "allow"
+    },
+    "payload_hash": "d3026da563d387721efae0662e18ef6f10e093051f169bda84ea10ad414e5b6b"
+  },
+  {
+    "run_id": "harness-20260806T080552Z-c8c28183",
+    "episode_id": "g10a-multi-001",
+    "event_index": 11,
+    "turn_index": 0,
+    "timestamp": "2026-08-06T08:05:52.482763+00:00",
+    "event_type": "tool_executed",
+    "component": "fake_tool",
+    "payload": {
+      "tool": "create_task"
+    },
+    "payload_hash": "20fe99cc70549307d5e088000f81540d6a164d26ceef7054859f2ff82e084ebd"
+  },
+  {
+    "run_id": "harness-20260806T080552Z-c8c28183",
+    "episode_id": "g10a-multi-001",
+    "event_index": 12,
+    "turn_index": 0,
+    "timestamp": "2026-08-06T08:05:52.482779+00:00",
+    "event_type": "state_mutated",
+    "component": "fake_environment",
+    "payload": {
+      "keys": [
+        "completed"
+      ]
+    },
+    "payload_hash": "961281f2274758edb4cff70d5879c420c537b990235bf3b3194b43cdee36f6d3"
+  },
+  {
+    "run_id": "harness-20260806T080552Z-c8c28183",
+    "episode_id": "g10a-multi-001",
+    "event_index": 13,
+    "turn_index": 0,
+    "timestamp": "2026-08-06T08:05:52.482796+00:00",
+    "event_type": "reply_emitted",
+    "component": "fake_adapter",
+    "payload": {
+      "reply": "fake episode completed"
+    },
+    "payload_hash": "4aab6660fa7c3c593b7a36694f1fe4a963c45946573f8f1c2c03b996bdfdd65a"
+  },
+  {
+    "run_id": "harness-20260806T080552Z-c8c28183",
+    "episode_id": "g10a-multi-001",
+    "event_index": 14,
+    "turn_index": 0,
+    "timestamp": "2026-08-06T08:05:52.482808+00:00",
+    "event_type": "episode_finished",
+    "component": "fake_adapter",
+    "payload": {
+      "status": "PASS"
+    },
+    "payload_hash": "783b173fb8eec97c19a27521573cd90ff71aaae2533a2cba68b777e558748e43"
+  }
+]

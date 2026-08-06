@@ -4,6 +4,15 @@
 
 本文是 Agent Evaluation Harness v2 的前置审查。旧程序只有在确认输入、输出、runtime、trace 和报告契约匹配后，才能接入统一 runner。
 
+Phase 1B 的 machine-readable 基线记录在：
+
+```text
+my_md/test_docs/eval_suite/phase-1b-compatibility-baseline.json
+```
+
+其中 `compatibility_status` 表示旧 runner 本身的兼容性判断，`integration_status` 表示统一 Harness adapter 的接入进度；两者不能互相替代。
+`adapter_ready` 表示适配器是否通过 G10-A；`main_gate_allowed` 只表示 G10-B 是否已经批准进入统一主 gate。
+
 ## 状态定义
 
 | 状态 | 含义 |
@@ -76,6 +85,69 @@
 6. privacy tests。
 
 没有 adapter 的旧 runner 不得直接被统一 runner import。
+
+## G10 修订：适配器就绪与主 gate 准入分离
+
+旧 runner 的 `compatibility_status=ADAPTER_REQUIRED` 不等于不能进入统一主 gate。
+它只表示旧 runner 不能被直接复用，必须经过明确的适配器边界。G10 拆成两个连续 gate：
+
+### G10-A：Adapter Ready
+
+必须同时满足：
+
+- unified contract tests 通过；
+- adapter 的真实 smoke 或受控 offline 证据通过；
+- event replay、privacy/redaction、session isolation 回归通过；
+- 安全 hard gate 全部为零违规；
+- 完整 `4 类场景 × 5 条 case × 3 profile = 60 turn` 矩阵完成；
+- 真实 LLM、workspace、provider usage 和失败原因可追溯。
+
+状态表示：
+
+```text
+compatibility_status = MATCH 或 ADAPTER_REQUIRED
+integration_status = ADAPTER_PASS
+adapter_ready = true
+main_gate_allowed = false
+```
+
+### G10-B：Main Gate Admission
+
+只有 G10-A 通过后才允许提升为：
+
+```text
+compatibility_status = MATCH 或 ADAPTER_REQUIRED
+integration_status = MAIN_GATE_READY
+adapter_ready = true
+main_gate_allowed = true
+```
+
+因此，`ADAPTER_REQUIRED + adapter_ready` 是合法的适配器接入状态；
+只有 `MAIN_GATE_READY + main_gate_allowed` 才能被 registry 选入主 gate。
+Registry 还会校验 approved live 组合的 `source_name`、`adapter_name`、
+`execution_mode`、source path、source commit 和真实 provider 标记，并通过
+`require_main_gate_ready()` fail-closed；`main_gate_allowed` 不能单独授权。
+
+这里的 `source_name` 是旧 runner 身份，`adapter_name` 是统一 Harness 运行适配器身份。
+两者必须同时出现在 approved 组合中，且 provenance 必须匹配；不能仅凭手工修改
+JSON 中的状态字段放行。
+
+当前只允许作为候选主 gate executor 的来源：
+
+- IPC live adapter；
+- deep live adapter；
+- memory online adapter。
+
+以下来源仍保持 shadow/report-only，不能通过 G10-B：
+
+- offline trace；
+- cost/latency report adapter；
+- LongMemEval、PersonaMem；
+- branch-only tool governance evaluator；
+- MiniRoute。
+
+本次修订不把当前 smoke 结果直接升级为 `adapter_ready=true`，也不把缺失的 latency
+填充为零；完整 60-turn、安全 hard gate 和 latency 可信边界仍是后续执行条件。
 
 ## 可信边界
 

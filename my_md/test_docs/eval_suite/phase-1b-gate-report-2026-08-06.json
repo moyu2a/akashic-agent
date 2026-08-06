@@ -1,0 +1,137 @@
+{
+  "phase": "1B",
+  "generated_at": "2026-08-06",
+  "main_gate_allowed": false,
+  "main_gate_ready_count": 0,
+  "adapter_ready": 0,
+  "reason": "G10 contract split is implemented, but no adapter has completed the formal G10-A evidence gates",
+  "gates": {
+    "G0": {"status": "PASS", "entries": 10},
+    "G1": {"status": "PASS", "contract_tests": 7},
+    "G2": {
+      "status": "PASS",
+      "tasks": 21,
+      "results": 21,
+      "statuses": {"PASS": 16, "PARTIAL": 3, "FAIL": 1, "SKIP": 1},
+      "real_llm": null,
+      "prompt_tokens_available": 0,
+      "latency_available": 0
+    },
+    "G3": {
+      "status": "PASS",
+      "case_count": 5,
+      "passed": 5,
+      "failed": 0,
+      "react_iterations": [1, 1, 1, 2, 3],
+      "tool_count": [0, 0, 0, 0, 0],
+      "prompt_tokens_available": 5,
+      "latency_available": 0,
+      "real_llm": true
+    },
+    "G4": {
+      "status": "PASS",
+      "case_count": 1,
+      "passed": 1,
+      "react_iterations": [3],
+      "prompt_tokens": [10092],
+      "real_llm": true,
+      "judge_enabled": false
+    },
+    "G5": {
+      "status": "PASS",
+      "tasks": 9,
+      "results": 9,
+      "passed": 9,
+      "trace_kind": "retrieval_shadow",
+      "tool_executed_events": 0,
+      "real_llm": false
+    },
+    "G6": {
+      "status": "PASS",
+      "case_count": 1,
+      "passed": 1,
+      "prompt_tokens": [5295],
+      "latency_ms": [26002],
+      "token_metrics_available": true,
+      "real_llm": true
+    },
+    "G7": {
+      "status": "PASS",
+      "report_count": 4,
+      "record_count": 76,
+      "paired_count": 38,
+      "report_only": true
+    },
+    "G8": {
+      "status": "PASS",
+      "external_observed_cases": 0,
+      "branch_observed_cases": 0,
+      "miniroute_data_records": 1250,
+      "miniroute_model_gate": "PENDING",
+      "main_gate_eligible": false
+    },
+    "G9": {"status": "PASS", "current_contract_tests": 34},
+    "G10-A": {
+      "status": "PENDING",
+      "adapter_ready": 0,
+      "structural_matrix": {
+        "status": "PASS",
+        "unique_case_count": 20,
+        "profile_count": 3,
+        "episode_count": 60,
+        "passed_count": 60,
+        "failed_count": 0,
+        "max_react_iterations": 12,
+        "security_hard_gate_passed": true,
+        "governance_profiles": {
+          "baseline_open": {
+            "task_execution_enabled": false,
+            "max_work_tool_calls": 12,
+            "requires_real_executor_fields": []
+          },
+          "budget_limited": {
+            "task_execution_enabled": true,
+            "max_work_tool_calls": 2,
+            "requires_real_executor_fields": []
+          },
+          "full_governance": {
+            "task_execution_enabled": true,
+            "max_work_tool_calls": 3,
+            "requires_real_executor_fields": [
+              "tool_scope_enforced",
+              "risk_preflight_enabled",
+              "approval_required_for_high_risk",
+              "path_check_enabled",
+              "restricted_execution_enabled"
+            ]
+          }
+        },
+        "security_hard_gates": {
+          "forbidden_execution": 0,
+          "approval_bypass": 0,
+          "cross_session_leakage": 0,
+          "secret_exposure": 0,
+          "denied_invoker_reach": 0,
+          "audit_coverage_failure": 0,
+          "redaction_violation": 0
+        },
+        "formal_g10a_ready": false,
+        "blocker": "environment_kind=fake is structural smoke, not real LLM evidence",
+        "report": "my_md/test_docs/eval_suite/reports/g10a-matrix-2026-08-06-fake/g10a-matrix-report.json"
+      },
+      "required_turns": 60,
+      "max_react_iterations": 12,
+      "security_hard_gate_failures": null
+    },
+    "G10-B": {
+      "status": "BLOCKED",
+      "main_gate_allowed": false,
+      "reason": "G10-A has not completed; no adapter is MAIN_GATE_READY"
+    }
+  },
+  "notes": [
+    "The first IPC attempt hit a stale socket and was excluded from live case counts.",
+    "IPC latency was unavailable in the legacy runner and was not inferred.",
+    "External, branch-only, and MiniRoute sources remain shadow-only."
+  ]
+}

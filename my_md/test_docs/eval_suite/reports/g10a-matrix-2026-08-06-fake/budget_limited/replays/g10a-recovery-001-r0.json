@@ -1,0 +1,151 @@
+[
+  {
+    "run_id": "harness-20260806T080552Z-0c1c5a4b",
+    "episode_id": "g10a-recovery-001",
+    "event_index": 0,
+    "turn_index": 0,
+    "timestamp": "2026-08-06T08:05:52.464425+00:00",
+    "event_type": "episode_started",
+    "component": "fake_adapter",
+    "payload": {
+      "case_id": "g10a-recovery-001",
+      "category": "failure_recovery_cost",
+      "governance_profile": "budget_limited"
+    },
+    "payload_hash": "e9663638944b07eb3e10bddd8b5767181b1203ca2acef6a97bc6ad402aa58b11"
+  },
+  {
+    "run_id": "harness-20260806T080552Z-0c1c5a4b",
+    "episode_id": "g10a-recovery-001",
+    "event_index": 1,
+    "turn_index": 0,
+    "timestamp": "2026-08-06T08:05:52.464449+00:00",
+    "event_type": "turn_started",
+    "component": "fake_adapter",
+    "payload": {
+      "role": "user"
+    },
+    "payload_hash": "6b3061507ef8cc2ca95320f790a9f9ccb3c850ae081df4b6f6e56e40d57203e4"
+  },
+  {
+    "run_id": "harness-20260806T080552Z-0c1c5a4b",
+    "episode_id": "g10a-recovery-001",
+    "event_index": 2,
+    "turn_index": 0,
+    "timestamp": "2026-08-06T08:05:52.464464+00:00",
+    "event_type": "context_rendered",
+    "component": "fake_adapter",
+    "payload": {
+      "text_length": 11
+    },
+    "payload_hash": "015b2e5e95e9313573c887286e78dff4d696bf5905bc0fb5ce19ac518a410d76"
+  },
+  {
+    "run_id": "harness-20260806T080552Z-0c1c5a4b",
+    "episode_id": "g10a-recovery-001",
+    "event_index": 3,
+    "turn_index": 0,
+    "timestamp": "2026-08-06T08:05:52.464476+00:00",
+    "event_type": "llm_call_started",
+    "component": "fake_provider",
+    "payload": {
+      "model": "fake-model"
+    },
+    "payload_hash": "06e7295e91f32f9538b57bbfab5b6f5f7d2698b62bc6a06d14e109b770ef44e9"
+  },
+  {
+    "run_id": "harness-20260806T080552Z-0c1c5a4b",
+    "episode_id": "g10a-recovery-001",
+    "event_index": 4,
+    "turn_index": 0,
+    "timestamp": "2026-08-06T08:05:52.464499+00:00",
+    "event_type": "llm_call_finished",
+    "component": "fake_provider",
+    "payload": {
+      "prompt_tokens": "[REDACTED]",
+      "completion_tokens": "[REDACTED]"
+    },
+    "payload_hash": "7d5db09bdb7a63346823afa9af9c5cb5707dfdfe21414650ad25d6f198f6de7e"
+  },
+  {
+    "run_id": "harness-20260806T080552Z-0c1c5a4b",
+    "episode_id": "g10a-recovery-001",
+    "event_index": 5,
+    "turn_index": 0,
+    "timestamp": "2026-08-06T08:05:52.464516+00:00",
+    "event_type": "tool_requested",
+    "component": "fake_agent",
+    "payload": {
+      "tool": "retry_safe_tool"
+    },
+    "payload_hash": "074e9463f7b4ae23fd9b8f936242addc6f762db1de13444f5b9d116daa9b975d"
+  },
+  {
+    "run_id": "harness-20260806T080552Z-0c1c5a4b",
+    "episode_id": "g10a-recovery-001",
+    "event_index": 6,
+    "turn_index": 0,
+    "timestamp": "2026-08-06T08:05:52.464531+00:00",
+    "event_type": "policy_decision",
+    "component": "fake_governance",
+    "payload": {
+      "tool": "retry_safe_tool",
+      "policy_action": "allow"
+    },
+    "payload_hash": "441a1654bb81906dd5a246c2fbf32ac289c2525e43c72e3c74eee7f833b8d7b2"
+  },
+  {
+    "run_id": "harness-20260806T080552Z-0c1c5a4b",
+    "episode_id": "g10a-recovery-001",
+    "event_index": 7,
+    "turn_index": 0,
+    "timestamp": "2026-08-06T08:05:52.464542+00:00",
+    "event_type": "tool_executed",
+    "component": "fake_tool",
+    "payload": {
+      "tool": "retry_safe_tool"
+    },
+    "payload_hash": "074e9463f7b4ae23fd9b8f936242addc6f762db1de13444f5b9d116daa9b975d"
+  },
+  {
+    "run_id": "harness-20260806T080552Z-0c1c5a4b",
+    "episode_id": "g10a-recovery-001",
+    "event_index": 8,
+    "turn_index": 0,
+    "timestamp": "2026-08-06T08:05:52.464560+00:00",
+    "event_type": "state_mutated",
+    "component": "fake_environment",
+    "payload": {
+      "keys": [
+        "completed"
+      ]
+    },
+    "payload_hash": "961281f2274758edb4cff70d5879c420c537b990235bf3b3194b43cdee36f6d3"
+  },
+  {
+    "run_id": "harness-20260806T080552Z-0c1c5a4b",
+    "episode_id": "g10a-recovery-001",
+    "event_index": 9,
+    "turn_index": 0,
+    "timestamp": "2026-08-06T08:05:52.464577+00:00",
+    "event_type": "reply_emitted",
+    "component": "fake_adapter",
+    "payload": {
+      "reply": "fake episode completed"
+    },
+    "payload_hash": "4aab6660fa7c3c593b7a36694f1fe4a963c45946573f8f1c2c03b996bdfdd65a"
+  },
+  {
+    "run_id": "harness-20260806T080552Z-0c1c5a4b",
+    "episode_id": "g10a-recovery-001",
+    "event_index": 10,
+    "turn_index": 0,
+    "timestamp": "2026-08-06T08:05:52.464589+00:00",
+    "event_type": "episode_finished",
+    "component": "fake_adapter",
+    "payload": {
+      "status": "PASS"
+    },
+    "payload_hash": "783b173fb8eec97c19a27521573cd90ff71aaae2533a2cba68b777e558748e43"
+  }
+]

@@ -1,0 +1,55 @@
+{
+  "summary": {
+    "total": 1,
+    "by_status": {
+      "pass": 1
+    },
+    "by_category": {
+      "observe_cost": {
+        "pass": 1
+      }
+    },
+    "avg_tool_calls_per_turn": 0.0,
+    "avg_iterations_per_turn": 1.0
+  },
+  "dry_run": false,
+  "results": [
+    {
+      "case_id": "DL-H001",
+      "title": "简单问答成本不应异常膨胀",
+      "category": "observe_cost",
+      "priority": "P1",
+      "risk_level": "safe",
+      "status": "pass",
+      "score": 1.0,
+      "failure_type": "none",
+      "step_results": [
+        {
+          "channel": "cli",
+          "text": "请用一句话解释 HTTP 204 是什么。",
+          "response": "HTTP 204 No Content 表示请求成功了，但响应里没有内容要返回——比如 DELETE 成功后、或某些 PUT/POST 只需要状态码时，服务器就回 204，客户端拿到后不用解析响应体。",
+          "turn": {
+            "id": 3,
+            "session_key": "cli:cli-129759788510544",
+            "user_msg": "请用一句话解释 HTTP 204 是什么。",
+            "output": "HTTP 204 No Content 表示请求成功了，但响应里没有内容要返回——比如 DELETE 成功后、或某些 PUT/POST 只需要状态码时，服务器就回 204，客户端拿到后不用解析响应体。",
+            "tool_names": [],
+            "tool_count": 0,
+            "error": "",
+            "iteration_count": 1,
+            "prompt_tokens": 3595,
+            "cache_hit_tokens": 5120,
+            "cache_prompt_tokens": 15914
+          }
+        }
+      ],
+      "issues": [],
+      "judge": {
+        "verdict": "skipped",
+        "score": 0.0,
+        "reason": "",
+        "failure_type": "judge_skipped"
+      }
+    }
+  ]
+}

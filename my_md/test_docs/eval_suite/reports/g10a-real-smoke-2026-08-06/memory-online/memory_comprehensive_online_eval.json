@@ -1,0 +1,222 @@
+{
+  "case_records": [
+    {
+      "answer_length": 694,
+      "answer_post_check_shadow": null,
+      "answer_rule_passed": false,
+      "case_id": "common_preference_recall_01",
+      "category": "common_preference_recall",
+      "completion_token_count": 3887,
+      "evidence_source": "original_memory_baseline",
+      "expected_memory_used": true,
+      "failures": [
+        "missing_expected_answer_term",
+        "missing_expected_answer_term_group",
+        "missing_expected_answer_term_group"
+      ],
+      "forbidden_contains_violation_count": 0,
+      "latency_ms": 35986,
+      "memory_grounding_passed": true,
+      "passed": false,
+      "profile_name": "chain_memory_base",
+      "prompt_token_count": 5535,
+      "prompt_variant": "baseline",
+      "provider_error": false,
+      "repeat_index": 0,
+      "timeout": false,
+      "token_metrics_available": true,
+      "total_token_count": 9422,
+      "used_memory_id_count": 6
+    }
+  ],
+  "failure_records": [
+    {
+      "case_id": "common_preference_recall_01",
+      "failure": "missing_expected_answer_term",
+      "profile_name": "chain_memory_base",
+      "prompt_variant": "baseline",
+      "repeat_index": 0
+    },
+    {
+      "case_id": "common_preference_recall_01",
+      "failure": "missing_expected_answer_term_group",
+      "profile_name": "chain_memory_base",
+      "prompt_variant": "baseline",
+      "repeat_index": 0
+    },
+    {
+      "case_id": "common_preference_recall_01",
+      "failure": "missing_expected_answer_term_group",
+      "profile_name": "chain_memory_base",
+      "prompt_variant": "baseline",
+      "repeat_index": 0
+    }
+  ],
+  "generated_at": "2026-07-19T00:00:00+00:00",
+  "metrics": {
+    "answer_post_check_shadow": {
+      "case_count": 0,
+      "conflict_evidence_included_count": 0,
+      "enabled_case_count": 0,
+      "forbidden_boundary_included_count": 0,
+      "insufficient_fallback_missing_count": 0,
+      "missing_likely_relevant_context_count": 0,
+      "needs_retry_count": 0,
+      "stale_evidence_included_count": 0
+    },
+    "answer_quality_missing_profiles": [
+      "chain_tri_retrieval",
+      "chain_graph_retrieval",
+      "chain_rerank_injection",
+      "chain_version_provenance",
+      "chain_all_on"
+    ],
+    "answer_quality_partial_matrix": true,
+    "answer_quality_passed": false,
+    "answer_quality_required_profiles": [
+      "chain_memory_base",
+      "chain_tri_retrieval",
+      "chain_graph_retrieval",
+      "chain_rerank_injection",
+      "chain_version_provenance",
+      "chain_all_on"
+    ],
+    "answer_rule_pass_rate": 0.0,
+    "avg_latency_ms": 35986.0,
+    "avg_total_token_count": 9422.0,
+    "baseline_profile": "chain_memory_base",
+    "case_count": 1,
+    "chain_adjacent_uplift": {
+      "chain_memory_base": 0.0
+    },
+    "chain_answer_quality_uplift_rows": [
+      {
+        "adjacent_answer_pass_delta_points": 0.0,
+        "adjacent_grounding_pass_delta_points": 0.0,
+        "answer_rule_pass_rate": 0.0,
+        "case_count": 1,
+        "cumulative_answer_pass_delta_points": 0.0,
+        "cumulative_answer_pass_relative_lift_percent": null,
+        "cumulative_grounding_pass_delta_points": 0.0,
+        "cumulative_grounding_pass_relative_lift_percent": 0.0,
+        "is_combo_check_row": false,
+        "memory_grounding_pass_rate": 100.0,
+        "previous_profile": null,
+        "profile_name": "chain_memory_base"
+      }
+    ],
+    "completed_call_count": 1,
+    "concurrency": 1,
+    "control_profile": "chain_off",
+    "evaluation_level": "comprehensive_online_agentloop",
+    "failed_answer_case_count": 1,
+    "forbidden_violation_rate": 0.0,
+    "full_answer_included": false,
+    "infra_passed": true,
+    "memory_grounding_pass_rate": 100.0,
+    "metric_sources": {
+      "offline_retrieval_proxy": "existing offline trace retrieval metrics",
+      "online_answer_level": "real AgentLoop answer scoring",
+      "online_balanced_proxy": "online answer-level fields converted into balanced proxy dimensions",
+      "real_db_readonly_sampling_background": "aggregate-only real memory DB sampling status"
+    },
+    "online_balanced_proxy_summaries": {
+      "chain_memory_base": {
+        "answer_derived_retrieval_proxy_score": "unavailable",
+        "answer_score": 0.0,
+        "available_dimensions": [
+          "answer_score",
+          "grounding_score",
+          "governance_score"
+        ],
+        "efficiency_score": "unavailable",
+        "formula": "balanced_score = 0.30 * answer_score + 0.25 * retrieval_proxy_score + 0.20 * grounding_score + 0.15 * governance_score + 0.10 * efficiency_score; unavailable dimensions are omitted and remaining weights are normalized",
+        "governance_score": 100.0,
+        "grounding_score": 100.0,
+        "metric_source": "online_balanced_proxy",
+        "online_balanced_proxy_delta": 0.0,
+        "online_balanced_proxy_score": 53.8462,
+        "unavailable_dimensions": [
+          "retrieval_proxy_score",
+          "efficiency_score"
+        ]
+      }
+    },
+    "passed_case_count": 0,
+    "profile_answer_quality_uplift_vs_memory_base": {
+      "chain_memory_base": {
+        "answer_pass_delta_points": 0.0,
+        "answer_pass_relative_lift_percent": null,
+        "answer_rule_pass_rate": 0.0,
+        "answer_success_count": 0,
+        "avg_latency_ms": 35986.0,
+        "avg_latency_overhead_ms": 0.0,
+        "avg_latency_reduction_percent": 0.0,
+        "avg_total_token_count": 9422.0,
+        "avg_total_token_overhead": 0.0,
+        "avg_total_token_reduction_percent": 0.0,
+        "baseline_profile": "chain_memory_base",
+        "case_count": 1,
+        "forbidden_case_count": 0,
+        "forbidden_violation_delta_points": 0.0,
+        "forbidden_violation_rate": 0.0,
+        "forbidden_violation_reduction_percent": null,
+        "grounding_pass_delta_points": 0.0,
+        "grounding_pass_relative_lift_percent": 0.0,
+        "grounding_success_count": 1,
+        "is_combo_check_row": false,
+        "memory_grounding_pass_rate": 100.0
+      }
+    },
+    "profile_count": 1,
+    "profile_metadata": {},
+    "profile_summaries": {
+      "chain_memory_base": {
+        "answer_rule_pass_rate": 0.0,
+        "answer_success_count": 0,
+        "avg_latency_ms": 35986.0,
+        "avg_total_token_count": 9422.0,
+        "case_count": 1,
+        "evidence_source": "original_memory_baseline",
+        "forbidden_case_count": 0,
+        "forbidden_violation_rate": 0.0,
+        "grounding_success_count": 1,
+        "main_score": 30.0,
+        "memory_grounding_pass_rate": 100.0,
+        "token_metrics_available": true
+      }
+    },
+    "profile_uplift_vs_memory_base": {
+      "chain_memory_base": 0.0
+    },
+    "profile_uplift_vs_off": {
+      "chain_memory_base": "unavailable"
+    },
+    "prompt_included": false,
+    "prompt_variant_count": 1,
+    "provider_error_count": 0,
+    "raw_memory_summary_included": false,
+    "raw_query_included": false,
+    "real_llm_enabled": true,
+    "real_memory_sample_metrics": {
+      "cross_scope_sample_unavailable": 1,
+      "invalid_extra_json_count": 0,
+      "memory_item_count": 0,
+      "missing_scope_count": 0,
+      "missing_table_count": 0,
+      "replacement_count": 0,
+      "sample_count": 0,
+      "usable_memory_item_count": 0,
+      "version_chain_sample_unavailable": 1
+    },
+    "repeat_count": 1,
+    "session_text_included": false,
+    "skipped_from_checkpoint_count": 0,
+    "timeout_count": 0,
+    "token_metrics_available": true,
+    "total_token_count": 9422,
+    "unique_case_count": 1
+  },
+  "passed": false,
+  "run_id": "a9c85f0ec227cc23"
+}

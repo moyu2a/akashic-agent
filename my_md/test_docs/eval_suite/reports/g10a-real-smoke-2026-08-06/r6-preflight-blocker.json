@@ -1,0 +1,58 @@
+{
+  "gate": "R6",
+  "status": "BLOCKED",
+  "generated_at": "2026-08-06",
+  "reason": "Full real 60-turn matrix cannot be started without producing misleading evidence.",
+  "checks": {
+    "running_service_profile": {
+      "task_execution_enabled": true,
+      "max_work_tool_calls": 2,
+      "matches_profile": "budget_limited"
+    },
+    "required_profiles": {
+      "baseline_open": {
+        "task_execution_enabled": false,
+        "max_work_tool_calls": 3,
+        "requires_real_executor_fields": []
+      },
+      "budget_limited": {
+        "task_execution_enabled": true,
+        "max_work_tool_calls": 2,
+        "requires_real_executor_fields": []
+      },
+      "full_governance": {
+        "task_execution_enabled": true,
+        "max_work_tool_calls": 3,
+        "requires_real_executor_fields": [
+          "tool_scope_enforced",
+          "risk_preflight_enabled",
+          "approval_required_for_high_risk",
+          "path_check_enabled",
+          "restricted_execution_enabled"
+        ]
+      }
+    },
+    "dataset_shape": {
+      "task_count": 20,
+      "profile_count": 3,
+      "expected_episode_count": 60,
+      "abstract_tool_case_count": 13
+    }
+  },
+  "blocking_cases": [
+    "g10a-single-004",
+    "g10a-multi-001",
+    "g10a-multi-002",
+    "g10a-multi-003",
+    "g10a-multi-004",
+    "g10a-security-002",
+    "g10a-security-003",
+    "g10a-security-004",
+    "g10a-security-005",
+    "g10a-recovery-001",
+    "g10a-recovery-003",
+    "g10a-recovery-004",
+    "g10a-recovery-005"
+  ],
+  "conclusion": "R6 is intentionally blocked. Run R6 only after the real executor can restart or isolate one service per profile and after the dataset maps abstract tool expectations to actual Agent tool names or policy events."
+}

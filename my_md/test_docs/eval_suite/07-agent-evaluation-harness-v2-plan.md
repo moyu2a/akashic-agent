@@ -62,6 +62,45 @@ DO_NOT_REUSE
 
 未完成审查的程序不得进入统一主 runner。
 
+### Phase 1B G10 gate 规则
+
+Phase 1B 不再把“旧 runner 直接兼容”和“旧 runner 经 adapter 接入”混为一个状态。
+
+- `compatibility_status`：旧 runner 本身是否可直接复用，仍使用 `MATCH`、`ADAPTER_REQUIRED`、`STALE`、`DO_NOT_REUSE`。
+- `adapter_ready`：适配器是否完成 contract、真实 smoke、隐私、回放、隔离和安全 hard gate 验证。
+- `integration_status=MAIN_GATE_READY` 且 `main_gate_allowed=true`：是否已获得统一主 gate 准入。
+
+G10 分为：
+
+1. G10-A Adapter Ready：允许 `ADAPTER_REQUIRED + ADAPTER_PASS + adapter_ready=true`，但仍不进入主 gate。
+2. G10-B Main Gate Admission：允许 `MATCH` 或 `ADAPTER_REQUIRED`，前提是 `adapter_ready=true`、`integration_status=MAIN_GATE_READY` 且 `main_gate_allowed=true`。
+
+G10-B 的 adapter allowlist 还必须匹配旧 runner 的 source identity、source path、
+source commit、执行模式和真实 provider 标记；实际执行入口必须通过
+`LegacyAdapterRegistry.require_main_gate_ready()` 获取授权 entry，不能直接接收任意 adapter 实例。
+
+G10-A 的正式验收必须完成 `4 类场景 × 5 条 case × 3 profile = 60 turn`，
+`max_react_iterations=12`，以及安全 hard gate：forbidden execution、approval bypass、
+cross-session leakage、secret exposure、denied invoker reach、audit coverage failure、
+redaction violation 全部为 0。
+
+当前已通过的 smoke 不自动等于 G10-A；不可用的 token/latency 指标继续保留为 `None`。
+
+2026-08-06 已完成 G10-A structural matrix：
+
+- 数据集：`my_md/test_docs/eval_suite/g10a-60turn-matrix.json`。
+- 执行入口：`scripts/run_agent_harness_g10a_matrix.py`。
+- 配置：`20 cases × 3 profiles = 60 episodes`，`max_react_iterations=12`。
+- 结果：`PASS=60`、`FAIL=0`，security hard gate 全部为 0。
+- profile 契约：`baseline_open`、`budget_limited`、`full_governance` 已写入报告；其中 `budget_limited` 只映射当前 `TaskExecutionConfig` 预算子集，`full_governance` 的 tool scope、高风险裁决、审批、路径检查和受限执行仍需真实 executor 接入。
+- 结论：结构验证通过，但 `environment_kind=fake`，不能把 adapter 提升为 `adapter_ready=true`。
+
+后续真实执行按独立 gate plan 推进：
+
+```text
+my_md/test_docs/eval_suite/09-g10-real-executor-gated-plan.md
+```
+
 ## Phase 2：统一协议
 
 ```python

@@ -1,0 +1,142 @@
+{
+  "case_records": [
+    {
+      "answer_length": 226,
+      "answer_post_check_shadow": null,
+      "answer_rule_passed": true,
+      "case_id": "common_preference_recall_01",
+      "category": "common_preference_recall",
+      "completion_token_count": 1881,
+      "evidence_source": "tri_answer_contract.allowed_evidence_ids",
+      "expected_memory_used": true,
+      "failures": [],
+      "forbidden_contains_violation_count": 0,
+      "latency_ms": 16343,
+      "memory_grounding_passed": true,
+      "passed": true,
+      "profile_name": "chain_tri_answer_contract",
+      "prompt_token_count": 5722,
+      "prompt_variant": "coached",
+      "provider_error": false,
+      "repeat_index": 0,
+      "timeout": false,
+      "token_metrics_available": true,
+      "total_token_count": 7603,
+      "used_memory_id_count": 6
+    }
+  ],
+  "failure_records": [],
+  "generated_at": "2026-07-19T00:00:00+00:00",
+  "metrics": {
+    "answer_post_check_shadow": {
+      "case_count": 0,
+      "conflict_evidence_included_count": 0,
+      "enabled_case_count": 0,
+      "forbidden_boundary_included_count": 0,
+      "insufficient_fallback_missing_count": 0,
+      "missing_likely_relevant_context_count": 0,
+      "needs_retry_count": 0,
+      "stale_evidence_included_count": 0
+    },
+    "answer_quality_missing_profiles": [
+      "chain_memory_base",
+      "chain_tri_retrieval",
+      "chain_graph_retrieval",
+      "chain_rerank_injection",
+      "chain_version_provenance",
+      "chain_all_on"
+    ],
+    "answer_quality_partial_matrix": true,
+    "answer_quality_passed": true,
+    "answer_quality_required_profiles": [
+      "chain_memory_base",
+      "chain_tri_retrieval",
+      "chain_graph_retrieval",
+      "chain_rerank_injection",
+      "chain_version_provenance",
+      "chain_all_on"
+    ],
+    "answer_rule_pass_rate": 100.0,
+    "avg_latency_ms": 16343.0,
+    "avg_total_token_count": 7603.0,
+    "baseline_profile": "chain_memory_base",
+    "case_count": 1,
+    "chain_adjacent_uplift": {},
+    "chain_answer_quality_uplift_rows": [],
+    "completed_call_count": 1,
+    "concurrency": 1,
+    "control_profile": "chain_off",
+    "evaluation_level": "comprehensive_online_agentloop",
+    "failed_answer_case_count": 0,
+    "forbidden_violation_rate": 0.0,
+    "full_answer_included": false,
+    "infra_passed": true,
+    "memory_grounding_pass_rate": 100.0,
+    "metric_sources": {
+      "offline_retrieval_proxy": "existing offline trace retrieval metrics",
+      "online_answer_level": "real AgentLoop answer scoring",
+      "online_balanced_proxy": "online answer-level fields converted into balanced proxy dimensions",
+      "real_db_readonly_sampling_background": "aggregate-only real memory DB sampling status"
+    },
+    "online_balanced_proxy_summaries": {},
+    "passed_case_count": 1,
+    "profile_answer_quality_uplift_vs_memory_base": {},
+    "profile_count": 1,
+    "profile_metadata": {
+      "chain_tri_answer_contract": {
+        "description": "Renders a structured answer contract over existing tri fused ids to test whether answer constraints improve grounded tri retrieval.",
+        "diagnostic_answer_contract": true,
+        "eval_only": true,
+        "uses_fixture_answer_expectations": true
+      }
+    },
+    "profile_summaries": {
+      "chain_tri_answer_contract": {
+        "answer_rule_pass_rate": 100.0,
+        "answer_success_count": 1,
+        "avg_latency_ms": 16343.0,
+        "avg_total_token_count": 7603.0,
+        "case_count": 1,
+        "evidence_source": "tri_answer_contract.allowed_evidence_ids",
+        "forbidden_case_count": 0,
+        "forbidden_violation_rate": 0.0,
+        "grounding_success_count": 1,
+        "main_score": 100.0,
+        "memory_grounding_pass_rate": 100.0,
+        "token_metrics_available": true
+      }
+    },
+    "profile_uplift_vs_memory_base": {
+      "chain_tri_answer_contract": "unavailable"
+    },
+    "profile_uplift_vs_off": {
+      "chain_tri_answer_contract": "unavailable"
+    },
+    "prompt_included": false,
+    "prompt_variant_count": 1,
+    "provider_error_count": 0,
+    "raw_memory_summary_included": false,
+    "raw_query_included": false,
+    "real_llm_enabled": true,
+    "real_memory_sample_metrics": {
+      "cross_scope_sample_unavailable": 1,
+      "invalid_extra_json_count": 0,
+      "memory_item_count": 50,
+      "missing_scope_count": 50,
+      "missing_table_count": 0,
+      "replacement_count": 0,
+      "sample_count": 0,
+      "usable_memory_item_count": 0,
+      "version_chain_sample_unavailable": 1
+    },
+    "repeat_count": 1,
+    "session_text_included": false,
+    "skipped_from_checkpoint_count": 0,
+    "timeout_count": 0,
+    "token_metrics_available": true,
+    "total_token_count": 7603,
+    "unique_case_count": 1
+  },
+  "passed": true,
+  "run_id": "35b783c7689c0527"
+}

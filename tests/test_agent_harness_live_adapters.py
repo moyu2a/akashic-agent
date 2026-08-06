@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 import json
 from pathlib import Path
+import pytest
 
 from eval.agent_harness.protocol import RunManifest
 
@@ -117,8 +118,8 @@ def test_ipc_live_adapter_audit_and_json_load_cases(tmp_path: Path) -> None:
     tasks = adapter.load_cases(dataset)
 
     assert isinstance(adapter, LegacyRunnerAdapter)
-    assert source.source_name == "ipc_live"
-    assert source.integration_status is IntegrationStatus.NOT_STARTED
+    assert source.source_name == "live_eval_runner"
+    assert source.integration_status is IntegrationStatus.ADAPTER_PASS
     assert source.main_gate_allowed is False
     assert [task.case_id for task in tasks] == ["safe-001", "guarded-001"]
     assert tasks[0].steps == ({"role": "user", "text": "remember this"},)
@@ -138,7 +139,9 @@ def test_ipc_live_adapter_dry_run_and_guarded_boundary(tmp_path: Path) -> None:
     ]
 
     assert [case["id"] for case in adapter.select_cases(cases)] == ["safe"]
-    assert [case["id"] for case in adapter.select_cases(cases, include_guarded=True)] == [
+    assert [
+        case["id"] for case in adapter.select_cases(cases, include_guarded=True)
+    ] == [
         "safe",
         "guarded",
     ]
@@ -233,3 +236,113 @@ def test_deep_live_adapter_keeps_judge_as_quality_and_events_replay_safe() -> No
         rendered = json.dumps(event["payload"], ensure_ascii=False)
         assert "private user text" not in rendered
         assert "private assistant reply" not in rendered
+
+
+@pytest.mark.asyncio
+async def test_ipc_live_adapter_invokes_the_legacy_runner_module(
+    tmp_path: Path,
+) -> None:
+    from eval.agent_harness.legacy_adapters.live_ipc import IpcLiveAdapter
+
+    runner = tmp_path / "legacy_live_runner.py"
+    marker = tmp_path / "called.txt"
+    runner.write_text(
+        """
+from dataclasses import dataclass
+from pathlib import Path
+
+class ObserveStore:
+    def __init__(self, workspace):
+        self.workspace = Path(workspace)
+
+async def run_case(case, *, endpoint, observe, timeout, dry_run):
+    Path(observe.workspace / "called.txt").write_text(
+        f"{case['id']}|{endpoint}|{timeout}|{dry_run}",
+        encoding="utf-8",
+    )
+    return {"case_id": case["id"], "status": "dry_run", "step_results": [], "issues": []}
+""",
+        encoding="utf-8",
+    )
+    adapter = IpcLiveAdapter(source_path=runner)
+
+    raw_result = await adapter.run_case(
+        {"id": "legacy-live-001"},
+        workspace=tmp_path,
+        endpoint="/tmp/akashic-test.sock",
+        timeout=17.0,
+        dry_run=True,
+    )
+
+    assert raw_result["case_id"] == "legacy-live-001"
+    assert marker.read_text(encoding="utf-8") == (
+        "legacy-live-001|/tmp/akashic-test.sock|17.0|True"
+    )
+
+
+def test_ipc_live_adapter_loads_yaml_through_the_legacy_loader(tmp_path: Path) -> None:
+    from eval.agent_harness.legacy_adapters.live_ipc import IpcLiveAdapter
+
+    runner = tmp_path / "legacy_live_runner.py"
+    runner.write_text(
+        """
+def load_cases(path):
+    return [
+        {
+            "id": "yaml-case",
+            "category": "memory",
+            "risk_level": "safe",
+            "execution_mode": "live",
+            "input": {"text": "loaded by legacy"},
+        }
+    ]
+""",
+        encoding="utf-8",
+    )
+    dataset = tmp_path / "cases.yaml"
+    dataset.write_text("cases: []\n", encoding="utf-8")
+
+    tasks = IpcLiveAdapter(source_path=runner).load_cases(dataset)
+
+    assert [task.case_id for task in tasks] == ["yaml-case"]
+
+
+@pytest.mark.asyncio
+async def test_deep_live_adapter_invokes_the_legacy_runner_module(
+    tmp_path: Path,
+) -> None:
+    from eval.agent_harness.legacy_adapters.deep_live import DeepLiveAdapter
+
+    runner = tmp_path / "legacy_deep_runner.py"
+    marker = tmp_path / "deep-called.txt"
+    runner.write_text(
+        """
+from pathlib import Path
+
+class TraceStore:
+    def __init__(self, workspace):
+        self.workspace = Path(workspace)
+
+async def run_case(case, *, endpoint, trace, timeout, dry_run, judge_enabled):
+    (trace.workspace / "deep-called.txt").write_text(
+        f"{case['id']}|{endpoint}|{timeout}|{dry_run}|{judge_enabled}",
+        encoding="utf-8",
+    )
+    return {"case_id": case["id"], "status": "dry_run", "step_results": [], "issues": [], "judge": None}
+""",
+        encoding="utf-8",
+    )
+
+    raw_result = await DeepLiveAdapter(source_path=runner).run_case(
+        {"id": "legacy-deep-001"},
+        workspace=tmp_path,
+        endpoint="/tmp/akashic-test.sock",
+        timeout=19.0,
+        dry_run=True,
+        judge_enabled=True,
+    )
+
+    assert raw_result["case_id"] == "legacy-deep-001"
+    assert marker.read_text(encoding="utf-8") == (
+        "legacy-deep-001|/tmp/akashic-test.sock|19.0|True|True"
+    )

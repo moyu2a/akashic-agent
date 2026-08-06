@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+from pathlib import Path
 from types import SimpleNamespace
 
 from eval.agent_harness.protocol import RunManifest, TaskSpec
@@ -211,6 +213,52 @@ def test_cost_latency_adapter_is_report_only_and_keeps_paired_ab_metrics() -> No
     assert "secret reply" not in repr(candidate_result.events)
 
 
+def test_cost_latency_adapter_reads_real_ab_json_records(tmp_path: Path) -> None:
+    import json
+
+    from eval.agent_harness.legacy_adapters.cost_latency import CostLatencyAdapter
+
+    report = {
+        "metrics": {"real_llm": True},
+        "records": [
+            {
+                "run_id": "real-ab",
+                "phase": "A",
+                "profile": "baseline",
+                "case_id": "tool-001",
+                "category": "tool_task",
+                "prompt_preview": "safe preview",
+                "reply_preview": "safe reply",
+                "correctness": "PASS",
+                "simple_fast_path": False,
+                "expected_fast_path": False,
+                "tool_error_count": 0,
+                "actual_prompt_tokens_sum": 200,
+                "actual_total_tokens_sum": 260,
+                "turn_duration_ms": 1000,
+                "llm_duration_ms_sum": 700,
+                "react_iteration_count": 4,
+                "actual_tools": ["search"],
+                "expected_tools": ["search"],
+                "denied_tool_attempt_count": 0,
+                "unregistered_tool_count": 0,
+                "forbidden_reply_pattern_count": 0,
+                "expected_tool_missing_count": 0,
+                "note": "",
+            }
+        ],
+    }
+    path = tmp_path / "real-ab.json"
+    path.write_text(json.dumps(report), encoding="utf-8")
+
+    results = CostLatencyAdapter().adapt_report_file(path, manifest=_manifest())
+
+    assert len(results) == 1
+    assert results[0].episode_id == "tool-001-baseline"
+    assert results[0].metrics["report_only"] is True
+    assert results[0].metrics["metric_provenance"]["total_tokens"] == "real_ab_record"
+
+
 def test_shadow_adapter_keeps_boundaries_and_excludes_shadow_from_main_gate() -> None:
     from eval.agent_harness.legacy_adapters.shadow import ShadowAdapter
 
@@ -252,7 +300,9 @@ def test_shadow_adapter_keeps_boundaries_and_excludes_shadow_from_main_gate() ->
     assert external.metrics["benchmark_kind"] == "external"
     assert external.metrics["historical"] is True
     assert external.metrics["main_gate_eligible"] is False
-    assert external.metrics["metric_provenance"]["latency_ms"] == "missing:external-suite"
+    assert (
+        external.metrics["metric_provenance"]["latency_ms"] == "missing:external-suite"
+    )
     assert governance.metrics["benchmark_kind"] == "tool_governance_branch"
     assert governance.metrics["main_gate_eligible"] is False
     assert governance.metrics["tool_error_count"] is None
@@ -268,3 +318,107 @@ def test_shadow_adapter_keeps_boundaries_and_excludes_shadow_from_main_gate() ->
     assert "json_valid" not in miniroute.metrics["decision"]
     assert miniroute.metrics["main_gate_eligible"] is False
     assert all("tool_executed" != event for event in _event_types(miniroute))
+
+
+def test_shadow_adapter_builds_a_formal_non_gate_summary() -> None:
+    from eval.agent_harness.legacy_adapters.shadow import ShadowAdapter
+
+    adapter = ShadowAdapter()
+    observations = [
+        adapter.adapt_external_benchmark(
+            name="longmemeval",
+            case_id="long-001",
+            metrics={"score": 0.8},
+            passed=True,
+            manifest=_manifest(),
+            historical=True,
+        ),
+        adapter.adapt_tool_governance_branch(
+            branch_name="governance",
+            case_id="gov-001",
+            decision={"policy_action": "deny"},
+            metrics={"forbidden_execution": 0},
+            passed=True,
+            manifest=_manifest(),
+        ),
+    ]
+
+    summary = adapter.summarize(observations)
+
+    assert summary["episode_count"] == 2
+    assert summary["main_gate_eligible"] is False
+    assert summary["by_kind"] == {
+        "external": {"count": 1, "passed": 1, "failed": 0},
+        "tool_governance_branch": {"count": 1, "passed": 1, "failed": 0},
+    }
+
+
+def test_memory_offline_adapter_invokes_the_legacy_eval_runner(tmp_path: Path) -> None:
+    from eval.agent_harness.legacy_adapters.memory import MemoryOfflineAdapter
+
+    runner = tmp_path / "legacy_memory_runner.py"
+    runner.write_text(
+        """
+from pathlib import Path
+
+def run_eval_case_files(root):
+    Path(root / "offline-called.txt").write_text("legacy-offline", encoding="utf-8")
+    return SimpleReport()
+
+class SimpleReport:
+    cases = []
+""",
+        encoding="utf-8",
+    )
+    adapter = MemoryOfflineAdapter(source_path=runner)
+
+    tasks, results = adapter.run(tmp_path, manifest=_manifest())
+
+    assert tasks == ()
+    assert results == ()
+    assert (tmp_path / "offline-called.txt").read_text(
+        encoding="utf-8"
+    ) == "legacy-offline"
+
+
+def test_memory_online_adapter_invokes_the_legacy_comprehensive_runner(
+    tmp_path: Path,
+) -> None:
+    from eval.agent_harness.legacy_adapters.memory import MemoryOnlineAdapter
+
+    runner = tmp_path / "legacy_memory_online.py"
+    runner.write_text(
+        """
+from pathlib import Path
+
+async def run_comprehensive_online_eval(
+    specs, workspace, provider, model, **kwargs
+):
+    Path(workspace / "online-called.txt").write_text(
+        f"{len(specs)}|{model}|{kwargs['timeout_s']}|{kwargs['real_llm_enabled']}",
+        encoding="utf-8",
+    )
+    return SimpleReport()
+
+class SimpleReport:
+    cases = []
+""",
+        encoding="utf-8",
+    )
+    adapter = MemoryOnlineAdapter(source_path=runner)
+
+    report = asyncio.run(
+        adapter.run(
+            specs=[{"case_id": "case-1"}],
+            workspace=tmp_path,
+            provider=object(),
+            model="real-model",
+            timeout_s=23.0,
+            real_llm_enabled=True,
+        )
+    )
+
+    assert report.cases == []
+    assert (tmp_path / "online-called.txt").read_text(encoding="utf-8") == (
+        "1|real-model|23.0|True"
+    )
