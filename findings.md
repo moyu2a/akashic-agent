@@ -165,3 +165,18 @@
 - Current hard target recall results are: 三路召回 `87.5% -> 100%`, 图谱召回 `87.5% -> 97.5%`, 版本链当前有效版本 `80% -> 100%`.
 - These are still offline target-oriented fixtures, not real online LLM results. The formal report keeps `online_status = gated_no_checkpoint` and `real_llm_used = False`.
 - Next useful work: inspect graph hard misses behind the remaining `98.75%`, add forked replacement-chain fixtures, and add write/hygiene evidence before spending more provider tokens.
+## 2026-08-05 MiniRoute V2 Dataset Findings
+
+- MiniMind `lora_route_v1` showed stable JSON formatting but weak routing semantics: train exact `29.83%`, valid exact `29.35%`.
+- V1 root causes were data/schema issues rather than only训练参数问题:
+  - memory labels used `need_tools=false` with `tool_scope=["memory_tools"]`;
+  - prompt did not enumerate allowed `intent` / `tool_scope` / `risk_level` values;
+  - no fallback tool domain existed for "needs tool but current scopes do not match";
+  - chat hard negatives, memory/profile boundaries, file-read/high-risk boundaries were weak;
+  - V1 train/valid/test were grouped by intent.
+- V2 treats memory as an ability/tool domain at route layer:
+  - `memory_query`: `need_memory=true`, `need_tools=true`, `tool_scope=["memory_tools"]`, `risk_level="read_only"`;
+  - `profile_update`: `need_memory=true`, `need_tools=true`, `tool_scope=["memory_tools"]`, `risk_level="write"`.
+- V2 adds `unknown_tools` to separate "clearly no tool needed" from "needs some tool but cannot map to existing domains".
+- V2 prompt enumerates all legal labels and explicitly says MiniRoute output is coarse routing advice, not final tool authorization.
+- V2 validator applies stricter consistency rules only to `route_v2_*.jsonl`, preserving V1 historical dataset validation for comparison.

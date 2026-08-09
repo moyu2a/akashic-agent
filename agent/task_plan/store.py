@@ -650,6 +650,41 @@ class TaskPlanStore:
             ).fetchall()
         return [row_to_execution_event(row) for row in rows]
 
+    def get_execution_recovery_checkpoint(
+        self, attempt_id: str
+    ) -> dict[str, Any] | None:
+        with self._connect() as conn:
+            attempt_row = conn.execute(
+                "SELECT * FROM task_execution_attempts WHERE attempt_id = ?",
+                (attempt_id,),
+            ).fetchone()
+            if attempt_row is None:
+                return None
+            rows = conn.execute(
+                """
+                SELECT * FROM task_execution_events
+                WHERE attempt_id = ?
+                ORDER BY sequence_no ASC
+                """,
+                (attempt_id,),
+            ).fetchall()
+        events = [row_to_execution_event(row) for row in rows]
+        started = next(
+            (event for event in events if event.event_type == "tool_started"),
+            None,
+        )
+        finished = next(
+            (event for event in reversed(events) if event.event_type == "tool_finished"),
+            None,
+        )
+        return {
+            "attempt_id": attempt_id,
+            "attempt": row_to_execution_attempt(attempt_row).to_dict(),
+            "started": None if started is None else _execution_event_to_dict(started),
+            "finished": None if finished is None else _execution_event_to_dict(finished),
+            "events": [_execution_event_to_dict(event) for event in events],
+        }
+
     def start_execution_attempt(
         self, *, attempt_id: str, owner_instance_id: str, now: datetime
     ) -> TaskExecutionAttempt:
@@ -1486,6 +1521,30 @@ def _row_to_step(row: sqlite3.Row) -> TaskStep:
         completed_at=row["completed_at"],
         metadata=_json_loads_dict(row["metadata_json"]),
     )
+
+
+def _execution_event_to_dict(event: TaskExecutionEvent) -> dict[str, Any]:
+    return {
+        "event_id": event.event_id,
+        "attempt_id": event.attempt_id,
+        "sequence_no": event.sequence_no,
+        "event_type": event.event_type,
+        "tool_name": event.tool_name,
+        "tool_call_id": event.tool_call_id,
+        "source_turn_id": event.source_turn_id,
+        "tool_risk": event.tool_risk,
+        "tool_capabilities": list(event.tool_capabilities),
+        "counts_as_work": event.counts_as_work,
+        "invoker_reached": event.invoker_reached,
+        "invoker_succeeded": event.invoker_succeeded,
+        "execution_status": event.execution_status,
+        "result_ok": event.result_ok,
+        "error_code": event.error_code,
+        "arguments_hash": event.arguments_hash,
+        "result_preview": event.result_preview,
+        "created_at": event.created_at,
+        "metadata": dict(event.metadata),
+    }
 
 
 def _json_dump(payload: object) -> str:

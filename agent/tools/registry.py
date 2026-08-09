@@ -76,6 +76,9 @@ class ToolMeta:
     search_hint: str | None = None
     non_lru: bool = False
     capabilities: frozenset[str] = frozenset()
+    recovery_ref: str | None = None
+    pollable: bool = False
+    side_effect: bool | None = None
 
 
 # ── ToolDocument ──────────────────────────────────────────────────────────────
@@ -147,6 +150,9 @@ class ToolRegistry:
         search_hint: str | None = None,
         non_lru: bool = False,
         capabilities: AbstractSet[str] | None = None,
+        recovery_ref: str | None = None,
+        pollable: bool = False,
+        side_effect: bool | None = None,
         source_type: str = "builtin",
         source_name: str = "",
     ) -> None:
@@ -163,6 +169,9 @@ class ToolRegistry:
             search_hint=search_hint,
             non_lru=non_lru,
             capabilities=resolved_capabilities,
+            recovery_ref=recovery_ref,
+            pollable=pollable,
+            side_effect=side_effect,
         )
         doc = ToolDocument.from_tool_and_meta(
             tool, meta, source_type=source_type, source_name=source_name
@@ -246,6 +255,11 @@ class ToolRegistry:
             "registry_capabilities": (
                 frozenset(meta.capabilities) if meta is not None else frozenset()
             ),
+            "recovery_ref": meta.recovery_ref if meta is not None else None,
+            "pollable": bool(meta.pollable) if meta is not None else False,
+            "side_effect": meta.side_effect
+            if meta is not None and meta.side_effect is not None
+            else None,
         }
 
     def get_documents(self) -> list[ToolDocument]:

@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import sqlite3
 import threading
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -17,6 +17,8 @@ class SessionStore:
         self._conn.row_factory = sqlite3.Row
         self._lock = threading.Lock()
         self._has_fts = False
+        self._conn.execute("PRAGMA busy_timeout = 3000")
+        self._conn.execute("PRAGMA foreign_keys = ON")
         self._init_schema()
 
     def _init_schema(self) -> None:
@@ -46,6 +48,63 @@ class SessionStore:
                     ts          TEXT NOT NULL,
                     UNIQUE (session_key, seq)
                 )
+                """
+            )
+            self._conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS outbox (
+                    outbox_id TEXT PRIMARY KEY,
+                    session_key TEXT NOT NULL,
+                    message_id TEXT NOT NULL,
+                    channel TEXT NOT NULL,
+                    chat_id TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    attempt_no INTEGER NOT NULL DEFAULT 0,
+                    available_at TEXT NOT NULL,
+                    lease_expires_at TEXT,
+                    worker_id TEXT,
+                    last_error TEXT,
+                    remote_message_id TEXT,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    FOREIGN KEY(message_id) REFERENCES messages(id) ON DELETE CASCADE
+                )
+                """
+            )
+            self._conn.execute(
+                """
+                CREATE INDEX IF NOT EXISTS ix_outbox_status_available
+                ON outbox(status, available_at, updated_at)
+                """
+            )
+            self._conn.execute(
+                """
+                CREATE INDEX IF NOT EXISTS ix_outbox_session_message
+                ON outbox(session_key, message_id)
+                """
+            )
+            self._conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS message_generations (
+                    generation_id TEXT PRIMARY KEY,
+                    session_key TEXT NOT NULL,
+                    message_id TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    last_streamed_offset INTEGER NOT NULL DEFAULT 0,
+                    partial_content TEXT NOT NULL DEFAULT '',
+                    started_at TEXT NOT NULL,
+                    finished_at TEXT,
+                    aborted_at TEXT,
+                    last_error TEXT,
+                    updated_at TEXT NOT NULL,
+                    FOREIGN KEY(message_id) REFERENCES messages(id) ON DELETE CASCADE
+                )
+                """
+            )
+            self._conn.execute(
+                """
+                CREATE INDEX IF NOT EXISTS ix_message_generations_status
+                ON message_generations(status, updated_at)
                 """
             )
             self._ensure_next_seq_values()
@@ -150,6 +209,9 @@ class SessionStore:
     def close(self) -> None:
         with self._lock:
             self._conn.close()
+
+    def _now(self, value: datetime | None = None) -> str:
+        return (value or datetime.now().astimezone()).isoformat()
 
     def session_exists(self, key: str) -> bool:
         with self._lock:
@@ -616,6 +678,446 @@ class SessionStore:
         if extra:
             row.update(extra)
         return row
+
+    def enqueue_outbox(
+        self,
+        *,
+        session_key: str,
+        message_id: str,
+        channel: str,
+        chat_id: str,
+        now: datetime | None = None,
+        available_at: datetime | None = None,
+        outbox_id: str | None = None,
+    ) -> dict[str, Any]:
+        outbox_id = outbox_id or f"outbox_{session_key.replace(':', '_')}_{message_id.rsplit(':', 1)[-1]}"
+        created_at = self._now(now)
+        available = self._now(available_at or now)
+        with self._lock:
+            self._conn.execute(
+                """
+                INSERT INTO outbox (
+                    outbox_id, session_key, message_id, channel, chat_id,
+                    status, attempt_no, available_at, created_at, updated_at
+                )
+                VALUES (?, ?, ?, ?, ?, 'pending', 0, ?, ?, ?)
+                ON CONFLICT(outbox_id) DO UPDATE SET
+                    updated_at = excluded.updated_at
+                """,
+                (
+                    outbox_id,
+                    session_key,
+                    message_id,
+                    channel,
+                    chat_id,
+                    available,
+                    created_at,
+                    created_at,
+                ),
+            )
+            self._conn.commit()
+        return self.get_outbox(outbox_id) or {"outbox_id": outbox_id}
+
+    def get_outbox(self, outbox_id: str) -> dict[str, Any] | None:
+        with self._lock:
+            row = self._conn.execute(
+                """
+                SELECT outbox_id, session_key, message_id, channel, chat_id,
+                       status, attempt_no, available_at, lease_expires_at,
+                       worker_id, last_error, remote_message_id,
+                       created_at, updated_at
+                FROM outbox
+                WHERE outbox_id = ?
+                """,
+                (outbox_id,),
+            ).fetchone()
+        if row is None:
+            return None
+        payload = {
+            "outbox_id": row["outbox_id"],
+            "session_key": row["session_key"],
+            "message_id": row["message_id"],
+            "channel": row["channel"],
+            "chat_id": row["chat_id"],
+            "status": row["status"],
+            "attempt_no": int(row["attempt_no"] or 0),
+            "available_at": row["available_at"],
+            "lease_expires_at": row["lease_expires_at"],
+            "worker_id": row["worker_id"],
+            "last_error": row["last_error"],
+            "remote_message_id": row["remote_message_id"],
+            "created_at": row["created_at"],
+            "updated_at": row["updated_at"],
+        }
+        message = self.get_message(str(row["message_id"]))
+        if message is not None:
+            payload["message"] = message
+        return payload
+
+    def list_outbox(
+        self,
+        *,
+        session_key: str | None = None,
+        status: str | None = None,
+        limit: int = 100,
+    ) -> list[dict[str, Any]]:
+        params: list[Any] = []
+        where_parts: list[str] = []
+        if session_key:
+            where_parts.append("session_key = ?")
+            params.append(session_key)
+        if status:
+            where_parts.append("status = ?")
+            params.append(status)
+        where_sql = f"WHERE {' AND '.join(where_parts)}" if where_parts else ""
+        sql = f"""
+            SELECT outbox_id, session_key, message_id, channel, chat_id,
+                   status, attempt_no, available_at, lease_expires_at,
+                   worker_id, last_error, remote_message_id,
+                   created_at, updated_at
+            FROM outbox
+            {where_sql}
+            ORDER BY created_at ASC
+            LIMIT ?
+        """
+        with self._lock:
+            rows = self._conn.execute(sql, tuple([*params, int(limit)])).fetchall()
+        result: list[dict[str, Any]] = []
+        for row in rows:
+            item = {
+                "outbox_id": row["outbox_id"],
+                "session_key": row["session_key"],
+                "message_id": row["message_id"],
+                "channel": row["channel"],
+                "chat_id": row["chat_id"],
+                "status": row["status"],
+                "attempt_no": int(row["attempt_no"] or 0),
+                "available_at": row["available_at"],
+                "lease_expires_at": row["lease_expires_at"],
+                "worker_id": row["worker_id"],
+                "last_error": row["last_error"],
+                "remote_message_id": row["remote_message_id"],
+                "created_at": row["created_at"],
+                "updated_at": row["updated_at"],
+            }
+            message = self.get_message(str(row["message_id"]))
+            if message is not None:
+                item["message"] = message
+            result.append(item)
+        return result
+
+    def claim_next_outbox(
+        self,
+        *,
+        worker_id: str,
+        now: datetime,
+        lease_seconds: int,
+    ) -> dict[str, Any] | None:
+        now_iso = self._now(now)
+        lease_expires_at = self._now(now + timedelta(seconds=lease_seconds))
+        with self._lock:
+            self._conn.execute("BEGIN IMMEDIATE")
+            try:
+                row = self._conn.execute(
+                    """
+                    SELECT outbox_id
+                    FROM outbox
+                    WHERE status = 'pending' AND available_at <= ?
+                    ORDER BY created_at ASC
+                    LIMIT 1
+                    """,
+                    (now_iso,),
+                ).fetchone()
+                if row is None:
+                    self._conn.rollback()
+                    return None
+                outbox_id = str(row["outbox_id"])
+                cur = self._conn.execute(
+                    """
+                    UPDATE outbox
+                    SET status = 'sending',
+                        attempt_no = attempt_no + 1,
+                        worker_id = ?,
+                        lease_expires_at = ?,
+                        updated_at = ?
+                    WHERE outbox_id = ? AND status = 'pending' AND available_at <= ?
+                    """,
+                    (worker_id, lease_expires_at, now_iso, outbox_id, now_iso),
+                )
+                if cur.rowcount != 1:
+                    self._conn.rollback()
+                    return None
+                self._conn.commit()
+            except Exception:
+                self._conn.rollback()
+                raise
+        return self.get_outbox(outbox_id)
+
+    def mark_outbox_sent(
+        self,
+        outbox_id: str,
+        *,
+        remote_message_id: str,
+        now: datetime | None = None,
+    ) -> dict[str, Any] | None:
+        now_iso = self._now(now)
+        with self._lock:
+            self._conn.execute(
+                """
+                UPDATE outbox
+                SET status = 'sent',
+                    remote_message_id = ?,
+                    last_error = NULL,
+                    worker_id = NULL,
+                    lease_expires_at = NULL,
+                    updated_at = ?
+                WHERE outbox_id = ?
+                """,
+                (remote_message_id, now_iso, outbox_id),
+            )
+            self._conn.commit()
+        return self.get_outbox(outbox_id)
+
+    def mark_outbox_unknown(
+        self,
+        outbox_id: str,
+        *,
+        remote_message_id: str,
+        error: str,
+        now: datetime | None = None,
+    ) -> dict[str, Any] | None:
+        now_iso = self._now(now)
+        with self._lock:
+            self._conn.execute(
+                """
+                UPDATE outbox
+                SET status = 'unknown',
+                    remote_message_id = ?,
+                    last_error = ?,
+                    updated_at = ?
+                WHERE outbox_id = ?
+                """,
+                (remote_message_id, error, now_iso, outbox_id),
+            )
+            self._conn.commit()
+        return self.get_outbox(outbox_id)
+
+    def mark_outbox_failed(
+        self,
+        outbox_id: str,
+        *,
+        error: str,
+        now: datetime | None = None,
+        retry_after_seconds: int = 30,
+    ) -> dict[str, Any] | None:
+        now_iso = self._now(now)
+        retry_at = self._now((now or datetime.now().astimezone()) + timedelta(seconds=retry_after_seconds))
+        with self._lock:
+            self._conn.execute(
+                """
+                UPDATE outbox
+                SET status = 'failed',
+                    last_error = ?,
+                    available_at = ?,
+                    updated_at = ?
+                WHERE outbox_id = ?
+                """,
+                (error, retry_at, now_iso, outbox_id),
+            )
+            self._conn.commit()
+        return self.get_outbox(outbox_id)
+
+    def reconcile_unknown_outbox(
+        self,
+        outbox_id: str,
+        *,
+        delivered: bool,
+        now: datetime | None = None,
+        error: str | None = None,
+    ) -> dict[str, Any] | None:
+        now_iso = self._now(now)
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT remote_message_id FROM outbox WHERE outbox_id = ?",
+                (outbox_id,),
+            ).fetchone()
+            if row is None:
+                return None
+            status = "sent" if delivered else "failed"
+            self._conn.execute(
+                """
+                UPDATE outbox
+                SET status = ?,
+                    last_error = ?,
+                    updated_at = ?
+                WHERE outbox_id = ?
+                """,
+                (status, error, now_iso, outbox_id),
+            )
+            self._conn.commit()
+        return self.get_outbox(outbox_id)
+
+    def create_message_generation(
+        self,
+        *,
+        session_key: str,
+        message_id: str,
+        generation_id: str,
+        now: datetime | None = None,
+    ) -> dict[str, Any]:
+        now_iso = self._now(now)
+        with self._lock:
+            self._conn.execute(
+                """
+                INSERT INTO message_generations (
+                    generation_id, session_key, message_id, status,
+                    last_streamed_offset, partial_content, started_at, updated_at
+                )
+                VALUES (?, ?, ?, 'streaming', 0, '', ?, ?)
+                ON CONFLICT(generation_id) DO UPDATE SET
+                    updated_at = excluded.updated_at
+                """,
+                (generation_id, session_key, message_id, now_iso, now_iso),
+            )
+            self._conn.commit()
+        return self.get_message_generation(generation_id) or {
+            "generation_id": generation_id,
+            "session_key": session_key,
+            "message_id": message_id,
+            "status": "streaming",
+        }
+
+    def update_message_generation_progress(
+        self,
+        generation_id: str,
+        *,
+        partial_content: str,
+        last_streamed_offset: int,
+        now: datetime | None = None,
+    ) -> dict[str, Any] | None:
+        now_iso = self._now(now)
+        with self._lock:
+            self._conn.execute(
+                """
+                UPDATE message_generations
+                SET partial_content = ?,
+                    last_streamed_offset = ?,
+                    updated_at = ?
+                WHERE generation_id = ?
+                """,
+                (partial_content, int(last_streamed_offset), now_iso, generation_id),
+            )
+            self._conn.commit()
+        return self.get_message_generation(generation_id)
+
+    def finish_message_generation(
+        self,
+        generation_id: str,
+        *,
+        final_content: str,
+        now: datetime | None = None,
+    ) -> dict[str, Any] | None:
+        now_iso = self._now(now)
+        with self._lock:
+            self._conn.execute(
+                """
+                UPDATE message_generations
+                SET status = 'finished',
+                    partial_content = ?,
+                    last_streamed_offset = ?,
+                    finished_at = ?,
+                    last_error = NULL,
+                    updated_at = ?
+                WHERE generation_id = ?
+                """,
+                (
+                    final_content,
+                    len(final_content),
+                    now_iso,
+                    now_iso,
+                    generation_id,
+                ),
+            )
+            self._conn.commit()
+        return self.get_message_generation(generation_id)
+
+    def abort_stale_message_generations(
+        self,
+        *,
+        now: datetime | None = None,
+        suffix: str = "",
+    ) -> list[dict[str, Any]]:
+        now_iso = self._now(now)
+        with self._lock:
+            rows = self._conn.execute(
+                """
+                SELECT generation_id, message_id, partial_content
+                FROM message_generations
+                WHERE status = 'streaming'
+                """
+            ).fetchall()
+            results: list[dict[str, Any]] = []
+            for row in rows:
+                content = str(row["partial_content"] or "")
+                message_content = content + ("\n\n" + suffix if suffix else "")
+                self._conn.execute(
+                    """
+                    UPDATE messages
+                    SET content = ?
+                    WHERE id = ?
+                    """,
+                    (message_content, str(row["message_id"])),
+                )
+                self._conn.execute(
+                    """
+                    UPDATE message_generations
+                    SET status = 'aborted',
+                        aborted_at = ?,
+                        updated_at = ?
+                    WHERE generation_id = ?
+                    """,
+                    (now_iso, now_iso, str(row["generation_id"])),
+                )
+                results.append(
+                    {
+                        "generation_id": str(row["generation_id"]),
+                        "message_id": str(row["message_id"]),
+                        "status": "aborted",
+                        "partial_content": content,
+                        "last_streamed_offset": 0,
+                        "updated_at": now_iso,
+                    }
+                )
+            self._conn.commit()
+        return results
+
+    def get_message_generation(self, generation_id: str) -> dict[str, Any] | None:
+        with self._lock:
+            row = self._conn.execute(
+                """
+                SELECT generation_id, session_key, message_id, status,
+                       last_streamed_offset, partial_content, started_at,
+                       finished_at, aborted_at, last_error, updated_at
+                FROM message_generations
+                WHERE generation_id = ?
+                """,
+                (generation_id,),
+            ).fetchone()
+        if row is None:
+            return None
+        return {
+            "generation_id": row["generation_id"],
+            "session_key": row["session_key"],
+            "message_id": row["message_id"],
+            "status": row["status"],
+            "last_streamed_offset": int(row["last_streamed_offset"] or 0),
+            "partial_content": row["partial_content"] or "",
+            "started_at": row["started_at"],
+            "finished_at": row["finished_at"],
+            "aborted_at": row["aborted_at"],
+            "last_error": row["last_error"],
+            "updated_at": row["updated_at"],
+        }
 
     def fetch_session_messages(self, session_key: str) -> list[dict[str, Any]]:
         with self._lock:

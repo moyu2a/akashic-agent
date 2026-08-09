@@ -131,6 +131,22 @@ class _PersistUserMessageModule:
             media=msg.media if msg.media else None,
             **user_kwargs,
         )
+        stream_user_id = _streaming_ref(ctx, msg, "streaming_user_message_id")
+        if stream_user_id:
+            current = session.messages[-1]
+            current["id"] = str(stream_user_id)
+            stream_user_seq = _streaming_ref(ctx, msg, "streaming_user_seq")
+            if stream_user_seq is not None:
+                current["seq"] = int(stream_user_seq)
+            extra = dict(user_kwargs)
+            if msg.media:
+                extra["media"] = list(msg.media)
+            _update_existing_message(
+                self._session_services.session_manager,
+                str(stream_user_id),
+                content=msg.content,
+                extra=extra,
+            )
         return frame
 
 
@@ -138,8 +154,12 @@ class _PersistAssistantMessageModule:
     slot = "after_reasoning.persist_asst"
     requires = ("after_reasoning.persist_user", _CTX_SLOT)
 
+    def __init__(self, session_services: SessionServices) -> None:
+        self._session_services = session_services
+
     async def run(self, frame: AfterReasoningFrame) -> AfterReasoningFrame:
         ctx = cast(AfterReasoningCtx, frame.slots[_CTX_SLOT])
+        msg = frame.input.state.msg
         raw_session = frame.input.state.session
         if raw_session is None:
             raise RuntimeError("AfterReasoning requires TurnState.session")
@@ -152,6 +172,40 @@ class _PersistAssistantMessageModule:
             assistant_kwargs["reasoning_content"] = ctx.thinking
         assistant_kwargs.update(_collect_persist_assistant_slots(frame.slots))
         session.add_message("assistant", ctx.reply, **assistant_kwargs)
+        stream_message_id = _streaming_ref(ctx, msg, "streaming_message_id")
+        if stream_message_id:
+            current = session.messages[-1]
+            current["id"] = str(stream_message_id)
+            stream_message_seq = _streaming_ref(ctx, msg, "streaming_message_seq")
+            if stream_message_seq is not None:
+                current["seq"] = int(stream_message_seq)
+            stream_generation_id = _streaming_ref(
+                ctx,
+                msg,
+                "streaming_generation_id",
+            )
+            if stream_generation_id:
+                current["streaming_generation_id"] = str(stream_generation_id)
+            extra = {
+                key: value
+                for key, value in assistant_kwargs.items()
+                if key != "tool_chain" and value is not None
+            }
+            if stream_generation_id:
+                extra["streaming_generation_id"] = str(stream_generation_id)
+                extra["streaming"] = False
+            _update_existing_message(
+                self._session_services.session_manager,
+                str(stream_message_id),
+                content=ctx.reply,
+                tool_chain=list(ctx.tool_chain) if ctx.tool_chain else None,
+                extra=extra,
+            )
+            _finish_generation(
+                self._session_services.session_manager,
+                str(stream_generation_id or ""),
+                final_content=ctx.reply,
+            )
         return frame
 
 
@@ -237,7 +291,7 @@ def default_after_reasoning_modules(
         _BuildAfterReasoningCtxModule(),
         _EmitAfterReasoningCtxModule(bus),
         _PersistUserMessageModule(session_services),
-        _PersistAssistantMessageModule(),
+        _PersistAssistantMessageModule(session_services),
         _UpdateSessionMetadataModule(),
         _AppendMessagesModule(session_services),
         _BuildOutboundMessageModule(),
@@ -267,3 +321,49 @@ def _collect_persist_user_slots(slots: dict[str, object]) -> dict[str, object]:
 
 def _append_media(target: list[str], exports: dict[str, object]) -> None:
     append_string_exports(target, exports)
+
+
+def _streaming_ref(
+    ctx: AfterReasoningCtx,
+    msg: object,
+    key: str,
+) -> object | None:
+    if key in ctx.context_retry:
+        return ctx.context_retry.get(key)
+    metadata = getattr(msg, "metadata", None)
+    if isinstance(metadata, dict):
+        return metadata.get(key)
+    return None
+
+
+def _update_existing_message(
+    session_manager: object,
+    message_id: str,
+    *,
+    content: str,
+    tool_chain: object | None = None,
+    extra: dict[str, object] | None = None,
+) -> None:
+    store = getattr(session_manager, "_store", None)
+    update = getattr(store, "update_message", None)
+    if callable(update):
+        update(
+            message_id,
+            content=content,
+            tool_chain=tool_chain,
+            extra=extra,
+        )
+
+
+def _finish_generation(
+    session_manager: object,
+    generation_id: str,
+    *,
+    final_content: str,
+) -> None:
+    if not generation_id:
+        return
+    store = getattr(session_manager, "_store", None)
+    finish = getattr(store, "finish_message_generation", None)
+    if callable(finish):
+        finish(generation_id, final_content=final_content)
