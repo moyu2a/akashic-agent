@@ -1172,6 +1172,91 @@ class SessionStore:
                 self._conn.rollback()
                 raise
 
+    def mark_tool_invocation_succeeded(
+        self,
+        *,
+        attempt_id: str,
+        result_message_id: str,
+        result_preview: str,
+        now: datetime,
+    ) -> None:
+        now_iso = self._now(now)
+        with self._lock:
+            self._conn.execute(
+                """
+                UPDATE tool_invocation_attempts
+                SET status = 'succeeded',
+                    result_message_id = ?,
+                    result_preview = ?,
+                    finished_at = ?,
+                    lease_expires_at = NULL,
+                    updated_at = ?
+                WHERE attempt_id = ?
+                """,
+                (result_message_id, result_preview, now_iso, now_iso, attempt_id),
+            )
+            self._conn.execute(
+                """
+                UPDATE react_steps
+                SET status = 'tool_succeeded',
+                    tool_result_message_id = ?,
+                    updated_at = ?
+                WHERE step_id = (
+                    SELECT step_id
+                    FROM tool_invocation_attempts
+                    WHERE attempt_id = ?
+                )
+                """,
+                (result_message_id, now_iso, attempt_id),
+            )
+            self._conn.commit()
+
+    def mark_tool_invocation_failed(
+        self,
+        *,
+        attempt_id: str,
+        error_code: str,
+        now: datetime,
+    ) -> None:
+        now_iso = self._now(now)
+        with self._lock:
+            self._conn.execute(
+                """
+                UPDATE tool_invocation_attempts
+                SET status = 'failed',
+                    error_code = ?,
+                    finished_at = ?,
+                    lease_expires_at = NULL,
+                    updated_at = ?
+                WHERE attempt_id = ?
+                """,
+                (error_code, now_iso, now_iso, attempt_id),
+            )
+            self._conn.commit()
+
+    def mark_tool_invocation_blocked(
+        self,
+        *,
+        attempt_id: str,
+        error_code: str,
+        now: datetime,
+    ) -> None:
+        now_iso = self._now(now)
+        with self._lock:
+            self._conn.execute(
+                """
+                UPDATE tool_invocation_attempts
+                SET status = 'blocked',
+                    error_code = ?,
+                    finished_at = ?,
+                    lease_expires_at = NULL,
+                    updated_at = ?
+                WHERE attempt_id = ?
+                """,
+                (error_code, now_iso, now_iso, attempt_id),
+            )
+            self._conn.commit()
+
     def enqueue_outbox(
         self,
         *,

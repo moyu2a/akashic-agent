@@ -7,9 +7,10 @@ import time
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Awaitable, Callable, cast
+from uuid import uuid4
 
 import agent.core.passive_support as support
 from agent.config_models import OptimizationConfig
@@ -1485,6 +1486,18 @@ class DefaultReasoner(Reasoner):
         evidence_assessment: EvidenceAssessment | None = None
         final_only_next_call = False
         react_boundary_batch_skip_count = 0
+        ordinary_react_store = getattr(self._session_manager, "_store", None)
+        ordinary_react_enabled = bool(
+            ordinary_react_store is not None
+            and task_execution_turn is None
+            and tool_event_session_key
+        )
+        ordinary_turn_run_id = (
+            f"react_{tool_event_session_key.replace(':', '_')}_{uuid4().hex}"
+            if ordinary_react_enabled
+            else ""
+        )
+        ordinary_worker_id = f"reasoner_{id(self)}"
         if initial_visible_names is not None:
             visible_names = set(initial_visible_names) - disabled
             always_on = self._tools.get_always_on_names()
@@ -2265,6 +2278,75 @@ class DefaultReasoner(Reasoner):
                             != "read-only"
                         ),
                     }
+                    ordinary_attempt_id = ""
+                    if ordinary_react_enabled:
+                        now = datetime.now().astimezone()
+                        lease_expires_at = now + timedelta(seconds=300)
+                        step_id = f"{ordinary_turn_run_id}_step_{iteration}"
+                        ordinary_react_store.create_turn_run(
+                            turn_run_id=ordinary_turn_run_id,
+                            session_key=tool_event_session_key,
+                            user_message_id=None,
+                            now=now,
+                        )
+                        ordinary_react_store.claim_turn_run_for_recovery(
+                            turn_run_id=ordinary_turn_run_id,
+                            worker_id=ordinary_worker_id,
+                            lease_expires_at=lease_expires_at,
+                            now=now,
+                        )
+                        ordinary_react_store.create_react_step(
+                            step_id=step_id,
+                            turn_run_id=ordinary_turn_run_id,
+                            step_no=iteration,
+                            model_input_json=json.dumps(
+                                messages,
+                                ensure_ascii=False,
+                                default=str,
+                            ),
+                            now=now,
+                        )
+                        ordinary_attempt = ordinary_react_store.persist_react_tool_call(
+                            turn_run_id=ordinary_turn_run_id,
+                            step_id=step_id,
+                            tool_call_id=tool_call.id,
+                            tool_name=tool_call.name,
+                            arguments_json=json.dumps(
+                                tool_call.arguments,
+                                ensure_ascii=False,
+                                sort_keys=True,
+                                default=str,
+                            ),
+                            arguments_hash=hash_execution_arguments(
+                                redact_execution_arguments(dict(tool_call.arguments))
+                            ),
+                            recovery_ref=str(
+                                invocation_metadata.get("recovery_ref")
+                                or tool_call.id
+                            ),
+                            pollable=bool(invocation_metadata.get("pollable", False)),
+                            idempotent=bool(
+                                invocation_metadata.get("idempotent", False)
+                            ),
+                            side_effect=bool(
+                                invocation_metadata.get("side_effect", True)
+                            ),
+                            now=now,
+                        )
+                        ordinary_attempt_id = str(ordinary_attempt["attempt_id"])
+                        claimed = ordinary_react_store.claim_tool_invocation(
+                            attempt_id=ordinary_attempt_id,
+                            turn_run_id=ordinary_turn_run_id,
+                            worker_id=ordinary_worker_id,
+                            lease_expires_at=lease_expires_at,
+                            now=now,
+                        )
+                        if not claimed:
+                            ordinary_react_store.mark_tool_invocation_blocked(
+                                attempt_id=ordinary_attempt_id,
+                                error_code="ordinary_tool_claim_failed",
+                                now=now,
+                            )
                     if (
                         self._task_execution_coordinator is not None
                         and task_execution_turn is not None
@@ -2364,6 +2446,36 @@ class DefaultReasoner(Reasoner):
                             tool_result_truncated_count += 1
                         result = limited_text
                         normalized = normalize_tool_result(result)
+                    if ordinary_attempt_id:
+                        now = datetime.now().astimezone()
+                        if real_tool_executed:
+                            seq = ordinary_react_store.next_seq(
+                                tool_event_session_key
+                            )
+                            message = ordinary_react_store.insert_message(
+                                tool_event_session_key,
+                                role="tool",
+                                content=str(result),
+                                ts=now.isoformat(),
+                                seq=seq,
+                                extra={
+                                    "tool_call_id": tool_call.id,
+                                    "tool_name": tool_call.name,
+                                    "turn_run_id": ordinary_turn_run_id,
+                                },
+                            )
+                            ordinary_react_store.mark_tool_invocation_succeeded(
+                                attempt_id=ordinary_attempt_id,
+                                result_message_id=str(message["id"]),
+                                result_preview=normalized.preview(),
+                                now=now,
+                            )
+                        else:
+                            ordinary_react_store.mark_tool_invocation_failed(
+                                attempt_id=ordinary_attempt_id,
+                                error_code=exec_result.status,
+                                now=now,
+                            )
                     await self._bus.fanout(AfterToolResultCtx(
                         session_key=tool_event_session_key,
                         channel=tool_event_channel,
