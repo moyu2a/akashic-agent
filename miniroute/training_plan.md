@@ -2,7 +2,7 @@
 
 ## 训练目标
 
-基于 MiniMind 预训练模型进行 SFT 或 LoRA 微调，使模型能够根据用户输入稳定输出 MiniRoute 路由 JSON。
+基于 MiniMind 预训练模型进行 SFT 或 LoRA 微调，使模型能够根据用户输入稳定输出 MiniRoute V4 场景 JSON。
 
 ## 不做从零预训练
 
@@ -37,14 +37,16 @@
 
 ## 训练输入
 
-训练数据：
+V4 训练数据：
 
-- `data/route_train.jsonl`
-- `data/route_valid.jsonl`
+- `data/route_v4_train.jsonl`
+- `data/route_v4_valid.jsonl`
 
 测试数据不参与训练：
 
-- `data/route_test.jsonl`
+- `data/route_v4_test.jsonl`
+
+V4 输入只包含 `has_active_task` 和 `user_message`，不放完整记忆、历史、工具列表、插件信息、文件内容或检索结果。
 
 ## 训练输出
 
@@ -60,17 +62,18 @@
 建议输出目录：
 
 ```text
-training/runs/YYYYMMDD-HHMM-miniroute-sft-v1/
+training/runs/YYYYMMDD-HHMM-miniroute-v4-scene/
 ```
 
 ## 第一轮训练目标
 
-第一轮不追求极限准确率，重点验证：
+V4 第一轮不追求极限准确率，重点验证：
 
 - 模型能稳定输出 JSON。
-- intent 分类基本可用。
-- 高风险请求不被判低。
-- 工具范围不会明显过度开放。
+- `scene` 分类基本可用。
+- `operation` 和 `request_mode` 是否能跟随场景稳定输出。
+- 普通请求不会被误判为 `action`。
+- `unknown` 请求不会被过度自信地归到执行动作。
 
 ## 训练后必须做的事
 

@@ -22,8 +22,14 @@ class TurnInterruptState:
     session_key: str
     original_user_message: str
     original_metadata: dict = field(default_factory=dict)
+    original_media: list[str] = field(default_factory=list)
     partial_reply: str = ""
     partial_thinking: str | None = None
+    stream_user_message_id: str = ""
+    stream_user_seq: int | None = None
+    stream_message_id: str = ""
+    stream_message_seq: int | None = None
+    stream_generation_id: str = ""
     tools_used: list[str] = field(default_factory=list)
     tool_chain_partial: list[dict] = field(default_factory=list)
     interrupted_by: str = "/stop"

@@ -26,9 +26,34 @@ TOOL_SCOPES: tuple[str, ...] = (
     "shell_tools",
     "task_tools",
     "observe_tools",
+    "unknown_tools",
 )
 
 DEFAULT_INSTRUCTION = "判断用户请求的意图、记忆需求、工具需求、工具范围和风险等级，并只输出 JSON。"
+
+ROUTE_PROMPT_V2 = """你是 MnemoAgent 的前置路由分类器。只根据用户请求分类，不要执行请求。
+
+intent 只能是：
+chat, memory_query, profile_update, task_plan, content_save, file_read, tool_execution, status_query
+
+tool_scope 只能是：
+none, memory_tools, task_tools, content_tools, file_read_tools, file_write_tools, shell_tools, observe_tools, unknown_tools
+
+risk_level 只能是：
+none, read_only, write, high_risk
+
+字段含义：
+- need_memory 表示是否需要长期记忆或用户历史。
+- need_tools 表示是否需要进入工具或能力流程。
+- tool_scope 是粗粒度工具域，不是具体工具授权。
+- none 表示明确不需要工具。
+- unknown_tools 表示需要工具，但无法归入当前定义的工具域。
+- high_risk 表示删除、覆盖、安装、执行命令、访问敏感路径等高风险请求。
+
+输出 JSON 字段固定为：
+intent, need_memory, need_tools, tool_scope, risk_level
+
+只输出 JSON，不要解释。"""
 
 
 @dataclass(frozen=True, slots=True)

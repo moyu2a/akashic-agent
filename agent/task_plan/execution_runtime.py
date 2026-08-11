@@ -565,6 +565,24 @@ class TaskExecutionRuntimeCoordinator:
             attempt_id=attempt_id,
         )
 
+    def record_tool_event(
+        self,
+        *,
+        session_key: str,
+        attempt_id: str,
+        event: RuntimeToolEvent,
+    ) -> None:
+        try:
+            self._require_service().record_tool_event(
+                session_key=session_key,
+                attempt_id=attempt_id,
+                event=event,
+            )
+        except TaskExecutionConflictError:
+            raise TaskExecutionLeaseLostError(
+                "late task execution event rejected after lease loss"
+            )
+
     def handle_model_final(
         self,
         turn: PreparedTaskExecutionTurn,

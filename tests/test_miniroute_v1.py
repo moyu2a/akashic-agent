@@ -162,3 +162,29 @@ def test_evaluator_reports_metrics_and_scope_overopen() -> None:
     assert report.risk_level_accuracy == 50.0
     assert report.high_risk_recall == 0.0
     assert report.risk_underestimate_count == 1
+
+
+def test_evaluator_treats_multiple_tool_scopes_as_an_unordered_set() -> None:
+    expected = [
+        RouteLabel(
+            intent="task_plan",
+            need_memory=True,
+            need_tools=True,
+            tool_scope=["memory_tools", "task_tools"],
+            risk_level="write",
+        )
+    ]
+    predicted = [
+        RouteLabel(
+            intent="task_plan",
+            need_memory=True,
+            need_tools=True,
+            tool_scope=["task_tools", "memory_tools"],
+            risk_level="write",
+        )
+    ]
+
+    report = evaluate_predictions(expected, predicted)
+
+    assert report.tool_scope_accuracy == 100.0
+    assert report.scope_overopen_count == 0
