@@ -107,6 +107,85 @@ class SessionStore:
                 ON message_generations(status, updated_at)
                 """
             )
+            self._conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS turn_runs (
+                    turn_run_id TEXT PRIMARY KEY,
+                    session_key TEXT NOT NULL,
+                    user_message_id TEXT,
+                    assistant_message_id TEXT,
+                    status TEXT NOT NULL,
+                    current_step_id TEXT,
+                    lease_owner TEXT,
+                    lease_expires_at TEXT,
+                    lease_version INTEGER NOT NULL DEFAULT 0,
+                    blocked_reason TEXT,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                )
+                """
+            )
+            self._conn.execute(
+                """
+                CREATE INDEX IF NOT EXISTS ix_turn_runs_status_lease
+                ON turn_runs(status, lease_expires_at, updated_at)
+                """
+            )
+            self._conn.execute(
+                """
+                CREATE INDEX IF NOT EXISTS ix_turn_runs_session
+                ON turn_runs(session_key, updated_at)
+                """
+            )
+            self._conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS react_steps (
+                    step_id TEXT PRIMARY KEY,
+                    turn_run_id TEXT NOT NULL,
+                    step_no INTEGER NOT NULL,
+                    status TEXT NOT NULL,
+                    model_input_json TEXT NOT NULL DEFAULT '[]',
+                    assistant_tool_call_json TEXT,
+                    tool_result_message_id TEXT,
+                    assistant_message_id TEXT,
+                    error_code TEXT,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    UNIQUE(turn_run_id, step_no),
+                    FOREIGN KEY(turn_run_id) REFERENCES turn_runs(turn_run_id) ON DELETE CASCADE
+                )
+                """
+            )
+            self._conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS tool_invocation_attempts (
+                    attempt_id TEXT PRIMARY KEY,
+                    turn_run_id TEXT NOT NULL,
+                    step_id TEXT NOT NULL,
+                    tool_call_id TEXT NOT NULL,
+                    tool_name TEXT NOT NULL,
+                    arguments_json TEXT NOT NULL,
+                    arguments_hash TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    recovery_ref TEXT,
+                    pollable INTEGER NOT NULL DEFAULT 0,
+                    idempotent INTEGER NOT NULL DEFAULT 0,
+                    side_effect INTEGER NOT NULL DEFAULT 1,
+                    result_message_id TEXT,
+                    result_preview TEXT NOT NULL DEFAULT '',
+                    error_code TEXT NOT NULL DEFAULT '',
+                    owner_instance_id TEXT,
+                    lease_expires_at TEXT,
+                    started_at TEXT,
+                    finished_at TEXT,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    UNIQUE(turn_run_id, tool_call_id),
+                    FOREIGN KEY(turn_run_id) REFERENCES turn_runs(turn_run_id) ON DELETE CASCADE,
+                    FOREIGN KEY(step_id) REFERENCES react_steps(step_id) ON DELETE CASCADE
+                )
+                """
+            )
             self._ensure_next_seq_values()
             self._ensure_fts()
             self._conn.commit()
@@ -212,6 +291,62 @@ class SessionStore:
 
     def _now(self, value: datetime | None = None) -> str:
         return (value or datetime.now().astimezone()).isoformat()
+
+    def _row_to_turn_run(self, row: sqlite3.Row) -> dict[str, Any]:
+        return {
+            "turn_run_id": row["turn_run_id"],
+            "session_key": row["session_key"],
+            "user_message_id": row["user_message_id"],
+            "assistant_message_id": row["assistant_message_id"],
+            "status": row["status"],
+            "current_step_id": row["current_step_id"],
+            "lease_owner": row["lease_owner"],
+            "lease_expires_at": row["lease_expires_at"],
+            "lease_version": int(row["lease_version"] or 0),
+            "blocked_reason": row["blocked_reason"],
+            "created_at": row["created_at"],
+            "updated_at": row["updated_at"],
+        }
+
+    def _row_to_react_step(self, row: sqlite3.Row) -> dict[str, Any]:
+        return {
+            "step_id": row["step_id"],
+            "turn_run_id": row["turn_run_id"],
+            "step_no": int(row["step_no"] or 0),
+            "status": row["status"],
+            "model_input_json": row["model_input_json"],
+            "assistant_tool_call_json": row["assistant_tool_call_json"],
+            "tool_result_message_id": row["tool_result_message_id"],
+            "assistant_message_id": row["assistant_message_id"],
+            "error_code": row["error_code"],
+            "created_at": row["created_at"],
+            "updated_at": row["updated_at"],
+        }
+
+    def _row_to_tool_invocation_attempt(self, row: sqlite3.Row) -> dict[str, Any]:
+        return {
+            "attempt_id": row["attempt_id"],
+            "turn_run_id": row["turn_run_id"],
+            "step_id": row["step_id"],
+            "tool_call_id": row["tool_call_id"],
+            "tool_name": row["tool_name"],
+            "arguments_json": row["arguments_json"],
+            "arguments_hash": row["arguments_hash"],
+            "status": row["status"],
+            "recovery_ref": row["recovery_ref"],
+            "pollable": bool(row["pollable"]),
+            "idempotent": bool(row["idempotent"]),
+            "side_effect": bool(row["side_effect"]),
+            "result_message_id": row["result_message_id"],
+            "result_preview": row["result_preview"],
+            "error_code": row["error_code"],
+            "owner_instance_id": row["owner_instance_id"],
+            "lease_expires_at": row["lease_expires_at"],
+            "started_at": row["started_at"],
+            "finished_at": row["finished_at"],
+            "created_at": row["created_at"],
+            "updated_at": row["updated_at"],
+        }
 
     def session_exists(self, key: str) -> bool:
         with self._lock:
@@ -678,6 +813,364 @@ class SessionStore:
         if extra:
             row.update(extra)
         return row
+
+    def create_turn_run(
+        self,
+        *,
+        turn_run_id: str,
+        session_key: str,
+        user_message_id: str | None,
+        now: datetime,
+    ) -> dict[str, Any]:
+        now_iso = self._now(now)
+        with self._lock:
+            self._conn.execute(
+                """
+                INSERT INTO turn_runs (
+                    turn_run_id, session_key, user_message_id, status,
+                    created_at, updated_at
+                )
+                VALUES (?, ?, ?, 'running', ?, ?)
+                ON CONFLICT(turn_run_id) DO UPDATE SET
+                    updated_at = excluded.updated_at
+                """,
+                (turn_run_id, session_key, user_message_id, now_iso, now_iso),
+            )
+            self._conn.commit()
+        turn = self.get_turn_run(turn_run_id)
+        if turn is None:
+            raise KeyError(turn_run_id)
+        return turn
+
+    def get_turn_run(self, turn_run_id: str) -> dict[str, Any] | None:
+        with self._lock:
+            row = self._conn.execute(
+                """
+                SELECT turn_run_id, session_key, user_message_id,
+                       assistant_message_id, status, current_step_id,
+                       lease_owner, lease_expires_at, lease_version,
+                       blocked_reason, created_at, updated_at
+                FROM turn_runs
+                WHERE turn_run_id = ?
+                """,
+                (turn_run_id,),
+            ).fetchone()
+        return self._row_to_turn_run(row) if row is not None else None
+
+    def claim_turn_run_for_recovery(
+        self,
+        *,
+        turn_run_id: str,
+        worker_id: str,
+        lease_expires_at: datetime,
+        now: datetime,
+    ) -> bool:
+        now_iso = self._now(now)
+        lease_iso = self._now(lease_expires_at)
+        with self._lock:
+            self._conn.execute("BEGIN IMMEDIATE")
+            try:
+                cur = self._conn.execute(
+                    """
+                    UPDATE turn_runs
+                    SET lease_owner = ?,
+                        lease_expires_at = ?,
+                        lease_version = lease_version + 1,
+                        updated_at = ?
+                    WHERE turn_run_id = ?
+                      AND status IN (
+                          'running',
+                          'model_retry_pending',
+                          'tool_recovery_pending',
+                          'final_pending'
+                      )
+                      AND (
+                          lease_expires_at IS NULL
+                          OR lease_expires_at <= ?
+                          OR lease_owner = ?
+                      )
+                    """,
+                    (
+                        worker_id,
+                        lease_iso,
+                        now_iso,
+                        turn_run_id,
+                        now_iso,
+                        worker_id,
+                    ),
+                )
+                if cur.rowcount != 1:
+                    self._conn.rollback()
+                    return False
+                self._conn.commit()
+                return True
+            except Exception:
+                self._conn.rollback()
+                raise
+
+    def mark_turn_run_completed(
+        self,
+        *,
+        turn_run_id: str,
+        now: datetime,
+    ) -> None:
+        now_iso = self._now(now)
+        with self._lock:
+            self._conn.execute(
+                """
+                UPDATE turn_runs
+                SET status = 'completed',
+                    lease_owner = NULL,
+                    lease_expires_at = NULL,
+                    updated_at = ?
+                WHERE turn_run_id = ?
+                """,
+                (now_iso, turn_run_id),
+            )
+            self._conn.commit()
+
+    def list_recoverable_turn_runs(
+        self,
+        *,
+        now: datetime,
+        limit: int = 100,
+    ) -> list[dict[str, Any]]:
+        now_iso = self._now(now)
+        with self._lock:
+            rows = self._conn.execute(
+                """
+                SELECT turn_run_id, session_key, user_message_id,
+                       assistant_message_id, status, current_step_id,
+                       lease_owner, lease_expires_at, lease_version,
+                       blocked_reason, created_at, updated_at
+                FROM turn_runs
+                WHERE status IN (
+                    'running',
+                    'model_retry_pending',
+                    'tool_recovery_pending',
+                    'final_pending'
+                )
+                  AND (lease_expires_at IS NULL OR lease_expires_at <= ?)
+                ORDER BY updated_at ASC, turn_run_id ASC
+                LIMIT ?
+                """,
+                (now_iso, int(limit)),
+            ).fetchall()
+        return [self._row_to_turn_run(row) for row in rows]
+
+    def create_react_step(
+        self,
+        *,
+        step_id: str,
+        turn_run_id: str,
+        step_no: int,
+        model_input_json: str,
+        now: datetime,
+    ) -> dict[str, Any]:
+        now_iso = self._now(now)
+        with self._lock:
+            self._conn.execute(
+                """
+                INSERT INTO react_steps (
+                    step_id, turn_run_id, step_no, status,
+                    model_input_json, created_at, updated_at
+                )
+                VALUES (?, ?, ?, 'model_pending', ?, ?, ?)
+                ON CONFLICT(step_id) DO UPDATE SET
+                    updated_at = excluded.updated_at
+                """,
+                (step_id, turn_run_id, int(step_no), model_input_json, now_iso, now_iso),
+            )
+            self._conn.execute(
+                """
+                UPDATE turn_runs
+                SET current_step_id = ?,
+                    updated_at = ?
+                WHERE turn_run_id = ?
+                """,
+                (step_id, now_iso, turn_run_id),
+            )
+            self._conn.commit()
+        step = self.get_react_step(step_id)
+        if step is None:
+            raise KeyError(step_id)
+        return step
+
+    def get_react_step(self, step_id: str) -> dict[str, Any] | None:
+        with self._lock:
+            row = self._conn.execute(
+                """
+                SELECT step_id, turn_run_id, step_no, status,
+                       model_input_json, assistant_tool_call_json,
+                       tool_result_message_id, assistant_message_id,
+                       error_code, created_at, updated_at
+                FROM react_steps
+                WHERE step_id = ?
+                """,
+                (step_id,),
+            ).fetchone()
+        return self._row_to_react_step(row) if row is not None else None
+
+    def persist_react_tool_call(
+        self,
+        *,
+        turn_run_id: str,
+        step_id: str,
+        tool_call_id: str,
+        tool_name: str,
+        arguments_json: str,
+        arguments_hash: str,
+        recovery_ref: str,
+        pollable: bool,
+        idempotent: bool,
+        side_effect: bool,
+        now: datetime,
+    ) -> dict[str, Any]:
+        now_iso = self._now(now)
+        attempt_id = f"tool_{turn_run_id}_{tool_call_id}"
+        with self._lock:
+            self._conn.execute(
+                """
+                INSERT INTO tool_invocation_attempts (
+                    attempt_id, turn_run_id, step_id, tool_call_id,
+                    tool_name, arguments_json, arguments_hash, status,
+                    recovery_ref, pollable, idempotent, side_effect,
+                    created_at, updated_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(turn_run_id, tool_call_id) DO UPDATE SET
+                    updated_at = excluded.updated_at
+                """,
+                (
+                    attempt_id,
+                    turn_run_id,
+                    step_id,
+                    tool_call_id,
+                    tool_name,
+                    arguments_json,
+                    arguments_hash,
+                    recovery_ref,
+                    1 if pollable else 0,
+                    1 if idempotent else 0,
+                    1 if side_effect else 0,
+                    now_iso,
+                    now_iso,
+                ),
+            )
+            self._conn.execute(
+                """
+                UPDATE react_steps
+                SET status = 'tool_pending',
+                    updated_at = ?
+                WHERE step_id = ?
+                """,
+                (now_iso, step_id),
+            )
+            self._conn.commit()
+        attempt = self.get_tool_invocation_attempt(attempt_id)
+        if attempt is None:
+            raise KeyError(attempt_id)
+        return attempt
+
+    def get_tool_invocation_attempt(
+        self,
+        attempt_id: str,
+    ) -> dict[str, Any] | None:
+        with self._lock:
+            row = self._conn.execute(
+                """
+                SELECT attempt_id, turn_run_id, step_id, tool_call_id,
+                       tool_name, arguments_json, arguments_hash, status,
+                       recovery_ref, pollable, idempotent, side_effect,
+                       result_message_id, result_preview, error_code,
+                       owner_instance_id, lease_expires_at, started_at,
+                       finished_at, created_at, updated_at
+                FROM tool_invocation_attempts
+                WHERE attempt_id = ?
+                """,
+                (attempt_id,),
+            ).fetchone()
+        return self._row_to_tool_invocation_attempt(row) if row is not None else None
+
+    def claim_tool_invocation(
+        self,
+        *,
+        attempt_id: str,
+        turn_run_id: str,
+        worker_id: str,
+        lease_expires_at: datetime,
+        now: datetime,
+    ) -> bool:
+        now_iso = self._now(now)
+        lease_iso = self._now(lease_expires_at)
+        with self._lock:
+            self._conn.execute("BEGIN IMMEDIATE")
+            try:
+                turn = self._conn.execute(
+                    """
+                    SELECT 1
+                    FROM turn_runs
+                    WHERE turn_run_id = ?
+                      AND lease_owner = ?
+                      AND lease_expires_at > ?
+                      AND status IN (
+                          'running',
+                          'model_retry_pending',
+                          'tool_recovery_pending',
+                          'final_pending'
+                      )
+                    """,
+                    (turn_run_id, worker_id, now_iso),
+                ).fetchone()
+                if turn is None:
+                    self._conn.rollback()
+                    return False
+                cur = self._conn.execute(
+                    """
+                    UPDATE tool_invocation_attempts
+                    SET status = 'running',
+                        owner_instance_id = ?,
+                        lease_expires_at = ?,
+                        started_at = COALESCE(started_at, ?),
+                        updated_at = ?
+                    WHERE attempt_id = ?
+                      AND turn_run_id = ?
+                      AND (
+                          status = 'pending'
+                          OR (status = 'running' AND lease_expires_at <= ?)
+                      )
+                    """,
+                    (
+                        worker_id,
+                        lease_iso,
+                        now_iso,
+                        now_iso,
+                        attempt_id,
+                        turn_run_id,
+                        now_iso,
+                    ),
+                )
+                if cur.rowcount != 1:
+                    self._conn.rollback()
+                    return False
+                self._conn.execute(
+                    """
+                    UPDATE react_steps
+                    SET status = 'tool_running',
+                        updated_at = ?
+                    WHERE step_id = (
+                        SELECT step_id
+                        FROM tool_invocation_attempts
+                        WHERE attempt_id = ?
+                    )
+                    """,
+                    (now_iso, attempt_id),
+                )
+                self._conn.commit()
+                return True
+            except Exception:
+                self._conn.rollback()
+                raise
 
     def enqueue_outbox(
         self,
