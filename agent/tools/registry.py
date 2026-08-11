@@ -2,7 +2,7 @@ import logging
 from collections.abc import Set as AbstractSet
 from copy import deepcopy
 from dataclasses import dataclass
-from typing import Any, cast
+from typing import Any, Literal, cast
 
 from agent.tools.base import Tool, ToolResult
 from agent.tools.execution_context import (
@@ -79,6 +79,12 @@ class ToolMeta:
     recovery_ref: str | None = None
     pollable: bool = False
     side_effect: bool | None = None
+    idempotent: bool | None = None
+    recovery_ref_strategy: Literal[
+        "tool_call_id",
+        "argument_hash",
+        "external_request_id",
+    ] = "tool_call_id"
 
 
 # ── ToolDocument ──────────────────────────────────────────────────────────────
@@ -132,6 +138,7 @@ class ToolRegistry:
         self._metadata: dict[str, ToolMeta] = {}
         self._documents: dict[str, ToolDocument] = {}
         self._context: dict[str, str] = {}
+        self._recovery_probes: dict[str, object] = {}
         self._backend: SearchBackend = backend or KeywordSearchBackend()
 
     def set_context(self, **kwargs: str) -> None:
@@ -153,6 +160,12 @@ class ToolRegistry:
         recovery_ref: str | None = None,
         pollable: bool = False,
         side_effect: bool | None = None,
+        idempotent: bool | None = None,
+        recovery_ref_strategy: Literal[
+            "tool_call_id",
+            "argument_hash",
+            "external_request_id",
+        ] = "tool_call_id",
         source_type: str = "builtin",
         source_name: str = "",
     ) -> None:
@@ -163,6 +176,18 @@ class ToolRegistry:
         )
         if not all(isinstance(item, str) and item for item in resolved_capabilities):
             raise ValueError("tool capabilities must be non-empty strings")
+        if recovery_ref_strategy not in {
+            "tool_call_id",
+            "argument_hash",
+            "external_request_id",
+        }:
+            raise ValueError("invalid recovery_ref_strategy")
+        resolved_side_effect = (
+            side_effect if side_effect is not None else risk != "read-only"
+        )
+        resolved_idempotent = (
+            idempotent if idempotent is not None else risk == "read-only"
+        )
         meta = ToolMeta(
             risk=risk,
             always_on=always_on,
@@ -171,7 +196,9 @@ class ToolRegistry:
             capabilities=resolved_capabilities,
             recovery_ref=recovery_ref,
             pollable=pollable,
-            side_effect=side_effect,
+            side_effect=resolved_side_effect,
+            idempotent=resolved_idempotent,
+            recovery_ref_strategy=recovery_ref_strategy,
         )
         doc = ToolDocument.from_tool_and_meta(
             tool, meta, source_type=source_type, source_name=source_name
@@ -198,6 +225,7 @@ class ToolRegistry:
         _ = self._tools.pop(name, None)
         _ = self._metadata.pop(name, None)
         _ = self._documents.pop(name, None)
+        _ = self._recovery_probes.pop(name, None)
         self._backend.remove(name)
         logger.debug(f"注销工具: {name}")
 
@@ -260,7 +288,23 @@ class ToolRegistry:
             "side_effect": meta.side_effect
             if meta is not None and meta.side_effect is not None
             else None,
+            "idempotent": meta.idempotent
+            if meta is not None and meta.idempotent is not None
+            else False,
+            "recovery_ref_strategy": (
+                meta.recovery_ref_strategy if meta is not None else "tool_call_id"
+            ),
         }
+
+    def register_recovery_probe(self, tool_name: str, probe: object) -> None:
+        if tool_name not in self._tools:
+            raise KeyError(f"tool not registered: {tool_name}")
+        if not callable(getattr(probe, "probe", None)):
+            raise TypeError("probe must expose an async probe method")
+        self._recovery_probes[tool_name] = probe
+
+    def get_recovery_probe(self, tool_name: str) -> object | None:
+        return self._recovery_probes.get(tool_name)
 
     def get_documents(self) -> list[ToolDocument]:
         """返回所有已注册工具的索引文档列表。"""

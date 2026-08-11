@@ -252,7 +252,9 @@ def test_registry_returns_invocation_metadata_for_registered_tool() -> None:
         "registry_capabilities": frozenset({"dummy.read"}),
         "recovery_ref": None,
         "pollable": False,
-        "side_effect": None,
+        "side_effect": False,
+        "idempotent": True,
+        "recovery_ref_strategy": "tool_call_id",
     }
 
 
@@ -268,6 +270,8 @@ def test_registry_returns_closed_metadata_for_missing_tool() -> None:
         "recovery_ref": None,
         "pollable": False,
         "side_effect": None,
+        "idempotent": False,
+        "recovery_ref_strategy": "tool_call_id",
     }
 
 
