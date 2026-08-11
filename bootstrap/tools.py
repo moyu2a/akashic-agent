@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import asyncio
 from collections import Counter
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -43,7 +44,7 @@ from agent.tools.message_push import MessagePushTool
 from agent.tools.registry import ToolRegistry
 from agent.tools.turn_trace import InspectTurnTraceTool
 from agent.tracing.turn_trace_query import TurnTraceQueryService
-from agent.turns.outbound import BusOutboundPort
+from agent.turns.outbound import BusOutboundPort, PersistentOutboxReconciler
 from bootstrap.toolsets.mcp import McpToolsetProvider
 from bootstrap.toolsets.memory import MemoryToolsetProvider
 from bootstrap.toolsets.meta import (
@@ -556,6 +557,15 @@ def build_core_runtime(
         logger.exception("Task execution startup recovery failed; disabling task execution")
         task_execution_service = None
         task_execution_recovery = None
+    try:
+        stale_generations = session_manager.abort_stale_message_generations()
+        if stale_generations:
+            logger.info(
+                "Recovered %d stale streaming generations",
+                len(stale_generations),
+            )
+    except Exception:
+        logger.exception("Session generation recovery failed; continuing startup")
     if config.task_execution.enabled and task_execution_service is not None:
         task_execution_coordinator = TaskExecutionRuntimeCoordinator(
             task_execution_service,
@@ -563,6 +573,18 @@ def build_core_runtime(
             runtime_instance_id=runtime_instance_id,
             clock=task_execution_clock,
         )
+    try:
+        outbox_reconciler = PersistentOutboxReconciler(
+            session_manager,
+            BusOutboundPort(bus),
+        )
+        flushed = asyncio.run(
+            outbox_reconciler.flush_pending(worker_id=runtime_instance_id)
+        )
+        if flushed:
+            logger.info("Recovered %d pending outbox rows", flushed)
+    except Exception:
+        logger.exception("Outbox startup flush failed; continuing startup")
     loop_ref: dict[str, AgentLoop] = {}
     (
         tools,

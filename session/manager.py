@@ -458,3 +458,10 @@ class SessionManager:
         except Exception as e:
             logging.warning("Failed to read channel metadata for %s: %s", channel, e)
             return []
+
+    def abort_stale_message_generations(
+        self,
+        *,
+        suffix: str = "（内容因网络波动截断，请重新触发）",
+    ) -> list[dict[str, Any]]:
+        return self._store.abort_stale_message_generations(suffix=suffix)

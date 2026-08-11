@@ -5,6 +5,7 @@ from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import replace
 from datetime import datetime
 from typing import TYPE_CHECKING, TypeAlias, cast
+from uuid import uuid4
 
 from agent.context import ContextBuilder
 from agent.core.passive_turn import (
@@ -27,7 +28,7 @@ from agent.looping.ports import (
 )
 from agent.retrieval.default_pipeline import DefaultMemoryRetrievalPipeline
 from agent.retrieval.protocol import MemoryRetrievalPipeline
-from agent.turns.outbound import BusOutboundPort
+from agent.turns.outbound import BusOutboundPort, PersistentOutboundPort
 
 # Re-export for backward-compat: existing callers import these from core.py
 __all__ = [
@@ -198,6 +199,7 @@ class AgentLoop:
                 content_delta = payload.get("content_delta")
                 if isinstance(content_delta, str) and content_delta:
                     self._append_partial_reply(session_key, content_delta)
+                    self._attach_streaming_metadata(msg, session_key)
                 thinking_delta = payload.get("thinking_delta")
                 if isinstance(thinking_delta, str) and thinking_delta:
                     self._append_partial_thinking(session_key, thinking_delta)
@@ -224,6 +226,7 @@ class AgentLoop:
             content_delta = payload.get("content_delta")
             if isinstance(content_delta, str) and content_delta:
                 self._append_partial_reply(session_key, content_delta)
+                self._attach_streaming_metadata(msg, session_key)
             thinking_delta = payload.get("thinking_delta")
             if isinstance(thinking_delta, str) and thinking_delta:
                 self._append_partial_thinking(session_key, thinking_delta)
@@ -248,12 +251,91 @@ class AgentLoop:
         if state is None or not delta:
             return
         state.partial_reply += delta
+        self._sync_streaming_generation(session_key)
 
     def _append_partial_thinking(self, session_key: str, delta: str) -> None:
         state = self._active_turn_states.get(session_key)
         if state is None or not delta:
             return
         state.partial_thinking = (state.partial_thinking or "") + delta
+
+    def _sync_streaming_generation(self, session_key: str) -> None:
+        state = self._active_turn_states.get(session_key)
+        if state is None or not state.partial_reply:
+            return
+        session_manager = self._session_services.session_manager
+        store = getattr(session_manager, "_store", None)
+        if store is None:
+            return
+        now = datetime.now().astimezone()
+        if not state.stream_generation_id:
+            session = session_manager.get_or_create(session_key)
+            save = getattr(session_manager, "save", None)
+            if callable(save):
+                save(session)
+            generation_id = f"gen_{uuid4().hex}"
+            user_seq = store.next_seq(session_key)
+            user_row = store.insert_message(
+                session_key,
+                role="user",
+                content=state.original_user_message,
+                ts=now.isoformat(),
+                seq=user_seq,
+                extra=(
+                    {"media": list(state.original_media)}
+                    if state.original_media
+                    else None
+                ),
+            )
+            assistant_row = store.insert_message(
+                session_key,
+                role="assistant",
+                content=state.partial_reply,
+                ts=now.isoformat(),
+                seq=user_seq + 1,
+                extra={
+                    "streaming_generation_id": generation_id,
+                    "streaming": True,
+                },
+            )
+            store.create_message_generation(
+                session_key=session_key,
+                message_id=str(assistant_row["id"]),
+                generation_id=generation_id,
+                now=now,
+            )
+            state.stream_user_message_id = str(user_row["id"])
+            state.stream_user_seq = int(user_row["seq"])
+            state.stream_message_id = str(assistant_row["id"])
+            state.stream_message_seq = int(assistant_row["seq"])
+            state.stream_generation_id = generation_id
+        store.update_message(
+            state.stream_message_id,
+            content=state.partial_reply,
+        )
+        store.update_message_generation_progress(
+            state.stream_generation_id,
+            partial_content=state.partial_reply,
+            last_streamed_offset=len(state.partial_reply),
+            now=now,
+        )
+
+    def _attach_streaming_metadata(self, msg: object, session_key: str) -> None:
+        state = self._active_turn_states.get(session_key)
+        if state is None or not state.stream_message_id:
+            return
+        metadata = getattr(msg, "metadata", None)
+        if not isinstance(metadata, dict):
+            return
+        metadata.update(
+            {
+                "streaming_user_message_id": state.stream_user_message_id,
+                "streaming_user_seq": state.stream_user_seq,
+                "streaming_message_id": state.stream_message_id,
+                "streaming_message_seq": state.stream_message_seq,
+                "streaming_generation_id": state.stream_generation_id,
+            }
+        )
 
     def _resolve_memory_runtime(
         self,
@@ -322,6 +404,10 @@ class AgentLoop:
             context=self._context,
             history_window=config.memory.keep_count,
         )
+        outbound_port = PersistentOutboundPort(
+            session_svc.session_manager,
+            BusOutboundPort(self.bus),
+        )
         agent_core = AgentCore(
             AgentCoreDeps(
                 session=session_svc,
@@ -330,7 +416,7 @@ class AgentLoop:
                 tools=deps.tools,
                 reasoner=self._reasoner,
                 event_bus=self._event_bus,
-                outbound_port=BusOutboundPort(self.bus),
+                outbound_port=outbound_port,
                 history_window=config.memory.keep_count,
                 optimization=config.optimization,
             )
@@ -533,6 +619,7 @@ class AgentLoop:
                     session_key=key,
                     original_user_message=item.content,
                     original_metadata=dict(item.metadata or {}),
+                    original_media=list(item.media or []),
                 )
             case SpawnCompletionItem():
                 return TurnInterruptState(
@@ -575,6 +662,7 @@ class AgentLoop:
             session_key=key,
             original_user_message=resumed.content,
             original_metadata=dict(resumed.metadata or {}),
+            original_media=list(resumed.media or []),
         )
         return resumed, True
 

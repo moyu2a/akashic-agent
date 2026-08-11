@@ -232,9 +232,67 @@ class TaskExecutionService:
                     event.arguments_hash, max_chars=128
                 ),
                 result_preview=bounded_execution_preview(event.result_preview),
+                metadata=dict(event.metadata),
             )
         except (ExecutionAttemptConflictError, TaskExecutionAttemptNotFoundError) as exc:
             raise TaskExecutionConflictError(str(exc)) from exc
+
+    def resolve_recovery_checkpoint(
+        self,
+        *,
+        session_key: str,
+        attempt_id: str,
+        probe: Callable[[dict[str, object]], bool | None] | None = None,
+    ) -> TaskExecutionSnapshot:
+        attempt = self._require_owned_attempt(session_key=session_key, attempt_id=attempt_id)
+        checkpoint = self._store.get_execution_recovery_checkpoint(attempt_id)
+        if checkpoint is None:
+            return self._snapshot(attempt)
+        started = checkpoint.get("started")
+        finished = checkpoint.get("finished")
+        if started is None or finished is not None:
+            return self._snapshot(attempt)
+        metadata = dict(started.get("metadata") or {})
+        if probe is None or not bool(metadata.get("pollable")):
+            return self._snapshot(attempt)
+        verdict = probe(checkpoint)
+        if verdict is True:
+            finished_event = RuntimeToolEvent(
+                event_type="tool_finished",
+                tool_name=str(started.get("tool_name") or ""),
+                tool_call_id=str(started.get("tool_call_id") or ""),
+                source_turn_id=started.get("source_turn_id"),
+                tool_risk=str(started.get("tool_risk") or "unknown"),
+                tool_capabilities=tuple(str(item) for item in started.get("tool_capabilities") or ()),
+                counts_as_work=bool(started.get("counts_as_work")),
+                invoker_reached=True,
+                invoker_succeeded=True,
+                execution_status="success",
+                result_ok=True,
+                error_code="",
+                arguments_hash=str(started.get("arguments_hash") or ""),
+                result_preview=str(metadata.get("recovery_ref") or "recovered"),
+                metadata=dict(metadata),
+            )
+            self.record_tool_event(
+                session_key=session_key,
+                attempt_id=attempt_id,
+                event=finished_event,
+            )
+            return self._snapshot(
+                self._require_owned_attempt(session_key=session_key, attempt_id=attempt_id)
+            )
+        if verdict is False:
+            self.block_attempt(
+                session_key=session_key,
+                attempt_id=attempt_id,
+                terminal_reason="runtime_restarted_outcome_unknown",
+                error_code="recovery_probe_failed",
+            )
+            return self._snapshot(
+                self._require_owned_attempt(session_key=session_key, attempt_id=attempt_id)
+            )
+        return self._snapshot(attempt)
 
     def finish_attempt(
         self,

@@ -207,6 +207,7 @@ class RuntimeToolEvent:
     error_code: str
     arguments_hash: str
     result_preview: str
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)

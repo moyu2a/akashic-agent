@@ -2,6 +2,8 @@ from agent.turns.outbound import (
     BusOutboundPort,
     OutboundDispatch,
     OutboundPort,
+    PersistentOutboxReconciler,
+    PersistentOutboundPort,
     PushToolOutboundPort,
 )
 from agent.turns.orchestrator import TurnOrchestrator, TurnOrchestratorDeps
@@ -11,6 +13,8 @@ __all__ = [
     "BusOutboundPort",
     "OutboundDispatch",
     "OutboundPort",
+    "PersistentOutboxReconciler",
+    "PersistentOutboundPort",
     "PushToolOutboundPort",
     "TurnOrchestrator",
     "TurnOrchestratorDeps",

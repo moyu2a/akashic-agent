@@ -3438,3 +3438,32 @@
   - because P6o-24 showed retry-shadow below guided on another 40-case run, this is not yet stable-best proof;
   - keep retry-shadow shadow-only, with no real retry and no production default change;
   - next confidence step should be repeat `2` or `3` stability validation before any rollout decision.
+## 2026-08-05 MiniRoute V2 Dataset
+
+- User request: record V2 problems and solutions, create a detailed plan, review it, revise issues, then execute the MiniRoute V2 dataset fix.
+- Plan:
+  - created `miniroute/reports/v2_dataset_plan.md`;
+  - recorded V1 problems, V2 decisions, task breakdown, review checklist, and final verification requirements.
+- Implementation:
+  - added `unknown_tools` and `ROUTE_PROMPT_V2` in `miniroute/v1_schema.py`;
+  - added `miniroute/tools/generate_v2_dataset.py`;
+  - added `tests/test_miniroute_v2.py`;
+  - updated `miniroute/tools/validate_dataset.py` with V2-only strict consistency checks;
+  - generated `miniroute/data/route_v2_train.jsonl`, `route_v2_valid.jsonl`, and `route_v2_test.jsonl`;
+  - added `miniroute/reports/v2_dataset_notes.md`;
+  - updated `miniroute/label_schema.md`, `miniroute/data/README.md`, and `miniroute/training/train_commands.md`.
+- Dataset result:
+  - train `1061`;
+  - valid `227`;
+  - test `232`;
+  - total `1520`;
+  - V2 test high-risk records `35`;
+  - deterministic shuffle seed `20260805`.
+- Review:
+  - no subagents were used because this side conversation forbids them;
+  - self-review checked schema consistency, V1 preservation, MiniMind `conversations` format, strict V2 validation, hard negatives, boundary samples, and training handoff docs.
+- Verification:
+  - `PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -m pytest tests/test_miniroute_v1.py tests/test_miniroute_v2.py -q -p no:cacheprovider` -> `11 passed in 0.20s`;
+  - `PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -m compileall -q miniroute tests/test_miniroute_v1.py tests/test_miniroute_v2.py` -> passed;
+  - V2 validation -> `ok=true`, `total_records=1520`, `high_risk_test_count=35`, `issues=[]`;
+  - V1 validation -> `ok=true`, `total_records=1250`, `high_risk_test_count=30`, `issues=[]`.

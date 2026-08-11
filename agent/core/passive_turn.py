@@ -53,10 +53,15 @@ from agent.tool_runtime import (
 )
 from agent.tools.base import normalize_tool_result
 from agent.tools.execution_context import ToolExecutionContext
+from agent.task_plan.execution_redaction import (
+    hash_execution_arguments,
+    redact_execution_arguments,
+)
 from agent.task_plan.execution_runtime import (
     PreparedTaskExecutionTurn,
     TaskExecutionLeaseLostError,
     TaskExecutionRuntimeCoordinator,
+    RuntimeToolEvent,
 )
 from agent.tools.tool_search import ToolSearchTool
 from agent.turns.outbound import OutboundDispatch, OutboundPort
@@ -2238,6 +2243,28 @@ class DefaultReasoner(Reasoner):
                         ),
                         resource_roots=_resource_roots_from_context(self._context),
                     )
+                    task_request_id = (
+                        task_execution_turn.request_id
+                        if task_execution_turn is not None
+                        else ""
+                    )
+                    recovery_metadata = {
+                        "request_id": task_request_id,
+                        "task_request_id": task_request_id,
+                        "tool_call_id": tool_call.id,
+                        "recovery_ref": str(
+                            invocation_metadata.get("recovery_ref")
+                            or execution_request.call_id
+                            or tool_call.id
+                        ),
+                        "pollable": bool(invocation_metadata.get("pollable", False)),
+                        "side_effect": (
+                            invocation_metadata.get("side_effect")
+                            if invocation_metadata.get("side_effect") is not None
+                            else str(invocation_metadata.get("registry_risk", "unknown"))
+                            != "read-only"
+                        ),
+                    }
                     if (
                         self._task_execution_coordinator is not None
                         and task_execution_turn is not None
@@ -2245,6 +2272,49 @@ class DefaultReasoner(Reasoner):
                         async with self._task_execution_coordinator.lease_guard(
                             task_execution_turn
                         ):
+                            if (
+                                task_execution_turn.owns_current_attempt
+                                and task_execution_turn.attempt_id is not None
+                            ):
+                                self._task_execution_coordinator.record_tool_event(
+                                    session_key=tool_event_session_key,
+                                    attempt_id=task_execution_turn.attempt_id,
+                                    event=RuntimeToolEvent(
+                                        event_type="tool_started",
+                                        tool_name=tool_call.name,
+                                        tool_call_id=tool_call.id,
+                                        source_turn_id=(
+                                            task_execution_turn.source_turn_id
+                                        ),
+                                        tool_risk=str(
+                                            invocation_metadata.get(
+                                                "registry_risk", "unknown"
+                                            )
+                                        ),
+                                        tool_capabilities=tuple(
+                                            sorted(
+                                                _invocation_capabilities(
+                                                    invocation_metadata.get(
+                                                        "registry_capabilities", ()
+                                                    )
+                                                )
+                                            )
+                                        ),
+                                        counts_as_work=False,
+                                        invoker_reached=True,
+                                        invoker_succeeded=False,
+                                        execution_status="running",
+                                        result_ok=None,
+                                        error_code="",
+                                        arguments_hash=hash_execution_arguments(
+                                            redact_execution_arguments(
+                                                dict(tool_call.arguments)
+                                            )
+                                        ),
+                                        result_preview="",
+                                        metadata=recovery_metadata,
+                                    ),
+                                )
                             tool_started = time.monotonic()
                             exec_result = await self._tool_executor.execute(
                                 execution_request,

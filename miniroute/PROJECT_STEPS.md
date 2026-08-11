@@ -4,13 +4,13 @@
 
 ## 阶段 1：确定任务边界
 
-目标：把 MiniRoute 固定为轻量意图路由模型，不做最终回答模型。
+目标：把 MiniRoute 固定为轻量场景识别模型，不做最终回答模型，也不做工具审批模型。
 
 需要完成：
 
 1. 明确小模型输入：当前用户消息，必要时可附带少量会话元信息。
 2. 明确小模型输出：固定 JSON，不输出解释文本。
-3. 明确小模型职责：判断意图、记忆需求、工具需求、工具范围和风险等级。
+3. 明确小模型职责：V4 只判断 `scene`、`operation` 和 `request_mode`。
 4. 明确安全边界：小模型只做建议，不能绕过原工具治理和审批机制。
 
 阶段产物：
@@ -20,16 +20,15 @@
 
 ## 阶段 2：设计标签体系
 
-目标：把开放式用户请求转成可监督训练的分类任务。
+目标：把开放式用户请求转成可监督训练的场景分类任务。
 
 需要完成：
 
-1. 设计 `intent` 标签。
-2. 设计 `need_memory` 标签。
-3. 设计 `need_tools` 标签。
-4. 设计 `tool_scope` 标签。
-5. 设计 `risk_level` 标签。
-6. 补充典型样例和混淆样例。
+1. 设计 `scene` 标签。
+2. 设计 `operation` 标签。
+3. 设计 `request_mode` 标签。
+4. 补充典型样例和混淆样例。
+5. 保留 V1-V3 五字段协议作为历史 baseline，不作为 V4 主线。
 
 阶段产物：
 
@@ -48,15 +47,15 @@
 
 推荐规模：
 
-- 训练集：1000 到 2000 条。
+- 训练集：2000 到 3000 条。
 - 验证集：200 到 300 条。
 - 测试集：200 到 300 条。
 
 阶段产物：
 
-- `data/route_train.jsonl`
-- `data/route_valid.jsonl`
-- `data/route_test.jsonl`
+- `data/route_v4_train.jsonl`
+- `data/route_v4_valid.jsonl`
+- `data/route_v4_test.jsonl`
 - `dataset_plan.md`
 
 ## 阶段 4：云服务器安装 MiniMind
@@ -78,7 +77,7 @@
 
 ## 阶段 5：SFT 或 LoRA 微调
 
-目标：让小模型学会根据用户输入输出固定 JSON 路由结果。
+目标：让小模型学会根据用户输入输出固定 JSON 场景结果。
 
 建议优先使用 LoRA 微调，先不要全量微调。
 
@@ -103,22 +102,19 @@
 核心指标：
 
 - JSON 合法率。
-- intent 准确率。
-- need_memory 准确率。
-- need_tools 准确率。
-- tool_scope 准确率。
-- risk_level 准确率。
-- 高风险请求召回率。
-- 禁止工具误开放率。
+- scene 准确率。
+- operation 准确率。
+- request_mode 准确率。
+- 完全匹配率。
+- `chat -> action` 危险混淆数量。
+- `unknown -> action` 危险混淆比例。
 
 建议通过标准：
 
 - JSON 合法率不低于 99%。
-- intent 准确率不低于 90%。
-- need_memory F1 不低于 90%。
-- need_tools F1 不低于 90%。
-- 高风险请求召回率不低于 98%。
-- 禁止工具误开放率等于 0。
+- scene 准确率不低于 90%。
+- 完全匹配率不低于 88%。
+- `chat -> action` 危险混淆等于 0。
 
 阶段产物：
 
@@ -132,12 +128,12 @@
 
 重点错误类型：
 
-1. 记忆查询误判为普通聊天。
-2. 工具能力询问误判为工具执行。
-3. 内容收藏误判为普通链接分析。
-4. 删除、覆盖、安装等高风险请求判低。
-5. 输出 JSON 不合法。
-6. 工具范围过度开放。
+1. `chat` 和 `profile` 混淆。
+2. `memory` 和 `status` 混淆。
+3. `file` 和 `action` 混淆。
+4. `content` 和 `action` 混淆。
+5. `task` 和 `chat` 混淆。
+6. 输出 JSON 不合法。
 
 阶段产物：
 
@@ -159,8 +155,7 @@ POST /route
 ```json
 {
   "message": "你还记得我上次说的回答偏好吗？",
-  "channel": "cli",
-  "session_id": "local"
+  "has_active_task": false
 }
 ```
 
@@ -168,11 +163,9 @@ POST /route
 
 ```json
 {
-  "intent": "memory_query",
-  "need_memory": true,
-  "need_tools": false,
-  "tool_scope": ["memory_tools"],
-  "risk_level": "read_only"
+  "scene": "memory",
+  "operation": "query",
+  "request_mode": "single"
 }
 ```
 
@@ -188,11 +181,11 @@ POST /route
 每轮记录：
 
 - 用户输入。
-- MnemoAgent 原有路由决策。
-- MiniRoute 路由决策。
+- MiniRoute V4 场景识别结果。
+- MnemoAgent 原流程使用的上下文策略。
+- 是否发生长期记忆召回。
 - 最终真实工具调用。
-- 是否发生工具误开放。
-- 是否发生高风险请求。
+- prompt tokens 和耗时。
 
 阶段产物：
 
@@ -205,9 +198,10 @@ POST /route
 
 可优先启用：
 
-- 是否需要长期记忆检索。
+- 是否跳过长期记忆检索。
 - 是否进入工作模式。
-- 是否开放只读工具。
+- 是否使用任务状态摘要。
+- 是否使用短上下文或完整上下文。
 
 继续禁止小模型直接控制：
 
