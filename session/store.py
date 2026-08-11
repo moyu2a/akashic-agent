@@ -1011,6 +1011,84 @@ class SessionStore:
             ).fetchone()
         return self._row_to_react_step(row) if row is not None else None
 
+    def mark_react_step_model_running(
+        self,
+        *,
+        step_id: str,
+        runtime_instance_id: str,
+        lease_expires_at: datetime,
+        now: datetime,
+    ) -> bool:
+        del runtime_instance_id, lease_expires_at
+        now_iso = self._now(now)
+        with self._lock:
+            cur = self._conn.execute(
+                """
+                UPDATE react_steps
+                SET status = 'model_running',
+                    updated_at = ?
+                WHERE step_id = ?
+                  AND status IN ('model_pending', 'model_retry_pending')
+                """,
+                (now_iso, step_id),
+            )
+            self._conn.commit()
+        return cur.rowcount == 1
+
+    def mark_react_step_tool_pending(
+        self,
+        *,
+        step_id: str,
+        assistant_tool_call_json: str,
+        now: datetime,
+    ) -> None:
+        now_iso = self._now(now)
+        with self._lock:
+            self._conn.execute(
+                """
+                UPDATE react_steps
+                SET status = 'tool_pending',
+                    assistant_tool_call_json = ?,
+                    updated_at = ?
+                WHERE step_id = ?
+                """,
+                (assistant_tool_call_json, now_iso, step_id),
+            )
+            self._conn.commit()
+
+    def mark_react_step_final_pending(
+        self,
+        *,
+        step_id: str,
+        assistant_message_id: str | None,
+        now: datetime,
+    ) -> None:
+        now_iso = self._now(now)
+        with self._lock:
+            self._conn.execute(
+                """
+                UPDATE react_steps
+                SET status = 'final_pending',
+                    assistant_message_id = ?,
+                    updated_at = ?
+                WHERE step_id = ?
+                """,
+                (assistant_message_id, now_iso, step_id),
+            )
+            self._conn.execute(
+                """
+                UPDATE turn_runs
+                SET assistant_message_id = COALESCE(?, assistant_message_id),
+                    status = 'final_pending',
+                    updated_at = ?
+                WHERE turn_run_id = (
+                    SELECT turn_run_id FROM react_steps WHERE step_id = ?
+                )
+                """,
+                (assistant_message_id, now_iso, step_id),
+            )
+            self._conn.commit()
+
     def persist_react_tool_call(
         self,
         *,

@@ -1498,6 +1498,21 @@ class DefaultReasoner(Reasoner):
             else ""
         )
         ordinary_worker_id = f"reasoner_{id(self)}"
+        ordinary_current_step_id = ""
+        if ordinary_react_enabled:
+            now = datetime.now().astimezone()
+            ordinary_react_store.create_turn_run(
+                turn_run_id=ordinary_turn_run_id,
+                session_key=tool_event_session_key,
+                user_message_id=None,
+                now=now,
+            )
+            ordinary_react_store.claim_turn_run_for_recovery(
+                turn_run_id=ordinary_turn_run_id,
+                worker_id=ordinary_worker_id,
+                lease_expires_at=now + timedelta(seconds=300),
+                now=now,
+            )
         if initial_visible_names is not None:
             visible_names = set(initial_visible_names) - disabled
             always_on = self._tools.get_always_on_names()
@@ -1641,6 +1656,28 @@ class DefaultReasoner(Reasoner):
                 if simple_fast_path or final_only_next_call
                 else self._tools.get_schemas(names=schema_names)
             )
+            if ordinary_react_enabled:
+                now = datetime.now().astimezone()
+                ordinary_current_step_id = (
+                    f"{ordinary_turn_run_id}_step_{iteration}"
+                )
+                ordinary_react_store.create_react_step(
+                    step_id=ordinary_current_step_id,
+                    turn_run_id=ordinary_turn_run_id,
+                    step_no=iteration,
+                    model_input_json=json.dumps(
+                        messages,
+                        ensure_ascii=False,
+                        default=str,
+                    ),
+                    now=now,
+                )
+                ordinary_react_store.mark_react_step_model_running(
+                    step_id=ordinary_current_step_id,
+                    runtime_instance_id=ordinary_worker_id,
+                    lease_expires_at=now + timedelta(seconds=300),
+                    now=now,
+                )
             if (
                 self._task_execution_coordinator is not None
                 and task_execution_turn is not None
@@ -1732,6 +1769,24 @@ class DefaultReasoner(Reasoner):
                     provider_fields=response.provider_fields,
                 )
                 tool_batch = tool_call_batch_snapshot(response.tool_calls)
+                if ordinary_react_enabled and ordinary_current_step_id:
+                    ordinary_react_store.mark_react_step_tool_pending(
+                        step_id=ordinary_current_step_id,
+                        assistant_tool_call_json=json.dumps(
+                            [
+                                {
+                                    "id": tc.id,
+                                    "name": tc.name,
+                                    "arguments": tc.arguments,
+                                }
+                                for tc in response.tool_calls
+                            ],
+                            ensure_ascii=False,
+                            sort_keys=True,
+                            default=str,
+                        ),
+                        now=datetime.now().astimezone(),
+                    )
 
                 # 6. 逐个执行本轮工具调用。
                 iter_calls: list[dict[str, Any]] = []
@@ -2282,7 +2337,10 @@ class DefaultReasoner(Reasoner):
                     if ordinary_react_enabled:
                         now = datetime.now().astimezone()
                         lease_expires_at = now + timedelta(seconds=300)
-                        step_id = f"{ordinary_turn_run_id}_step_{iteration}"
+                        step_id = (
+                            ordinary_current_step_id
+                            or f"{ordinary_turn_run_id}_step_{iteration}"
+                        )
                         ordinary_react_store.create_turn_run(
                             turn_run_id=ordinary_turn_run_id,
                             session_key=tool_event_session_key,
@@ -2915,6 +2973,17 @@ class DefaultReasoner(Reasoner):
                 tools_used if tools_used else "无",
             )
             messages.append({"role": "assistant", "content": response.content})
+            if ordinary_react_enabled and ordinary_current_step_id:
+                now = datetime.now().astimezone()
+                ordinary_react_store.mark_react_step_final_pending(
+                    step_id=ordinary_current_step_id,
+                    assistant_message_id=None,
+                    now=now,
+                )
+                ordinary_react_store.mark_turn_run_completed(
+                    turn_run_id=ordinary_turn_run_id,
+                    now=now,
+                )
             # 8b. AfterStep 模块链（最终回复分支）：通知观察者本轮推理结束。
             _ = await self._after_step.run(AfterStepCtx(
                 session_key=tool_event_session_key,
