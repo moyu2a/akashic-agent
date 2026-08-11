@@ -929,6 +929,29 @@ class SessionStore:
             )
             self._conn.commit()
 
+    def mark_turn_run_blocked(
+        self,
+        *,
+        turn_run_id: str,
+        blocked_reason: str,
+        now: datetime,
+    ) -> None:
+        now_iso = self._now(now)
+        with self._lock:
+            self._conn.execute(
+                """
+                UPDATE turn_runs
+                SET status = 'blocked',
+                    blocked_reason = ?,
+                    lease_owner = NULL,
+                    lease_expires_at = NULL,
+                    updated_at = ?
+                WHERE turn_run_id = ?
+                """,
+                (blocked_reason, now_iso, turn_run_id),
+            )
+            self._conn.commit()
+
     def list_recoverable_turn_runs(
         self,
         *,
@@ -1332,6 +1355,27 @@ class SessionStore:
                 WHERE attempt_id = ?
                 """,
                 (error_code, now_iso, now_iso, attempt_id),
+            )
+            self._conn.commit()
+
+    def mark_tool_invocation_pending(
+        self,
+        *,
+        attempt_id: str,
+        now: datetime,
+    ) -> None:
+        now_iso = self._now(now)
+        with self._lock:
+            self._conn.execute(
+                """
+                UPDATE tool_invocation_attempts
+                SET status = 'pending',
+                    owner_instance_id = NULL,
+                    lease_expires_at = NULL,
+                    updated_at = ?
+                WHERE attempt_id = ?
+                """,
+                (now_iso, attempt_id),
             )
             self._conn.commit()
 

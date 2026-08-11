@@ -32,6 +32,7 @@ from agent.looping.ports import (
 )
 from agent.mcp.registry import McpServerRegistry
 from agent.provider import LLMProvider
+from agent.recovery.react_recovery import ReactRecoveryService
 from agent.retrieval.default_pipeline import DefaultMemoryRetrievalPipeline
 from agent.scheduler import SchedulerService
 from agent.task_plan.context import TaskPlanPromptRenderModule
@@ -566,6 +567,21 @@ def build_core_runtime(
             )
     except Exception:
         logger.exception("Session generation recovery failed; continuing startup")
+    try:
+        react_store = getattr(session_manager, "_store", None)
+        if react_store is not None:
+            react_results = ReactRecoveryService(
+                react_store,
+                worker_id=runtime_instance_id,
+            ).reconcile_startup(now=datetime.now(UTC))
+            if react_results:
+                logger.info(
+                    "React startup recovery reconciled %d turns: %s",
+                    len(react_results),
+                    dict(Counter(result.reason for result in react_results)),
+                )
+    except Exception:
+        logger.exception("React startup recovery failed; continuing startup")
     if config.task_execution.enabled and task_execution_service is not None:
         task_execution_coordinator = TaskExecutionRuntimeCoordinator(
             task_execution_service,
