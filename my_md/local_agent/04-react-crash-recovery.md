@@ -23,6 +23,26 @@
 - 如果原 user message 尚未 commit，replay 使用 `react_steps.model_input_json` 作为基础上下文，避免恢复后丢失原始 prompt/context。
 - 最终回复仍走 `post_reasoning -> after_turn -> PersistentOutboundPort`，保持 `messages + outbox` 的既有持久化和派发路径。
 
+## Turn 阶段恢复矩阵
+
+一次普通 ReAct turn 的主要阶段都有明确的崩溃恢复策略。恢复服务先抢 `turn_runs` 的 lease，再按当前 step/tool/message 状态决定继续、重试或 blocked。
+
+| 崩溃位置 | 重启后的处理 |
+| --- | --- |
+| `turn created` / `model_pending` | claim Turn lease 后重试当前模型 step。 |
+| `model_running` | 不做 token 级续传；使用已持久化的 `model_input_json` 重新执行该模型 step。 |
+| 流式 generation 中 | 保留已写入的 partial content，将未完成 generation 标记为 `aborted`，不续传同一个 LLM stream。 |
+| assistant `tool_calls` 已持久化 / `tool_pending` | 保留原始 `tool_call_id`、工具名和参数；不伪造 tool result，恢复后按普通工具 checkpoint 继续执行。 |
+| `tool_running` 且工具只读或幂等 | lease 过期后将 attempt 放回 `pending`，允许安全 retry。 |
+| `tool_running` 且工具有不可确认外部副作用 | 将 attempt 和 turn 标记为 `blocked`，不自动 replay，等待人工处理或工具提供可 probe 的 `recovery_ref`。 |
+| `tool_succeeded` | replay assistant tool call 和 tool result；严格校验 `tool_call_id` 匹配后，通过 `AgentLoop.resume_react_turn()` 进入下一轮 reasoning。 |
+| replay 协议无效 | 将 turn 标记为 `blocked`，避免把顺序错乱或 ID 丢失的上下文发给模型。 |
+| `final_pending` | 将 turn 标记为 completed；最终消息投递交给 `outbox` 恢复。 |
+| assistant message 已落库，`outbox` 为 `pending` / `sending` / `unknown` | 由 outbox reconciler 根据派发状态重试、查询远端状态、转为 `sent` 或 `failed`。 |
+| recovery callback 失败 | 当前 turn 标记为 `blocked`，记录 `resume_failed`，恢复服务继续处理其他 turn。 |
+
+一句话原则：能证明安全的自动重试，结果已经落库的从结果之后继续，不确定外部副作用的一律 blocked，最终消息投递由 outbox 兜底。
+
 ## 边界
 
 - 不做 LLM stream 的 token 级续传；未完成 generation 仍按现有逻辑标记 aborted，并保留 partial content。
