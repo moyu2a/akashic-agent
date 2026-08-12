@@ -1,4 +1,5 @@
 from __future__ import annotations
+import asyncio
 from typing import Any, cast
 from unittest.mock import MagicMock
 
@@ -26,7 +27,12 @@ from agent.task_plan.store import TaskPlanStore
 from agent.task_plan.execution_runtime import TaskExecutionRuntimeCoordinator
 from agent.tools.registry import ToolRegistry
 from agent.tools.base import Tool
-from bootstrap.tools import _build_loop_deps, build_core_runtime, build_registered_tools
+from bootstrap.tools import (
+    CoreRuntime,
+    _build_loop_deps,
+    build_core_runtime,
+    build_registered_tools,
+)
 from bootstrap.wiring import (
     wire_turn_lifecycle,
     register_memory_plugin,
@@ -37,6 +43,7 @@ from bootstrap.wiring import (
     resolve_toolset_provider,
 )
 from bus.event_bus import EventBus
+from session.manager import SessionManager
 from tests.memory_fakes import FakeMemoryEngine
 
 
@@ -199,6 +206,104 @@ def test_core_runtime_disables_only_task_execution_after_recovery_error(
             "abort_task_step_execution",
         }
     )
+
+
+def test_core_runtime_start_reconciles_react_after_plugins_with_resume_callback(
+    tmp_path: Path, monkeypatch
+) -> None:
+    events: list[str] = []
+    observed: dict[str, object] = {}
+
+    class _Loop:
+        active_turn_states: dict[str, object] = {}
+
+        def add_before_turn_plugin_modules(self, modules) -> None:
+            events.append("before_turn_plugins_wired")
+
+        def add_before_reasoning_plugin_modules(self, modules) -> None:
+            pass
+
+        def add_prompt_render_plugin_modules(self, modules) -> None:
+            pass
+
+        def add_before_step_plugin_modules(self, modules) -> None:
+            pass
+
+        def add_after_step_plugin_modules(self, modules) -> None:
+            pass
+
+        def add_after_reasoning_plugin_modules(self, modules) -> None:
+            pass
+
+        def add_after_turn_plugin_modules(self, modules) -> None:
+            pass
+
+        async def resume_react_turn(self, turn_run_id: str) -> None:
+            events.append(f"resume:{turn_run_id}")
+
+    class _ReactRecovery:
+        def __init__(self, store, *, worker_id, resume_turn=None) -> None:
+            observed["resume_turn"] = resume_turn
+            events.append("react_recovery_created")
+
+        async def reconcile_startup_async(self, *, now):
+            events.append("react_recovery_reconciled")
+            resume_turn = observed["resume_turn"]
+            assert callable(resume_turn)
+            await resume_turn("turn-1")
+            return ()
+
+    class _PluginManager:
+        loaded_count = 0
+        before_turn_modules: list[object] = []
+        before_reasoning_modules: list[object] = []
+        prompt_render_modules: list[object] = []
+        before_step_modules: list[object] = []
+        after_step_modules: list[object] = []
+        after_reasoning_modules: list[object] = []
+        after_turn_modules: list[object] = []
+        tool_hooks: list[object] = []
+
+        async def load_all(self) -> None:
+            events.append("plugins_loaded")
+
+    class _McpRegistry:
+        def start_connect_all_background(self) -> None:
+            pass
+
+    loop = _Loop()
+    manager = SessionManager(tmp_path)
+    monkeypatch.setattr("bootstrap.tools.ReactRecoveryService", _ReactRecovery)
+    runtime = CoreRuntime(
+        config=_core_runtime_config(),
+        http_resources=cast(Any, SimpleNamespace()),
+        loop=cast(Any, loop),
+        bus=cast(Any, SimpleNamespace()),
+        event_bus=EventBus(),
+        tools=ToolRegistry(),
+        push_tool=cast(Any, SimpleNamespace()),
+        session_manager=manager,
+        scheduler=cast(Any, SimpleNamespace()),
+        provider=cast(Any, SimpleNamespace()),
+        light_provider=None,
+        mcp_registry=cast(Any, _McpRegistry()),
+        memory_runtime=cast(Any, SimpleNamespace(engine=object())),
+        presence=cast(Any, SimpleNamespace()),
+        peer_process_manager=None,
+        peer_poller=None,
+        plugin_manager=cast(Any, _PluginManager()),
+        runtime_instance_id="runtime-1",
+    )
+
+    asyncio.run(runtime.start())
+
+    assert events == [
+        "plugins_loaded",
+        "before_turn_plugins_wired",
+        "react_recovery_created",
+        "react_recovery_reconciled",
+        "resume:turn-1",
+    ]
 
 
 def _core_runtime_config() -> ConfigModel:

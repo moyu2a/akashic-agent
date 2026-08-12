@@ -1448,6 +1448,8 @@ class DefaultReasoner(Reasoner):
         disabled_tools: set[str] | None = None,
         task_execution_turn: PreparedTaskExecutionTurn | None = None,
         optimization_profile: object | None = None,
+        react_turn_run_id: str = "",
+        react_step_no_offset: int = 0,
     ) -> ReasonerResult:
         # 1. 初始化消息上下文、本轮工具轨迹。
         messages = initial_messages
@@ -1493,12 +1495,14 @@ class DefaultReasoner(Reasoner):
             and tool_event_session_key
         )
         ordinary_turn_run_id = (
-            f"react_{tool_event_session_key.replace(':', '_')}_{uuid4().hex}"
+            react_turn_run_id
+            or f"react_{tool_event_session_key.replace(':', '_')}_{uuid4().hex}"
             if ordinary_react_enabled
             else ""
         )
         ordinary_worker_id = f"reasoner_{id(self)}"
         ordinary_current_step_id = ""
+        ordinary_step_no_offset = max(0, int(react_step_no_offset or 0))
         if ordinary_react_enabled:
             now = datetime.now().astimezone()
             ordinary_react_store.create_turn_run(
@@ -1658,13 +1662,12 @@ class DefaultReasoner(Reasoner):
             )
             if ordinary_react_enabled:
                 now = datetime.now().astimezone()
-                ordinary_current_step_id = (
-                    f"{ordinary_turn_run_id}_step_{iteration}"
-                )
+                persisted_step_no = ordinary_step_no_offset + iteration
+                ordinary_current_step_id = f"{ordinary_turn_run_id}_step_{persisted_step_no}"
                 ordinary_react_store.create_react_step(
                     step_id=ordinary_current_step_id,
                     turn_run_id=ordinary_turn_run_id,
-                    step_no=iteration,
+                    step_no=persisted_step_no,
                     model_input_json=json.dumps(
                         messages,
                         ensure_ascii=False,
@@ -2337,9 +2340,10 @@ class DefaultReasoner(Reasoner):
                     if ordinary_react_enabled:
                         now = datetime.now().astimezone()
                         lease_expires_at = now + timedelta(seconds=300)
+                        persisted_step_no = ordinary_step_no_offset + iteration
                         step_id = (
                             ordinary_current_step_id
-                            or f"{ordinary_turn_run_id}_step_{iteration}"
+                            or f"{ordinary_turn_run_id}_step_{persisted_step_no}"
                         )
                         ordinary_react_store.create_turn_run(
                             turn_run_id=ordinary_turn_run_id,
@@ -2356,7 +2360,7 @@ class DefaultReasoner(Reasoner):
                         ordinary_react_store.create_react_step(
                             step_id=step_id,
                             turn_run_id=ordinary_turn_run_id,
-                            step_no=iteration,
+                            step_no=persisted_step_no,
                             model_input_json=json.dumps(
                                 messages,
                                 ensure_ascii=False,

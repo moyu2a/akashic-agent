@@ -100,6 +100,69 @@ def test_replay_builder_reconstructs_valid_tool_call_and_result(
     ]
 
 
+def test_replay_builder_uses_model_input_when_user_message_was_not_committed(
+    tmp_path: Path,
+) -> None:
+    store = SessionStore(tmp_path / "sessions.db")
+    store.create_turn_run(
+        turn_run_id="turn-1",
+        session_key="cli:s1",
+        user_message_id=None,
+        now=NOW,
+    )
+    step = store.create_react_step(
+        step_id="step-1",
+        turn_run_id="turn-1",
+        step_no=0,
+        model_input_json='[{"role":"system","content":"sys"},{"role":"user","content":"use tool"}]',
+        now=NOW,
+    )
+    store.mark_react_step_tool_pending(
+        step_id=step["step_id"],
+        assistant_tool_call_json=(
+            '[{"id":"call-1","name":"read_file","arguments":{"path":"README.md"}}]'
+        ),
+        now=NOW,
+    )
+    attempt = store.persist_react_tool_call(
+        turn_run_id="turn-1",
+        step_id=step["step_id"],
+        tool_call_id="call-1",
+        tool_name="read_file",
+        arguments_json='{"path":"README.md"}',
+        arguments_hash="hash-1",
+        recovery_ref="call-1",
+        pollable=False,
+        idempotent=True,
+        side_effect=False,
+        now=NOW,
+    )
+    result = store.insert_message(
+        "cli:s1",
+        role="tool",
+        content="README contents",
+        ts=NOW.isoformat(),
+        seq=0,
+        extra={"tool_call_id": "call-1"},
+    )
+    store.mark_tool_invocation_succeeded(
+        attempt_id=attempt["attempt_id"],
+        result_message_id=result["id"],
+        result_preview="README contents",
+        now=NOW,
+    )
+
+    messages = ReactReplayBuilder(store).build_messages(
+        session_key="cli:s1",
+        turn_run_id="turn-1",
+    )
+
+    assert messages[:2] == [
+        {"role": "system", "content": "sys"},
+        {"role": "user", "content": "use tool"},
+    ]
+
+
 def test_replay_builder_reconstructs_valid_multi_tool_batch(tmp_path: Path) -> None:
     store = SessionStore(tmp_path / "sessions.db")
     turn_run_id = _seed_turn(store)

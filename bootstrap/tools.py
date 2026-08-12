@@ -101,6 +101,7 @@ class CoreRuntime:
     task_execution_service: TaskExecutionService | None = None
     task_execution_recovery: TaskExecutionRecoveryService | None = None
     plugin_manager: "PluginManager | None" = None
+    runtime_instance_id: str = ""
 
     async def start(self) -> None:
         self.mcp_registry.start_connect_all_background()
@@ -161,6 +162,20 @@ class CoreRuntime:
                 spawn_tool = self.tools.get_tool("spawn")
                 if spawn_tool is not None and hasattr(spawn_tool, "add_tool_hooks"):
                     spawn_tool.add_tool_hooks(self.plugin_manager.tool_hooks)
+        try:
+            react_results = await ReactRecoveryService(
+                self.session_manager._store,
+                worker_id=self.runtime_instance_id or "runtime",
+                resume_turn=self.loop.resume_react_turn,
+            ).reconcile_startup_async(now=datetime.now(UTC))
+            if react_results:
+                logger.info(
+                    "React startup recovery reconciled %d turns: %s",
+                    len(react_results),
+                    dict(Counter(result.reason for result in react_results)),
+                )
+        except Exception:
+            logger.exception("React startup recovery failed; continuing startup")
 
     async def inspect_modules(self) -> str:
         if self.plugin_manager is not None:
@@ -567,21 +582,6 @@ def build_core_runtime(
             )
     except Exception:
         logger.exception("Session generation recovery failed; continuing startup")
-    try:
-        react_store = getattr(session_manager, "_store", None)
-        if react_store is not None:
-            react_results = ReactRecoveryService(
-                react_store,
-                worker_id=runtime_instance_id,
-            ).reconcile_startup(now=datetime.now(UTC))
-            if react_results:
-                logger.info(
-                    "React startup recovery reconciled %d turns: %s",
-                    len(react_results),
-                    dict(Counter(result.reason for result in react_results)),
-                )
-    except Exception:
-        logger.exception("React startup recovery failed; continuing startup")
     if config.task_execution.enabled and task_execution_service is not None:
         task_execution_coordinator = TaskExecutionRuntimeCoordinator(
             task_execution_service,
@@ -704,6 +704,7 @@ def build_core_runtime(
         peer_process_manager=peer_pm,
         peer_poller=peer_poller,
         plugin_manager=plugin_manager,
+        runtime_instance_id=runtime_instance_id,
     )
 
 

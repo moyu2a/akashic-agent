@@ -16,7 +16,7 @@ from agent.core.passive_turn import (
 )
 from agent.looping.interrupt import InterruptResult, TurnInterruptState
 from agent.core.runner import CoreRunner, CoreRunnerDeps
-from agent.core.runtime_support import ToolDiscoveryState
+from agent.core.runtime_support import ToolDiscoveryState, TurnRunResult
 from agent.looping.ports import (
     AgentLoopConfig,
     AgentLoopDeps,
@@ -103,6 +103,13 @@ def _item_content(item: InboundItem) -> str:
     return (
         f"[后台任务完成] {item.event.label or item.event.status or item.event.job_id}"
     )
+
+
+def _split_session_key(session_key: str) -> tuple[str, str]:
+    if ":" not in session_key:
+        return "cli", session_key
+    channel, chat_id = session_key.split(":", 1)
+    return channel or "cli", chat_id
 
 
 class AgentLoop:
@@ -752,6 +759,77 @@ class AgentLoop:
             dispatch_outbound=False,
         )
         return response.content if response else ""
+
+    async def resume_react_turn(self, turn_run_id: str) -> OutboundMessage:
+        from agent.recovery.react_replay import ReactReplayBlocked, ReactReplayBuilder
+
+        session_manager = self._session_services.session_manager
+        store = getattr(session_manager, "_store", None)
+        if store is None:
+            raise RuntimeError("react recovery requires persistent session store")
+        turn = store.get_turn_run(turn_run_id)
+        if turn is None:
+            raise RuntimeError(f"react turn not found: {turn_run_id}")
+        session_key = str(turn["session_key"])
+        channel, chat_id = _split_session_key(session_key)
+        try:
+            messages = ReactReplayBuilder(store).build_messages(
+                session_key=session_key,
+                turn_run_id=turn_run_id,
+            )
+        except ReactReplayBlocked as exc:
+            store.mark_turn_run_blocked(
+                turn_run_id=turn_run_id,
+                blocked_reason=exc.reason,
+                now=datetime.now().astimezone(),
+            )
+            raise
+
+        result = await self._reasoner.run(
+            messages,
+            request_time=datetime.now(),
+            preflight_injected=True,
+            tool_event_session_key=session_key,
+            tool_event_channel=channel,
+            tool_event_chat_id=chat_id,
+            react_turn_run_id=turn_run_id,
+            react_step_no_offset=store.next_react_step_no(turn_run_id),
+        )
+        tools_used = list(result.metadata.get("tools_used") or [])
+        tool_chain = list(result.metadata.get("tool_chain") or [])
+        context_retry = {
+            "react_recovery": {
+                "turn_run_id": turn_run_id,
+                "resumed": True,
+            }
+        }
+        if result.metadata.get("react_stats"):
+            context_retry["react_stats"] = dict(result.metadata["react_stats"])
+        msg = InboundMessage(
+            channel=channel,
+            sender="system",
+            chat_id=chat_id,
+            content="[react recovery resume]",
+            metadata={
+                "omit_user_turn": True,
+                "skip_post_memory": True,
+                "suppress_stream_events": True,
+                "react_recovery_turn_run_id": turn_run_id,
+            },
+        )
+        return await self._agent_core.pipeline.post_reasoning(
+            msg,
+            session_key,
+            TurnRunResult(
+                reply=result.reply,
+                tools_used=tools_used,
+                tool_chain=tool_chain,
+                thinking=result.thinking,
+                streamed=result.streamed,
+                context_retry=context_retry,
+            ),
+            dispatch_outbound=True,
+        )
 
     async def _run_agent_loop(
         self,

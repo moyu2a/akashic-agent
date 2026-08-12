@@ -1034,6 +1034,18 @@ class SessionStore:
             ).fetchone()
         return self._row_to_react_step(row) if row is not None else None
 
+    def next_react_step_no(self, turn_run_id: str) -> int:
+        with self._lock:
+            row = self._conn.execute(
+                """
+                SELECT COALESCE(MAX(step_no) + 1, 0) AS next_step_no
+                FROM react_steps
+                WHERE turn_run_id = ?
+                """,
+                (turn_run_id,),
+            ).fetchone()
+        return int((row["next_step_no"] if row else 0) or 0)
+
     def mark_react_step_model_running(
         self,
         *,

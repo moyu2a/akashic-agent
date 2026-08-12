@@ -26,6 +26,7 @@ class ReactReplayBuilder:
         if turn is None or turn["session_key"] != session_key:
             raise ReactReplayBlocked("blocked_replay_turn_missing")
 
+        steps = self._steps(turn_run_id)
         messages: list[dict[str, object]] = []
         user_message_id = str(turn.get("user_message_id") or "")
         if user_message_id:
@@ -33,8 +34,10 @@ class ReactReplayBuilder:
             if user is None:
                 raise ReactReplayBlocked("blocked_replay_user_message_missing")
             messages.append({"role": "user", "content": user.get("content") or ""})
+        elif steps:
+            messages.extend(self._parse_model_input(str(steps[0].get("model_input_json") or "")))
 
-        for step in self._steps(turn_run_id):
+        for step in steps:
             raw_tool_calls = step.get("assistant_tool_call_json")
             if not raw_tool_calls:
                 continue
@@ -77,6 +80,23 @@ class ReactReplayBuilder:
                         "content": result.get("content") or "",
                     }
                 )
+        return messages
+
+    def _parse_model_input(self, raw: str) -> list[dict[str, object]]:
+        try:
+            parsed = json.loads(raw)
+        except json.JSONDecodeError as exc:
+            raise ReactReplayBlocked("blocked_replay_invalid_model_input_json") from exc
+        if not isinstance(parsed, list):
+            raise ReactReplayBlocked("blocked_replay_invalid_model_input_json")
+        messages: list[dict[str, object]] = []
+        for item in parsed:
+            if not isinstance(item, dict):
+                raise ReactReplayBlocked("blocked_replay_invalid_model_input_json")
+            role = item.get("role")
+            if not isinstance(role, str) or not role:
+                raise ReactReplayBlocked("blocked_replay_invalid_model_input_json")
+            messages.append(dict(item))
         return messages
 
     def _steps(self, turn_run_id: str) -> list[dict[str, Any]]:

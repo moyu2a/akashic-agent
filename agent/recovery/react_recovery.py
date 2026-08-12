@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -48,6 +49,26 @@ class ReactRecoveryService:
             results.append(self._recover_claimed_turn(turn_run_id, now=now))
         return results
 
+    async def reconcile_startup_async(
+        self,
+        *,
+        now: datetime,
+        limit: int = 100,
+    ) -> list[ReactRecoveryResult]:
+        results: list[ReactRecoveryResult] = []
+        for turn in self._store.list_recoverable_turn_runs(now=now, limit=limit):
+            turn_run_id = str(turn["turn_run_id"])
+            claimed = self._store.claim_turn_run_for_recovery(
+                turn_run_id=turn_run_id,
+                worker_id=self._worker_id,
+                lease_expires_at=now + timedelta(seconds=self._lease_seconds),
+                now=now,
+            )
+            if not claimed:
+                continue
+            results.append(await self._recover_claimed_turn_async(turn_run_id, now=now))
+        return results
+
     def _recover_claimed_turn(
         self,
         turn_run_id: str,
@@ -70,6 +91,64 @@ class ReactRecoveryService:
         if succeeded:
             if self._resume_turn is not None:
                 self._resume_turn(turn_run_id)
+            return ReactRecoveryResult(turn_run_id, "resumed_after_tool_success")
+
+        running = [attempt for attempt in attempts if attempt["status"] == "running"]
+        if running:
+            attempt = running[0]
+            attempt_id = str(attempt["attempt_id"])
+            if bool(attempt["side_effect"]) and not bool(attempt["idempotent"]):
+                self._store.mark_tool_invocation_blocked(
+                    attempt_id=attempt_id,
+                    error_code="blocked_side_effect_unknown",
+                    now=now,
+                )
+                self._store.mark_turn_run_blocked(
+                    turn_run_id=turn_run_id,
+                    blocked_reason="blocked_side_effect_unknown",
+                    now=now,
+                )
+                return ReactRecoveryResult(turn_run_id, "blocked_side_effect_unknown")
+            self._store.mark_tool_invocation_pending(
+                attempt_id=attempt_id,
+                now=now,
+            )
+            return ReactRecoveryResult(turn_run_id, "tool_retry_pending")
+
+        return ReactRecoveryResult(turn_run_id, "model_retry_pending")
+
+    async def _recover_claimed_turn_async(
+        self,
+        turn_run_id: str,
+        *,
+        now: datetime,
+    ) -> ReactRecoveryResult:
+        turn = self._store.get_turn_run(turn_run_id)
+        if turn is None:
+            return ReactRecoveryResult(turn_run_id, "turn_missing")
+        if turn["status"] == "final_pending":
+            self._store.mark_turn_run_completed(turn_run_id=turn_run_id, now=now)
+            return ReactRecoveryResult(turn_run_id, "final_completed")
+
+        step = self._current_step(turn_run_id)
+        if step is None:
+            return ReactRecoveryResult(turn_run_id, "model_retry_pending")
+
+        attempts = self._attempts(str(step["step_id"]))
+        succeeded = [attempt for attempt in attempts if attempt["status"] == "succeeded"]
+        if succeeded:
+            if self._resume_turn is not None:
+                try:
+                    maybe = self._resume_turn(turn_run_id)
+                    if inspect.isawaitable(maybe):
+                        await maybe
+                except Exception:
+                    self._store.mark_turn_run_blocked(
+                        turn_run_id=turn_run_id,
+                        blocked_reason="resume_failed",
+                        now=now,
+                    )
+                    return ReactRecoveryResult(turn_run_id, "resume_failed")
             return ReactRecoveryResult(turn_run_id, "resumed_after_tool_success")
 
         running = [attempt for attempt in attempts if attempt["status"] == "running"]

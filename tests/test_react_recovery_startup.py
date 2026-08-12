@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -109,6 +110,28 @@ def test_tool_succeeded_invokes_resume_callback(tmp_path: Path) -> None:
 
     assert [item.reason for item in result] == ["resumed_after_tool_success"]
     assert resumed == ["turn-1"]
+
+
+def test_async_startup_recovery_blocks_turn_when_resume_callback_fails(
+    tmp_path: Path,
+) -> None:
+    store = SessionStore(tmp_path / "sessions.db")
+    _seed_turn_with_step(store)
+    _seed_tool_attempt(store, side_effect=False, idempotent=True, status="succeeded")
+
+    async def _resume(_turn_run_id: str) -> None:
+        raise RuntimeError("resume failed")
+
+    result = asyncio.run(
+        ReactRecoveryService(
+            store,
+            worker_id="w1",
+            resume_turn=_resume,
+        ).reconcile_startup_async(now=NOW)
+    )
+
+    assert [item.reason for item in result] == ["resume_failed"]
+    assert store.get_turn_run("turn-1")["status"] == "blocked"
 
 
 def test_final_pending_turn_is_completed(tmp_path: Path) -> None:
