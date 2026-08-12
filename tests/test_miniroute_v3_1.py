@@ -112,35 +112,38 @@ def test_v3_1_delta_contains_required_contrast_labels() -> None:
 
 
 def test_v3_1_preserves_v3_split_membership(tmp_path: Path) -> None:
+    from miniroute.tools.generate_v3_dataset import write_v3_dataset_files
     from miniroute.tools.generate_v3_1_dataset import write_v3_1_dataset_files
 
-    data_dir = Path("miniroute/data")
-    splits = write_v3_1_dataset_files(tmp_path)
+    frozen_dir = tmp_path / "frozen_v3"
+    write_v3_dataset_files(frozen_dir)
+    out_dir = tmp_path / "v3_1"
+    splits = write_v3_1_dataset_files(out_dir, frozen_data_dir=frozen_dir)
 
     original_train = set(
         json.dumps(row, ensure_ascii=False, sort_keys=True)
-        for row in _load_jsonl(data_dir / "route_v3_train.jsonl")
+        for row in _load_jsonl(frozen_dir / "route_v3_train.jsonl")
     )
     original_valid = set(
         json.dumps(row, ensure_ascii=False, sort_keys=True)
-        for row in _load_jsonl(data_dir / "route_v3_valid.jsonl")
+        for row in _load_jsonl(frozen_dir / "route_v3_valid.jsonl")
     )
     original_test = set(
         json.dumps(row, ensure_ascii=False, sort_keys=True)
-        for row in _load_jsonl(data_dir / "route_v3_test.jsonl")
+        for row in _load_jsonl(frozen_dir / "route_v3_test.jsonl")
     )
 
     new_train = set(
         json.dumps(row, ensure_ascii=False, sort_keys=True)
-        for row in _load_jsonl(tmp_path / "route_v3_1_train.jsonl")
+        for row in _load_jsonl(out_dir / "route_v3_1_train.jsonl")
     )
     new_valid = set(
         json.dumps(row, ensure_ascii=False, sort_keys=True)
-        for row in _load_jsonl(tmp_path / "route_v3_1_valid.jsonl")
+        for row in _load_jsonl(out_dir / "route_v3_1_valid.jsonl")
     )
     new_test = set(
         json.dumps(row, ensure_ascii=False, sort_keys=True)
-        for row in _load_jsonl(tmp_path / "route_v3_1_test.jsonl")
+        for row in _load_jsonl(out_dir / "route_v3_1_test.jsonl")
     )
 
     assert original_train <= new_train
@@ -152,14 +155,18 @@ def test_v3_1_preserves_v3_split_membership(tmp_path: Path) -> None:
 
 
 def test_v3_1_generated_dataset_passes_validator(tmp_path: Path) -> None:
+    from miniroute.tools.generate_v3_dataset import write_v3_dataset_files
     from miniroute.tools.generate_v3_1_dataset import write_v3_1_dataset_files
 
-    write_v3_1_dataset_files(tmp_path)
+    frozen_dir = tmp_path / "frozen_v3"
+    write_v3_dataset_files(frozen_dir)
+    out_dir = tmp_path / "v3_1"
+    write_v3_1_dataset_files(out_dir, frozen_data_dir=frozen_dir)
     report = validate_dataset_files(
         {
-            "train": tmp_path / "route_v3_1_train.jsonl",
-            "valid": tmp_path / "route_v3_1_valid.jsonl",
-            "test": tmp_path / "route_v3_1_test.jsonl",
+            "train": out_dir / "route_v3_1_train.jsonl",
+            "valid": out_dir / "route_v3_1_valid.jsonl",
+            "test": out_dir / "route_v3_1_test.jsonl",
         }
     )
 
