@@ -30,6 +30,7 @@ from core.memory.engine import (
     RememberResult,
 )
 from memory2.eval_cases import EvalCase
+from memory2.eval_semantic_judge import SemanticJudgeConfig, judge_semantic_equivalence
 from session.manager import SessionManager
 
 
@@ -276,6 +277,8 @@ def score_answer_text(
     answer: str,
     expectation: AnswerExpectation,
     used_memory_ids: Sequence[str],
+    *,
+    semantic_judge_config: SemanticJudgeConfig | None = None,
 ) -> AnswerScoreResult:
     failures: list[str] = []
     matched_expected_terms: list[str] = []
@@ -311,6 +314,39 @@ def score_answer_text(
         if _contains_term(answer, term):
             forbidden_violation_count += 1
             failures.append(f"found forbidden answer term: {term}")
+
+    if (
+        forbidden_violation_count == 0
+        and semantic_judge_config is not None
+        and semantic_judge_config.enabled
+        and (expected_miss_count > 0 or expected_any_miss_count > 0)
+    ):
+        expected_templates = [
+            *missing_expected_terms,
+            *[term for group in missing_any_groups for term in group],
+        ]
+        semantic = judge_semantic_equivalence(
+            answer_text=answer,
+            expected_templates=expected_templates,
+            config=semantic_judge_config,
+        )
+        if semantic.passed:
+            failures = [
+                failure
+                for failure in failures
+                if not failure.startswith("missing expected answer term")
+            ]
+            failures.append("semantic_ambiguity")
+            expected_pass_count += expected_miss_count
+            expected_any_pass_count += expected_any_miss_count
+            expected_miss_count = 0
+            expected_any_miss_count = 0
+            matched_expected_terms.extend(missing_expected_terms)
+            matched_any_groups.extend(missing_any_groups)
+            missing_expected_terms = []
+            missing_any_groups = []
+        elif semantic.needs_human_review:
+            failures.append("needs_human_review")
 
     used_ids = set(str(item_id) for item_id in used_memory_ids)
     missing_memory_ids = [
