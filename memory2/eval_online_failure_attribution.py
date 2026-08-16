@@ -6,6 +6,48 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Mapping, Sequence
 
+GOVERNANCE_FAILURE_BUCKETS: tuple[str, ...] = (
+    "retrieval_miss",
+    "low_rank",
+    "governance_drop",
+    "missing_expected_answer_term",
+    "missing_expected_answer_term_group",
+    "found_forbidden_answer_term",
+    "grounding_missing",
+    "semantic_ambiguity",
+    "needs_human_review",
+    "provider_error",
+    "timeout",
+    "language_detection_noise",
+    "infra_noise",
+    "semantic_absurdity_dataset_gate",
+)
+
+
+def governance_failure_buckets(failures: list[str]) -> tuple[str, ...]:
+    buckets: list[str] = []
+    for failure in failures:
+        bucket = _governance_failure_bucket(failure)
+        if bucket not in buckets:
+            buckets.append(bucket)
+    return tuple(buckets)
+
+
+def _governance_failure_bucket(failure: str) -> str:
+    if failure in GOVERNANCE_FAILURE_BUCKETS:
+        return failure
+    if failure.startswith("missing expected answer term group"):
+        return "missing_expected_answer_term_group"
+    if failure.startswith("missing expected answer term"):
+        return "missing_expected_answer_term"
+    if failure.startswith("found forbidden answer term"):
+        return "found_forbidden_answer_term"
+    if failure.startswith("missing expected memory ids"):
+        return "grounding_missing"
+    if failure in {"provider_error", "timeout"}:
+        return failure
+    return "infra_noise" if "infra" in failure else "governance_drop"
+
 
 BASELINE_PROFILE = "chain_memory_base"
 
