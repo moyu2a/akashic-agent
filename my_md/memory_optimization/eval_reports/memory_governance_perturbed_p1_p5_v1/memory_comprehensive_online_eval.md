@@ -79,6 +79,11 @@
 
 - `main_score`、profile uplift 和 online balanced proxy 保留在 JSON 输出中以兼容既有消费者，不作为本报告主表的解释口径。
 
+## Perturbed Eval Review
+
+- 测试方案、数据结论、正确/错误 case 形式和代表样例：`memory_governance_perturbed_eval_review.md`
+- 1200 条 profile-case 完整复盘 JSONL：`memory_governance_perturbed_case_review.jsonl`
+
 ## Metric Sources
 
 - `online_answer_level`: real AgentLoop answer scoring
