@@ -38,6 +38,8 @@
 
 - JSON report: `my_md/memory_optimization/eval_reports/memory_governance_p1_p4_real_v1/memory_comprehensive_online_eval.json`
 - Markdown report: `my_md/memory_optimization/eval_reports/memory_governance_p1_p4_real_v1/memory_comprehensive_online_eval.md`
+- Failure review: `my_md/memory_optimization/eval_reports/memory_governance_p1_p4_real_v1/memory_governance_failure_review.md`
+- Full failure JSONL: `my_md/memory_optimization/eval_reports/memory_governance_p1_p4_real_v1/memory_governance_failure_review.jsonl`
 - Checkpoint: `/tmp/akashic-memory-governance-p1-p4-real-v1.checkpoint.jsonl`
 - Answer debug: `/tmp/akashic-memory-governance-p1-p4-real-v1-workspace/answer_debug`
 - `chain_tri_retrieval`: 80 cases, answer rate 41.25%, grounding 100.0%, forbidden 17.5%.

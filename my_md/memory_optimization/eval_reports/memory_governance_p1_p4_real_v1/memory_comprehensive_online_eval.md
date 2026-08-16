@@ -83,6 +83,11 @@
 - `separate_safety_path_result`: `98.75 belongs to system-path safe-version validation`
 - 本次正式 real LLM run 没有复现历史 `37.5% -> 97.5%`，而是在同一张 P1-P4 主表中得到新的实测值 `41.25% -> 100.0%`。
 
+## Failure Review
+
+- 失败原文、模型错误回答、失败类型和归因表格：`memory_governance_failure_review.md`
+- 完整 JSONL 原始复盘记录：`memory_governance_failure_review.jsonl`
+
 ## 原始评分字段
 
 - `main_score`、profile uplift 和 online balanced proxy 保留在 JSON 输出中以兼容既有消费者，不作为本报告主表的解释口径。
