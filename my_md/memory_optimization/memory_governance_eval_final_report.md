@@ -47,3 +47,17 @@
 - `chain_tri_evidence_only`: 80 cases, answer rate 26.25%, grounding 100.0%, forbidden 55.0%.
 - `chain_tri_answer_contract`: 80 cases, answer rate 87.5%, grounding 100.0%, forbidden 12.5%.
 - `chain_tri_governed_answer_contract`: 80 cases, answer rate 100.0%, grounding 100.0%, forbidden 0.0%.
+
+## Failure Cause Summary
+
+| Profile | 治理场景 | 主要错误 | 根因和结论 |
+| --- | --- | --- | --- |
+| P1 `chain_tri_retrieval` | 只做三路召回/RRF 融合 | 47 failed；33 missing expected；14 forbidden | 召回层没有候选过滤和回答契约。它只能证明相关记忆可被取到，不能保证模型输出当前有效值，也不能阻止旧值/冲突值进入回答。 |
+| P2 `chain_tri_candidate_governance` | 候选治理 | 47 failed；47 missing expected；0 forbidden | 候选治理能挡住 forbidden，但没有要求模型必须把 allowed evidence 的目标术语说出来，所以 answer hit 没有提升。 |
+| P3 `chain_tri_evidence_only` | 候选治理 + 结构化证据，无回答契约 | 59 failed；44 forbidden；17 missing expected | 结构化 evidence block 暴露了 forbidden/conflict/version boundary，模型会把这些边界信息写进解释里。P3 的反直觉低分说明结构化证据不能单独使用，必须配 production-safe answer contract。 |
+| P4 `chain_tri_answer_contract` | 回答契约，无候选治理 | 10 failed；10 forbidden | 回答契约显著提升当前值命中，但上下文里仍有旧值，模型在解释边界时仍可能复述 forbidden term。 |
+| P5 `chain_tri_governed_answer_contract` | 候选治理 + production-safe evidence contract | 0 failed；0 forbidden | 先过滤候选，再约束回答，是本轮最稳定组合。 |
+
+P3 的典型错误不是“模型完全选错值”，而是“选对当前值后又解释旧值”。例如 `mgov_004` 正确回答 `中文3`，但复述 `英文3` 作为 superseded 说明；`mgov_011` 正确回答 `Akashic`，但复述 `Aurora` 已经过时。少量 P3 失败来自 deterministic exact-term scoring，例如 `中文1` 被答成 `中文`，或 `深圳7` 被答成 `深圳 7`。
+
+完整失败原文、模型错误回答、归因和 P3 反直觉分析见：`my_md/memory_optimization/eval_reports/memory_governance_p1_p4_real_v1/memory_governance_failure_review.md`。

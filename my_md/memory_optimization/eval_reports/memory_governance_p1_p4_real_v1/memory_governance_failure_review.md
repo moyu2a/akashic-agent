@@ -33,6 +33,43 @@
 | `chain_tri_retrieval` | `missing_expected_answer_term_group` | 33 | 33 | 回答表达没有覆盖 expected any 同义组。 |
 | `chain_tri_retrieval` | `found_forbidden_answer_term` | 14 | 14 | 旧值/冲突值仍进入上下文，模型误用了 forbidden evidence。 |
 
+## Governance Scenario Failure Summary
+
+| Profile | 治理场景 | 主要错误 | 根因 | 复盘结论 |
+| --- | --- | --- | --- | --- |
+| P1 `chain_tri_retrieval` | 只做三路召回/RRF 融合 | 47 failed；33 missing expected；14 forbidden | 召回层没有答案约束，也没有候选级过滤。旧值、冲突值和低置信干扰项仍可进入上下文，模型有时会继续查工具或复述无效记忆。 | 召回不是治理，只能提供候选上下文，不能保证当前值被稳定表达，也不能保证 forbidden 边界。 |
+| P2 `chain_tri_candidate_governance` | 候选治理过滤旧值/干扰项 | 47 failed；47 missing expected；0 forbidden | 候选治理解决了“不能说什么”，但没有回答契约要求模型必须输出 allowed evidence 里的目标术语。模型经常转为工具调用、泛化回答或省略带编号的精确值。 | 候选过滤可以显著降低 forbidden 风险，但单独使用不足以提升 answer hit。 |
+| P3 `chain_tri_evidence_only` | 候选治理 + 结构化证据区块，无回答契约 | 59 failed；44 forbidden；17 missing expected | 结构化证据把 Allowed/Forbidden/Version Boundaries 都展示给模型，但没有禁止复述 forbidden term 的回答契约。模型常把 forbidden 作为解释边界的材料写进答案。 | P3 不是“结构化证据单独有效”的证明，反而说明结构化证据必须配回答契约。 |
+| P4 `chain_tri_answer_contract` | 三路召回 + 回答契约，无候选治理 | 10 failed；10 forbidden | 回答契约强制目标答案，answer hit 明显提升；但旧值仍在上下文里，模型在解释“不要用旧值”时仍会复述 forbidden term。 | 契约能约束答案形态，但不能替代候选过滤。 |
+| P5 `chain_tri_governed_answer_contract` | 候选治理 + production-safe evidence contract | 0 failed；0 forbidden | 先在候选层移除风险证据，再用回答契约约束 allowed evidence 的目标表达。 | 当前组合最稳，符合“候选治理 + 回答契约”必须同时存在的预期。 |
+
+## P3 Counterintuitive Failure Analysis
+
+P3 `chain_tri_evidence_only` 的结果低于 P2 和 P4：80 cases 中 only 21 answer success，59 failed，forbidden rate 达到 55.0%。这不是候选治理失效，而是结构化证据暴露了更多“不能使用的边界信息”，但缺少回答契约约束模型不要复述这些词。
+
+| P3 Failure Type | Count | 说明 |
+| --- | ---: | --- |
+| `found_forbidden_answer_term` | 44 | 模型回答通常已经选对 allowed/current value，但在解释旧值、干扰项或版本边界时复述了 forbidden term，触发硬失败。 |
+| `missing_expected_answer_term` | 17 | 模型没有保留 expected term 的精确字面值，例如省略编号或插入空格。 |
+| `missing_expected_answer_term_group` | 17 | 回答表达没有命中 expected any 同义组，通常与 missing expected 同时出现。 |
+
+| P3 Scenario | Failed Cases | 主要原因 |
+| --- | ---: | --- |
+| `same_name_entity_confusion` | 9 | 同名实体场景里 forbidden 旧实体很容易被模型拿来解释“不是它”。 |
+| `low_confidence_source` | 9 | 低置信干扰项被结构化列出后，模型会说明低置信项不可用，从而复述 forbidden term。 |
+| `insufficient_evidence_should_uncertain` | 9 | 模型会解释“已确认”不成立，但 `已确认` 本身是 forbidden term。 |
+| `preference_replace` | 8 | 旧偏好被 superseded，模型常以“旧记录是 X”方式解释边界。 |
+| `user_correction` | 8 | 用户纠正场景中，旧值常被模型作为被纠正对象复述。 |
+| `ambiguous_question_with_answer` | 7 | 模型会澄清相邻主题和当前主题的区别，顺带复述旧值。 |
+| `stale_memory_interference` | 5 | 过期记忆被当作版本边界说明材料。 |
+| `similar_memory_conflict` | 4 | 相似但不同主题的冲突值被解释性复述。 |
+
+典型 P3 evidence block 会同时包含 `Allowed Evidence`、`Forbidden Evidence` 和 `Version Boundaries`。例如 `mgov_004` 中 allowed 是 `中文3`，forbidden 包含 `英文3`；模型回答“当前有效偏好是中文3”本身正确，但随后写出“旧记录里的英文3已被标记为 superseded”，因此命中 forbidden hard fail。`mgov_011` 同样回答了正确值 `Akashic`，但解释 `Aurora` 已经过时导致失败。
+
+另有少量 P3 failure 属于评分字面值问题，而不是语义方向错误。例如 `mgov_002` 期望 `中文1`，模型只答 `中文`；`mgov_038` 期望 `深圳7`，模型答 `深圳 7`，语义接近但 deterministic exact-term scoring 不命中。
+
+结论：P3 的反直觉表现说明，结构化证据本身会放大边界词暴露面。只有当结构化证据与 production-safe answer contract 配套，并且 forbidden/conflict/version 信息不被模型作为可复述内容时，answer-level 指标才稳定。
+
 ## Failed Case Detail Table
 
 表格包含失败 case 的原始问题、原始记忆摘要、预期/禁答配置、模型回答和归因。完整 evidence block 和完整 JSON 字段见同目录 `memory_governance_failure_review.jsonl`。

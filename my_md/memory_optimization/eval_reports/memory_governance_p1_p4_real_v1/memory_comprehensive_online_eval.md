@@ -87,6 +87,7 @@
 
 - 失败原文、模型错误回答、失败类型和归因表格：`memory_governance_failure_review.md`
 - 完整 JSONL 原始复盘记录：`memory_governance_failure_review.jsonl`
+- 不同治理场景的错误原因与 P3 反直觉分析已记录在 `memory_governance_failure_review.md` 的 `Governance Scenario Failure Summary` 和 `P3 Counterintuitive Failure Analysis` 小节。
 
 ## 原始评分字段
 
