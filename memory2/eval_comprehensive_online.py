@@ -54,6 +54,13 @@ from memory2.eval_answer_post_check import (
     answer_post_check_shadow_to_dict,
     build_answer_post_check_shadow,
 )
+from memory2.eval_memory_governance_profiles import (
+    MEMORY_GOVERNANCE_PROFILE_ORDER,
+    render_structured_evidence_only_block,
+)
+from memory2.eval_memory_governance_dataset import (
+    memory_governance_case_to_eval_case,
+)
 from memory2.eval_runner import _baseline_recalled_items
 from memory2.eval_quantitative_uplift import (
     BALANCED_SCORE_FORMULA,
@@ -84,6 +91,7 @@ ANSWER_QUALITY_PROFILES: tuple[str, ...] = (
     "chain_all_on",
 )
 TRI_CANDIDATE_GOVERNANCE_PROFILE = "chain_tri_candidate_governance"
+TRI_EVIDENCE_ONLY_PROFILE = "chain_tri_evidence_only"
 TRI_ANSWER_CONTRACT_PROFILE = "chain_tri_answer_contract"
 TRI_GOVERNED_ANSWER_CONTRACT_PROFILE = "chain_tri_governed_answer_contract"
 TRI_RERANK_GOVERNED_ANSWER_CONTRACT_PROFILE = (
@@ -103,6 +111,7 @@ PRODUCTION_GOVERNED_ANSWER_CONTRACT_PROFILES: tuple[str, ...] = (
 )
 OPTIONAL_ANSWER_QUALITY_PROFILES: tuple[str, ...] = (
     TRI_CANDIDATE_GOVERNANCE_PROFILE,
+    TRI_EVIDENCE_ONLY_PROFILE,
     TRI_ANSWER_CONTRACT_PROFILE,
     TRI_GOVERNED_ANSWER_CONTRACT_PROFILE,
     TRI_RERANK_GOVERNED_ANSWER_CONTRACT_PROFILE,
@@ -118,6 +127,20 @@ PROFILE_METADATA: dict[str, dict[str, object]] = {
         "description": (
             "Applies risk-tiered candidate governance to existing tri fused "
             "ids while protecting fixture should_recall_ids."
+        ),
+    },
+    TRI_EVIDENCE_ONLY_PROFILE: {
+        "eval_only": True,
+        "oracle_protected": True,
+        "uses_fixture_expected_ids": True,
+        "candidate_governance_mode": "tiered",
+        "combines_candidate_governance": True,
+        "structured_evidence_only": True,
+        "diagnostic_answer_contract": False,
+        "production_safe_evidence_contract": False,
+        "description": (
+            "Applies candidate governance and renders structured evidence "
+            "sections, without answer-contract instructions."
         ),
     },
     TRI_ANSWER_CONTRACT_PROFILE: {
@@ -258,6 +281,26 @@ class ComprehensiveOnlineReport:
         )
 
 
+@dataclass(frozen=True)
+class EvalRunProvenance:
+    command_shape_hash: str
+    dataset_path: str = ""
+    profile_ladder: str = ""
+    provider_name: str = ""
+    model: str = ""
+    config_hash: str = ""
+    git_commit: str = ""
+    real_llm_enabled: bool = False
+    fake_provider_enabled: bool = False
+
+
+@dataclass(frozen=True)
+class _CheckpointLoadResult:
+    rows: tuple[tuple[str, ComprehensiveCaseResult], ...]
+    malformed_line_count: int
+    provenance_mismatch_count: int
+
+
 class ComprehensiveOnlineMemoryEngine:
     def __init__(
         self,
@@ -284,6 +327,7 @@ class ComprehensiveOnlineMemoryEngine:
         governed_trace: dict[str, object] | None = None
         if self.profile_name in {
             TRI_CANDIDATE_GOVERNANCE_PROFILE,
+            TRI_EVIDENCE_ONLY_PROFILE,
             TRI_GOVERNED_ANSWER_CONTRACT_PROFILE,
             TRI_RERANK_GOVERNED_ANSWER_CONTRACT_PROFILE,
             TRI_VERSION_GOVERNED_ANSWER_CONTRACT_PROFILE,
@@ -301,6 +345,90 @@ class ComprehensiveOnlineMemoryEngine:
                 else governed_tri_trace_for_case(self.case)
             )
             ids = list(tuple(governed_trace.get("ids", ())))
+        if self.profile_name == TRI_EVIDENCE_ONLY_PROFILE:
+            assert governed_trace is not None
+            summaries = _memory_summaries_by_id(self.case)
+            should_not_ids = {
+                str(item) for item in self.case.expectations.get("should_not_recall_ids", ())
+            }
+            memory_items = [
+                dict(item)
+                for item in self.case.setup.get("memory_items", ())
+                if isinstance(item, dict)
+            ]
+            by_id = {
+                str(item.get("id") or item.get("memory_id") or ""): item
+                for item in memory_items
+            }
+            allowed_evidence = [
+                {
+                    "id": item_id,
+                    "summary": summaries.get(item_id, ""),
+                    "status": by_id.get(item_id, {}).get("status", ""),
+                    "confidence": by_id.get(item_id, {}).get("confidence", ""),
+                }
+                for item_id in ids
+            ]
+            forbidden_evidence = [
+                {
+                    "id": item_id,
+                    "summary": summaries.get(item_id, ""),
+                    "status": by_id.get(item_id, {}).get("status", ""),
+                    "confidence": by_id.get(item_id, {}).get("confidence", ""),
+                }
+                for item_id in should_not_ids
+                if item_id in by_id
+            ]
+            version_boundaries = [
+                dict(item)
+                for item in self.case.setup.get("memory_replacements", ())
+                if isinstance(item, dict)
+            ]
+            self.used_memory_ids = ids
+            hits = [
+                MemoryHit(
+                    id=item_id,
+                    summary=summaries.get(item_id, ""),
+                    content=summaries.get(item_id, ""),
+                    score=1.0,
+                    source_ref="",
+                    engine_kind="comprehensive_online_eval",
+                    injected=True,
+                )
+                for item_id in ids
+            ]
+            self.last_text_block = render_structured_evidence_only_block(
+                allowed_evidence=allowed_evidence,
+                forbidden_evidence=forbidden_evidence,
+                conflict_evidence=[],
+                version_boundaries=version_boundaries,
+            )
+            trace = dict(governed_trace.get("trace", {}))
+            raw = {
+                "ids": ids,
+                "evidence_source": profile_evidence_source(self.profile_name),
+                "candidate_governance_mode": trace.get("candidate_governance_mode"),
+                "candidate_risk_tier_counts": trace.get(
+                    "candidate_risk_tier_counts",
+                    {},
+                ),
+                "accepted_candidate_risk_tier_counts": trace.get(
+                    "accepted_candidate_risk_tier_counts",
+                    {},
+                ),
+                "tiered_deleted_risks_by_reason": trace.get(
+                    "tiered_deleted_risks_by_reason",
+                    {},
+                ),
+                "structured_evidence_only": True,
+                "answer_contract": None,
+            }
+            self.last_raw = dict(raw)
+            return MemoryEngineRetrieveResult(
+                text_block=self.last_text_block,
+                hits=hits,
+                raw=raw,
+            )
         else:
             ids = list(evidence_ids_for_profile(self.case, self.profile_name))
         if (
@@ -598,6 +726,8 @@ def evidence_ids_for_profile(case: EvalCase, profile_name: str) -> tuple[str, ..
         return ()
     if profile_name == TRI_CANDIDATE_GOVERNANCE_PROFILE:
         return governed_tri_evidence_ids_for_case(case)
+    if profile_name == TRI_EVIDENCE_ONLY_PROFILE:
+        return governed_tri_evidence_ids_for_case(case)
     if profile_name == TRI_ANSWER_CONTRACT_PROFILE:
         return tri_answer_contract_evidence_ids(case)
     if profile_name == TRI_GOVERNED_ANSWER_CONTRACT_PROFILE:
@@ -796,6 +926,9 @@ def profile_evidence_source(profile_name: str) -> str:
         TRI_CANDIDATE_GOVERNANCE_PROFILE: (
             "tri_candidate_governance.risk_tiered_allowed_ids"
         ),
+        TRI_EVIDENCE_ONLY_PROFILE: (
+            "tri_evidence_only.structured_governed_allowed_evidence_ids"
+        ),
         TRI_ANSWER_CONTRACT_PROFILE: "tri_answer_contract.allowed_evidence_ids",
         TRI_GOVERNED_ANSWER_CONTRACT_PROFILE: (
             "tri_governed_answer_contract.governed_allowed_evidence_ids"
@@ -896,12 +1029,23 @@ async def run_comprehensive_online_eval(
     checkpoint_jsonl: Path | None = None,
     resume: bool = False,
     concurrency: int = 1,
+    report_metadata: dict[str, object] | None = None,
+    run_provenance: EvalRunProvenance | None = None,
 ) -> ComprehensiveOnlineReport:
     if concurrency < 1:
         raise ValueError("concurrency must be at least 1")
     workspace.mkdir(parents=True, exist_ok=True)
+    checkpoint_state = _load_checkpoint_rows(
+        checkpoint_jsonl,
+        command_shape_hash=run_provenance.command_shape_hash
+        if resume and run_provenance is not None
+        else None,
+    )
     existing = (
-        _load_checkpoint_results(checkpoint_jsonl, include_infra_failures=False)
+        _checkpoint_results_from_rows(
+            checkpoint_state.rows,
+            include_infra_failures=False,
+        )
         if resume
         else {}
     )
@@ -928,7 +1072,7 @@ async def run_comprehensive_online_eval(
                 answer_debug_dir=answer_debug_dir,
             )
             results.append(result)
-            _append_checkpoint_result(checkpoint_jsonl, key, result)
+            _append_checkpoint_result(checkpoint_jsonl, key, result, run_provenance)
     else:
         semaphore = asyncio.Semaphore(concurrency)
 
@@ -959,7 +1103,7 @@ async def run_comprehensive_online_eval(
         for task in asyncio.as_completed(tasks):
             key, result = await task
             results.append(result)
-            _append_checkpoint_result(checkpoint_jsonl, key, result)
+            _append_checkpoint_result(checkpoint_jsonl, key, result, run_provenance)
     return _build_comprehensive_report(
         tuple(results),
         real_llm_enabled=real_llm_enabled,
@@ -967,6 +1111,11 @@ async def run_comprehensive_online_eval(
         skipped_from_checkpoint_count=skipped,
         real_memory_sample_metrics=real_memory_sample_metrics or {},
         concurrency=concurrency,
+        report_metadata=report_metadata or {},
+        malformed_checkpoint_line_count=checkpoint_state.malformed_line_count,
+        checkpoint_provenance_mismatch_count=(
+            checkpoint_state.provenance_mismatch_count if resume else 0
+        ),
     )
 
 
@@ -993,8 +1142,13 @@ def build_comprehensive_online_report_from_checkpoint(
     real_llm_enabled: bool,
     exclude_infra_failures: bool = False,
     real_memory_sample_metrics: dict[str, object] | None = None,
+    command_shape_hash: str | None = None,
 ) -> ComprehensiveOnlineReport:
-    rows = _load_checkpoint_rows(checkpoint_jsonl)
+    checkpoint_state = _load_checkpoint_rows(
+        checkpoint_jsonl,
+        command_shape_hash=command_shape_hash,
+    )
+    rows = checkpoint_state.rows
     input_count = len(rows)
     loaded = _checkpoint_results_from_rows(rows, include_infra_failures=True)
     results = tuple(loaded.values())
@@ -1015,6 +1169,10 @@ def build_comprehensive_online_report_from_checkpoint(
         completed_call_count=len(results),
         skipped_from_checkpoint_count=0,
         real_memory_sample_metrics=real_memory_sample_metrics or {},
+        malformed_checkpoint_line_count=checkpoint_state.malformed_line_count,
+        checkpoint_provenance_mismatch_count=(
+            checkpoint_state.provenance_mismatch_count
+        ),
     )
     report.metrics["checkpoint_input_count"] = input_count
     report.metrics["excluded_infra_failure_count"] = excluded
@@ -1323,6 +1481,9 @@ def _build_comprehensive_report(
     skipped_from_checkpoint_count: int,
     real_memory_sample_metrics: dict[str, object],
     concurrency: int = 1,
+    report_metadata: dict[str, object] | None = None,
+    malformed_checkpoint_line_count: int = 0,
+    checkpoint_provenance_mismatch_count: int = 0,
 ) -> ComprehensiveOnlineReport:
     metrics = _metrics_from_results(
         results,
@@ -1332,6 +1493,17 @@ def _build_comprehensive_report(
         real_memory_sample_metrics=real_memory_sample_metrics,
         concurrency=concurrency,
     )
+    metrics.update(report_metadata or {})
+    metrics["malformed_checkpoint_line_count"] = malformed_checkpoint_line_count
+    metrics["checkpoint_provenance_mismatch_count"] = (
+        checkpoint_provenance_mismatch_count
+    )
+    metrics["fresh_checkpoint_valid"] = (
+        int(metrics.get("skipped_from_checkpoint_count") or 0) == 0
+        and malformed_checkpoint_line_count == 0
+        and checkpoint_provenance_mismatch_count == 0
+    )
+    annotate_memory_governance_causal_chain(metrics)
     return ComprehensiveOnlineReport(
         run_id=_deterministic_run_id(results),
         generated_at=_FIXED_REPORT_TIME.isoformat(),
@@ -1485,6 +1657,27 @@ def _empty_metrics(real_memory_sample_metrics: dict[str, object]) -> dict[str, o
         "metric_sources": dict(METRIC_SOURCES),
         "real_memory_sample_metrics": real_memory_sample_metrics,
     }
+
+
+def annotate_memory_governance_causal_chain(metrics: dict[str, object]) -> None:
+    summaries = metrics.get("profile_summaries")
+    if not isinstance(summaries, dict):
+        return
+    p1 = summaries.get("chain_tri_retrieval")
+    p4 = summaries.get("chain_tri_governed_answer_contract")
+    if not isinstance(p1, dict) or not isinstance(p4, dict):
+        return
+    p1_rate = float(p1.get("answer_rule_pass_rate") or 0.0)
+    p4_rate = float(p4.get("answer_rule_pass_rate") or 0.0)
+    metrics["measured_causal_chain"] = (
+        f"{p1_rate}_to_{p4_rate}_same_table_profile_ladder"
+    )
+    if round(p1_rate, 4) == 37.5 and round(p4_rate, 4) == 97.5:
+        metrics["causal_claim_status"] = "reproduced_historical_37.5_to_97.5"
+    else:
+        metrics["causal_claim_status"] = (
+            "new_measured_values_differ_from_historical_37.5_to_97.5"
+        )
 
 
 def _profile_summaries(
@@ -1955,14 +2148,32 @@ def _report_to_dict(report: ComprehensiveOnlineReport) -> dict[str, object]:
 
 def _load_checkpoint_rows(
     path: Path | None,
-) -> tuple[tuple[str, ComprehensiveCaseResult], ...]:
+    *,
+    command_shape_hash: str | None = None,
+) -> _CheckpointLoadResult:
     if path is None or not path.exists():
-        return ()
+        return _CheckpointLoadResult((), 0, 0)
     rows: list[tuple[str, ComprehensiveCaseResult]] = []
+    malformed = 0
+    mismatches = 0
     for line in path.read_text(encoding="utf-8").splitlines():
         if not line.strip():
             continue
-        payload = json.loads(line)
+        try:
+            payload = json.loads(line)
+        except json.JSONDecodeError:
+            malformed += 1
+            continue
+        if command_shape_hash is not None:
+            provenance = payload.get("run_provenance")
+            row_hash = (
+                str(provenance.get("command_shape_hash") or "")
+                if isinstance(provenance, dict)
+                else ""
+            )
+            if row_hash != command_shape_hash:
+                mismatches += 1
+                continue
         key = str(payload.get("spec_key") or "")
         result_payload = payload.get("result")
         if key and isinstance(result_payload, dict):
@@ -1980,7 +2191,7 @@ def _load_checkpoint_rows(
                     ),
                 )
             )
-    return tuple(rows)
+    return _CheckpointLoadResult(tuple(rows), malformed, mismatches)
 
 
 def _checkpoint_results_from_rows(
@@ -2002,7 +2213,7 @@ def _load_checkpoint_results(
     include_infra_failures: bool = True,
 ) -> dict[str, ComprehensiveCaseResult]:
     return _checkpoint_results_from_rows(
-        _load_checkpoint_rows(path),
+        _load_checkpoint_rows(path).rows,
         include_infra_failures=include_infra_failures,
     )
 
@@ -2011,6 +2222,7 @@ def _append_checkpoint_result(
     path: Path | None,
     spec_key: str,
     result: ComprehensiveCaseResult,
+    run_provenance: EvalRunProvenance | None = None,
 ) -> None:
     if path is None:
         return
@@ -2018,7 +2230,13 @@ def _append_checkpoint_result(
     with path.open("a", encoding="utf-8") as handle:
         handle.write(
             json.dumps(
-                {"spec_key": spec_key, "result": _case_record(result)},
+                {
+                    "spec_key": spec_key,
+                    "run_provenance": asdict(run_provenance)
+                    if run_provenance is not None
+                    else {},
+                    "result": _case_record(result),
+                },
                 ensure_ascii=False,
                 sort_keys=True,
             )
