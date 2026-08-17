@@ -31,6 +31,22 @@ def test_public_long_memory_runner_writes_fake_provider_smoke_report(tmp_path: P
             str(checkpoint),
             "--fresh-checkpoint",
             "--fake-provider",
+            "--profile",
+            "chain_tri_governed_answer_contract",
+            "--prompt-variants",
+            "baseline",
+            "--repeats",
+            "1",
+            "--evidence-render-mode",
+            "answer_window",
+            "--long-evidence-token-limit",
+            "3000",
+            "--reserved-prompt-token-budget",
+            "2000",
+            "--answer-window-turns",
+            "2",
+            "--model-context-window",
+            "8192",
         ],
         check=True,
         capture_output=True,
@@ -45,8 +61,18 @@ def test_public_long_memory_runner_writes_fake_provider_smoke_report(tmp_path: P
     assert report["metrics"]["dataset_case_count"] == 6
     assert report["metrics"]["sampled_case_count"] == 5
     assert report["metrics"]["completed_call_count"] == 5
+    assert report["metrics"]["actual_call_shape"] == "5 * 1 * 1 * 1 = 5"
     assert report["metrics"]["provider_error_count"] == 0
     assert report["metrics"]["timeout_count"] == 0
+    assert report["metrics"]["prompt_variants"] == ["baseline"]
+    assert report["metrics"]["repeats"] == 1
+    assert report["metrics"]["evidence_render_mode"] == "answer_window"
+    assert report["metrics"]["long_evidence_token_limit"] == 3000
+    assert report["metrics"]["reserved_prompt_token_budget"] == 2000
+    assert report["metrics"]["model_context_window"] == 8192
+    assert report["metrics"]["effective_evidence_token_budget"] == 3000
+    assert report["metrics"]["tool_call_only_count"] == 0
+    assert report["metrics"]["tool_call_style_output_count"] == 0
     assert report["metrics"]["sampling"]["seed"] == 42
     assert set(report["metrics"]["sampled_category_distribution"]) == {
         "abstention",
@@ -57,3 +83,64 @@ def test_public_long_memory_runner_writes_fake_provider_smoke_report(tmp_path: P
     }
     assert len(report["case_reviews"]) == 5
     assert (out_dir / "public_long_memory_eval.md").exists()
+
+
+def test_public_long_memory_runner_captures_sanitized_provider_requests(tmp_path: Path) -> None:
+    out_dir = tmp_path / "out"
+    checkpoint = tmp_path / "checkpoint.jsonl"
+    workspace = tmp_path / "workspace"
+    request_dir = tmp_path / "requests"
+    dataset = tmp_path / "single_category.jsonl"
+    dataset.write_text(
+        '{"id":"capture_001","category":"single-session-user",'
+        '"question":"What drink does Alice prefer?","answer":"green tea",'
+        '"history":[{"role":"user","content":"Alice says she prefers green tea.","has_answer":true}]}\n',
+        encoding="utf-8",
+    )
+
+    subprocess.run(
+        [
+            sys.executable,
+            "scripts/run_public_long_memory_eval.py",
+            "--dataset",
+            str(dataset),
+            "--phase",
+            "phase_a",
+            "--sample-size",
+            "1",
+            "--seed",
+            "42",
+            "--workspace",
+            str(workspace),
+            "--out-dir",
+            str(out_dir),
+            "--checkpoint-jsonl",
+            str(checkpoint),
+            "--fresh-checkpoint",
+            "--fake-provider",
+            "--profile",
+            "chain_tri_governed_answer_contract",
+            "--prompt-variants",
+            "baseline",
+            "--repeats",
+            "1",
+            "--evidence-render-mode",
+            "answer_window",
+            "--capture-provider-request",
+            "--provider-request-debug-dir",
+            str(request_dir),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    request_files = sorted(request_dir.glob("*.json"))
+    assert len(request_files) == 1
+    payload = json.loads(request_files[0].read_text(encoding="utf-8"))
+    assert payload["case_id"]
+    assert payload["provider_request"]["model"] == "fake-model"
+    assert "messages" in payload["provider_request"]
+    assert "api_key" not in json.dumps(payload, ensure_ascii=False).lower()
+    assert payload["user_question"]
+    assert payload["evidence_block_text"]

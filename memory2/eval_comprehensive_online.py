@@ -259,6 +259,7 @@ class ComprehensiveCaseResult:
     used_memory_id_count: int
     failures: tuple[str, ...]
     answer_post_check_shadow: dict[str, object] | None = None
+    evidence_render_metadata: tuple[dict[str, object], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -545,6 +546,10 @@ class ComprehensiveOnlineMemoryEngine:
                         ),
                         "forbidden_boundary_ids": list(contract.forbidden_boundary_ids),
                         "deleted_evidence_ids": list(contract.deleted_evidence_ids),
+                        "evidence_render_metadata": list(
+                            contract.evidence_render_metadata
+                        ),
+                        "public_long_memory_eval": contract.public_long_memory_eval,
                     },
                 }
                 self.last_raw = dict(raw)
@@ -1031,6 +1036,7 @@ async def run_comprehensive_online_eval(
     concurrency: int = 1,
     report_metadata: dict[str, object] | None = None,
     run_provenance: EvalRunProvenance | None = None,
+    provider_request_debug_dir: Path | None = None,
 ) -> ComprehensiveOnlineReport:
     if concurrency < 1:
         raise ValueError("concurrency must be at least 1")
@@ -1070,6 +1076,7 @@ async def run_comprehensive_online_eval(
                 timeout_s=timeout_s,
                 case_index=index,
                 answer_debug_dir=answer_debug_dir,
+                provider_request_debug_dir=provider_request_debug_dir,
             )
             results.append(result)
             _append_checkpoint_result(checkpoint_jsonl, key, result, run_provenance)
@@ -1093,6 +1100,7 @@ async def run_comprehensive_online_eval(
                         timeout_s=timeout_s,
                         case_index=index,
                         answer_debug_dir=answer_debug_dir,
+                        provider_request_debug_dir=provider_request_debug_dir,
                     ),
                 )
 
@@ -1346,6 +1354,7 @@ async def _run_comprehensive_case(
     timeout_s: float,
     case_index: int,
     answer_debug_dir: Path | None,
+    provider_request_debug_dir: Path | None = None,
 ) -> ComprehensiveCaseResult:
     workspace.mkdir(parents=True, exist_ok=True)
     memory = ComprehensiveOnlineMemoryEngine(
@@ -1420,6 +1429,14 @@ async def _run_comprehensive_case(
                 memory.used_memory_ids,
             )
         )
+    evidence_render_metadata = ()
+    raw_answer_contract = memory.last_raw.get("answer_contract")
+    if isinstance(raw_answer_contract, dict):
+        raw_metadata = raw_answer_contract.get("evidence_render_metadata")
+        if isinstance(raw_metadata, list):
+            evidence_render_metadata = tuple(
+                dict(item) for item in raw_metadata if isinstance(item, dict)
+            )
     failures.extend(score.failures)
     token_counts = _extract_token_counts(
         recording_provider.responses[-1] if recording_provider.responses else None
@@ -1447,6 +1464,7 @@ async def _run_comprehensive_case(
         used_memory_id_count=len(memory.used_memory_ids),
         failures=tuple(failures),
         answer_post_check_shadow=answer_post_check_shadow,
+        evidence_render_metadata=evidence_render_metadata,
     )
     if answer_debug_dir is not None:
         write_llm_sample_answer_debug(
@@ -1469,6 +1487,21 @@ async def _run_comprehensive_case(
             ),
             answer_debug_dir
             / f"{case_index:04d}-{_safe_name(spec.profile_name)}-{_safe_name(spec.prompt_variant)}-{_safe_name(spec.case.id)}.json",
+        )
+    if provider_request_debug_dir is not None:
+        _write_provider_request_debug(
+            provider_request_debug_dir
+            / f"{case_index:04d}-{_safe_name(spec.profile_name)}-{_safe_name(spec.prompt_variant)}-{_safe_name(spec.case.id)}.json",
+            case_id=spec.case.id,
+            case_index=case_index,
+            profile_name=spec.profile_name,
+            prompt_variant=spec.prompt_variant,
+            repeat_index=spec.repeat_index,
+            user_question=query,
+            evidence_block_text=memory.last_text_block,
+            provider_request=(
+                recording_provider.requests[-1] if recording_provider.requests else {}
+            ),
         )
     return result
 
@@ -2114,7 +2147,58 @@ def _case_record(result: ComprehensiveCaseResult) -> dict[str, object]:
         "used_memory_id_count": result.used_memory_id_count,
         "failures": [_sanitize_failure(failure) for failure in result.failures],
         "answer_post_check_shadow": result.answer_post_check_shadow,
+        "evidence_render_metadata": list(result.evidence_render_metadata),
     }
+
+
+def _write_provider_request_debug(
+    path: Path,
+    *,
+    case_id: str,
+    case_index: int,
+    profile_name: str,
+    prompt_variant: str,
+    repeat_index: int,
+    user_question: str,
+    evidence_block_text: str,
+    provider_request: dict[str, object],
+) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "case_id": case_id,
+        "case_index": case_index,
+        "profile_name": profile_name,
+        "prompt_variant": prompt_variant,
+        "repeat_index": repeat_index,
+        "user_question": user_question,
+        "evidence_block_text": evidence_block_text,
+        "provider_request": _sanitize_provider_request(provider_request),
+    }
+    path.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True),
+        encoding="utf-8",
+    )
+
+
+def _sanitize_provider_request(value: object) -> object:
+    if isinstance(value, dict):
+        sanitized: dict[str, object] = {}
+        for key, item in value.items():
+            key_text = str(key)
+            lowered = key_text.lower()
+            if any(secret in lowered for secret in ("api_key", "authorization", "token")):
+                continue
+            if callable(item):
+                continue
+            sanitized[key_text] = _sanitize_provider_request(item)
+        return sanitized
+    if isinstance(value, list):
+        return [_sanitize_provider_request(item) for item in value]
+    if isinstance(value, tuple):
+        return [_sanitize_provider_request(item) for item in value]
+    if isinstance(value, (str, int, float, bool)) or value is None:
+        return value
+    return str(value)
 
 
 def _failure_records(
@@ -2186,6 +2270,14 @@ def _load_checkpoint_rows(
                             "failures": tuple(result_payload.get("failures", [])),
                             "answer_post_check_shadow": result_payload.get(
                                 "answer_post_check_shadow"
+                            ),
+                            "evidence_render_metadata": tuple(
+                                dict(item)
+                                for item in result_payload.get(
+                                    "evidence_render_metadata",
+                                    [],
+                                )
+                                if isinstance(item, dict)
                             ),
                         }
                     ),

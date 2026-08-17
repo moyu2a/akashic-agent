@@ -243,11 +243,13 @@ class LLMSampleMemoryEngine:
 class _RecordingProvider:
     def __init__(self, provider: object) -> None:
         self.provider = provider
+        self.requests: list[dict[str, Any]] = []
         self.responses: list[LLMResponse] = []
         self.errors: list[Exception] = []
 
     async def chat(self, **kwargs: Any) -> LLMResponse:
         chat = getattr(self.provider, "chat")
+        self.requests.append(dict(kwargs))
         try:
             response = await chat(**kwargs)
         except Exception as exc:

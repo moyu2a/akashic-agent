@@ -3,9 +3,12 @@ from __future__ import annotations
 from pathlib import Path
 
 from memory2.eval_public_long_memory import (
+    PublicEvidenceRenderConfig,
     PublicLongMemoryCase,
+    build_public_evidence_render_config,
     load_longmemeval_cases,
     public_case_to_eval_case,
+    render_public_long_memory_evidence,
     score_public_answer,
     stratified_sample_cases,
 )
@@ -50,7 +53,7 @@ def test_load_longmemeval_cases_preserves_haystack_sessions_as_memory_chunks(tmp
         '"haystack_sessions":['
         '[{"role":"user","content":"First amount was $300."},'
         '{"role":"assistant","content":"Noted."}],'
-        '[{"role":"user","content":"Final amount became $400."}]'
+        '[{"role":"user","content":"Final amount became $400.","has_answer":true}]'
         ']}\n',
         encoding="utf-8",
     )
@@ -65,6 +68,82 @@ def test_load_longmemeval_cases_preserves_haystack_sessions_as_memory_chunks(tmp
     assert len(eval_case.setup["memory_items"]) == 2
     assert eval_case.setup["memory_items"][0]["extra_json"]["session_id"] == "s1"
     assert eval_case.setup["memory_items"][0]["extra_json"]["session_date"] == "2024-01-01"
+    assert eval_case.setup["memory_items"][1]["extra_json"]["turns"][0]["turn_index"] == 1
+    assert eval_case.setup["memory_items"][1]["extra_json"]["turns"][0]["has_answer"] is True
+
+
+def test_answer_window_rendering_uses_answer_turn_and_token_budget() -> None:
+    item = {
+        "summary": "session: " + "leading filler " * 80,
+        "content": "session: " + "leading filler " * 80,
+        "extra_json": {
+            "benchmark": "longmemeval",
+            "turns": [
+                {"turn_index": 1, "role": "user", "content": "irrelevant opening " * 40, "has_answer": False},
+                {"turn_index": 2, "role": "assistant", "content": "ack", "has_answer": False},
+                {"turn_index": 3, "role": "user", "content": "The final amount became $400.", "has_answer": True},
+                {"turn_index": 4, "role": "assistant", "content": "Recorded.", "has_answer": False},
+                {"turn_index": 5, "role": "user", "content": "unrelated closing " * 40, "has_answer": False},
+            ],
+        },
+    }
+
+    rendered, metadata = render_public_long_memory_evidence(
+        item,
+        PublicEvidenceRenderConfig(
+            mode="answer_window",
+            long_evidence_token_limit=16,
+            reserved_prompt_token_budget=2000,
+            model_context_window=8192,
+            answer_window_turns=1,
+        ),
+    )
+
+    assert "The final amount became $400." in rendered
+    assert "irrelevant opening" not in rendered
+    assert metadata["answer_window_source"] == "has_answer_turn"
+    assert metadata["effective_evidence_token_budget"] == 16
+
+
+def test_answer_window_rendering_falls_back_to_last_third_without_has_answer() -> None:
+    item = {
+        "summary": "session summary",
+        "content": "session content",
+        "extra_json": {
+            "benchmark": "longmemeval",
+            "turns": [
+                {"turn_index": 1, "role": "user", "content": "first", "has_answer": False},
+                {"turn_index": 2, "role": "assistant", "content": "second", "has_answer": False},
+                {"turn_index": 3, "role": "user", "content": "third", "has_answer": False},
+                {"turn_index": 4, "role": "assistant", "content": "fourth", "has_answer": False},
+                {"turn_index": 5, "role": "user", "content": "fifth", "has_answer": False},
+                {"turn_index": 6, "role": "assistant", "content": "sixth", "has_answer": False},
+            ],
+        },
+    }
+
+    rendered, metadata = render_public_long_memory_evidence(
+        item,
+        PublicEvidenceRenderConfig(mode="answer_window"),
+    )
+
+    assert "user: fifth" in rendered
+    assert "assistant: sixth" in rendered
+    assert "user: first" not in rendered
+    assert metadata["answer_window_source"] == "last_third"
+    assert metadata["answer_window_fallback_reason"] == "oracle_missing_has_answer"
+
+
+def test_build_public_evidence_render_config_records_token_budget() -> None:
+    config = build_public_evidence_render_config(
+        mode="answer_window",
+        long_evidence_token_limit=3000,
+        reserved_prompt_token_budget=2000,
+        model_context_window=4096,
+        answer_window_turns=2,
+    )
+
+    assert config.effective_token_budget == 2096
 
 
 def test_stratified_sample_cases_preserves_categories_with_seed() -> None:
@@ -152,4 +231,4 @@ def test_score_public_answer_rejects_empty_and_tool_call_answers() -> None:
         category="single-session-user",
     )
     assert not tool_call.passed
-    assert tool_call.method == "tool_call_only"
+    assert tool_call.method == "tool_call_style_output"

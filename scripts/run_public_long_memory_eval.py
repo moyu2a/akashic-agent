@@ -26,6 +26,7 @@ from memory2.eval_comprehensive_online import (
 from memory2.eval_public_long_memory import (
     PUBLIC_LONG_MEMORY_PROFILE,
     build_public_long_memory_report,
+    build_public_evidence_render_config,
     dataset_sha256,
     load_longmemeval_cases,
     public_case_to_eval_case,
@@ -99,8 +100,40 @@ async def _amain() -> int:
     parser.add_argument("--deterministic", action="store_true")
     parser.add_argument("--temperature", type=float, default=0.0)
     parser.add_argument("--top-p", type=float, default=1.0)
+    parser.add_argument("--profile", default=PUBLIC_LONG_MEMORY_PROFILE)
+    parser.add_argument("--prompt-variants", default="baseline")
+    parser.add_argument("--repeats", type=int, default=1)
+    parser.add_argument(
+        "--evidence-render-mode",
+        choices=("compact", "long_context", "answer_window", "auto"),
+        default="answer_window",
+    )
+    parser.add_argument("--long-evidence-token-limit", type=int, default=3000)
+    parser.add_argument("--reserved-prompt-token-budget", type=int, default=2000)
+    parser.add_argument("--answer-window-turns", type=int, default=2)
+    parser.add_argument("--model-context-window", type=int, default=8192)
+    parser.add_argument("--capture-provider-request", action="store_true")
+    parser.add_argument("--provider-request-debug-dir", default="")
     args = parser.parse_args()
 
+    prompt_variants = _parse_prompt_variants(str(args.prompt_variants))
+    if str(args.profile) != PUBLIC_LONG_MEMORY_PROFILE:
+        parser.error(
+            "--profile currently supports only "
+            f"{PUBLIC_LONG_MEMORY_PROFILE} for public LongMemEval"
+        )
+    if int(args.repeats) < 1:
+        parser.error("--repeats must be at least 1")
+    try:
+        evidence_render_config = build_public_evidence_render_config(
+            mode=str(args.evidence_render_mode),  # type: ignore[arg-type]
+            long_evidence_token_limit=int(args.long_evidence_token_limit),
+            reserved_prompt_token_budget=int(args.reserved_prompt_token_budget),
+            model_context_window=int(args.model_context_window),
+            answer_window_turns=int(args.answer_window_turns),
+        )
+    except ValueError as exc:
+        parser.error(str(exc))
     if bool(args.fake_provider) and bool(args.enable_real_llm):
         parser.error("--fake-provider and --enable-real-llm cannot be used together")
     if not bool(args.fake_provider) and not bool(args.enable_real_llm):
@@ -131,15 +164,16 @@ async def _amain() -> int:
         public_case_to_eval_case(
             case,
             phase=str(args.phase),
-            profile=PUBLIC_LONG_MEMORY_PROFILE,
+            profile=str(args.profile),
+            evidence_render_config=evidence_render_config,
         )
         for case in sampled_cases
     ]
     specs = build_comprehensive_run_specs(
         eval_cases,
-        repeats=1,
-        prompt_variants=("baseline",),
-        profiles=(PUBLIC_LONG_MEMORY_PROFILE,),
+        repeats=int(args.repeats),
+        prompt_variants=prompt_variants,
+        profiles=(str(args.profile),),
     )
     provider, model, provider_name = _build_provider(args)
     if bool(args.deterministic):
@@ -163,6 +197,10 @@ async def _amain() -> int:
         sampled_case_ids=tuple(case.source_id for case in sampled_cases),
         seed=int(args.seed),
         sample_size=sample_size,
+        prompt_variants=prompt_variants,
+        repeats=int(args.repeats),
+        evidence_render_mode=evidence_render_config.mode,
+        effective_evidence_token_budget=evidence_render_config.effective_token_budget,
         provider_name=provider_name,
         model=model,
         config_hash=config_hash,
@@ -183,6 +221,18 @@ async def _amain() -> int:
             "benchmark": "longmemeval",
             "phase": str(args.phase),
             "profile": PUBLIC_LONG_MEMORY_PROFILE,
+            "prompt_variants": list(prompt_variants),
+            "repeats": int(args.repeats),
+            "evidence_render_mode": evidence_render_config.mode,
+            "long_evidence_token_limit": evidence_render_config.long_evidence_token_limit,
+            "reserved_prompt_token_budget": (
+                evidence_render_config.reserved_prompt_token_budget
+            ),
+            "answer_window_turns": evidence_render_config.answer_window_turns,
+            "model_context_window": evidence_render_config.model_context_window,
+            "effective_evidence_token_budget": (
+                evidence_render_config.effective_token_budget
+            ),
             "dataset_path": str(dataset_path),
             "dataset_sha256": dataset_hash,
         },
@@ -196,6 +246,14 @@ async def _amain() -> int:
             git_commit=git_commit,
             real_llm_enabled=bool(args.enable_real_llm),
             fake_provider_enabled=bool(args.fake_provider),
+        ),
+        provider_request_debug_dir=(
+            Path(args.provider_request_debug_dir)
+            if bool(args.capture_provider_request)
+            and str(args.provider_request_debug_dir)
+            else workspace / "public_long_memory_provider_requests"
+            if bool(args.capture_provider_request)
+            else None
         ),
     )
     public_report = build_public_long_memory_report(
@@ -212,6 +270,17 @@ async def _amain() -> int:
         command_shape_hash=command_shape_hash,
         real_llm_enabled=bool(args.enable_real_llm),
         fake_provider_enabled=bool(args.fake_provider),
+        prompt_variants=prompt_variants,
+        repeats=int(args.repeats),
+        evidence_render_config=evidence_render_config,
+        capture_provider_request=bool(args.capture_provider_request),
+        provider_request_debug_dir=(
+            Path(args.provider_request_debug_dir)
+            if str(args.provider_request_debug_dir)
+            else workspace / "public_long_memory_provider_requests"
+        )
+        if bool(args.capture_provider_request)
+        else None,
     )
     json_path = out_dir / "public_long_memory_eval.json"
     md_path = out_dir / "public_long_memory_eval.md"
@@ -254,6 +323,16 @@ def _effective_sample_size(*, phase: str, requested: int, dataset_count: int) ->
     return min(50, dataset_count)
 
 
+def _parse_prompt_variants(value: str) -> tuple[str, ...]:
+    variants = tuple(item.strip() for item in value.split(",") if item.strip())
+    if not variants:
+        raise SystemExit("--prompt-variants must not be empty")
+    invalid = [variant for variant in variants if variant not in {"baseline", "coached"}]
+    if invalid:
+        raise SystemExit("unknown --prompt-variants: " + ", ".join(invalid))
+    return variants
+
+
 def _validate_fresh_checkpoint_args(
     *,
     checkpoint_jsonl: Path | None,
@@ -279,6 +358,10 @@ def _command_shape_hash(
     sampled_case_ids: tuple[str, ...],
     seed: int,
     sample_size: int,
+    prompt_variants: tuple[str, ...],
+    repeats: int,
+    evidence_render_mode: str,
+    effective_evidence_token_budget: int,
     provider_name: str,
     model: str,
     config_hash: str,
@@ -292,6 +375,10 @@ def _command_shape_hash(
         "sampled_case_ids": list(sampled_case_ids),
         "seed": seed,
         "sample_size": sample_size,
+        "prompt_variants": list(prompt_variants),
+        "repeats": repeats,
+        "evidence_render_mode": evidence_render_mode,
+        "effective_evidence_token_budget": effective_evidence_token_budget,
         "provider_name": provider_name,
         "model": model,
         "config_hash": config_hash,

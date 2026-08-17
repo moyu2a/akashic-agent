@@ -24,9 +24,26 @@ class PublicLongMemoryCase:
     category: str
     question: str
     gold_answer: str
-    history: tuple[dict[str, str], ...]
+    history: tuple[dict[str, Any], ...]
     answer_aliases: tuple[str, ...] = ()
     raw: dict[str, Any] | None = None
+
+
+PublicEvidenceRenderMode = Literal["compact", "long_context", "answer_window", "auto"]
+
+
+@dataclass(frozen=True)
+class PublicEvidenceRenderConfig:
+    mode: PublicEvidenceRenderMode = "answer_window"
+    long_evidence_token_limit: int = 3000
+    reserved_prompt_token_budget: int = 2000
+    model_context_window: int = 8192
+    answer_window_turns: int = 2
+
+    @property
+    def effective_token_budget(self) -> int:
+        available = max(1, self.model_context_window - self.reserved_prompt_token_budget)
+        return max(1, min(self.long_evidence_token_limit, available))
 
 
 @dataclass(frozen=True)
@@ -39,6 +56,33 @@ class PublicAnswerScore:
 
 
 SemanticJudge = Callable[..., Literal["pass", "fail", "uncertain"]]
+
+
+def build_public_evidence_render_config(
+    *,
+    mode: PublicEvidenceRenderMode = "answer_window",
+    long_evidence_token_limit: int = 3000,
+    reserved_prompt_token_budget: int = 2000,
+    model_context_window: int = 8192,
+    answer_window_turns: int = 2,
+) -> PublicEvidenceRenderConfig:
+    if mode not in {"compact", "long_context", "answer_window", "auto"}:
+        raise ValueError(f"unknown evidence render mode: {mode}")
+    if long_evidence_token_limit < 1:
+        raise ValueError("long_evidence_token_limit must be at least 1")
+    if reserved_prompt_token_budget < 0:
+        raise ValueError("reserved_prompt_token_budget must be non-negative")
+    if model_context_window < 1:
+        raise ValueError("model_context_window must be at least 1")
+    if answer_window_turns < 0:
+        raise ValueError("answer_window_turns must be non-negative")
+    return PublicEvidenceRenderConfig(
+        mode=mode,
+        long_evidence_token_limit=long_evidence_token_limit,
+        reserved_prompt_token_budget=reserved_prompt_token_budget,
+        model_context_window=model_context_window,
+        answer_window_turns=answer_window_turns,
+    )
 
 
 def load_longmemeval_cases(path: Path) -> tuple[PublicLongMemoryCase, ...]:
@@ -117,8 +161,10 @@ def public_case_to_eval_case(
     *,
     phase: str,
     profile: str = PUBLIC_LONG_MEMORY_PROFILE,
+    evidence_render_config: PublicEvidenceRenderConfig | None = None,
 ) -> EvalCase:
     scope_id = f"longmemeval_{phase}_{_safe_id(case.source_id)}"
+    render_config = evidence_render_config or build_public_evidence_render_config()
     memory_items = [
         {
             "id": f"{case.source_id}_history_{index:04d}",
@@ -135,6 +181,11 @@ def public_case_to_eval_case(
                 "category": case.category,
                 "source_id": case.source_id,
                 "role": message["role"],
+                "turn_index": message.get("turn_index", index),
+                "has_answer": bool(message.get("has_answer", False)),
+                "turns": list(message.get("turns", ()))
+                if isinstance(message.get("turns"), list)
+                else [],
                 "session_id": message.get("session_id", ""),
                 "session_date": message.get("session_date", ""),
                 "phase": phase,
@@ -159,6 +210,7 @@ def public_case_to_eval_case(
             "query": case.question,
             "memory_items": memory_items,
             "memory_replacements": [],
+            "public_long_memory_evidence_render": asdict(render_config),
         },
         expectations={
             "answer_expectations": {
@@ -200,7 +252,7 @@ def score_public_answer(
     if not answer:
         return PublicAnswerScore(False, "empty_answer", normalized_gold, normalized_answer)
     if _is_tool_call_only(answer):
-        return PublicAnswerScore(False, "tool_call_only", normalized_gold, normalized_answer)
+        return PublicAnswerScore(False, "tool_call_style_output", normalized_gold, normalized_answer)
     candidates = (gold_answer, *answer_aliases)
     for candidate in candidates:
         normalized_candidate = normalize_public_answer(candidate)
@@ -264,6 +316,11 @@ def build_public_long_memory_report(
     command_shape_hash: str,
     real_llm_enabled: bool,
     fake_provider_enabled: bool,
+    prompt_variants: tuple[str, ...] = ("baseline",),
+    repeats: int = 1,
+    evidence_render_config: PublicEvidenceRenderConfig | None = None,
+    capture_provider_request: bool = False,
+    provider_request_debug_dir: Path | None = None,
 ) -> dict[str, Any]:
     case_by_id = {case.source_id: case for case in sampled_cases}
     answer_debug_by_case = _load_answer_debug_by_case(answer_debug_dir)
@@ -271,6 +328,10 @@ def build_public_long_memory_report(
     public_pass_count = 0
     manual_review_count = 0
     unable_to_score_count = 0
+    tool_call_style_count = 0
+    tool_call_style_case_ids: list[str] = []
+    sent_evidence_gold_hit_count = 0
+    render_config = evidence_render_config or build_public_evidence_render_config()
 
     for record in getattr(benchmark_report, "case_records", ()):
         if not isinstance(record, dict):
@@ -279,10 +340,19 @@ def build_public_long_memory_report(
         case = case_by_id.get(case_id)
         debug = answer_debug_by_case.get(case_id, {})
         answer_text = str(debug.get("answer_text") or "")
+        evidence_text = str(debug.get("evidence_block_text") or "")
+        evidence_gold_hit = False
         public_score = None
         if case is None:
             unable_to_score_count += 1
         else:
+            evidence_gold_hit = (
+                bool(normalize_public_answer(case.gold_answer))
+                and normalize_public_answer(case.gold_answer)
+                in normalize_public_answer(evidence_text)
+            )
+            if evidence_gold_hit:
+                sent_evidence_gold_hit_count += 1
             score = score_public_answer(
                 question=case.question,
                 gold_answer=case.gold_answer,
@@ -295,8 +365,12 @@ def build_public_long_memory_report(
                 public_pass_count += 1
             if score.needs_manual_review:
                 manual_review_count += 1
-            if score.method in {"empty_answer", "tool_call_only"}:
+            if score.method == "tool_call_style_output":
+                tool_call_style_count += 1
+                tool_call_style_case_ids.append(case_id)
+            if score.method in {"empty_answer", "tool_call_style_output"}:
                 unable_to_score_count += 1
+        render_metadata = record.get("evidence_render_metadata")
         case_reviews.append(
             {
                 "source_id": case_id,
@@ -308,6 +382,10 @@ def build_public_long_memory_report(
                 "repeat_index": record.get("repeat_index", 0),
                 "answer_debug_available": bool(debug),
                 "model_answer": answer_text,
+                "sent_evidence_gold_hit": evidence_gold_hit,
+                "evidence_render_metadata": render_metadata
+                if isinstance(render_metadata, list)
+                else [],
                 "comprehensive_answer_rule_passed": record.get("answer_rule_passed", False),
                 "memory_grounding_passed": record.get("memory_grounding_passed", False),
                 "provider_error": record.get("provider_error", False),
@@ -319,6 +397,7 @@ def build_public_long_memory_report(
 
     metrics = dict(getattr(benchmark_report, "metrics", {}) or {})
     completed = int(metrics.get("completed_call_count") or 0)
+    actual_call_count = len(sampled_cases) * 1 * len(prompt_variants) * int(repeats)
     metrics.update(
         {
             "benchmark": "longmemeval",
@@ -331,6 +410,20 @@ def build_public_long_memory_report(
             "dataset_category_distribution": public_category_distribution(dataset_cases),
             "sampled_category_distribution": public_category_distribution(sampled_cases),
             "sampled_case_ids": [case.source_id for case in sampled_cases],
+            "prompt_variants": list(prompt_variants),
+            "repeats": int(repeats),
+            "actual_call_shape": (
+                f"{len(sampled_cases)} * 1 * {len(prompt_variants)} * {int(repeats)}"
+                f" = {actual_call_count}"
+            ),
+            "evidence_render_mode": render_config.mode,
+            "long_evidence_token_limit": render_config.long_evidence_token_limit,
+            "reserved_prompt_token_budget": render_config.reserved_prompt_token_budget,
+            "model_context_window": render_config.model_context_window,
+            "answer_window_turns": render_config.answer_window_turns,
+            "effective_evidence_token_budget": render_config.effective_token_budget,
+            "capture_provider_request": capture_provider_request,
+            "provider_request_debug_dir": str(provider_request_debug_dir or ""),
             "sampling": {
                 "strategy": "stratified_by_category",
                 "seed": seed,
@@ -339,6 +432,11 @@ def build_public_long_memory_report(
             "public_answer_pass_count": public_pass_count,
             "public_answer_pass_rate": _rate(public_pass_count, completed),
             "semantic_ambiguity_count": manual_review_count,
+            "tool_call_only_count": tool_call_style_count,
+            "tool_call_style_output_count": tool_call_style_count,
+            "tool_call_style_output_case_ids": tool_call_style_case_ids,
+            "sent_evidence_gold_hit_count": sent_evidence_gold_hit_count,
+            "sent_evidence_gold_hit_rate": _rate(sent_evidence_gold_hit_count, completed),
             "scorer_unable_to_score_count": unable_to_score_count,
             "scorer_unable_to_score_rate": _rate(unable_to_score_count, completed),
             "command_shape_hash": command_shape_hash,
@@ -389,6 +487,10 @@ def write_public_long_memory_markdown(report: dict[str, Any], path: Path) -> Non
         "malformed_checkpoint_line_count",
         "checkpoint_provenance_mismatch_count",
         "public_answer_pass_rate",
+        "tool_call_style_output_count",
+        "sent_evidence_gold_hit_count",
+        "evidence_render_mode",
+        "effective_evidence_token_budget",
         "scorer_unable_to_score_rate",
         "real_llm_enabled",
         "fake_provider_enabled",
@@ -521,7 +623,50 @@ def _normalize_history(payload: dict[str, Any]) -> tuple[dict[str, str], ...]:
     return tuple(messages)
 
 
-def _append_messages(messages: list[dict[str, str]], raw: object) -> None:
+def render_public_long_memory_evidence(
+    item: dict[str, Any],
+    config: PublicEvidenceRenderConfig,
+) -> tuple[str, dict[str, object]]:
+    metadata: dict[str, object] = {
+        "evidence_render_mode": config.mode,
+        "long_evidence_token_limit": config.long_evidence_token_limit,
+        "reserved_prompt_token_budget": config.reserved_prompt_token_budget,
+        "model_context_window": config.model_context_window,
+        "answer_window_turns": config.answer_window_turns,
+        "effective_evidence_token_budget": config.effective_token_budget,
+        "answer_window_source": "",
+        "answer_window_fallback_reason": "",
+    }
+    mode = config.mode
+    if mode == "auto":
+        extra = item.get("extra_json") if isinstance(item.get("extra_json"), dict) else {}
+        mode = "answer_window" if extra.get("benchmark") == "longmemeval" else "compact"
+        metadata["evidence_render_mode"] = mode
+    if mode == "compact":
+        metadata["answer_window_source"] = "compact"
+        return _compact_text(str(item.get("summary") or item.get("content") or "")), metadata
+
+    turns = _turns_from_item(item)
+    if mode == "long_context" or not turns:
+        metadata["answer_window_source"] = "long_context"
+        if not turns:
+            metadata["answer_window_fallback_reason"] = "missing_turn_metadata"
+        text = _format_turns(turns) if turns else str(item.get("summary") or item.get("content") or "")
+        return _trim_text_to_token_budget(text, config.effective_token_budget), metadata
+
+    selected = _answer_window_turns(turns, config.answer_window_turns)
+    if selected[1] == "has_answer_turn":
+        metadata["answer_window_source"] = "has_answer_turn"
+    else:
+        metadata["answer_window_source"] = "last_third"
+        metadata["answer_window_fallback_reason"] = "oracle_missing_has_answer"
+    return (
+        _trim_text_to_token_budget(_format_turns(selected[0]), config.effective_token_budget),
+        metadata,
+    )
+
+
+def _append_messages(messages: list[dict[str, Any]], raw: object) -> None:
     if isinstance(raw, str):
         if raw.strip():
             messages.append({"role": "user", "content": raw.strip()})
@@ -536,7 +681,10 @@ def _append_messages(messages: list[dict[str, str]], raw: object) -> None:
         ).strip()
         role = str(raw.get("role") or raw.get("speaker") or "user").strip() or "user"
         if content:
-            messages.append({"role": role, "content": content})
+            message: dict[str, Any] = {"role": role, "content": content}
+            if "has_answer" in raw:
+                message["has_answer"] = bool(raw.get("has_answer"))
+            messages.append(message)
         return
     if isinstance(raw, list):
         for item in raw:
@@ -548,13 +696,23 @@ def _normalize_session_chunks(
     *,
     session_ids: object,
     session_dates: object,
-) -> tuple[dict[str, str], ...]:
+) -> tuple[dict[str, Any], ...]:
     normalized_ids = session_ids if isinstance(session_ids, list) else []
     normalized_dates = session_dates if isinstance(session_dates, list) else []
-    chunks: list[dict[str, str]] = []
+    chunks: list[dict[str, Any]] = []
     for index, session in enumerate(sessions):
-        turns: list[dict[str, str]] = []
+        turns: list[dict[str, Any]] = []
         _append_messages(turns, session)
+        preserved_turns = [
+            {
+                "turn_index": turn_index,
+                "role": str(turn.get("role") or "user"),
+                "content": str(turn.get("content") or ""),
+                "has_answer": bool(turn.get("has_answer", False)),
+            }
+            for turn_index, turn in enumerate(turns, start=1)
+            if str(turn.get("content") or "")
+        ]
         content = "\n".join(
             f"{turn['role']}: {turn['content']}" for turn in turns if turn.get("content")
         ).strip()
@@ -569,9 +727,90 @@ def _normalize_session_chunks(
             "session_date": str(normalized_dates[index])
             if index < len(normalized_dates)
             else "",
+            "turns": preserved_turns,
         }
         chunks.append(chunk)
     return tuple(chunks)
+
+
+def _turns_from_item(item: dict[str, Any]) -> list[dict[str, object]]:
+    extra = item.get("extra_json") if isinstance(item.get("extra_json"), dict) else {}
+    turns = extra.get("turns")
+    if isinstance(turns, list):
+        normalized = []
+        for index, turn in enumerate(turns, start=1):
+            if not isinstance(turn, dict):
+                continue
+            content = str(turn.get("content") or "").strip()
+            if not content:
+                continue
+            normalized.append(
+                {
+                    "turn_index": int(turn.get("turn_index") or index),
+                    "role": str(turn.get("role") or "user"),
+                    "content": content,
+                    "has_answer": bool(turn.get("has_answer", False)),
+                }
+            )
+        if normalized:
+            return normalized
+    content = str(item.get("content") or "").strip()
+    role = str(extra.get("role") or item.get("role") or "user")
+    if content:
+        return [
+            {
+                "turn_index": int(extra.get("turn_index") or 1),
+                "role": role,
+                "content": content,
+                "has_answer": bool(extra.get("has_answer", False)),
+            }
+        ]
+    return []
+
+
+def _answer_window_turns(
+    turns: list[dict[str, object]],
+    window_turns: int,
+) -> tuple[list[dict[str, object]], str]:
+    answer_index = next(
+        (index for index, turn in enumerate(turns) if turn.get("has_answer") is True),
+        None,
+    )
+    if answer_index is not None:
+        start = max(0, answer_index - window_turns)
+        end = min(len(turns), answer_index + window_turns + 1)
+        return turns[start:end], "has_answer_turn"
+    start = max(0, (len(turns) * 2) // 3)
+    return turns[start:], "last_third"
+
+
+def _format_turns(turns: list[dict[str, object]]) -> str:
+    return "\n".join(
+        f"{str(turn.get('role') or 'user')}: {str(turn.get('content') or '').strip()}"
+        for turn in turns
+        if str(turn.get("content") or "").strip()
+    )
+
+
+def _trim_text_to_token_budget(text: str, token_budget: int) -> str:
+    compact = "\n".join(line.strip() for line in str(text or "").splitlines() if line.strip())
+    if token_budget <= 0:
+        return ""
+    tokens = _rough_tokens(compact)
+    if len(tokens) <= token_budget:
+        return compact
+    return " ".join(tokens[-token_budget:])
+
+
+def _rough_tokens(text: str) -> list[str]:
+    return re.findall(r"[\u3400-\u9fff]|[A-Za-z0-9_.$/-]+|[^\w\s]", text)
+
+
+def _compact_text(text: str, *, limit: int = 180) -> str:
+    compact = " ".join(str(text or "").split())
+    if len(compact) <= limit:
+        return compact
+    return compact[: limit - 3].rstrip() + "..."
 
 
 def _is_tool_call_only(answer: str) -> bool:
