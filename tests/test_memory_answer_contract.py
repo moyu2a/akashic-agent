@@ -86,6 +86,17 @@ def test_rendered_contract_is_structured_and_private() -> None:
     assert case.setup["query"] not in text
 
 
+def test_rendered_answer_contract_does_not_force_chinese() -> None:
+    case = _case_with_should_not_in_tri()
+    contract = build_tri_answer_contract(case)
+
+    text = render_answer_contract_block(contract)
+
+    assert "same language as the user question" in text
+    assert "在中文回答" not in text
+    assert "中文回答" not in text
+
+
 def test_governed_contract_uses_supplied_allowed_ids_and_marks_dropped_tri_ids() -> None:
     case = _case_with_should_not_in_tri()
     base_contract = build_tri_answer_contract(case)
@@ -317,6 +328,8 @@ def test_render_production_evidence_contract_is_structured_and_not_oracle_terms(
     assert "ORACLE_TERM" not in text
     assert "ORACLE_GROUP" not in text
     assert "ORACLE_FORBIDDEN" not in text
+    assert "same language as the user question" in text
+    assert "中文回答" not in text
 
 
 def test_production_governed_contract_accepts_eval_profile_name() -> None:

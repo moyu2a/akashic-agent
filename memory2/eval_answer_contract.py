@@ -358,7 +358,8 @@ def render_answer_contract_block(contract: AnswerContract) -> str:
         f"Answer Contract: {contract.profile_name}",
         "diagnostic_eval_only=true",
         "请只根据 allowed_evidence 回答；不要使用 forbidden_memory_ids 中的记忆。",
-        "如果 required_terms 或 required_term_groups 与证据一致，请在中文回答中保留这些关键术语。",
+        "Answer in the same language as the user question unless the user explicitly requests another language.",
+        "如果 required_terms 或 required_term_groups 与证据一致，请在回答中保留这些关键术语。",
         "如果证据不足以支持 required_terms，请说明无法确认，不要补写 forbidden_terms。",
         "must_use_memory_ids: " + ", ".join(contract.must_use_ids),
         "forbidden_memory_ids: " + ", ".join(contract.forbidden_ids),
@@ -381,6 +382,7 @@ def render_production_evidence_contract_block(
         "diagnostic_eval_only=true",
         "production_safe=true",
         "请只根据 allowed_evidence 回答；如果 insufficient_evidence_fallback=true，请说明证据不足。",
+        "Answer in the same language as the user question unless the user explicitly requests another language.",
         "如果存在 forbidden boundary，表示有旧版本、越界或禁止使用的记忆边界；不要复述或引用这些边界内容。",
         "allowed_evidence: " + ", ".join(contract.allowed_evidence),
         "likely_relevant_evidence: " + ", ".join(contract.likely_relevant_evidence),
@@ -406,7 +408,7 @@ def render_production_evidence_contract_block(
     ]
     if contract.public_long_memory_eval:
         lines.append(
-            "公开长记忆评测约束：本次不会执行工具调用；不要输出 tool_call、函数调用或 XML，直接根据 allowed_evidence 给出最终答案。"
+            "Public long-memory benchmark constraint: no tools are executed in this evaluation; do not output tool_call, function calls, or XML; answer directly from allowed_evidence."
         )
     for item_id, summary in contract.evidence_summaries:
         lines.append(f"- memory_id={item_id}; summary={summary}")
