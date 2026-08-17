@@ -40,6 +40,33 @@ def test_load_longmemeval_cases_treats_abs_suffix_as_abstention(tmp_path: Path) 
     assert cases[0].category == "abstention"
 
 
+def test_load_longmemeval_cases_preserves_haystack_sessions_as_memory_chunks(tmp_path: Path) -> None:
+    dataset = tmp_path / "longmemeval_sessions.jsonl"
+    dataset.write_text(
+        '{"question_id":"case_002","question_type":"multi-session",'
+        '"question":"What was the final amount?","answer":"$400",'
+        '"haystack_session_ids":["s1","s2"],'
+        '"haystack_dates":["2024-01-01","2024-01-02"],'
+        '"haystack_sessions":['
+        '[{"role":"user","content":"First amount was $300."},'
+        '{"role":"assistant","content":"Noted."}],'
+        '[{"role":"user","content":"Final amount became $400."}]'
+        ']}\n',
+        encoding="utf-8",
+    )
+
+    case = load_longmemeval_cases(dataset)[0]
+    eval_case = public_case_to_eval_case(case, phase="phase_a")
+
+    assert len(case.history) == 2
+    assert case.history[0]["role"] == "session"
+    assert "user: First amount was $300." in case.history[0]["content"]
+    assert "assistant: Noted." in case.history[0]["content"]
+    assert len(eval_case.setup["memory_items"]) == 2
+    assert eval_case.setup["memory_items"][0]["extra_json"]["session_id"] == "s1"
+    assert eval_case.setup["memory_items"][0]["extra_json"]["session_date"] == "2024-01-01"
+
+
 def test_stratified_sample_cases_preserves_categories_with_seed() -> None:
     cases = load_longmemeval_cases(FIXTURE)
 

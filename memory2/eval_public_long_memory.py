@@ -135,6 +135,8 @@ def public_case_to_eval_case(
                 "category": case.category,
                 "source_id": case.source_id,
                 "role": message["role"],
+                "session_id": message.get("session_id", ""),
+                "session_date": message.get("session_date", ""),
                 "phase": phase,
             },
         }
@@ -499,12 +501,18 @@ def _case_from_payload(payload: dict[str, Any], *, index: int) -> PublicLongMemo
 
 
 def _normalize_history(payload: dict[str, Any]) -> tuple[dict[str, str], ...]:
+    haystack_sessions = payload.get("haystack_sessions")
+    if isinstance(haystack_sessions, list):
+        return _normalize_session_chunks(
+            haystack_sessions,
+            session_ids=payload.get("haystack_session_ids"),
+            session_dates=payload.get("haystack_dates"),
+        )
     raw = (
         payload.get("history")
         or payload.get("conversation")
         or payload.get("messages")
         or payload.get("haystack")
-        or payload.get("haystack_sessions")
         or payload.get("sessions")
         or ()
     )
@@ -533,6 +541,37 @@ def _append_messages(messages: list[dict[str, str]], raw: object) -> None:
     if isinstance(raw, list):
         for item in raw:
             _append_messages(messages, item)
+
+
+def _normalize_session_chunks(
+    sessions: list[object],
+    *,
+    session_ids: object,
+    session_dates: object,
+) -> tuple[dict[str, str], ...]:
+    normalized_ids = session_ids if isinstance(session_ids, list) else []
+    normalized_dates = session_dates if isinstance(session_dates, list) else []
+    chunks: list[dict[str, str]] = []
+    for index, session in enumerate(sessions):
+        turns: list[dict[str, str]] = []
+        _append_messages(turns, session)
+        content = "\n".join(
+            f"{turn['role']}: {turn['content']}" for turn in turns if turn.get("content")
+        ).strip()
+        if not content:
+            continue
+        chunk = {
+            "role": "session",
+            "content": content,
+            "session_id": str(normalized_ids[index])
+            if index < len(normalized_ids)
+            else str(index + 1),
+            "session_date": str(normalized_dates[index])
+            if index < len(normalized_dates)
+            else "",
+        }
+        chunks.append(chunk)
+    return tuple(chunks)
 
 
 def _is_tool_call_only(answer: str) -> bool:
