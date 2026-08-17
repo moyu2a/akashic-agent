@@ -370,6 +370,28 @@ def test_public_report_marks_abstention_intent_as_secondary_pass(tmp_path: Path)
     assert report["metrics"]["strict_public_answer_pass_count"] == 0
 
 
+def test_public_report_marks_no_record_abstention_as_secondary_pass(tmp_path: Path) -> None:
+    case = PublicLongMemoryCase(
+        source_id="abs_002",
+        category="abstention",
+        question="How long did my iPad case take to arrive?",
+        gold_answer="unknown",
+        history=({"role": "user", "content": "No delivery date was shared."},),
+    )
+
+    report = _report_for_public_answer(
+        tmp_path,
+        case=case,
+        answer_text="I don't have any record of that purchase in the available memory.",
+        evidence_text="user: No delivery date was shared.",
+    )
+    review = report["case_reviews"][0]
+
+    assert review["strict_public_score"]["passed"] is False
+    assert review["secondary_public_score"]["passed"] is True
+    assert review["secondary_public_score"]["method"] == "abstention_intent"
+
+
 def test_public_report_marks_preference_cases_for_semantic_review(tmp_path: Path) -> None:
     case = PublicLongMemoryCase(
         source_id="pref_001",

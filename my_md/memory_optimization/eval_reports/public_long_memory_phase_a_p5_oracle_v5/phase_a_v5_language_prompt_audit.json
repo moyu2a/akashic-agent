@@ -1,0 +1,1341 @@
+{
+  "findings": [
+    {
+      "classification": "production",
+      "line": 48,
+      "path": "agent/persona.py",
+      "patterns": [
+        "中文回答"
+      ],
+      "risk": "preference_memory_example",
+      "text": "4. 用户长期偏好，例如中文回答、条目式回答、pytest 风格。"
+    },
+    {
+      "classification": "production",
+      "line": 36,
+      "path": "config.example.toml",
+      "patterns": [
+        "same language"
+      ],
+      "risk": "same_language_policy",
+      "text": "system_prompt = \"You are Akashic, a helpful AI assistant with access to tools. Always respond in the same language the user uses.\""
+    },
+    {
+      "classification": "legacy_benchmark",
+      "line": 45,
+      "path": "eval/longmemeval/config.example.toml",
+      "patterns": [
+        "Answer concisely in English"
+      ],
+      "risk": "isolated_answer_language_bias",
+      "text": "system_prompt   = \"You are a helpful personal assistant with long-term memory. When the user asks about past conversations or personal details, always use your memory tools to retrieve the relevant information before answering. Answer concisely in English in one sentence or less — no greetings, no follow-up questions, no emojis.\""
+    },
+    {
+      "classification": "legacy_benchmark",
+      "line": 118,
+      "path": "eval/longmemeval/qa_runner.py",
+      "patterns": [
+        "English only",
+        "Respond in English"
+      ],
+      "risk": "isolated_answer_language_bias",
+      "text": "content=instance.question + \"\\n\\n[Respond in English only. One sentence or short phrase.]\","
+    },
+    {
+      "classification": "legacy_benchmark",
+      "line": 24,
+      "path": "eval/longmemeval/runtime.py",
+      "patterns": [
+        "English only",
+        "Answer in English"
+      ],
+      "risk": "isolated_answer_language_bias",
+      "text": "Answer in English only. Be concise: one sentence or a short phrase."
+    },
+    {
+      "classification": "public_p5",
+      "line": 362,
+      "path": "memory2/eval_answer_contract.py",
+      "patterns": [
+        "same language"
+      ],
+      "risk": "same_language_policy",
+      "text": "\"Answer in the same language as the current user question unless the user explicitly requests another language.\","
+    },
+    {
+      "classification": "public_p5",
+      "line": 388,
+      "path": "memory2/eval_answer_contract.py",
+      "patterns": [
+        "same language"
+      ],
+      "risk": "same_language_policy",
+      "text": "\"Answer in the same language as the current user question unless the user explicitly requests another language.\","
+    },
+    {
+      "classification": "other",
+      "line": 9,
+      "path": "memory2/eval_language_prompt_audit.py",
+      "patterns": [
+        "English only"
+      ],
+      "risk": "answer_language_bias_review",
+      "text": "\"English only\","
+    },
+    {
+      "classification": "other",
+      "line": 10,
+      "path": "memory2/eval_language_prompt_audit.py",
+      "patterns": [
+        "Answer in English"
+      ],
+      "risk": "answer_language_bias_review",
+      "text": "\"Answer in English\","
+    },
+    {
+      "classification": "other",
+      "line": 11,
+      "path": "memory2/eval_language_prompt_audit.py",
+      "patterns": [
+        "Respond in English"
+      ],
+      "risk": "answer_language_bias_review",
+      "text": "\"Respond in English\","
+    },
+    {
+      "classification": "other",
+      "line": 12,
+      "path": "memory2/eval_language_prompt_audit.py",
+      "patterns": [
+        "Answer concisely in English"
+      ],
+      "risk": "answer_language_bias_review",
+      "text": "\"Answer concisely in English\","
+    },
+    {
+      "classification": "other",
+      "line": 13,
+      "path": "memory2/eval_language_prompt_audit.py",
+      "patterns": [
+        "用中文回答",
+        "中文回答"
+      ],
+      "risk": "answer_language_bias_review",
+      "text": "\"用中文回答\","
+    },
+    {
+      "classification": "other",
+      "line": 14,
+      "path": "memory2/eval_language_prompt_audit.py",
+      "patterns": [
+        "中文回答"
+      ],
+      "risk": "answer_language_bias_review",
+      "text": "\"中文回答\","
+    },
+    {
+      "classification": "other",
+      "line": 15,
+      "path": "memory2/eval_language_prompt_audit.py",
+      "patterns": [
+        "same language"
+      ],
+      "risk": "same_language_policy",
+      "text": "\"same language\","
+    },
+    {
+      "classification": "other",
+      "line": 16,
+      "path": "memory2/eval_language_prompt_audit.py",
+      "patterns": [
+        "用户语言"
+      ],
+      "risk": "same_language_policy",
+      "text": "\"用户语言\","
+    },
+    {
+      "classification": "other",
+      "line": 23,
+      "path": "memory2/eval_language_prompt_audit.py",
+      "patterns": [
+        "用中文回答",
+        "中文回答"
+      ],
+      "risk": "answer_language_bias_review",
+      "text": "re.compile(r\"用中文回答|中文回答\"),"
+    },
+    {
+      "classification": "other",
+      "line": 41,
+      "path": "memory2/eval_llm_sample.py",
+      "patterns": [
+        "中文回答"
+      ],
+      "risk": "answer_language_bias_review",
+      "text": "\"中文回答\": (\"保持中文\", \"中文继续\", \"中文 + 条目式\"),"
+    },
+    {
+      "classification": "other",
+      "line": 42,
+      "path": "memory2/eval_llm_sample.py",
+      "patterns": [
+        "中文回答"
+      ],
+      "risk": "preference_memory_example",
+      "text": "\"用户偏好中文回答\": (\"保持中文\", \"中文继续\", \"中文 + 条目式\"),"
+    },
+    {
+      "classification": "other",
+      "line": 202,
+      "path": "memory2/eval_quantitative_cases.py",
+      "patterns": [
+        "中文回答"
+      ],
+      "risk": "preference_memory_example",
+      "text": "target_summary=\"用户偏好中文回答\","
+    },
+    {
+      "classification": "other",
+      "line": 203,
+      "path": "memory2/eval_quantitative_cases.py",
+      "patterns": [
+        "中文回答"
+      ],
+      "risk": "preference_memory_example",
+      "text": "graph_summary=\"用户偏好中文回答并保持条目式输出\","
+    },
+    {
+      "classification": "other",
+      "line": 205,
+      "path": "memory2/eval_quantitative_cases.py",
+      "patterns": [
+        "中文回答"
+      ],
+      "risk": "preference_memory_example",
+      "text": "duplicate_summary=\"用户偏好中文回答\","
+    },
+    {
+      "classification": "other",
+      "line": 206,
+      "path": "memory2/eval_quantitative_cases.py",
+      "patterns": [
+        "中文回答"
+      ],
+      "risk": "answer_language_bias_review",
+      "text": "conflict_summary=\"用户不偏好中文回答\","
+    },
+    {
+      "classification": "other",
+      "line": 209,
+      "path": "memory2/eval_quantitative_cases.py",
+      "patterns": [
+        "用中文回答",
+        "中文回答"
+      ],
+      "risk": "answer_language_bias_review",
+      "text": "query_common=\"请继续用中文回答，并保持 pytest 风格。\","
+    },
+    {
+      "classification": "other",
+      "line": 213,
+      "path": "memory2/eval_quantitative_cases.py",
+      "patterns": [
+        "中文回答"
+      ],
+      "risk": "answer_language_bias_review",
+      "text": "graph_topic=\"中文回答\","
+    },
+    {
+      "classification": "other",
+      "line": 87,
+      "path": "memory2/eval_sleep_hygiene_cases.py",
+      "patterns": [
+        "中文回答"
+      ],
+      "risk": "preference_memory_example",
+      "text": "\"用户偏好中文回答，并希望面试表达直接清晰\","
+    },
+    {
+      "classification": "other",
+      "line": 93,
+      "path": "memory2/eval_sleep_hygiene_cases.py",
+      "patterns": [
+        "中文回答"
+      ],
+      "risk": "preference_memory_example",
+      "text": "\"用户偏好中文回答，并希望面试表达直接清晰\","
+    },
+    {
+      "classification": "other",
+      "line": 345,
+      "path": "memory2/eval_sleep_hygiene_cases.py",
+      "patterns": [
+        "中文回答"
+      ],
+      "risk": "preference_memory_example",
+      "text": "summary = f\"用户偏好中文回答，并希望面试表达直接清晰，编号 {idx}\""
+    },
+    {
+      "classification": "other",
+      "line": 399,
+      "path": "memory2/eval_sleep_hygiene_cases.py",
+      "patterns": [
+        "中文回答"
+      ],
+      "risk": "preference_memory_example",
+      "text": "summary = f\"用户偏好中文回答，并希望面试表达直接清晰，重复组编号 {idx}\""
+    },
+    {
+      "classification": "other",
+      "line": 72,
+      "path": "memory2/eval_write_governance_cases.py",
+      "patterns": [
+        "中文回答"
+      ],
+      "risk": "answer_language_bias_review",
+      "text": "\"在中文回答中\","
+    },
+    {
+      "classification": "fixture",
+      "line": 84,
+      "path": "scripts/run_memory_comprehensive_online_eval.py",
+      "patterns": [
+        "用中文回答",
+        "中文回答"
+      ],
+      "risk": "isolated_answer_language_bias",
+      "text": "answer = \"三路召回使用 RRF 融合排序，并用中文回答。\""
+    },
+    {
+      "classification": "fixture",
+      "line": 86,
+      "path": "scripts/run_memory_comprehensive_online_eval.py",
+      "patterns": [
+        "用中文回答",
+        "中文回答"
+      ],
+      "risk": "isolated_answer_language_bias",
+      "text": "answer = \"NetworkX 图谱可以辅助第三路召回，并用中文回答。\""
+    },
+    {
+      "classification": "fixture",
+      "line": 88,
+      "path": "scripts/run_memory_comprehensive_online_eval.py",
+      "patterns": [
+        "用中文回答",
+        "中文回答"
+      ],
+      "risk": "isolated_answer_language_bias",
+      "text": "answer = \"Python 测试优先使用 pytest，并用中文回答。\""
+    },
+    {
+      "classification": "fixture",
+      "line": 90,
+      "path": "scripts/run_memory_comprehensive_online_eval.py",
+      "patterns": [
+        "用中文回答",
+        "中文回答"
+      ],
+      "risk": "isolated_answer_language_bias",
+      "text": "answer = \"回答时应保持条目式，并用中文回答。\""
+    },
+    {
+      "classification": "fixture",
+      "line": 33,
+      "path": "scripts/run_memory_llm_sample_eval.py",
+      "patterns": [
+        "中文回答"
+      ],
+      "risk": "isolated_answer_language_bias",
+      "text": "answer = \"你在 Telegram 会话偏好中文回答。\""
+    },
+    {
+      "classification": "fixture",
+      "line": 35,
+      "path": "scripts/run_memory_llm_sample_eval.py",
+      "patterns": [
+        "用中文回答",
+        "中文回答"
+      ],
+      "risk": "isolated_answer_language_bias",
+      "text": "answer = \"我应该用中文回答你。\""
+    },
+    {
+      "classification": "fixture",
+      "line": 13,
+      "path": "tests/fixtures/memory_eval_cases/conflict_memory.json",
+      "patterns": [
+        "用中文回答",
+        "中文回答"
+      ],
+      "risk": "isolated_answer_language_bias",
+      "text": "\"summary\": \"用户喜欢使用中文回答\","
+    },
+    {
+      "classification": "fixture",
+      "line": 22,
+      "path": "tests/fixtures/memory_eval_cases/conflict_memory.json",
+      "patterns": [
+        "用中文回答",
+        "中文回答"
+      ],
+      "risk": "isolated_answer_language_bias",
+      "text": "\"summary\": \"用户不喜欢使用中文回答\","
+    },
+    {
+      "classification": "fixture",
+      "line": 43,
+      "path": "tests/fixtures/memory_eval_cases/conflict_memory.json",
+      "patterns": [
+        "中文回答"
+      ],
+      "risk": "isolated_answer_language_bias",
+      "text": "\"query\": \"我喜欢中文回答吗？\""
+    },
+    {
+      "classification": "fixture",
+      "line": 13,
+      "path": "tests/fixtures/memory_eval_cases/cross_scope_isolation.json",
+      "patterns": [
+        "中文回答"
+      ],
+      "risk": "isolated_answer_language_bias",
+      "text": "\"summary\": \"用户在 Telegram 会话偏好中文回答\","
+    },
+    {
+      "classification": "fixture",
+      "line": 13,
+      "path": "tests/fixtures/memory_eval_cases/duplicate_memory.json",
+      "patterns": [
+        "中文回答"
+      ],
+      "risk": "isolated_answer_language_bias",
+      "text": "\"summary\": \"用户喜欢中文回答\","
+    },
+    {
+      "classification": "fixture",
+      "line": 22,
+      "path": "tests/fixtures/memory_eval_cases/duplicate_memory.json",
+      "patterns": [
+        "中文回答"
+      ],
+      "risk": "isolated_answer_language_bias",
+      "text": "\"summary\": \"用户喜欢中文回答\","
+    },
+    {
+      "classification": "fixture",
+      "line": 13,
+      "path": "tests/fixtures/memory_eval_cases/preference_recall.json",
+      "patterns": [
+        "中文回答"
+      ],
+      "risk": "preference_memory_example",
+      "text": "\"summary\": \"用户偏好中文回答\","
+    },
+    {
+      "classification": "fixture",
+      "line": 95,
+      "path": "tests/test_memory_answer_contract.py",
+      "patterns": [
+        "same language"
+      ],
+      "risk": "same_language_policy",
+      "text": "assert \"same language as the current user question\" in text"
+    },
+    {
+      "classification": "fixture",
+      "line": 97,
+      "path": "tests/test_memory_answer_contract.py",
+      "patterns": [
+        "中文回答"
+      ],
+      "risk": "isolated_answer_language_bias",
+      "text": "assert \"在中文回答\" not in text"
+    },
+    {
+      "classification": "fixture",
+      "line": 98,
+      "path": "tests/test_memory_answer_contract.py",
+      "patterns": [
+        "中文回答"
+      ],
+      "risk": "isolated_answer_language_bias",
+      "text": "assert \"中文回答\" not in text"
+    },
+    {
+      "classification": "fixture",
+      "line": 333,
+      "path": "tests/test_memory_answer_contract.py",
+      "patterns": [
+        "same language"
+      ],
+      "risk": "same_language_policy",
+      "text": "assert \"same language as the current user question\" in text"
+    },
+    {
+      "classification": "fixture",
+      "line": 335,
+      "path": "tests/test_memory_answer_contract.py",
+      "patterns": [
+        "中文回答"
+      ],
+      "risk": "isolated_answer_language_bias",
+      "text": "assert \"中文回答\" not in text"
+    },
+    {
+      "classification": "fixture",
+      "line": 400,
+      "path": "tests/test_memory_comprehensive_online_cli.py",
+      "patterns": [
+        "用中文回答",
+        "中文回答"
+      ],
+      "risk": "isolated_answer_language_bias",
+      "text": "assert \"请继续用中文回答，并保持 pytest 风格。\" not in report_text"
+    },
+    {
+      "classification": "fixture",
+      "line": 401,
+      "path": "tests/test_memory_comprehensive_online_cli.py",
+      "patterns": [
+        "中文回答"
+      ],
+      "risk": "preference_memory_example",
+      "text": "assert \"用户偏好中文回答\" not in report_text"
+    },
+    {
+      "classification": "fixture",
+      "line": 403,
+      "path": "tests/test_memory_comprehensive_online_cli.py",
+      "patterns": [
+        "用中文回答",
+        "中文回答"
+      ],
+      "risk": "isolated_answer_language_bias",
+      "text": "assert \"请继续用中文回答，并保持 pytest 风格。\" not in markdown_text"
+    },
+    {
+      "classification": "fixture",
+      "line": 404,
+      "path": "tests/test_memory_comprehensive_online_cli.py",
+      "patterns": [
+        "中文回答"
+      ],
+      "risk": "preference_memory_example",
+      "text": "assert \"用户偏好中文回答\" not in markdown_text"
+    },
+    {
+      "classification": "fixture",
+      "line": 54,
+      "path": "tests/test_memory_comprehensive_online_eval.py",
+      "patterns": [
+        "用中文回答",
+        "中文回答"
+      ],
+      "risk": "isolated_answer_language_bias",
+      "text": "answer = \"三路召回使用 RRF 融合排序，并用中文回答。\""
+    },
+    {
+      "classification": "fixture",
+      "line": 56,
+      "path": "tests/test_memory_comprehensive_online_eval.py",
+      "patterns": [
+        "用中文回答",
+        "中文回答"
+      ],
+      "risk": "isolated_answer_language_bias",
+      "text": "answer = \"NetworkX 图谱可以辅助第三路召回，并用中文回答。\""
+    },
+    {
+      "classification": "fixture",
+      "line": 58,
+      "path": "tests/test_memory_comprehensive_online_eval.py",
+      "patterns": [
+        "用中文回答",
+        "中文回答"
+      ],
+      "risk": "isolated_answer_language_bias",
+      "text": "answer = \"Python 测试优先使用 pytest，并用中文回答。\""
+    },
+    {
+      "classification": "fixture",
+      "line": 83,
+      "path": "tests/test_memory_eval_agent_dry_run.py",
+      "patterns": [
+        "中文回答"
+      ],
+      "risk": "preference_memory_example",
+      "text": "assert \"用户偏好中文回答\" not in json_text"
+    },
+    {
+      "classification": "fixture",
+      "line": 84,
+      "path": "tests/test_memory_eval_agent_dry_run.py",
+      "patterns": [
+        "中文回答"
+      ],
+      "risk": "preference_memory_example",
+      "text": "assert \"用户偏好中文回答\" not in md_text"
+    },
+    {
+      "classification": "fixture",
+      "line": 93,
+      "path": "tests/test_memory_eval_cases.py",
+      "patterns": [
+        "中文回答"
+      ],
+      "risk": "preference_memory_example",
+      "text": "\"summary\": \"用户偏好中文回答\","
+    },
+    {
+      "classification": "fixture",
+      "line": 31,
+      "path": "tests/test_memory_eval_llm_sample.py",
+      "patterns": [
+        "用中文回答",
+        "中文回答"
+      ],
+      "risk": "isolated_answer_language_bias",
+      "text": "answer: str = \"我应该用中文回答你。\","
+    },
+    {
+      "classification": "fixture",
+      "line": 79,
+      "path": "tests/test_memory_eval_llm_sample.py",
+      "patterns": [
+        "用中文回答",
+        "中文回答"
+      ],
+      "risk": "isolated_answer_language_bias",
+      "text": "result = score_answer_text(\"我应该用中文回答你。\", expectation, [\"m_pref_cn\"])"
+    },
+    {
+      "classification": "fixture",
+      "line": 132,
+      "path": "tests/test_memory_eval_llm_sample.py",
+      "patterns": [
+        "中文回答"
+      ],
+      "risk": "isolated_answer_language_bias",
+      "text": "AnswerExpectation(expected_answer_contains=(\"中文回答\",)),"
+    },
+    {
+      "classification": "fixture",
+      "line": 145,
+      "path": "tests/test_memory_eval_llm_sample.py",
+      "patterns": [
+        "中文回答"
+      ],
+      "risk": "preference_memory_example",
+      "text": "(\"中文回答\", \"用户偏好中文回答\"),"
+    },
+    {
+      "classification": "fixture",
+      "line": 226,
+      "path": "tests/test_memory_eval_llm_sample.py",
+      "patterns": [
+        "用中文回答",
+        "中文回答"
+      ],
+      "risk": "isolated_answer_language_bias",
+      "text": "result = score_answer_text(\"我会用中文回答。\", expectation, [\"m_graph_1\"])"
+    },
+    {
+      "classification": "fixture",
+      "line": 238,
+      "path": "tests/test_memory_eval_llm_sample.py",
+      "patterns": [
+        "用中文回答",
+        "中文回答"
+      ],
+      "risk": "isolated_answer_language_bias",
+      "text": "provider = _FakeLLMProvider(\"我应该用中文回答你。\")"
+    },
+    {
+      "classification": "fixture",
+      "line": 249,
+      "path": "tests/test_memory_eval_llm_sample.py",
+      "patterns": [
+        "用中文回答",
+        "中文回答"
+      ],
+      "risk": "isolated_answer_language_bias",
+      "text": "assert result.answer_length == len(\"我应该用中文回答你。\")"
+    },
+    {
+      "classification": "fixture",
+      "line": 416,
+      "path": "tests/test_memory_eval_llm_sample.py",
+      "patterns": [
+        "用中文回答",
+        "中文回答"
+      ],
+      "risk": "isolated_answer_language_bias",
+      "text": "response=LLMResponse(content=\"我应该用中文回答你。\", tool_calls=[]),"
+    },
+    {
+      "classification": "fixture",
+      "line": 438,
+      "path": "tests/test_memory_eval_llm_sample.py",
+      "patterns": [
+        "用中文回答",
+        "中文回答"
+      ],
+      "risk": "isolated_answer_language_bias",
+      "text": "content=\"我应该用中文回答你。\","
+    },
+    {
+      "classification": "fixture",
+      "line": 464,
+      "path": "tests/test_memory_eval_llm_sample.py",
+      "patterns": [
+        "用中文回答",
+        "中文回答"
+      ],
+      "risk": "isolated_answer_language_bias",
+      "text": "content=\"我应该用中文回答你。\","
+    },
+    {
+      "classification": "fixture",
+      "line": 516,
+      "path": "tests/test_memory_eval_llm_sample.py",
+      "patterns": [
+        "用中文回答",
+        "中文回答"
+      ],
+      "risk": "isolated_answer_language_bias",
+      "text": "fake_answer = \"我应该用中文回答你。\""
+    },
+    {
+      "classification": "fixture",
+      "line": 537,
+      "path": "tests/test_memory_eval_llm_sample.py",
+      "patterns": [
+        "中文回答"
+      ],
+      "risk": "preference_memory_example",
+      "text": "\"用户偏好中文回答\","
+    },
+    {
+      "classification": "fixture",
+      "line": 96,
+      "path": "tests/test_memory_eval_real_report.py",
+      "patterns": [
+        "中文回答"
+      ],
+      "risk": "preference_memory_example",
+      "text": "assert \"用户偏好中文回答\" not in json_path.read_text(encoding=\"utf-8\")"
+    },
+    {
+      "classification": "fixture",
+      "line": 97,
+      "path": "tests/test_memory_eval_real_report.py",
+      "patterns": [
+        "中文回答"
+      ],
+      "risk": "preference_memory_example",
+      "text": "assert \"用户偏好中文回答\" not in md_path.read_text(encoding=\"utf-8\")"
+    },
+    {
+      "classification": "fixture",
+      "line": 60,
+      "path": "tests/test_memory_eval_real_samples.py",
+      "patterns": [
+        "中文回答"
+      ],
+      "risk": "preference_memory_example",
+      "text": "\"用户偏好中文回答\","
+    },
+    {
+      "classification": "fixture",
+      "line": 131,
+      "path": "tests/test_memory_eval_real_samples.py",
+      "patterns": [
+        "中文回答"
+      ],
+      "risk": "preference_memory_example",
+      "text": "\"用户偏好中文回答\","
+    },
+    {
+      "classification": "fixture",
+      "line": 173,
+      "path": "tests/test_memory_eval_real_samples.py",
+      "patterns": [
+        "中文回答"
+      ],
+      "risk": "preference_memory_example",
+      "text": "\"new_summary\": \"用户偏好中文回答\","
+    },
+    {
+      "classification": "fixture",
+      "line": 155,
+      "path": "tests/test_memory_experiments_live_smoke.py",
+      "patterns": [
+        "中文回答"
+      ],
+      "risk": "isolated_answer_language_bias",
+      "text": "\"summary\": \"用户明确要求记住：喜欢中文回答\","
+    },
+    {
+      "classification": "fixture",
+      "line": 506,
+      "path": "tests/test_memory_experiments_live_smoke.py",
+      "patterns": [
+        "中文回答"
+      ],
+      "risk": "isolated_answer_language_bias",
+      "text": "text=\"请记住我喜欢中文回答。\","
+    },
+    {
+      "classification": "fixture",
+      "line": 579,
+      "path": "tests/test_memory_experiments_live_smoke.py",
+      "patterns": [
+        "中文回答"
+      ],
+      "risk": "isolated_answer_language_bias",
+      "text": "text=\"请记住我喜欢中文回答。\","
+    },
+    {
+      "classification": "fixture",
+      "line": 294,
+      "path": "tests/test_memory_experiments_runner.py",
+      "patterns": [
+        "中文回答"
+      ],
+      "risk": "isolated_answer_language_bias",
+      "text": "result = score_write_candidate_shadow(\"用户明确要求记住：喜欢中文回答\")"
+    },
+    {
+      "classification": "fixture",
+      "line": 303,
+      "path": "tests/test_memory_experiments_runner.py",
+      "patterns": [
+        "用中文回答",
+        "中文回答"
+      ],
+      "risk": "isolated_answer_language_bias",
+      "text": "\"用户明确要求记住：以后都用中文回答\","
+    },
+    {
+      "classification": "fixture",
+      "line": 347,
+      "path": "tests/test_memory_experiments_runner.py",
+      "patterns": [
+        "用中文回答",
+        "中文回答"
+      ],
+      "risk": "isolated_answer_language_bias",
+      "text": "\"用户明确要求记住：以后都用中文回答\","
+    },
+    {
+      "classification": "fixture",
+      "line": 350,
+      "path": "tests/test_memory_experiments_runner.py",
+      "patterns": [
+        "用中文回答",
+        "中文回答"
+      ],
+      "risk": "isolated_answer_language_bias",
+      "text": "{\"id\": \"mem_1\", \"summary\": \"用户明确要求记住：以后都用中文回答\"},"
+    },
+    {
+      "classification": "fixture",
+      "line": 370,
+      "path": "tests/test_memory_experiments_runner.py",
+      "patterns": [
+        "中文回答"
+      ],
+      "risk": "isolated_answer_language_bias",
+      "text": "{\"id\": \"mem_1\", \"summary\": \"用户喜欢中文回答\"},"
+    },
+    {
+      "classification": "fixture",
+      "line": 400,
+      "path": "tests/test_memory_experiments_runner.py",
+      "patterns": [
+        "中文回答"
+      ],
+      "risk": "isolated_answer_language_bias",
+      "text": "\"summary\": \"用户明确要求记住：喜欢中文回答\","
+    },
+    {
+      "classification": "fixture",
+      "line": 452,
+      "path": "tests/test_memory_experiments_runner.py",
+      "patterns": [
+        "用中文回答",
+        "中文回答"
+      ],
+      "risk": "isolated_answer_language_bias",
+      "text": "\"summary\": \"用户明确要求记住：以后都用中文回答\","
+    },
+    {
+      "classification": "fixture",
+      "line": 475,
+      "path": "tests/test_memory_experiments_runner.py",
+      "patterns": [
+        "用中文回答",
+        "中文回答"
+      ],
+      "risk": "isolated_answer_language_bias",
+      "text": "assert candidates[0][\"summary\"] == \"用户明确要求记住：以后都用中文回答\""
+    },
+    {
+      "classification": "fixture",
+      "line": 487,
+      "path": "tests/test_memory_experiments_runner.py",
+      "patterns": [
+        "用中文回答",
+        "中文回答"
+      ],
+      "risk": "isolated_answer_language_bias",
+      "text": "{\"id\": \"mem_existing\", \"summary\": \"用户明确要求记住：以后都用中文回答\"},"
+    },
+    {
+      "classification": "fixture",
+      "line": 496,
+      "path": "tests/test_memory_experiments_runner.py",
+      "patterns": [
+        "用中文回答",
+        "中文回答"
+      ],
+      "risk": "isolated_answer_language_bias",
+      "text": "\"summary\": \"用户明确要求记住：以后都用中文回答\","
+    },
+    {
+      "classification": "fixture",
+      "line": 528,
+      "path": "tests/test_memory_experiments_runner.py",
+      "patterns": [
+        "用中文回答",
+        "中文回答"
+      ],
+      "risk": "isolated_answer_language_bias",
+      "text": "{\"id\": \"mem_1\", \"summary\": \"用户明确要求记住：以后都用中文回答\"},"
+    },
+    {
+      "classification": "fixture",
+      "line": 537,
+      "path": "tests/test_memory_experiments_runner.py",
+      "patterns": [
+        "用中文回答",
+        "中文回答"
+      ],
+      "risk": "isolated_answer_language_bias",
+      "text": "\"summary\": \"用户明确要求记住：以后都用中文回答\","
+    },
+    {
+      "classification": "fixture",
+      "line": 557,
+      "path": "tests/test_memory_experiments_runner.py",
+      "patterns": [
+        "用中文回答",
+        "中文回答"
+      ],
+      "risk": "isolated_answer_language_bias",
+      "text": "{\"id\": \"mem_existing\", \"summary\": \"用户明确要求记住：以后都用中文回答\"},"
+    },
+    {
+      "classification": "fixture",
+      "line": 566,
+      "path": "tests/test_memory_experiments_runner.py",
+      "patterns": [
+        "用中文回答",
+        "中文回答"
+      ],
+      "risk": "isolated_answer_language_bias",
+      "text": "\"summary\": \"用户明确要求记住：以后都用中文回答\","
+    },
+    {
+      "classification": "fixture",
+      "line": 31,
+      "path": "tests/test_memory_governance_dataset.py",
+      "patterns": [
+        "中文回答"
+      ],
+      "risk": "isolated_answer_language_bias",
+      "text": "\"summary\": \"用户现在偏好中文回答\","
+    },
+    {
+      "classification": "fixture",
+      "line": 32,
+      "path": "tests/test_memory_governance_dataset.py",
+      "patterns": [
+        "中文回答"
+      ],
+      "risk": "isolated_answer_language_bias",
+      "text": "\"content\": \"用户现在偏好中文回答\","
+    },
+    {
+      "classification": "fixture",
+      "line": 42,
+      "path": "tests/test_memory_governance_dataset.py",
+      "patterns": [
+        "中文回答"
+      ],
+      "risk": "isolated_answer_language_bias",
+      "text": "\"expected_answer_contains_any\": [[\"中文回答\", \"保持中文\"]],"
+    },
+    {
+      "classification": "fixture",
+      "line": 87,
+      "path": "tests/test_memory_governance_dataset.py",
+      "patterns": [
+        "中文回答"
+      ],
+      "risk": "isolated_answer_language_bias",
+      "text": "expected_answer_contains_any=((\"中文回答\", \"保持中文\"),),"
+    },
+    {
+      "classification": "fixture",
+      "line": 76,
+      "path": "tests/test_memory_injection_governance_experiments.py",
+      "patterns": [
+        "中文回答"
+      ],
+      "risk": "isolated_answer_language_bias",
+      "text": "\"summary\": \"用户希望中文回答\","
+    },
+    {
+      "classification": "fixture",
+      "line": 248,
+      "path": "tests/test_memory_llm_sample_cli.py",
+      "patterns": [
+        "中文回答"
+      ],
+      "risk": "preference_memory_example",
+      "text": "\"用户偏好中文回答\","
+    },
+    {
+      "classification": "fixture",
+      "line": 249,
+      "path": "tests/test_memory_llm_sample_cli.py",
+      "patterns": [
+        "中文回答"
+      ],
+      "risk": "isolated_answer_language_bias",
+      "text": "\"用户在 Telegram 会话偏好中文回答\","
+    },
+    {
+      "classification": "fixture",
+      "line": 251,
+      "path": "tests/test_memory_llm_sample_cli.py",
+      "patterns": [
+        "用中文回答",
+        "中文回答"
+      ],
+      "risk": "isolated_answer_language_bias",
+      "text": "\"我应该用中文回答你。\","
+    },
+    {
+      "classification": "fixture",
+      "line": 252,
+      "path": "tests/test_memory_llm_sample_cli.py",
+      "patterns": [
+        "中文回答"
+      ],
+      "risk": "isolated_answer_language_bias",
+      "text": "\"你在 Telegram 会话偏好中文回答。\","
+    },
+    {
+      "classification": "fixture",
+      "line": 46,
+      "path": "tests/test_memory_semantic_judge.py",
+      "patterns": [
+        "中文回答"
+      ],
+      "risk": "isolated_answer_language_bias",
+      "text": "answer_text=\"保持中文回答\","
+    },
+    {
+      "classification": "fixture",
+      "line": 54,
+      "path": "tests/test_memory_semantic_judge.py",
+      "patterns": [
+        "中文回答"
+      ],
+      "risk": "isolated_answer_language_bias",
+      "text": "answer_text=\"保持中文回答\","
+    },
+    {
+      "classification": "fixture",
+      "line": 87,
+      "path": "tests/test_memory_semantic_judge.py",
+      "patterns": [
+        "中文回答"
+      ],
+      "risk": "isolated_answer_language_bias",
+      "text": "AnswerExpectation(expected_answer_contains=(\"中文回答\",)),"
+    },
+    {
+      "classification": "fixture",
+      "line": 105,
+      "path": "tests/test_memory_semantic_judge.py",
+      "patterns": [
+        "中文回答"
+      ],
+      "risk": "isolated_answer_language_bias",
+      "text": "AnswerExpectation(expected_answer_contains=(\"中文回答\",)),"
+    },
+    {
+      "classification": "fixture",
+      "line": 37,
+      "path": "tests/test_memory_sleep_consolidation_engine.py",
+      "patterns": [
+        "中文回答"
+      ],
+      "risk": "isolated_answer_language_bias",
+      "text": "\"summary\": \"用户喜欢中文回答\","
+    },
+    {
+      "classification": "fixture",
+      "line": 46,
+      "path": "tests/test_memory_sleep_consolidation_engine.py",
+      "patterns": [
+        "中文回答"
+      ],
+      "risk": "isolated_answer_language_bias",
+      "text": "\"summary\": \"用户喜欢中文回答\","
+    },
+    {
+      "classification": "fixture",
+      "line": 166,
+      "path": "tests/test_memory_sleep_consolidation_engine.py",
+      "patterns": [
+        "中文回答"
+      ],
+      "risk": "isolated_answer_language_bias",
+      "text": "conversation=\"USER: 我喜欢中文回答\","
+    },
+    {
+      "classification": "fixture",
+      "line": 41,
+      "path": "tests/test_memory_sleep_consolidation_experiments.py",
+      "patterns": [
+        "中文回答"
+      ],
+      "risk": "isolated_answer_language_bias",
+      "text": "_item(\"m1\", \"用户喜欢中文回答\"),"
+    },
+    {
+      "classification": "fixture",
+      "line": 42,
+      "path": "tests/test_memory_sleep_consolidation_experiments.py",
+      "patterns": [
+        "中文回答"
+      ],
+      "risk": "isolated_answer_language_bias",
+      "text": "_item(\"m2\", \"用户喜欢中文回答\"),"
+    },
+    {
+      "classification": "fixture",
+      "line": 62,
+      "path": "tests/test_memory_sleep_consolidation_experiments.py",
+      "patterns": [
+        "中文回答"
+      ],
+      "risk": "isolated_answer_language_bias",
+      "text": "_item(\"m3\", \"用户喜欢中文回答\"),"
+    },
+    {
+      "classification": "fixture",
+      "line": 87,
+      "path": "tests/test_memory_sleep_consolidation_experiments.py",
+      "patterns": [
+        "中文回答"
+      ],
+      "risk": "isolated_answer_language_bias",
+      "text": "\"用户强偏好中文回答\","
+    },
+    {
+      "classification": "fixture",
+      "line": 105,
+      "path": "tests/test_memory_sleep_consolidation_experiments.py",
+      "patterns": [
+        "用中文回答",
+        "中文回答"
+      ],
+      "risk": "isolated_answer_language_bias",
+      "text": "_item(\"m1\", \"用户喜欢使用中文回答\"),"
+    },
+    {
+      "classification": "fixture",
+      "line": 106,
+      "path": "tests/test_memory_sleep_consolidation_experiments.py",
+      "patterns": [
+        "用中文回答",
+        "中文回答"
+      ],
+      "risk": "isolated_answer_language_bias",
+      "text": "_item(\"m2\", \"用户不喜欢使用中文回答\"),"
+    },
+    {
+      "classification": "fixture",
+      "line": 128,
+      "path": "tests/test_memory_sleep_consolidation_experiments.py",
+      "patterns": [
+        "中文回答"
+      ],
+      "risk": "isolated_answer_language_bias",
+      "text": "_item(f\"m{idx}\", f\"用户喜欢中文回答 {idx % 2}\") for idx in range(12)"
+    },
+    {
+      "classification": "fixture",
+      "line": 183,
+      "path": "tests/test_memory_sleep_consolidation_experiments.py",
+      "patterns": [
+        "中文回答"
+      ],
+      "risk": "isolated_answer_language_bias",
+      "text": "_item(\"m1\", \"用户喜欢中文回答\", source_ref=\"\"),"
+    },
+    {
+      "classification": "fixture",
+      "line": 184,
+      "path": "tests/test_memory_sleep_consolidation_experiments.py",
+      "patterns": [
+        "中文回答"
+      ],
+      "risk": "isolated_answer_language_bias",
+      "text": "_item(\"m2\", \"用户喜欢中文回答\", source_ref=\"\"),"
+    },
+    {
+      "classification": "fixture",
+      "line": 63,
+      "path": "tests/test_memory_sleep_hygiene_provenance.py",
+      "patterns": [
+        "中文回答"
+      ],
+      "risk": "isolated_answer_language_bias",
+      "text": "\"cli:local:1\": \"用户说喜欢中文回答\","
+    },
+    {
+      "classification": "fixture",
+      "line": 81,
+      "path": "tests/test_memory_sleep_hygiene_provenance.py",
+      "patterns": [
+        "中文回答"
+      ],
+      "risk": "isolated_answer_language_bias",
+      "text": "resolver = MappingSourceRefResolver({\"cli:local:1\": \"用户说喜欢中文回答\"})"
+    },
+    {
+      "classification": "fixture",
+      "line": 96,
+      "path": "tests/test_memory_sleep_hygiene_provenance.py",
+      "patterns": [
+        "中文回答"
+      ],
+      "risk": "isolated_answer_language_bias",
+      "text": "content=\"用户说喜欢中文回答\","
+    },
+    {
+      "classification": "fixture",
+      "line": 481,
+      "path": "tests/test_memory_system_path_safe_version_contract.py",
+      "patterns": [
+        "中文回答"
+      ],
+      "risk": "preference_memory_example",
+      "text": "baseline_items=[_item(\"m-current\", \"用户偏好中文回答。\")],"
+    },
+    {
+      "classification": "fixture",
+      "line": 484,
+      "path": "tests/test_memory_system_path_safe_version_contract.py",
+      "patterns": [
+        "中文回答"
+      ],
+      "risk": "preference_memory_example",
+      "text": "\"semantic\": [_item(\"m-current\", \"用户偏好中文回答。\")],"
+    },
+    {
+      "classification": "fixture",
+      "line": 502,
+      "path": "tests/test_memory_system_path_safe_version_contract.py",
+      "patterns": [
+        "中文回答"
+      ],
+      "risk": "preference_memory_example",
+      "text": "assert \"用户偏好中文回答。\" in text"
+    },
+    {
+      "classification": "fixture",
+      "line": 465,
+      "path": "tests/test_memory_write_governance_counts.py",
+      "patterns": [
+        "中文回答"
+      ],
+      "risk": "isolated_answer_language_bias",
+      "text": "summary=\"后续同类任务请在中文回答中先给结论\","
+    },
+    {
+      "classification": "fixture",
+      "line": 473,
+      "path": "tests/test_memory_write_governance_counts.py",
+      "patterns": [
+        "中文回答"
+      ],
+      "risk": "isolated_answer_language_bias",
+      "text": "{\"id\": \"existing\", \"summary\": \"后续同类任务请在中文回答中先给结论\"}"
+    },
+    {
+      "classification": "fixture",
+      "line": 46,
+      "path": "tests/test_post_response_memory_experiments.py",
+      "patterns": [
+        "中文回答"
+      ],
+      "risk": "isolated_answer_language_bias",
+      "text": "user_msg=\"请记住我喜欢中文回答\","
+    },
+    {
+      "classification": "fixture",
+      "line": 53,
+      "path": "tests/test_post_response_memory_experiments.py",
+      "patterns": [
+        "中文回答"
+      ],
+      "risk": "isolated_answer_language_bias",
+      "text": "\"arguments\": {\"summary\": \"用户明确要求记住：喜欢中文回答\"},"
+    },
+    {
+      "classification": "fixture",
+      "line": 97,
+      "path": "tests/test_post_response_memory_experiments.py",
+      "patterns": [
+        "中文回答"
+      ],
+      "risk": "isolated_answer_language_bias",
+      "text": "user_msg=\"请记住我喜欢中文回答\","
+    },
+    {
+      "classification": "fixture",
+      "line": 104,
+      "path": "tests/test_post_response_memory_experiments.py",
+      "patterns": [
+        "中文回答"
+      ],
+      "risk": "isolated_answer_language_bias",
+      "text": "\"arguments\": {\"summary\": \"用户明确要求记住：喜欢中文回答\"},"
+    },
+    {
+      "classification": "fixture",
+      "line": 213,
+      "path": "tests/test_post_response_memory_experiments.py",
+      "patterns": [
+        "中文回答"
+      ],
+      "risk": "isolated_answer_language_bias",
+      "text": "\"arguments\": {\"summary\": \"用户明确要求记住：喜欢中文回答\"},"
+    }
+  ],
+  "metrics": {
+    "finding_count": 129,
+    "fixture_answer_language_bias_count": 81,
+    "legacy_benchmark_answer_language_bias_count": 3,
+    "production_hidden_answer_language_bias_count": 0,
+    "public_p5_hidden_answer_language_bias_count": 0
+  }
+}
