@@ -94,6 +94,7 @@ def test_public_long_memory_runner_captures_sanitized_provider_requests(tmp_path
     dataset.write_text(
         '{"id":"capture_001","category":"single-session-user",'
         '"question":"What drink does Alice prefer?","answer":"green tea",'
+        '"question_date":"2024-02-03T00:00:00+00:00",'
         '"history":[{"role":"user","content":"Alice says she prefers green tea.","has_answer":true}]}\n',
         encoding="utf-8",
     )
@@ -144,3 +145,5 @@ def test_public_long_memory_runner_captures_sanitized_provider_requests(tmp_path
     assert "api_key" not in json.dumps(payload, ensure_ascii=False).lower()
     assert payload["user_question"]
     assert payload["evidence_block_text"]
+    request_text = json.dumps(payload["provider_request"], ensure_ascii=False)
+    assert "request_time=2024-02-03T00:00:00+00:00" in request_text

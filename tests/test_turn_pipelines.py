@@ -183,6 +183,31 @@ async def test_process_direct_suppresses_stream_and_memory_when_requested():
     assert loop._process.await_args.kwargs["dispatch_outbound"] is False
 
 
+@pytest.mark.asyncio
+async def test_process_direct_accepts_explicit_message_timestamp():
+    loop = object.__new__(AgentLoop)
+    loop._process = AsyncMock(
+        return_value=OutboundMessage(
+            channel="telegram",
+            chat_id="123",
+            content="ok",
+        )
+    )
+    timestamp = datetime.fromisoformat("2024-02-03T00:00:00+00:00")
+
+    await AgentLoop.process_direct(
+        loop,
+        content="What happened yesterday?",
+        session_key="eval:case",
+        channel="public_long_memory_eval",
+        chat_id="case",
+        message_timestamp=timestamp,
+    )
+
+    msg = loop._process.await_args.args[0]
+    assert msg.timestamp == timestamp
+
+
 def _make_loop(
     tmp_path: Path,
     *,

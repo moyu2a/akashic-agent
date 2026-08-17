@@ -29,6 +29,25 @@ def test_load_longmemeval_cases_normalizes_fixture_fields() -> None:
     assert cases[0].history[0]["content"] == "Alice says she prefers green tea."
 
 
+def test_load_longmemeval_cases_preserves_question_date(tmp_path: Path) -> None:
+    dataset = tmp_path / "longmemeval_date.jsonl"
+    dataset.write_text(
+        '{"question_id":"case_date","question_type":"temporal-reasoning",'
+        '"question":"What happened yesterday?","answer":"roadmap review",'
+        '"question_date":"2024-02-03T00:00:00+00:00",'
+        '"haystack_sessions":[[{"role":"user","content":"The roadmap review was yesterday.","has_answer":true}]],'
+        '"haystack_session_ids":["s1"],"haystack_dates":["2024-02-02"]}\n',
+        encoding="utf-8",
+    )
+
+    case = load_longmemeval_cases(dataset)[0]
+    eval_case = public_case_to_eval_case(case, phase="phase_a")
+
+    assert case.question_date == "2024-02-03T00:00:00+00:00"
+    assert eval_case.setup["public_long_memory"]["question_date"] == "2024-02-03T00:00:00+00:00"
+    assert eval_case.expectations["public_long_memory"]["question_date"] == "2024-02-03T00:00:00+00:00"
+
+
 def test_load_longmemeval_cases_treats_abs_suffix_as_abstention(tmp_path: Path) -> None:
     dataset = tmp_path / "longmemeval_abs.jsonl"
     dataset.write_text(
@@ -78,6 +97,8 @@ def test_answer_window_rendering_uses_answer_turn_and_token_budget() -> None:
         "content": "session: " + "leading filler " * 80,
         "extra_json": {
             "benchmark": "longmemeval",
+            "session_id": "session-9",
+            "session_date": "2024-01-02",
             "turns": [
                 {"turn_index": 1, "role": "user", "content": "irrelevant opening " * 40, "has_answer": False},
                 {"turn_index": 2, "role": "assistant", "content": "ack", "has_answer": False},
@@ -100,6 +121,7 @@ def test_answer_window_rendering_uses_answer_turn_and_token_budget() -> None:
     )
 
     assert "The final amount became $400." in rendered
+    assert "session_id=session-9; session_date=2024-01-02" in rendered
     assert "irrelevant opening" not in rendered
     assert metadata["answer_window_source"] == "has_answer_turn"
     assert metadata["effective_evidence_token_budget"] == 16

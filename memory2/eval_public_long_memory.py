@@ -25,6 +25,7 @@ class PublicLongMemoryCase:
     question: str
     gold_answer: str
     history: tuple[dict[str, Any], ...]
+    question_date: str = ""
     answer_aliases: tuple[str, ...] = ()
     raw: dict[str, Any] | None = None
 
@@ -210,6 +211,14 @@ def public_case_to_eval_case(
             "query": case.question,
             "memory_items": memory_items,
             "memory_replacements": [],
+            "public_long_memory": {
+                "benchmark": "longmemeval",
+                "source_id": case.source_id,
+                "category": case.category,
+                "question_date": case.question_date,
+                "profile": profile,
+                "phase": phase,
+            },
             "public_long_memory_evidence_render": asdict(render_config),
         },
         expectations={
@@ -229,6 +238,7 @@ def public_case_to_eval_case(
                 "category": case.category,
                 "gold_answer": case.gold_answer,
                 "answer_aliases": list(case.answer_aliases),
+                "question_date": case.question_date,
                 "profile": profile,
                 "phase": phase,
             },
@@ -597,9 +607,25 @@ def _case_from_payload(payload: dict[str, Any], *, index: int) -> PublicLongMemo
         question=question,
         gold_answer=gold_answer,
         history=_normalize_history(payload),
+        question_date=_question_date_from_payload(payload),
         answer_aliases=tuple(str(item) for item in aliases if str(item)),
         raw=dict(payload),
     )
+
+
+def _question_date_from_payload(payload: dict[str, Any]) -> str:
+    for key in (
+        "question_date",
+        "question_time",
+        "question_timestamp",
+        "query_date",
+        "query_time",
+        "query_timestamp",
+    ):
+        value = str(payload.get(key) or "").strip()
+        if value:
+            return value
+    return ""
 
 
 def _normalize_history(payload: dict[str, Any]) -> tuple[dict[str, str], ...]:
@@ -644,7 +670,8 @@ def render_public_long_memory_evidence(
         metadata["evidence_render_mode"] = mode
     if mode == "compact":
         metadata["answer_window_source"] = "compact"
-        return _compact_text(str(item.get("summary") or item.get("content") or "")), metadata
+        text = _compact_text(str(item.get("summary") or item.get("content") or ""))
+        return _with_session_header(item, text), metadata
 
     turns = _turns_from_item(item)
     if mode == "long_context" or not turns:
@@ -652,7 +679,13 @@ def render_public_long_memory_evidence(
         if not turns:
             metadata["answer_window_fallback_reason"] = "missing_turn_metadata"
         text = _format_turns(turns) if turns else str(item.get("summary") or item.get("content") or "")
-        return _trim_text_to_token_budget(text, config.effective_token_budget), metadata
+        return (
+            _with_session_header(
+                item,
+                _trim_text_to_token_budget(text, config.effective_token_budget),
+            ),
+            metadata,
+        )
 
     selected = _answer_window_turns(turns, config.answer_window_turns)
     if selected[1] == "has_answer_turn":
@@ -661,7 +694,13 @@ def render_public_long_memory_evidence(
         metadata["answer_window_source"] = "last_third"
         metadata["answer_window_fallback_reason"] = "oracle_missing_has_answer"
     return (
-        _trim_text_to_token_budget(_format_turns(selected[0]), config.effective_token_budget),
+        _with_session_header(
+            item,
+            _trim_text_to_token_budget(
+                _format_turns(selected[0]),
+                config.effective_token_budget,
+            ),
+        ),
         metadata,
     )
 
@@ -790,6 +829,17 @@ def _format_turns(turns: list[dict[str, object]]) -> str:
         for turn in turns
         if str(turn.get("content") or "").strip()
     )
+
+
+def _with_session_header(item: dict[str, Any], text: str) -> str:
+    extra = item.get("extra_json") if isinstance(item.get("extra_json"), dict) else {}
+    session_id = str(extra.get("session_id") or "").strip()
+    session_date = str(extra.get("session_date") or "").strip()
+    if not session_id and not session_date:
+        return text
+    header = f"session_id={session_id}; session_date={session_date}"
+    body = str(text or "").strip()
+    return f"{header}\n{body}" if body else header
 
 
 def _trim_text_to_token_budget(text: str, token_budget: int) -> str:

@@ -1394,6 +1394,7 @@ async def _run_comprehensive_case(
                 channel=scope["channel"],
                 chat_id=scope["chat_id"],
                 skip_post_memory=True,
+                message_timestamp=_message_timestamp_for_case(spec.case),
             ),
             timeout=max(0.001, float(timeout_s)),
         )
@@ -1504,6 +1505,26 @@ async def _run_comprehensive_case(
             ),
         )
     return result
+
+
+def _message_timestamp_for_case(case: EvalCase) -> datetime | None:
+    public_meta = case.setup.get("public_long_memory")
+    if not isinstance(public_meta, dict):
+        return None
+    raw = str(public_meta.get("question_date") or "").strip()
+    if not raw:
+        return None
+    if len(raw) == 10 and raw[4] == "-" and raw[7] == "-":
+        raw = f"{raw}T00:00:00+00:00"
+    if raw.endswith("Z"):
+        raw = raw[:-1] + "+00:00"
+    try:
+        parsed = datetime.fromisoformat(raw)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed
 
 
 def _build_comprehensive_report(
