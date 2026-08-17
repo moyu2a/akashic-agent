@@ -54,6 +54,38 @@
 - 中英混搭和 static scorer false negative 不应继续作为核心错误看待；它们适合保留为语言指标和评分器噪声指标。
 - 当前错误不是纯随机抖动，主导问题可以归纳为几个链路弱点；后续修复应针对能力模式加固，而不是针对单个 case 写特例。
 
+## 两类稳定错误的根因分析
+
+对代表性 case 的 `structured_evidence_snapshot_path`、`provider_request_path` 和 `answer_debug_path` 抽查显示，多数关键失败不是证据截断造成：代表 case 中 `truncation_applied=false`，结构化证据快照存在，provider request 中也包含 evidence block。因此主要问题不在“模型完全没看到证据”，而在证据解释和最终推理策略。
+
+### 多证据聚合少算
+
+典型 case：`3a704032`、`gpt4_d84a3211`、`46a3abf7`、`0a995998`、`6d550036`、`gpt4_a56e767c`、`gpt4_731e37d7`、`85fa3a3f`。
+
+| 证据形态 | 失败表现 | 根因 |
+| --- | --- | --- |
+| 证据分散在多个 session | 漏掉一个植物、一个项目、一笔费用、一个待取/待退物品 | 模型没有先列全集合再计数，而是边读边判断，只保留最显眼证据。 |
+| 时间窗口不是每条都显式写明 | `since start of year`、`last month` 下排除其实应计入的 item | 模型要求每个 item 都有强日期证明，缺少跨上下文继承。 |
+| item/category 边界模糊 | boots exchange、dry cleaning pickup、helmet purchase 等被排除 | 模型把“可计入项”定义得过窄。 |
+| 问题要求 total/count | 答成 confirmed minimum，例如“至少 2 个”“确认 $65，可能 $185” | 模型偏向避免误报，导致少算。 |
+
+根因归纳：当前回答阶段缺少硬性的 aggregate answer discipline。模型应先抽取所有候选项，标记 `include / exclude / uncertain`，再根据问题语义和时间窗口决定是否计入，最后给出单一答案。当前模型直接用自然语言推理，容易把“可能项”排除成少算。
+
+### 当前状态/版本选择错误
+
+典型 case：`c6853660`、`07741c45`、`852ce960`、`ce6d2d27`、`0f05491a`、`59524333`、`9ee3ecd6`。
+
+| 证据形态 | 失败表现 | 根因 |
+| --- | --- | --- |
+| 旧状态明确，新状态措辞较软 | old sneakers 仍答 `under bed`，而 Judge 认为当前应为 closet shoe rack | 模型更信任旧的显式陈述，低估后续上下文里的状态迁移。 |
+| 新状态像计划/意图 | coffee limit 答 decrease，因为 increase 被看成 `thinking of` | 模型区分“已发生”和“打算”过度保守。 |
+| later evidence 与 earlier evidence 冲突 | mortgage pre-approval 选旧金额或把新金额当不确认 | 版本优先级没有压过“旧证据更具体”的倾向。 |
+| assistant response 承接用户状态 | 当前状态来自对话推进，不是用户单句明说 | 模型没有把相邻上下文中的承接确认当作状态证据。 |
+
+根因归纳：版本治理已经把 allowed/active evidence 送入模型，但“状态类问题必须优先选择最新可解释状态”的规则还不够硬。对于包含 `current`、`now`、`most recently`、`usually`、`currently keep` 等语义的问题，回答阶段应显式按时间排序证据，先识别旧状态、新状态、计划/意图、已执行状态，再输出当前有效值。当前模型会被旧的显式证据或更具体的旧证据吸引，导致版本选择错误。
+
+修复方向应保持通用：为聚合题增加候选项列表和 include/exclude 约束，为状态题增加 recency/currentness 决策步骤；不要针对单个 LongMemEval case 写特例。
+
 ## Static Scorer 复盘
 
 | 项目 | 数量 |

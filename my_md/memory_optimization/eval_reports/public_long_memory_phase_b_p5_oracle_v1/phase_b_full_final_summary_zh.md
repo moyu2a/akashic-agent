@@ -76,7 +76,7 @@ raw strict/static scorer 只作为拆包和回归参考，不作为最终 correc
 
 保守口径如果把 `14` 条 preference partial 也算作错误，则错误数为 `34/491`，通过率为 `93.08%`。按当前复盘口径，preference gold / 偏好 partial 不作为主事实正确率的 blocker，但必须单独保留用于后续产品体验修复。
 
-错误场景复盘已记录在 `phase_b_full_external_LLM_judge_summary_zh.md` 的“错误场景与稳定性判断”章节。主要稳定问题是多 session 数量/金额汇总少算、knowledge-update 当前状态/版本选择错误；preference partial 属于产品体验优化项，static scorer false negative 属于评分器噪声。
+错误场景复盘已记录在 `phase_b_full_external_LLM_judge_summary_zh.md` 的“错误场景与稳定性判断”和“两类稳定错误的根因分析”章节。主要稳定问题是多 session 数量/金额汇总少算、knowledge-update 当前状态/版本选择错误；抽查代表 case 显示这些问题多数不是证据截断，而是聚合策略和 recency/currentness 版本决策不够硬。preference partial 属于产品体验优化项，static scorer false negative 属于评分器噪声。
 
 ## Language Metric
 
