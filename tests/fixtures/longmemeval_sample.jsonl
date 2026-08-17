@@ -1,0 +1,6 @@
+{"id":"lme_001","category":"single-session-user","question":"What drink does Alice prefer?","answer":"green tea","history":[{"role":"user","content":"Alice says she prefers green tea."},{"role":"assistant","content":"Noted."}]}
+{"id":"lme_002","category":"single-session-user","question":"What snack did Ben buy?","answer":"almonds","history":[{"role":"user","content":"Ben bought almonds after work."}]}
+{"id":"lme_003","category":"multi-session","question":"Which city did Carol visit after Rome?","answer":"Berlin","sessions":[[{"role":"user","content":"Carol visited Rome first."}],[{"role":"user","content":"After Rome, Carol went to Berlin."}]]}
+{"id":"lme_004","category":"temporal-reasoning","question":"When was the roadmap review?","answer":"2023 年 5 月","conversation":[{"role":"user","content":"The roadmap review happened in 二零二三年五月."}]}
+{"id":"lme_005","category":"knowledge-update","question":"What is Dana's current editor?","answer":"VS Code","messages":[{"role":"user","content":"Dana used Vim before."},{"role":"user","content":"Dana switched her current editor to VS Code."}]}
+{"id":"lme_006","category":"abstention","question":"What is Erin's passport number?","answer":"unknown","history":[{"role":"user","content":"Erin never shared her passport number."}]}
