@@ -1,4 +1,4 @@
-# LongMemEval Phase B Full P5-only 预 Judge 总结
+# LongMemEval Phase B Full P5-only 总结
 
 ## 执行结论
 
@@ -49,6 +49,33 @@
 
 raw strict/static scorer 只作为拆包和回归参考，不作为最终 correctness 结论。
 
+## 外部 LLM Judge 结果
+
+外部 Judge 已完成 `500/500` 条逐 case 审阅，原文已归档到 `phase_b_full_external_LLM_judge_raw.md`，机器可读索引见 `phase_b_full_external_LLM_judge_case_index.json`，详细中文汇总见 `phase_b_full_external_LLM_judge_summary_zh.md`。
+
+| Judge 分类 | 数量 |
+| --- | ---: |
+| 合理 PASS | 277 |
+| static FAIL 但 Judge 认为正确（false negative） | 180 |
+| static PASS 但 Judge 认为模型错误（false positive） | 8 |
+| static FAIL 且 Judge 认为明确模型错误 | 12 |
+| 偏好型 partial，记录但不纳入主事实错误 | 14 |
+| gold / 证据边界，主指标剔除 | 9 |
+
+调整后主事实口径：
+
+| 指标 | 结果 |
+| --- | ---: |
+| 原始 case 数 | 500 |
+| gold / 证据边界剔除 | 9 |
+| 有效分母 | 491 |
+| true factual model error | 20 |
+| 主事实口径错误率 | 4.07% |
+| 主事实口径通过数 | 471 |
+| 主事实口径通过率 | 95.93% |
+
+保守口径如果把 `14` 条 preference partial 也算作错误，则错误数为 `34/491`，通过率为 `93.08%`。按当前复盘口径，preference gold / 偏好 partial 不作为主事实正确率的 blocker，但必须单独保留用于后续产品体验修复。
+
 ## Language Metric
 
 | 指标 | 结果 |
@@ -77,16 +104,6 @@ raw strict/static scorer 只作为拆包和回归参考，不作为最终 correc
 - strict FAIL 文档：`phase_b_full_failed_case_human_review_zh.md`
 - case 索引：`phase_b_full_case_review_index.json`
 - 外部 Judge 说明：`phase_b_full_LLM_judge_instructions_zh.md`
-
-## 待外部 Judge 完成后补充
-
-以下指标需要外部 LLM Judge 输出后再填入：
-
-- adjusted effective denominator
-- adjusted pass/error rate
-- gold_questionable case 列表
-- true_error case 列表
-- partial_preference_miss case 列表
-- language_mismatch_only case 列表
-- scorer_false_positive / scorer_false_negative 列表
-- category-level adjusted result
+- 外部 Judge 原文归档：`phase_b_full_external_LLM_judge_raw.md`
+- 外部 Judge 机器可读索引：`phase_b_full_external_LLM_judge_case_index.json`
+- 外部 Judge 中文汇总：`phase_b_full_external_LLM_judge_summary_zh.md`
