@@ -30,6 +30,7 @@ from core.memory.engine import (
     RememberResult,
 )
 from memory2.eval_cases import EvalCase
+from memory2.eval_semantic_judge import SemanticJudgeConfig, judge_semantic_equivalence
 from session.manager import SessionManager
 
 
@@ -105,6 +106,7 @@ class LLMSampleAnswerDebugRecord:
     failures: tuple[str, ...]
     answer_rule_passed: bool
     memory_grounding_passed: bool
+    structured_evidence_snapshot_path: str = ""
 
 
 @dataclass(frozen=True)
@@ -242,11 +244,14 @@ class LLMSampleMemoryEngine:
 class _RecordingProvider:
     def __init__(self, provider: object) -> None:
         self.provider = provider
+        self.requests: list[dict[str, Any]] = []
         self.responses: list[LLMResponse] = []
         self.errors: list[Exception] = []
 
     async def chat(self, **kwargs: Any) -> LLMResponse:
         chat = getattr(self.provider, "chat")
+        snapshot = _snapshot_provider_request(kwargs)
+        self.requests.append(snapshot if isinstance(snapshot, dict) else {})
         try:
             response = await chat(**kwargs)
         except Exception as exc:
@@ -254,6 +259,27 @@ class _RecordingProvider:
             raise
         self.responses.append(response)
         return response
+
+
+def _snapshot_provider_request(value: object) -> object:
+    if isinstance(value, dict):
+        sanitized: dict[str, object] = {}
+        for key, item in value.items():
+            key_text = str(key)
+            lowered = key_text.lower()
+            if any(secret in lowered for secret in ("api_key", "authorization", "token")):
+                continue
+            if callable(item):
+                continue
+            sanitized[key_text] = _snapshot_provider_request(item)
+        return sanitized
+    if isinstance(value, list):
+        return [_snapshot_provider_request(item) for item in value]
+    if isinstance(value, tuple):
+        return [_snapshot_provider_request(item) for item in value]
+    if isinstance(value, (str, int, float, bool)) or value is None:
+        return value
+    return str(value)
 
 
 def answer_expectation_from_case(case: EvalCase) -> AnswerExpectation:
@@ -276,6 +302,8 @@ def score_answer_text(
     answer: str,
     expectation: AnswerExpectation,
     used_memory_ids: Sequence[str],
+    *,
+    semantic_judge_config: SemanticJudgeConfig | None = None,
 ) -> AnswerScoreResult:
     failures: list[str] = []
     matched_expected_terms: list[str] = []
@@ -311,6 +339,39 @@ def score_answer_text(
         if _contains_term(answer, term):
             forbidden_violation_count += 1
             failures.append(f"found forbidden answer term: {term}")
+
+    if (
+        forbidden_violation_count == 0
+        and semantic_judge_config is not None
+        and semantic_judge_config.enabled
+        and (expected_miss_count > 0 or expected_any_miss_count > 0)
+    ):
+        expected_templates = [
+            *missing_expected_terms,
+            *[term for group in missing_any_groups for term in group],
+        ]
+        semantic = judge_semantic_equivalence(
+            answer_text=answer,
+            expected_templates=expected_templates,
+            config=semantic_judge_config,
+        )
+        if semantic.passed:
+            failures = [
+                failure
+                for failure in failures
+                if not failure.startswith("missing expected answer term")
+            ]
+            failures.append("semantic_ambiguity")
+            expected_pass_count += expected_miss_count
+            expected_any_pass_count += expected_any_miss_count
+            expected_miss_count = 0
+            expected_any_miss_count = 0
+            matched_expected_terms.extend(missing_expected_terms)
+            matched_any_groups.extend(missing_any_groups)
+            missing_expected_terms = []
+            missing_any_groups = []
+        elif semantic.needs_human_review:
+            failures.append("needs_human_review")
 
     used_ids = set(str(item_id) for item_id in used_memory_ids)
     missing_memory_ids = [
@@ -537,6 +598,7 @@ def write_llm_sample_answer_debug(
         "failures": list(record.failures),
         "answer_rule_passed": record.answer_rule_passed,
         "memory_grounding_passed": record.memory_grounding_passed,
+        "structured_evidence_snapshot_path": record.structured_evidence_snapshot_path,
     }
     path.write_text(
         json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True),

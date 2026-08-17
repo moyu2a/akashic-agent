@@ -183,6 +183,15 @@ def test_behavior_prompt_distinguishes_evidence_contract_from_memory_summary() -
     assert "禁止只凭 recall 摘要或 search 预览直接作答" in prompt
 
 
+def test_behavior_prompt_does_not_force_chinese_for_english_questions() -> None:
+    prompt = build_agent_behavior_rules_prompt(workspace=Path("."))
+
+    assert "使用用户本轮语言" in prompt
+    assert "中文时口语、短句、简洁" in prompt
+    assert "英文时自然、简洁" in prompt
+    assert "中文口语，短句，简洁" not in prompt
+
+
 @pytest.mark.asyncio
 async def test_search_messages_returns_preview_with_source_ref(tmp_path):
     store = SessionStore(tmp_path / "sessions.db")

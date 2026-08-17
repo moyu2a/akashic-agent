@@ -81,9 +81,34 @@ def test_rendered_contract_is_structured_and_private() -> None:
     assert "must_use_memory_ids" in text
     assert "forbidden_memory_ids" in text
     assert "required_terms" in text
-    assert "不要使用 forbidden_memory_ids" in text
+    assert "Do not use forbidden_memory_ids" in text
     assert "memory_id=" in text
     assert case.setup["query"] not in text
+
+
+def test_rendered_answer_contract_does_not_force_chinese() -> None:
+    case = _case_with_should_not_in_tri()
+    contract = build_tri_answer_contract(case)
+
+    text = render_answer_contract_block(contract)
+
+    assert "same language as the current user question" in text
+    assert "Do not copy the language of retrieved evidence" in text
+    assert "在中文回答" not in text
+    assert "中文回答" not in text
+    assert "请只根据" not in text
+
+
+def test_rendered_answer_contract_instructs_advice_to_use_salient_user_context() -> None:
+    case = _case_with_should_not_in_tri()
+    contract = build_tri_answer_contract(case)
+
+    text = render_answer_contract_block(contract)
+
+    assert "For advice, tips, recommendations, planning, or suggestions" in text
+    assert "use all salient user-specific evidence" in text
+    assert "preferences, prior preparation, constraints, anxieties, and goals" in text
+    assert "Do not give generic advice while ignoring salient user-specific evidence" in text
 
 
 def test_governed_contract_uses_supplied_allowed_ids_and_marks_dropped_tri_ids() -> None:
@@ -317,6 +342,10 @@ def test_render_production_evidence_contract_is_structured_and_not_oracle_terms(
     assert "ORACLE_TERM" not in text
     assert "ORACLE_GROUP" not in text
     assert "ORACLE_FORBIDDEN" not in text
+    assert "same language as the current user question" in text
+    assert "Do not copy the language of retrieved evidence" in text
+    assert "中文回答" not in text
+    assert "请只根据" not in text
 
 
 def test_production_governed_contract_accepts_eval_profile_name() -> None:

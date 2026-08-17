@@ -455,6 +455,14 @@ def test_system_path_safe_version_cli_fake_provider_writes_sanitized_report(
         assert "failures" in row
         assert "answer_passed" not in row
     assert payload["metrics"]["replacement_seeded_count"] > 0
+    assert (
+        payload["metrics"]["claim_boundary"]
+        == "system_path_safe_version_independent_validation"
+    )
+    assert (
+        payload["metrics"]["not_same_table_with"]
+        == "chain_tri_retrieval_37.5_baseline"
+    )
     version_rows = [
         row
         for row in payload["cases"]

@@ -1,0 +1,2713 @@
+{
+  "case_reviews": [
+    {
+      "answer_debug_available": true,
+      "category": "abstention",
+      "comprehensive_answer_rule_passed": true,
+      "evidence_render_metadata": [
+        {
+          "answer_window_fallback_reason": "oracle_missing_has_answer",
+          "answer_window_source": "last_third",
+          "answer_window_turns": 2,
+          "effective_evidence_token_budget": 3000,
+          "evidence_render_mode": "answer_window",
+          "long_evidence_token_limit": 3000,
+          "memory_id": "60bf93ed_abs_history_0001",
+          "model_context_window": 8192,
+          "reserved_prompt_token_budget": 2000
+        },
+        {
+          "answer_window_fallback_reason": "oracle_missing_has_answer",
+          "answer_window_source": "last_third",
+          "answer_window_turns": 2,
+          "effective_evidence_token_budget": 3000,
+          "evidence_render_mode": "answer_window",
+          "long_evidence_token_limit": 3000,
+          "memory_id": "60bf93ed_abs_history_0002",
+          "model_context_window": 8192,
+          "reserved_prompt_token_budget": 2000
+        }
+      ],
+      "failures": [],
+      "gold_answer": "The information provided is not enough. You did not mention buying an iPad case.",
+      "memory_grounding_passed": true,
+      "model_answer": "这个……我翻了手头能用的记忆记录，里面没有提过你买 iPad 保护壳这件事。\n\n记录里跟\"买/到货\"相关的只有12月买显卡、2月10日装上，还有2月12日下载密码管理器这些。没有 iPad 壳的购买日期，也没法算到货天数。\n\n所以这个问题我现在答不了，证据不足。你要是把下单和到货的日期告诉我，我可以帮你算一下。",
+      "profile": "chain_tri_governed_answer_contract",
+      "prompt_variant": "baseline",
+      "provider_error": false,
+      "public_score": {
+        "method": "deterministic_mismatch",
+        "needs_manual_review": false,
+        "normalized_answer": "这个我翻了手头能用的记忆记录里面没有提过你买ipad保护壳这件事记录里跟买到货相关的只有12月买显卡2月10日装上还有2月12日下载密码管理器这些没有ipad壳的购买日期也没法算到货天数所以这个问题我现在答不了证据不足你要是把下单和到货的日期告诉我我可以帮你算1下",
+        "normalized_gold": "theinformationprovidedisnotenoughyoudidnotmentionbuyinganipadcase",
+        "passed": false
+      },
+      "question": "How many days did it take for my iPad case to arrive after I bought it?",
+      "repeat_index": 0,
+      "sent_evidence_gold_hit": false,
+      "source_id": "60bf93ed_abs",
+      "timeout": false
+    },
+    {
+      "answer_debug_available": true,
+      "category": "abstention",
+      "comprehensive_answer_rule_passed": true,
+      "evidence_render_metadata": [
+        {
+          "answer_window_fallback_reason": "oracle_missing_has_answer",
+          "answer_window_source": "last_third",
+          "answer_window_turns": 2,
+          "effective_evidence_token_budget": 3000,
+          "evidence_render_mode": "answer_window",
+          "long_evidence_token_limit": 3000,
+          "memory_id": "88432d0a_abs_history_0001",
+          "model_context_window": 8192,
+          "reserved_prompt_token_budget": 2000
+        },
+        {
+          "answer_window_fallback_reason": "oracle_missing_has_answer",
+          "answer_window_source": "last_third",
+          "answer_window_turns": 2,
+          "effective_evidence_token_budget": 3000,
+          "evidence_render_mode": "answer_window",
+          "long_evidence_token_limit": 3000,
+          "memory_id": "88432d0a_abs_history_0002",
+          "model_context_window": 8192,
+          "reserved_prompt_token_budget": 2000
+        },
+        {
+          "answer_window_fallback_reason": "oracle_missing_has_answer",
+          "answer_window_source": "last_third",
+          "answer_window_turns": 2,
+          "effective_evidence_token_budget": 3000,
+          "evidence_render_mode": "answer_window",
+          "long_evidence_token_limit": 3000,
+          "memory_id": "88432d0a_abs_history_0003",
+          "model_context_window": 8192,
+          "reserved_prompt_token_budget": 2000
+        },
+        {
+          "answer_window_fallback_reason": "oracle_missing_has_answer",
+          "answer_window_source": "last_third",
+          "answer_window_turns": 2,
+          "effective_evidence_token_budget": 3000,
+          "evidence_render_mode": "answer_window",
+          "long_evidence_token_limit": 3000,
+          "memory_id": "88432d0a_abs_history_0004",
+          "model_context_window": 8192,
+          "reserved_prompt_token_budget": 2000
+        }
+      ],
+      "failures": [],
+      "gold_answer": "The information provided is not enough. You did not mention baking egg tarts.",
+      "memory_grounding_passed": true,
+      "model_answer": "从我能看到的记忆里，最近两周的烘焙记录没有提到蛋挞。提到的是草莓挞、全麦面包、酸种意大利面包，还有给姐姐烤的巧克力蛋糕。\n\n所以“烤过几次蛋挞”这个我没法确认，证据里没有。你确实烤过蛋挞的话，我这边可能没记上。",
+      "profile": "chain_tri_governed_answer_contract",
+      "prompt_variant": "baseline",
+      "provider_error": false,
+      "public_score": {
+        "method": "deterministic_mismatch",
+        "needs_manual_review": false,
+        "normalized_answer": "从我能看到的记忆里最近2周的烘焙记录没有提到蛋挞提到的是草莓挞全麦面包酸种意大利面包还有给姐姐烤的巧克力蛋糕所以烤过几次蛋挞这个我没法确认证据里没有你确实烤过蛋挞的话我这边可能没记上",
+        "normalized_gold": "theinformationprovidedisnotenoughyoudidnotmentionbakingeggtarts",
+        "passed": false
+      },
+      "question": "How many times did I bake egg tarts in the past two weeks?",
+      "repeat_index": 0,
+      "sent_evidence_gold_hit": false,
+      "source_id": "88432d0a_abs",
+      "timeout": false
+    },
+    {
+      "answer_debug_available": true,
+      "category": "abstention",
+      "comprehensive_answer_rule_passed": true,
+      "evidence_render_metadata": [
+        {
+          "answer_window_fallback_reason": "oracle_missing_has_answer",
+          "answer_window_source": "last_third",
+          "answer_window_turns": 2,
+          "effective_evidence_token_budget": 3000,
+          "evidence_render_mode": "answer_window",
+          "long_evidence_token_limit": 3000,
+          "memory_id": "c8090214_abs_history_0001",
+          "model_context_window": 8192,
+          "reserved_prompt_token_budget": 2000
+        },
+        {
+          "answer_window_fallback_reason": "",
+          "answer_window_source": "has_answer_turn",
+          "answer_window_turns": 2,
+          "effective_evidence_token_budget": 3000,
+          "evidence_render_mode": "answer_window",
+          "long_evidence_token_limit": 3000,
+          "memory_id": "c8090214_abs_history_0002",
+          "model_context_window": 8192,
+          "reserved_prompt_token_budget": 2000
+        }
+      ],
+      "failures": [],
+      "gold_answer": "The information provided is not enough. You mentioned getting the iPhone 13 Pro and attending the market, but you did not mention buying an iPad.",
+      "memory_grounding_passed": true,
+      "model_answer": "这个我答不了，证据里没有你买 iPad 的时间。\n\n我只看到你提过 Holiday Market 是在 Black Friday 前一周去的，但买 iPad 这件事在可用的对话记录里没出现过，两天之间对不上号，算不出间隔。\n\n如果你记得大概哪个月买的 iPad，我可以帮你推一下。",
+      "profile": "chain_tri_governed_answer_contract",
+      "prompt_variant": "baseline",
+      "provider_error": false,
+      "public_score": {
+        "method": "deterministic_mismatch",
+        "needs_manual_review": false,
+        "normalized_answer": "这个我答不了证据里没有你买ipad的时间我只看到你提过holidaymarket是在blackfriday前1周去的但买ipad这件事在可用的对话记录里没出现过2天之间对不上号算不出间隔如果你记得大概哪个月买的ipad我可以帮你推1下",
+        "normalized_gold": "theinformationprovidedisnotenoughyoumentionedgettingtheiphone13proandattendingthemarketbutyoudidnotmentionbuyinganipad",
+        "passed": false
+      },
+      "question": "How many days before I bought my iPad did I attend the Holiday Market?",
+      "repeat_index": 0,
+      "sent_evidence_gold_hit": false,
+      "source_id": "c8090214_abs",
+      "timeout": false
+    },
+    {
+      "answer_debug_available": true,
+      "category": "knowledge-update",
+      "comprehensive_answer_rule_passed": true,
+      "evidence_render_metadata": [
+        {
+          "answer_window_fallback_reason": "",
+          "answer_window_source": "has_answer_turn",
+          "answer_window_turns": 2,
+          "effective_evidence_token_budget": 3000,
+          "evidence_render_mode": "answer_window",
+          "long_evidence_token_limit": 3000,
+          "memory_id": "031748ae_history_0001",
+          "model_context_window": 8192,
+          "reserved_prompt_token_budget": 2000
+        },
+        {
+          "answer_window_fallback_reason": "",
+          "answer_window_source": "has_answer_turn",
+          "answer_window_turns": 2,
+          "effective_evidence_token_budget": 3000,
+          "evidence_render_mode": "answer_window",
+          "long_evidence_token_limit": 3000,
+          "memory_id": "031748ae_history_0002",
+          "model_context_window": 8192,
+          "reserved_prompt_token_budget": 2000
+        }
+      ],
+      "failures": [],
+      "gold_answer": "When you just started your new role as Senior Software Engineer, you led 4 engineers. Now, you lead 5 engineers",
+      "memory_grounding_passed": true,
+      "model_answer": "刚开始的时候是 4 个工程师。现在带 5 个工程师了。",
+      "profile": "chain_tri_governed_answer_contract",
+      "prompt_variant": "baseline",
+      "provider_error": false,
+      "public_score": {
+        "method": "deterministic_mismatch",
+        "needs_manual_review": false,
+        "normalized_answer": "刚开始的时候是4个工程师现在带5个工程师了",
+        "normalized_gold": "whenyoujuststartedyournewroleasseniorsoftwareengineeryouled4engineersnowyoulead5engineers",
+        "passed": false
+      },
+      "question": "How many engineers do I lead when I just started my new role as Senior Software Engineer? How many engineers do I lead now?",
+      "repeat_index": 0,
+      "sent_evidence_gold_hit": false,
+      "source_id": "031748ae",
+      "timeout": false
+    },
+    {
+      "answer_debug_available": true,
+      "category": "knowledge-update",
+      "comprehensive_answer_rule_passed": true,
+      "evidence_render_metadata": [
+        {
+          "answer_window_fallback_reason": "",
+          "answer_window_source": "has_answer_turn",
+          "answer_window_turns": 2,
+          "effective_evidence_token_budget": 3000,
+          "evidence_render_mode": "answer_window",
+          "long_evidence_token_limit": 3000,
+          "memory_id": "0f05491a_history_0001",
+          "model_context_window": 8192,
+          "reserved_prompt_token_budget": 2000
+        },
+        {
+          "answer_window_fallback_reason": "",
+          "answer_window_source": "has_answer_turn",
+          "answer_window_turns": 2,
+          "effective_evidence_token_budget": 3000,
+          "evidence_render_mode": "answer_window",
+          "long_evidence_token_limit": 3000,
+          "memory_id": "0f05491a_history_0002",
+          "model_context_window": 8192,
+          "reserved_prompt_token_budget": 2000
+        }
+      ],
+      "failures": [],
+      "gold_answer": "120",
+      "memory_grounding_passed": true,
+      "model_answer": "我这边能看到的记录里有矛盾的答案：有一次你纠正成 **125 颗**，另一次你纠正成 **120 颗**，而且之前我还错答过 400 和 300。两次你给的不一样，我也没法确认哪个是现在的准确数。\n\n所以这个数字我暂时不能给你打包票，最稳的是直接看 app 里的进度页。",
+      "profile": "chain_tri_governed_answer_contract",
+      "prompt_variant": "baseline",
+      "provider_error": false,
+      "public_score": {
+        "method": "exact",
+        "needs_manual_review": false,
+        "normalized_answer": "我这边能看到的记录里有矛盾的答案有1次你纠正成125颗另1次你纠正成120颗而且之前我还错答过400和3002次你给的不1样我也没法确认哪个是现在的准确数所以这个数字我暂时不能给你打包票最稳的是直接看app里的进度页",
+        "normalized_gold": "120",
+        "passed": true
+      },
+      "question": "How many stars do I need to reach the gold level on my Starbucks Rewards app?",
+      "repeat_index": 0,
+      "sent_evidence_gold_hit": true,
+      "source_id": "0f05491a",
+      "timeout": false
+    },
+    {
+      "answer_debug_available": true,
+      "category": "knowledge-update",
+      "comprehensive_answer_rule_passed": true,
+      "evidence_render_metadata": [
+        {
+          "answer_window_fallback_reason": "",
+          "answer_window_source": "has_answer_turn",
+          "answer_window_turns": 2,
+          "effective_evidence_token_budget": 3000,
+          "evidence_render_mode": "answer_window",
+          "long_evidence_token_limit": 3000,
+          "memory_id": "1cea1afa_history_0001",
+          "model_context_window": 8192,
+          "reserved_prompt_token_budget": 2000
+        },
+        {
+          "answer_window_fallback_reason": "",
+          "answer_window_source": "has_answer_turn",
+          "answer_window_turns": 2,
+          "effective_evidence_token_budget": 3000,
+          "evidence_render_mode": "answer_window",
+          "long_evidence_token_limit": 3000,
+          "memory_id": "1cea1afa_history_0002",
+          "model_context_window": 8192,
+          "reserved_prompt_token_budget": 2000
+        }
+      ],
+      "failures": [],
+      "gold_answer": "600",
+      "memory_grounding_passed": true,
+      "model_answer": "根据我们对话记录里最新的一条，你上次提到的是 **600 粉丝**。\n\n不过这是你当时报的数字，我没法实时查你现在的 Instagram 页面，所以当前实际是多少我也不能确认。",
+      "profile": "chain_tri_governed_answer_contract",
+      "prompt_variant": "baseline",
+      "provider_error": false,
+      "public_score": {
+        "method": "exact",
+        "needs_manual_review": false,
+        "normalized_answer": "根据我们对话记录里最新的1条你上次提到的是600粉丝不过这是你当时报的数字我没法实时查你现在的instagram页面所以当前实际是多少我也不能确认",
+        "normalized_gold": "600",
+        "passed": true
+      },
+      "question": "How many Instagram followers do I currently have?",
+      "repeat_index": 0,
+      "sent_evidence_gold_hit": true,
+      "source_id": "1cea1afa",
+      "timeout": false
+    },
+    {
+      "answer_debug_available": true,
+      "category": "knowledge-update",
+      "comprehensive_answer_rule_passed": true,
+      "evidence_render_metadata": [
+        {
+          "answer_window_fallback_reason": "",
+          "answer_window_source": "has_answer_turn",
+          "answer_window_turns": 2,
+          "effective_evidence_token_budget": 3000,
+          "evidence_render_mode": "answer_window",
+          "long_evidence_token_limit": 3000,
+          "memory_id": "830ce83f_history_0001",
+          "model_context_window": 8192,
+          "reserved_prompt_token_budget": 2000
+        },
+        {
+          "answer_window_fallback_reason": "",
+          "answer_window_source": "has_answer_turn",
+          "answer_window_turns": 2,
+          "effective_evidence_token_budget": 3000,
+          "evidence_render_mode": "answer_window",
+          "long_evidence_token_limit": 3000,
+          "memory_id": "830ce83f_history_0002",
+          "model_context_window": 8192,
+          "reserved_prompt_token_budget": 2000
+        }
+      ],
+      "failures": [],
+      "gold_answer": "the suburbs",
+      "memory_grounding_passed": true,
+      "model_answer": "她最近一次是搬回了郊区（suburbs）。更早之前提到是搬到了芝加哥，但那次之后又搬回 suburbs 了，具体哪个城市的郊区，对话里没说。",
+      "profile": "chain_tri_governed_answer_contract",
+      "prompt_variant": "baseline",
+      "provider_error": false,
+      "public_score": {
+        "method": "deterministic_mismatch",
+        "needs_manual_review": false,
+        "normalized_answer": "她最近1次是搬回了郊区suburbs更早之前提到是搬到了芝加哥但那次之后又搬回suburbs了具体哪个城市的郊区对话里没说",
+        "normalized_gold": "thesuburbs",
+        "passed": false
+      },
+      "question": "Where did Rachel move to after her recent relocation?",
+      "repeat_index": 0,
+      "sent_evidence_gold_hit": true,
+      "source_id": "830ce83f",
+      "timeout": false
+    },
+    {
+      "answer_debug_available": true,
+      "category": "knowledge-update",
+      "comprehensive_answer_rule_passed": true,
+      "evidence_render_metadata": [
+        {
+          "answer_window_fallback_reason": "",
+          "answer_window_source": "has_answer_turn",
+          "answer_window_turns": 2,
+          "effective_evidence_token_budget": 3000,
+          "evidence_render_mode": "answer_window",
+          "long_evidence_token_limit": 3000,
+          "memory_id": "852ce960_history_0001",
+          "model_context_window": 8192,
+          "reserved_prompt_token_budget": 2000
+        },
+        {
+          "answer_window_fallback_reason": "",
+          "answer_window_source": "has_answer_turn",
+          "answer_window_turns": 2,
+          "effective_evidence_token_budget": 3000,
+          "evidence_render_mode": "answer_window",
+          "long_evidence_token_limit": 3000,
+          "memory_id": "852ce960_history_0002",
+          "model_context_window": 8192,
+          "reserved_prompt_token_budget": 2000
+        }
+      ],
+      "failures": [],
+      "gold_answer": "$400,000",
+      "memory_grounding_passed": true,
+      "model_answer": "查到你提到过两次，数字对不上：\n\n第一次是在聊买房预算时，你说房子 $325,000，在 Wells Fargo 预批了 **$350,000**。\n\n后来聊搬家设电视网络时，你又提了一句\"记得我在 Wells Fargo 预批了 **$400,000** 吗\"。\n\n所以这两个数字我都看到了，但没法确定哪个是准的。你记得是哪次对？",
+      "profile": "chain_tri_governed_answer_contract",
+      "prompt_variant": "baseline",
+      "provider_error": false,
+      "public_score": {
+        "method": "exact",
+        "needs_manual_review": false,
+        "normalized_answer": "查到你提到过2次数字对不上第1次是在聊买房预算时你说房子$325000在wellsfargo预批了$350000后来聊搬家设电视网络时你又提了1句记得我在wellsfargo预批了$400000吗所以这2个数字我都看到了但没法确定哪个是准的你记得是哪次对",
+        "normalized_gold": "$400000",
+        "passed": true
+      },
+      "question": "What was the amount I was pre-approved for when I got my mortgage from Wells Fargo?",
+      "repeat_index": 0,
+      "sent_evidence_gold_hit": true,
+      "source_id": "852ce960",
+      "timeout": false
+    },
+    {
+      "answer_debug_available": true,
+      "category": "knowledge-update",
+      "comprehensive_answer_rule_passed": true,
+      "evidence_render_metadata": [
+        {
+          "answer_window_fallback_reason": "",
+          "answer_window_source": "has_answer_turn",
+          "answer_window_turns": 2,
+          "effective_evidence_token_budget": 3000,
+          "evidence_render_mode": "answer_window",
+          "long_evidence_token_limit": 3000,
+          "memory_id": "a2f3aa27_history_0001",
+          "model_context_window": 8192,
+          "reserved_prompt_token_budget": 2000
+        },
+        {
+          "answer_window_fallback_reason": "",
+          "answer_window_source": "has_answer_turn",
+          "answer_window_turns": 2,
+          "effective_evidence_token_budget": 3000,
+          "evidence_render_mode": "answer_window",
+          "long_evidence_token_limit": 3000,
+          "memory_id": "a2f3aa27_history_0002",
+          "model_context_window": 8192,
+          "reserved_prompt_token_budget": 2000
+        }
+      ],
+      "failures": [],
+      "gold_answer": "1300",
+      "memory_grounding_passed": true,
+      "model_answer": "按我记忆里最后的信息，你上次说快接近 1300 了。\n\n但这个数字是之前的快照，我没法实时查到你现在的实际粉丝数，以 Instagram 上显示的为准。",
+      "profile": "chain_tri_governed_answer_contract",
+      "prompt_variant": "baseline",
+      "provider_error": false,
+      "public_score": {
+        "method": "exact",
+        "needs_manual_review": false,
+        "normalized_answer": "按我记忆里最后的信息你上次说快接近1300了但这个数字是之前的快照我没法实时查到你现在的实际粉丝数以instagram上显示的为准",
+        "normalized_gold": "1300",
+        "passed": true
+      },
+      "question": "How many followers do I have on Instagram now?",
+      "repeat_index": 0,
+      "sent_evidence_gold_hit": true,
+      "source_id": "a2f3aa27",
+      "timeout": false
+    },
+    {
+      "answer_debug_available": true,
+      "category": "knowledge-update",
+      "comprehensive_answer_rule_passed": true,
+      "evidence_render_metadata": [
+        {
+          "answer_window_fallback_reason": "",
+          "answer_window_source": "has_answer_turn",
+          "answer_window_turns": 2,
+          "effective_evidence_token_budget": 3000,
+          "evidence_render_mode": "answer_window",
+          "long_evidence_token_limit": 3000,
+          "memory_id": "e493bb7c_history_0001",
+          "model_context_window": 8192,
+          "reserved_prompt_token_budget": 2000
+        },
+        {
+          "answer_window_fallback_reason": "",
+          "answer_window_source": "has_answer_turn",
+          "answer_window_turns": 2,
+          "effective_evidence_token_budget": 3000,
+          "evidence_render_mode": "answer_window",
+          "long_evidence_token_limit": 3000,
+          "memory_id": "e493bb7c_history_0002",
+          "model_context_window": 8192,
+          "reserved_prompt_token_budget": 2000
+        }
+      ],
+      "failures": [],
+      "gold_answer": "in my bedroom",
+      "memory_grounding_passed": true,
+      "model_answer": "根据我们最近的对话，那幅 Emma Taylor 的 *Ethereal Dreams* 现在挂在卧室里，床的上方。你之前提到刚把它从客厅沙发上方移过去，说给卧室添了不少氛围。",
+      "profile": "chain_tri_governed_answer_contract",
+      "prompt_variant": "baseline",
+      "provider_error": false,
+      "public_score": {
+        "method": "deterministic_mismatch",
+        "needs_manual_review": false,
+        "normalized_answer": "根据我们最近的对话那幅emmataylor的etherealdreams现在挂在卧室里床的上方你之前提到刚把它从客厅沙发上方移过去说给卧室添了不少氛围",
+        "normalized_gold": "inmybedroom",
+        "passed": false
+      },
+      "question": "Where is the painting 'Ethereal Dreams' by Emma Taylor currently hanging?",
+      "repeat_index": 0,
+      "sent_evidence_gold_hit": true,
+      "source_id": "e493bb7c",
+      "timeout": false
+    },
+    {
+      "answer_debug_available": true,
+      "category": "multi-session",
+      "comprehensive_answer_rule_passed": true,
+      "evidence_render_metadata": [
+        {
+          "answer_window_fallback_reason": "",
+          "answer_window_source": "has_answer_turn",
+          "answer_window_turns": 2,
+          "effective_evidence_token_budget": 3000,
+          "evidence_render_mode": "answer_window",
+          "long_evidence_token_limit": 3000,
+          "memory_id": "2e6d26dc_history_0001",
+          "model_context_window": 8192,
+          "reserved_prompt_token_budget": 2000
+        },
+        {
+          "answer_window_fallback_reason": "",
+          "answer_window_source": "has_answer_turn",
+          "answer_window_turns": 2,
+          "effective_evidence_token_budget": 3000,
+          "evidence_render_mode": "answer_window",
+          "long_evidence_token_limit": 3000,
+          "memory_id": "2e6d26dc_history_0002",
+          "model_context_window": 8192,
+          "reserved_prompt_token_budget": 2000
+        },
+        {
+          "answer_window_fallback_reason": "",
+          "answer_window_source": "has_answer_turn",
+          "answer_window_turns": 2,
+          "effective_evidence_token_budget": 3000,
+          "evidence_render_mode": "answer_window",
+          "long_evidence_token_limit": 3000,
+          "memory_id": "2e6d26dc_history_0003",
+          "model_context_window": 8192,
+          "reserved_prompt_token_budget": 2000
+        },
+        {
+          "answer_window_fallback_reason": "",
+          "answer_window_source": "has_answer_turn",
+          "answer_window_turns": 2,
+          "effective_evidence_token_budget": 3000,
+          "evidence_render_mode": "answer_window",
+          "long_evidence_token_limit": 3000,
+          "memory_id": "2e6d26dc_history_0004",
+          "model_context_window": 8192,
+          "reserved_prompt_token_budget": 2000
+        }
+      ],
+      "failures": [],
+      "gold_answer": "5",
+      "memory_grounding_passed": true,
+      "model_answer": "按咱们聊过的，一共 5 个：\n\n- 双胞胎 Ava 和 Lily（4 月出生）\n- David 家的男孩 Jasper（几周前）\n- Rachel 家的男孩 Max（3 月）\n- Mike 和 Emma 家的女孩 Charlotte（Rachel 宝宝派对后几周）\n\n就是这些。",
+      "profile": "chain_tri_governed_answer_contract",
+      "prompt_variant": "baseline",
+      "provider_error": false,
+      "public_score": {
+        "method": "exact",
+        "needs_manual_review": false,
+        "normalized_answer": "按咱们聊过的1共5个双胞胎ava和lily4月出生david家的男孩jasper几周前rachel家的男孩max3月mike和emma家的女孩charlotterachel宝宝派对后几周就是这些",
+        "normalized_gold": "5",
+        "passed": true
+      },
+      "question": "How many babies were born to friends and family members in the last few months?",
+      "repeat_index": 0,
+      "sent_evidence_gold_hit": true,
+      "source_id": "2e6d26dc",
+      "timeout": false
+    },
+    {
+      "answer_debug_available": true,
+      "category": "multi-session",
+      "comprehensive_answer_rule_passed": true,
+      "evidence_render_metadata": [
+        {
+          "answer_window_fallback_reason": "",
+          "answer_window_source": "has_answer_turn",
+          "answer_window_turns": 2,
+          "effective_evidence_token_budget": 3000,
+          "evidence_render_mode": "answer_window",
+          "long_evidence_token_limit": 3000,
+          "memory_id": "60472f9c_history_0001",
+          "model_context_window": 8192,
+          "reserved_prompt_token_budget": 2000
+        },
+        {
+          "answer_window_fallback_reason": "oracle_missing_has_answer",
+          "answer_window_source": "last_third",
+          "answer_window_turns": 2,
+          "effective_evidence_token_budget": 3000,
+          "evidence_render_mode": "answer_window",
+          "long_evidence_token_limit": 3000,
+          "memory_id": "60472f9c_history_0002",
+          "model_context_window": 8192,
+          "reserved_prompt_token_budget": 2000
+        },
+        {
+          "answer_window_fallback_reason": "",
+          "answer_window_source": "has_answer_turn",
+          "answer_window_turns": 2,
+          "effective_evidence_token_budget": 3000,
+          "evidence_render_mode": "answer_window",
+          "long_evidence_token_limit": 3000,
+          "memory_id": "60472f9c_history_0003",
+          "model_context_window": 8192,
+          "reserved_prompt_token_budget": 2000
+        }
+      ],
+      "failures": [],
+      "gold_answer": "2",
+      "memory_grounding_passed": true,
+      "model_answer": "2 个。除了论文，你同时在做的还有 Data Mining 课程的 group project 和 Database Systems 课程的 group project。你当时还分别给它们建了独立的 Trello board。",
+      "profile": "chain_tri_governed_answer_contract",
+      "prompt_variant": "baseline",
+      "provider_error": false,
+      "public_score": {
+        "method": "exact",
+        "needs_manual_review": false,
+        "normalized_answer": "2个除了论文你同时在做的还有datamining课程的groupproject和databasesystems课程的groupproject你当时还分别给它们建了独立的trelloboard",
+        "normalized_gold": "2",
+        "passed": true
+      },
+      "question": "How many projects have I been working on simultaneously, excluding my thesis?",
+      "repeat_index": 0,
+      "sent_evidence_gold_hit": true,
+      "source_id": "60472f9c",
+      "timeout": false
+    },
+    {
+      "answer_debug_available": true,
+      "category": "multi-session",
+      "comprehensive_answer_rule_passed": true,
+      "evidence_render_metadata": [
+        {
+          "answer_window_fallback_reason": "",
+          "answer_window_source": "has_answer_turn",
+          "answer_window_turns": 2,
+          "effective_evidence_token_budget": 3000,
+          "evidence_render_mode": "answer_window",
+          "long_evidence_token_limit": 3000,
+          "memory_id": "61f8c8f8_history_0001",
+          "model_context_window": 8192,
+          "reserved_prompt_token_budget": 2000
+        },
+        {
+          "answer_window_fallback_reason": "",
+          "answer_window_source": "has_answer_turn",
+          "answer_window_turns": 2,
+          "effective_evidence_token_budget": 3000,
+          "evidence_render_mode": "answer_window",
+          "long_evidence_token_limit": 3000,
+          "memory_id": "61f8c8f8_history_0002",
+          "model_context_window": 8192,
+          "reserved_prompt_token_budget": 2000
+        }
+      ],
+      "failures": [],
+      "gold_answer": "10 minutes",
+      "memory_grounding_passed": true,
+      "model_answer": "你这次比去年快了 10 分钟——去年 45 分钟，最近那次 35 分钟。",
+      "profile": "chain_tri_governed_answer_contract",
+      "prompt_variant": "baseline",
+      "provider_error": false,
+      "public_score": {
+        "method": "deterministic_mismatch",
+        "needs_manual_review": false,
+        "normalized_answer": "你这次比去年快了10分钟去年45分钟最近那次35分钟",
+        "normalized_gold": "10minutes",
+        "passed": false
+      },
+      "question": "How much faster did I finish the 5K run compared to my previous year's time?",
+      "repeat_index": 0,
+      "sent_evidence_gold_hit": true,
+      "source_id": "61f8c8f8",
+      "timeout": false
+    },
+    {
+      "answer_debug_available": true,
+      "category": "multi-session",
+      "comprehensive_answer_rule_passed": true,
+      "evidence_render_metadata": [
+        {
+          "answer_window_fallback_reason": "",
+          "answer_window_source": "has_answer_turn",
+          "answer_window_turns": 2,
+          "effective_evidence_token_budget": 3000,
+          "evidence_render_mode": "answer_window",
+          "long_evidence_token_limit": 3000,
+          "memory_id": "6456829e_history_0001",
+          "model_context_window": 8192,
+          "reserved_prompt_token_budget": 2000
+        },
+        {
+          "answer_window_fallback_reason": "",
+          "answer_window_source": "has_answer_turn",
+          "answer_window_turns": 2,
+          "effective_evidence_token_budget": 3000,
+          "evidence_render_mode": "answer_window",
+          "long_evidence_token_limit": 3000,
+          "memory_id": "6456829e_history_0002",
+          "model_context_window": 8192,
+          "reserved_prompt_token_budget": 2000
+        }
+      ],
+      "failures": [],
+      "gold_answer": "8",
+      "memory_grounding_passed": true,
+      "model_answer": "番茄 5 株，黄瓜 3 株。",
+      "profile": "chain_tri_governed_answer_contract",
+      "prompt_variant": "baseline",
+      "provider_error": false,
+      "public_score": {
+        "method": "deterministic_mismatch",
+        "needs_manual_review": false,
+        "normalized_answer": "番茄5株黄瓜3株",
+        "normalized_gold": "8",
+        "passed": false
+      },
+      "question": "How many plants did I initially plant for tomatoes and cucumbers?",
+      "repeat_index": 0,
+      "sent_evidence_gold_hit": true,
+      "source_id": "6456829e",
+      "timeout": false
+    },
+    {
+      "answer_debug_available": true,
+      "category": "multi-session",
+      "comprehensive_answer_rule_passed": true,
+      "evidence_render_metadata": [
+        {
+          "answer_window_fallback_reason": "",
+          "answer_window_source": "has_answer_turn",
+          "answer_window_turns": 2,
+          "effective_evidence_token_budget": 3000,
+          "evidence_render_mode": "answer_window",
+          "long_evidence_token_limit": 3000,
+          "memory_id": "88432d0a_history_0001",
+          "model_context_window": 8192,
+          "reserved_prompt_token_budget": 2000
+        },
+        {
+          "answer_window_fallback_reason": "",
+          "answer_window_source": "has_answer_turn",
+          "answer_window_turns": 2,
+          "effective_evidence_token_budget": 3000,
+          "evidence_render_mode": "answer_window",
+          "long_evidence_token_limit": 3000,
+          "memory_id": "88432d0a_history_0002",
+          "model_context_window": 8192,
+          "reserved_prompt_token_budget": 2000
+        },
+        {
+          "answer_window_fallback_reason": "",
+          "answer_window_source": "has_answer_turn",
+          "answer_window_turns": 2,
+          "effective_evidence_token_budget": 3000,
+          "evidence_render_mode": "answer_window",
+          "long_evidence_token_limit": 3000,
+          "memory_id": "88432d0a_history_0003",
+          "model_context_window": 8192,
+          "reserved_prompt_token_budget": 2000
+        },
+        {
+          "answer_window_fallback_reason": "",
+          "answer_window_source": "has_answer_turn",
+          "answer_window_turns": 2,
+          "effective_evidence_token_budget": 3000,
+          "evidence_render_mode": "answer_window",
+          "long_evidence_token_limit": 3000,
+          "memory_id": "88432d0a_history_0004",
+          "model_context_window": 8192,
+          "reserved_prompt_token_budget": 2000
+        }
+      ],
+      "failures": [],
+      "gold_answer": "4",
+      "memory_grounding_passed": true,
+      "model_answer": "Based on what I have in memory, there were **4 times** you actually baked in the past two weeks:\n\n1. **Chocolate cake** last weekend (around Aug 8–9) for your sister's birthday — with espresso powder.\n2. **Sourdough bread** on a Tuesday — the recipe that came out dense and heavy.\n3. **A batch of cookies** last Thursday (Aug 13) — your first time using the convection setting.\n4. **Whole wheat baguette** last Saturday (Aug 15).\n\nThe counts are from memory summaries, so exact dates are approximate. Your upcoming plans (chicken wings tonight, rustic Italian bread this weekend) aren't baked yet, so they don't count.",
+      "profile": "chain_tri_governed_answer_contract",
+      "prompt_variant": "baseline",
+      "provider_error": false,
+      "public_score": {
+        "method": "exact",
+        "needs_manual_review": false,
+        "normalized_answer": "basedonwhatihaveinmemorytherewere4timesyouactuallybakedinthepasttwoweeks1chocolatecakelastweekendaroundaug89foryoursistersbirthdaywithespressopowder2sourdoughbreadonatuesdaytherecipethatcameoutdenseandheavy3abatchofcookieslastthursdayaug13yourfirsttimeusingtheconvectionsetting4wholewheatbaguettelastsaturdayaug15thecountsarefrommemorysummariessoexactdatesareapproximateyourupcomingplanschickenwingstonightrusticitalianbreadthisweekendarentbakedyetsotheydontcount",
+        "normalized_gold": "4",
+        "passed": true
+      },
+      "question": "How many times did I bake something in the past two weeks?",
+      "repeat_index": 0,
+      "sent_evidence_gold_hit": true,
+      "source_id": "88432d0a",
+      "timeout": false
+    },
+    {
+      "answer_debug_available": true,
+      "category": "multi-session",
+      "comprehensive_answer_rule_passed": true,
+      "evidence_render_metadata": [
+        {
+          "answer_window_fallback_reason": "",
+          "answer_window_source": "has_answer_turn",
+          "answer_window_turns": 2,
+          "effective_evidence_token_budget": 3000,
+          "evidence_render_mode": "answer_window",
+          "long_evidence_token_limit": 3000,
+          "memory_id": "8e91e7d9_history_0001",
+          "model_context_window": 8192,
+          "reserved_prompt_token_budget": 2000
+        },
+        {
+          "answer_window_fallback_reason": "",
+          "answer_window_source": "has_answer_turn",
+          "answer_window_turns": 2,
+          "effective_evidence_token_budget": 3000,
+          "evidence_render_mode": "answer_window",
+          "long_evidence_token_limit": 3000,
+          "memory_id": "8e91e7d9_history_0002",
+          "model_context_window": 8192,
+          "reserved_prompt_token_budget": 2000
+        }
+      ],
+      "failures": [],
+      "gold_answer": "4",
+      "memory_grounding_passed": true,
+      "model_answer": "根据你之前提到的，你有一个兄弟，还说过自己来自一个有 3 个姐妹的家庭。加起来的话，兄弟姐妹一共 4 个。",
+      "profile": "chain_tri_governed_answer_contract",
+      "prompt_variant": "baseline",
+      "provider_error": false,
+      "public_score": {
+        "method": "exact",
+        "needs_manual_review": false,
+        "normalized_answer": "根据你之前提到的你有1个兄弟还说过自己来自1个有3个姐妹的家庭加起来的话兄弟姐妹1共4个",
+        "normalized_gold": "4",
+        "passed": true
+      },
+      "question": "What is the total number of siblings I have?",
+      "repeat_index": 0,
+      "sent_evidence_gold_hit": true,
+      "source_id": "8e91e7d9",
+      "timeout": false
+    },
+    {
+      "answer_debug_available": true,
+      "category": "multi-session",
+      "comprehensive_answer_rule_passed": true,
+      "evidence_render_metadata": [
+        {
+          "answer_window_fallback_reason": "",
+          "answer_window_source": "has_answer_turn",
+          "answer_window_turns": 2,
+          "effective_evidence_token_budget": 3000,
+          "evidence_render_mode": "answer_window",
+          "long_evidence_token_limit": 3000,
+          "memory_id": "a3332713_history_0001",
+          "model_context_window": 8192,
+          "reserved_prompt_token_budget": 2000
+        },
+        {
+          "answer_window_fallback_reason": "",
+          "answer_window_source": "has_answer_turn",
+          "answer_window_turns": 2,
+          "effective_evidence_token_budget": 3000,
+          "evidence_render_mode": "answer_window",
+          "long_evidence_token_limit": 3000,
+          "memory_id": "a3332713_history_0002",
+          "model_context_window": 8192,
+          "reserved_prompt_token_budget": 2000
+        }
+      ],
+      "failures": [],
+      "gold_answer": "$200",
+      "memory_grounding_passed": true,
+      "model_answer": "$200。\n\n同事的婴儿礼物（Buy Buy Baby 那套衣服和玩具）$100，兄弟的毕业礼品卡 $100，加起来 $200。",
+      "profile": "chain_tri_governed_answer_contract",
+      "prompt_variant": "baseline",
+      "provider_error": false,
+      "public_score": {
+        "method": "exact",
+        "needs_manual_review": false,
+        "normalized_answer": "$200同事的婴儿礼物buybuybaby那套衣服和玩具$100兄弟的毕业礼品卡$100加起来$200",
+        "normalized_gold": "$200",
+        "passed": true
+      },
+      "question": "What is the total amount I spent on gifts for my coworker and brother?",
+      "repeat_index": 0,
+      "sent_evidence_gold_hit": false,
+      "source_id": "a3332713",
+      "timeout": false
+    },
+    {
+      "answer_debug_available": true,
+      "category": "multi-session",
+      "comprehensive_answer_rule_passed": true,
+      "evidence_render_metadata": [
+        {
+          "answer_window_fallback_reason": "",
+          "answer_window_source": "has_answer_turn",
+          "answer_window_turns": 2,
+          "effective_evidence_token_budget": 3000,
+          "evidence_render_mode": "answer_window",
+          "long_evidence_token_limit": 3000,
+          "memory_id": "b3c15d39_history_0001",
+          "model_context_window": 8192,
+          "reserved_prompt_token_budget": 2000
+        },
+        {
+          "answer_window_fallback_reason": "",
+          "answer_window_source": "has_answer_turn",
+          "answer_window_turns": 2,
+          "effective_evidence_token_budget": 3000,
+          "evidence_render_mode": "answer_window",
+          "long_evidence_token_limit": 3000,
+          "memory_id": "b3c15d39_history_0002",
+          "model_context_window": 8192,
+          "reserved_prompt_token_budget": 2000
+        }
+      ],
+      "failures": [],
+      "gold_answer": "5 days. 6 days (including the last day) is also acceptable.",
+      "memory_grounding_passed": true,
+      "model_answer": "5 days — you ordered it on February 5th, and it arrived on February 10th.",
+      "profile": "chain_tri_governed_answer_contract",
+      "prompt_variant": "baseline",
+      "provider_error": false,
+      "public_score": {
+        "method": "deterministic_mismatch",
+        "needs_manual_review": false,
+        "normalized_answer": "5daysyouordereditonfebruary5thanditarrivedonfebruary10th",
+        "normalized_gold": "5days6daysincludingthelastdayisalsoacceptable",
+        "passed": false
+      },
+      "question": "How many days did it take for me to receive the new remote shutter release after I ordered it?",
+      "repeat_index": 0,
+      "sent_evidence_gold_hit": false,
+      "source_id": "b3c15d39",
+      "timeout": false
+    },
+    {
+      "answer_debug_available": true,
+      "category": "multi-session",
+      "comprehensive_answer_rule_passed": true,
+      "evidence_render_metadata": [
+        {
+          "answer_window_fallback_reason": "",
+          "answer_window_source": "has_answer_turn",
+          "answer_window_turns": 2,
+          "effective_evidence_token_budget": 3000,
+          "evidence_render_mode": "answer_window",
+          "long_evidence_token_limit": 3000,
+          "memory_id": "bb7c3b45_history_0001",
+          "model_context_window": 8192,
+          "reserved_prompt_token_budget": 2000
+        },
+        {
+          "answer_window_fallback_reason": "",
+          "answer_window_source": "has_answer_turn",
+          "answer_window_turns": 2,
+          "effective_evidence_token_budget": 3000,
+          "evidence_render_mode": "answer_window",
+          "long_evidence_token_limit": 3000,
+          "memory_id": "bb7c3b45_history_0002",
+          "model_context_window": 8192,
+          "reserved_prompt_token_budget": 2000
+        }
+      ],
+      "failures": [],
+      "gold_answer": "$300",
+      "memory_grounding_passed": true,
+      "model_answer": "按你之前说的：原价 $500，在 outlet 花 $200 买的，省了 $300。",
+      "profile": "chain_tri_governed_answer_contract",
+      "prompt_variant": "baseline",
+      "provider_error": false,
+      "public_score": {
+        "method": "exact",
+        "needs_manual_review": false,
+        "normalized_answer": "按你之前说的原价$500在outlet花$200买的省了$300",
+        "normalized_gold": "$300",
+        "passed": true
+      },
+      "question": "How much did I save on the Jimmy Choo heels?",
+      "repeat_index": 0,
+      "sent_evidence_gold_hit": false,
+      "source_id": "bb7c3b45",
+      "timeout": false
+    },
+    {
+      "answer_debug_available": true,
+      "category": "multi-session",
+      "comprehensive_answer_rule_passed": true,
+      "evidence_render_metadata": [
+        {
+          "answer_window_fallback_reason": "",
+          "answer_window_source": "has_answer_turn",
+          "answer_window_turns": 2,
+          "effective_evidence_token_budget": 3000,
+          "evidence_render_mode": "answer_window",
+          "long_evidence_token_limit": 3000,
+          "memory_id": "ef9cf60a_history_0001",
+          "model_context_window": 8192,
+          "reserved_prompt_token_budget": 2000
+        },
+        {
+          "answer_window_fallback_reason": "",
+          "answer_window_source": "has_answer_turn",
+          "answer_window_turns": 2,
+          "effective_evidence_token_budget": 3000,
+          "evidence_render_mode": "answer_window",
+          "long_evidence_token_limit": 3000,
+          "memory_id": "ef9cf60a_history_0002",
+          "model_context_window": 8192,
+          "reserved_prompt_token_budget": 2000
+        }
+      ],
+      "failures": [],
+      "gold_answer": "$300",
+      "memory_grounding_passed": true,
+      "model_answer": "按你之前说过的，给妹妹买过两份礼：\n\n- 她最爱的 spa 礼品卡，$100\n- Tiffany 的银项链小吊坠，约 $200\n\n合计大概 **$300**。",
+      "profile": "chain_tri_governed_answer_contract",
+      "prompt_variant": "baseline",
+      "provider_error": false,
+      "public_score": {
+        "method": "exact",
+        "needs_manual_review": false,
+        "normalized_answer": "按你之前说过的给妹妹买过2份礼她最爱的spa礼品卡$100tiffany的银项链小吊坠约$200合计大概$300",
+        "normalized_gold": "$300",
+        "passed": true
+      },
+      "question": "How much did I spend on gifts for my sister?",
+      "repeat_index": 0,
+      "sent_evidence_gold_hit": false,
+      "source_id": "ef9cf60a",
+      "timeout": false
+    },
+    {
+      "answer_debug_available": true,
+      "category": "multi-session",
+      "comprehensive_answer_rule_passed": true,
+      "evidence_render_metadata": [
+        {
+          "answer_window_fallback_reason": "",
+          "answer_window_source": "has_answer_turn",
+          "answer_window_turns": 2,
+          "effective_evidence_token_budget": 3000,
+          "evidence_render_mode": "answer_window",
+          "long_evidence_token_limit": 3000,
+          "memory_id": "gpt4_2f91af09_history_0001",
+          "model_context_window": 8192,
+          "reserved_prompt_token_budget": 2000
+        },
+        {
+          "answer_window_fallback_reason": "",
+          "answer_window_source": "has_answer_turn",
+          "answer_window_turns": 2,
+          "effective_evidence_token_budget": 3000,
+          "evidence_render_mode": "answer_window",
+          "long_evidence_token_limit": 3000,
+          "memory_id": "gpt4_2f91af09_history_0002",
+          "model_context_window": 8192,
+          "reserved_prompt_token_budget": 2000
+        },
+        {
+          "answer_window_fallback_reason": "",
+          "answer_window_source": "has_answer_turn",
+          "answer_window_turns": 2,
+          "effective_evidence_token_budget": 3000,
+          "evidence_render_mode": "answer_window",
+          "long_evidence_token_limit": 3000,
+          "memory_id": "gpt4_2f91af09_history_0003",
+          "model_context_window": 8192,
+          "reserved_prompt_token_budget": 2000
+        }
+      ],
+      "failures": [],
+      "gold_answer": "23",
+      "memory_grounding_passed": true,
+      "model_answer": "按我能看到的记录，写得挺多的：\n\n- 诗：17 首（过去两周内）\n- 短篇小说：5 篇\n- 写作挑战作品：至少 1 篇，就是那篇《The Smell of Old Books》\n\n加起来是 **至少 23 篇**。不过挑战作品你到底写了几篇，记录里没写全，所以精确总数我只能确认到\"至少 23\"。要多于 23 的话，得靠你补充一下挑战那边的情况。",
+      "profile": "chain_tri_governed_answer_contract",
+      "prompt_variant": "baseline",
+      "provider_error": false,
+      "public_score": {
+        "method": "exact",
+        "needs_manual_review": false,
+        "normalized_answer": "按我能看到的记录写得挺多的诗17首过去2周内短篇小说5篇写作挑战作品至少1篇就是那篇thesmellofoldbooks加起来是至少23篇不过挑战作品你到底写了几篇记录里没写全所以精确总数我只能确认到至少23要多于23的话得靠你补充1下挑战那边的情况",
+        "normalized_gold": "23",
+        "passed": true
+      },
+      "question": "How many total pieces of writing have I completed since I started writing again three weeks ago, including short stories, poems, and pieces for the writing challenge?",
+      "repeat_index": 0,
+      "sent_evidence_gold_hit": false,
+      "source_id": "gpt4_2f91af09",
+      "timeout": false
+    },
+    {
+      "answer_debug_available": true,
+      "category": "multi-session",
+      "comprehensive_answer_rule_passed": true,
+      "evidence_render_metadata": [
+        {
+          "answer_window_fallback_reason": "",
+          "answer_window_source": "has_answer_turn",
+          "answer_window_turns": 2,
+          "effective_evidence_token_budget": 3000,
+          "evidence_render_mode": "answer_window",
+          "long_evidence_token_limit": 3000,
+          "memory_id": "gpt4_7fce9456_history_0001",
+          "model_context_window": 8192,
+          "reserved_prompt_token_budget": 2000
+        },
+        {
+          "answer_window_fallback_reason": "",
+          "answer_window_source": "has_answer_turn",
+          "answer_window_turns": 2,
+          "effective_evidence_token_budget": 3000,
+          "evidence_render_mode": "answer_window",
+          "long_evidence_token_limit": 3000,
+          "memory_id": "gpt4_7fce9456_history_0002",
+          "model_context_window": 8192,
+          "reserved_prompt_token_budget": 2000
+        },
+        {
+          "answer_window_fallback_reason": "",
+          "answer_window_source": "has_answer_turn",
+          "answer_window_turns": 2,
+          "effective_evidence_token_budget": 3000,
+          "evidence_render_mode": "answer_window",
+          "long_evidence_token_limit": 3000,
+          "memory_id": "gpt4_7fce9456_history_0003",
+          "model_context_window": 8192,
+          "reserved_prompt_token_budget": 2000
+        },
+        {
+          "answer_window_fallback_reason": "",
+          "answer_window_source": "has_answer_turn",
+          "answer_window_turns": 2,
+          "effective_evidence_token_budget": 3000,
+          "evidence_render_mode": "answer_window",
+          "long_evidence_token_limit": 3000,
+          "memory_id": "gpt4_7fce9456_history_0004",
+          "model_context_window": 8192,
+          "reserved_prompt_token_budget": 2000
+        },
+        {
+          "answer_window_fallback_reason": "",
+          "answer_window_source": "has_answer_turn",
+          "answer_window_turns": 2,
+          "effective_evidence_token_budget": 3000,
+          "evidence_render_mode": "answer_window",
+          "long_evidence_token_limit": 3000,
+          "memory_id": "gpt4_7fce9456_history_0005",
+          "model_context_window": 8192,
+          "reserved_prompt_token_budget": 2000
+        }
+      ],
+      "failures": [],
+      "gold_answer": "I viewed four properties before making an offer on the townhouse in the Brookside neighborhood. The reasons I didn't make an offer on them were: the kitchen of the bungalow needed serious renovation, the property in Cedar Creek was out of my budget, the noise from the highway was a deal-breaker for the 1-bedroom condo, and my offer on the 2-bedroom condo was rejected due to a higher bid.",
+      "memory_grounding_passed": true,
+      "model_answer": "出价 Brookside 那套 townhouse（2月25日）之前，你在对话里提过的看房记录有 4 处：\n\n1. 1月22日 – Oakwood 的 3 卧室 bungalow（厨房需要翻新）\n2. 2月1日 – Cedar Creek 的一处（超出预算）\n3. 2月10日 – 1 卧室 condo（高速噪音，pass）\n4. 2月15日 – 2 卧室 condo（2月17日 offer 被更高价抢走）\n\n所以是 4 处。",
+      "profile": "chain_tri_governed_answer_contract",
+      "prompt_variant": "baseline",
+      "provider_error": false,
+      "public_score": {
+        "method": "deterministic_mismatch",
+        "needs_manual_review": false,
+        "normalized_answer": "出价brookside那套townhouse2月25日之前你在对话里提过的看房记录有4处11月22日oakwood的3卧室bungalow厨房需要翻新22月1日cedarcreek的1处超出预算32月10日1卧室condo高速噪音pass42月15日2卧室condo2月17日offer被更高价抢走所以是4处",
+        "normalized_gold": "iviewedfourpropertiesbeforemakinganofferonthetownhouseinthebrooksideneighborhoodthereasonsididntmakeanofferonthemwerethekitchenofthebungalowneededseriousrenovationthepropertyincedarcreekwasoutofmybudgetthenoisefromthehighwaywasadealbreakerforthe1bedroomcondoandmyofferonthe2bedroomcondowasrejectedduetoahigherbid",
+        "passed": false
+      },
+      "question": "How many properties did I view before making an offer on the townhouse in the Brookside neighborhood?",
+      "repeat_index": 0,
+      "sent_evidence_gold_hit": false,
+      "source_id": "gpt4_7fce9456",
+      "timeout": false
+    },
+    {
+      "answer_debug_available": true,
+      "category": "single-session-assistant",
+      "comprehensive_answer_rule_passed": true,
+      "evidence_render_metadata": [
+        {
+          "answer_window_fallback_reason": "",
+          "answer_window_source": "has_answer_turn",
+          "answer_window_turns": 2,
+          "effective_evidence_token_budget": 3000,
+          "evidence_render_mode": "answer_window",
+          "long_evidence_token_limit": 3000,
+          "memory_id": "3249768e_history_0001",
+          "model_context_window": 8192,
+          "reserved_prompt_token_budget": 2000
+        }
+      ],
+      "failures": [],
+      "gold_answer": "Absinthe",
+      "memory_grounding_passed": true,
+      "model_answer": "第五瓶是 **Absinthe（苦艾酒）**。带甘草味和药草香，经典用法在 Sazerac 和 Corpse Reviver #2 里。",
+      "profile": "chain_tri_governed_answer_contract",
+      "prompt_variant": "baseline",
+      "provider_error": false,
+      "public_score": {
+        "method": "exact",
+        "needs_manual_review": false,
+        "normalized_answer": "第5瓶是absinthe苦艾酒带甘草味和药草香经典用法在sazerac和corpsereviver2里",
+        "normalized_gold": "absinthe",
+        "passed": true
+      },
+      "question": "I'm looking back at our previous conversation about building a cocktail bar. You recommended five bottles to make the widest variety of gin-based cocktails. Can you remind me what the fifth bottle was?",
+      "repeat_index": 0,
+      "sent_evidence_gold_hit": true,
+      "source_id": "3249768e",
+      "timeout": false
+    },
+    {
+      "answer_debug_available": true,
+      "category": "single-session-assistant",
+      "comprehensive_answer_rule_passed": true,
+      "evidence_render_metadata": [
+        {
+          "answer_window_fallback_reason": "",
+          "answer_window_source": "has_answer_turn",
+          "answer_window_turns": 2,
+          "effective_evidence_token_budget": 3000,
+          "evidence_render_mode": "answer_window",
+          "long_evidence_token_limit": 3000,
+          "memory_id": "3e321797_history_0001",
+          "model_context_window": 8192,
+          "reserved_prompt_token_budget": 2000
+        }
+      ],
+      "failures": [],
+      "gold_answer": "10 minutes",
+      "memory_grounding_passed": true,
+      "model_answer": "番茄汁加柠檬汁那次说的是敷 10 分钟，然后用冷水洗掉。",
+      "profile": "chain_tri_governed_answer_contract",
+      "prompt_variant": "baseline",
+      "provider_error": false,
+      "public_score": {
+        "method": "deterministic_mismatch",
+        "needs_manual_review": false,
+        "normalized_answer": "番茄汁加柠檬汁那次说的是敷10分钟然后用冷水洗掉",
+        "normalized_gold": "10minutes",
+        "passed": false
+      },
+      "question": "I wanted to follow up on our previous conversation about natural remedies for dark circles under the eyes. You mentioned applying tomato juice mixed with lemon juice, how long did you say I should leave it on for?",
+      "repeat_index": 0,
+      "sent_evidence_gold_hit": true,
+      "source_id": "3e321797",
+      "timeout": false
+    },
+    {
+      "answer_debug_available": true,
+      "category": "single-session-assistant",
+      "comprehensive_answer_rule_passed": true,
+      "evidence_render_metadata": [
+        {
+          "answer_window_fallback_reason": "",
+          "answer_window_source": "has_answer_turn",
+          "answer_window_turns": 2,
+          "effective_evidence_token_budget": 3000,
+          "evidence_render_mode": "answer_window",
+          "long_evidence_token_limit": 3000,
+          "memory_id": "51b23612_history_0001",
+          "model_context_window": 8192,
+          "reserved_prompt_token_budget": 2000
+        }
+      ],
+      "failures": [],
+      "gold_answer": "Nu, pogodi!",
+      "memory_grounding_passed": true,
+      "model_answer": "Yeah, that was \"Nu, pogodi!\" — in English it's usually \"Well, Just You Wait!\". I mentioned it as an example of Soviet propaganda that used humor and satire, with the framing that it mocked Western culture and cast the Soviet Union in a superior light. It's actually the famous wolf-and-hare cartoon, hugely popular across the Soviet bloc.",
+      "profile": "chain_tri_governed_answer_contract",
+      "prompt_variant": "baseline",
+      "provider_error": false,
+      "public_score": {
+        "method": "exact",
+        "needs_manual_review": false,
+        "normalized_answer": "yeahthatwasnupogodiinenglishitsusuallywelljustyouwaitimentioneditasanexampleofsovietpropagandathatusedhumorandsatirewiththeframingthatitmockedwesterncultureandcastthesovietunioninasuperiorlightitsactuallythefamouswolfandharecartoonhugelypopularacrossthesovietbloc",
+        "normalized_gold": "nupogodi",
+        "passed": true
+      },
+      "question": "I was going through our previous conversation about political propaganda and humor, and I was wondering if you could remind me of that Soviet cartoon you mentioned that mocked Western culture?",
+      "repeat_index": 0,
+      "sent_evidence_gold_hit": true,
+      "source_id": "51b23612",
+      "timeout": false
+    },
+    {
+      "answer_debug_available": true,
+      "category": "single-session-assistant",
+      "comprehensive_answer_rule_passed": true,
+      "evidence_render_metadata": [
+        {
+          "answer_window_fallback_reason": "",
+          "answer_window_source": "has_answer_turn",
+          "answer_window_turns": 2,
+          "effective_evidence_token_budget": 3000,
+          "evidence_render_mode": "answer_window",
+          "long_evidence_token_limit": 3000,
+          "memory_id": "8aef76bc_history_0001",
+          "model_context_window": 8192,
+          "reserved_prompt_token_budget": 2000
+        }
+      ],
+      "failures": [],
+      "gold_answer": "Mod Podge or another sealant",
+      "memory_grounding_passed": true,
+      "model_answer": "你之前推荐的是 Mod Podge，或者也可以用其他密封剂让花瓶防水。",
+      "profile": "chain_tri_governed_answer_contract",
+      "prompt_variant": "baseline",
+      "provider_error": false,
+      "public_score": {
+        "method": "deterministic_mismatch",
+        "needs_manual_review": false,
+        "normalized_answer": "你之前推荐的是modpodge或者也可以用其他密封剂让花瓶防水",
+        "normalized_gold": "modpodgeoranothersealant",
+        "passed": false
+      },
+      "question": "I'm going back to our previous conversation about DIY home decor projects using recycled materials. Can you remind me what sealant you recommended for the newspaper flower vase?",
+      "repeat_index": 0,
+      "sent_evidence_gold_hit": true,
+      "source_id": "8aef76bc",
+      "timeout": false
+    },
+    {
+      "answer_debug_available": true,
+      "category": "single-session-assistant",
+      "comprehensive_answer_rule_passed": true,
+      "evidence_render_metadata": [
+        {
+          "answer_window_fallback_reason": "",
+          "answer_window_source": "has_answer_turn",
+          "answer_window_turns": 2,
+          "effective_evidence_token_budget": 3000,
+          "evidence_render_mode": "answer_window",
+          "long_evidence_token_limit": 3000,
+          "memory_id": "ceb54acb_history_0001",
+          "model_context_window": 8192,
+          "reserved_prompt_token_budget": 2000
+        }
+      ],
+      "failures": [],
+      "gold_answer": "I suggested 'sexual fixations', 'problematic sexual behaviors', 'sexual impulsivity', and 'compulsive sexuality'.",
+      "memory_grounding_passed": true,
+      "model_answer": "根据我们之前的对话，除了 \"sexual compulsions\" 之外，我当时还建议了这几个：\n\n1. **Sexual fixations** —— 指对性想法或行为的高度专注，可能干扰生活其他方面。\n2. **Problematic sexual behaviors** —— 直白描述那些带来问题或困扰的行为。\n3. **Sexual impulsivity** —— 强调某些性行为的冲动或强迫性质，以及难以控制的一面。\n4. **Compulsive sexuality** —— 强调行为的强迫性，以及难以摆脱的困境。\n\n这几个就是当时列出的四个备选说法。",
+      "profile": "chain_tri_governed_answer_contract",
+      "prompt_variant": "baseline",
+      "provider_error": false,
+      "public_score": {
+        "method": "deterministic_mismatch",
+        "needs_manual_review": false,
+        "normalized_answer": "根据我们之前的对话除了sexualcompulsions之外我当时还建议了这几个1sexualfixations指对性想法或行为的高度专注可能干扰生活其他方面2problematicsexualbehaviors直白描述那些带来问题或困扰的行为3sexualimpulsivity强调某些性行为的冲动或强迫性质以及难以控制的1面4compulsivesexuality强调行为的强迫性以及难以摆脱的困境这几个就是当时列出的4个备选说法",
+        "normalized_gold": "isuggestedsexualfixationsproblematicsexualbehaviorssexualimpulsivityandcompulsivesexuality",
+        "passed": false
+      },
+      "question": "In our previous chat, you suggested 'sexual compulsions' and a few other options for alternative terms for certain behaviors. Can you remind me what the other four options were?",
+      "repeat_index": 0,
+      "sent_evidence_gold_hit": false,
+      "source_id": "ceb54acb",
+      "timeout": false
+    },
+    {
+      "answer_debug_available": true,
+      "category": "single-session-assistant",
+      "comprehensive_answer_rule_passed": true,
+      "evidence_render_metadata": [
+        {
+          "answer_window_fallback_reason": "",
+          "answer_window_source": "has_answer_turn",
+          "answer_window_turns": 2,
+          "effective_evidence_token_budget": 3000,
+          "evidence_render_mode": "answer_window",
+          "long_evidence_token_limit": 3000,
+          "memory_id": "e982271f_history_0001",
+          "model_context_window": 8192,
+          "reserved_prompt_token_budget": 2000
+        }
+      ],
+      "failures": [],
+      "gold_answer": "Revolution Hall",
+      "memory_grounding_passed": true,
+      "model_answer": "最后一个推荐的是 Revolution Hall。",
+      "profile": "chain_tri_governed_answer_contract",
+      "prompt_variant": "baseline",
+      "provider_error": false,
+      "public_score": {
+        "method": "exact",
+        "needs_manual_review": false,
+        "normalized_answer": "最后1个推荐的是revolutionhall",
+        "normalized_gold": "revolutionhall",
+        "passed": true
+      },
+      "question": "I was going through our previous chat. Can you remind me of the name of the last venue you recommended in the list of popular venues in Portland for indie music shows?",
+      "repeat_index": 0,
+      "sent_evidence_gold_hit": true,
+      "source_id": "e982271f",
+      "timeout": false
+    },
+    {
+      "answer_debug_available": true,
+      "category": "single-session-preference",
+      "comprehensive_answer_rule_passed": true,
+      "evidence_render_metadata": [
+        {
+          "answer_window_fallback_reason": "",
+          "answer_window_source": "has_answer_turn",
+          "answer_window_turns": 2,
+          "effective_evidence_token_budget": 3000,
+          "evidence_render_mode": "answer_window",
+          "long_evidence_token_limit": 3000,
+          "memory_id": "0a34ad58_history_0001",
+          "model_context_window": 8192,
+          "reserved_prompt_token_budget": 2000
+        }
+      ],
+      "failures": [],
+      "gold_answer": "The user would prefer responses that utilize their existing resources, such as their Suica card and TripIt app, to provide personalized tips for navigating Tokyo's public transportation. They might not prefer general tips or recommendations that do not take into account their prior preparations.",
+      "memory_grounding_passed": true,
+      "model_answer": "Totally understandable — Tokyo looks intimidating on the map, but honestly it's one of the easiest big cities to get around. You already have the hardest part sorted: your Suica.\n\nA few things that'll make it feel calmer:\n\n- **Trust your Suica.** Tap in and out at the gates, and it covers JR, metro, and buses. Top up at any ticket machine with cash. No PIN, no faff.\n- **Google Maps is your best friend.** It'll tell you the exact platform, which train car to board (handy for getting near the exits), and which station exit to leave from. Exit numbers matter — Shinjuku has dozens of exits, so follow the number, not your instincts.\n- **Station signs are bilingual**, and every station has a number code. Even with zero Japanese, you can match characters on the platform signs to what the map shows.\n- **Avoid rush hour if you can** (roughly 7:30–9:30am and 5–7pm). Packed but fine — you'll survive, it's just less fun.\n- **Last trains run around midnight.** If you're out late, check the last train time before you commit, or just take a taxi. Pricey (that Shinjuku–Tsukiji run would set you back ¥4,000–5,000), but a good fallback.\n- **You're in a great base.** Shinjuku is a major hub, so almost everywhere is one transfer at most. Even Tsukiji is just Yamanote Line to Shimbashi, then Ginza Line — about half an hour.\n\nThe one tip I'd really emphasize: if you ever get turned around, walk to the nearest station and ask staff. They're used to tourists, and most can understand enough English to point you the right way.\n\nBy day two it'll feel completely normal, I promise.",
+      "profile": "chain_tri_governed_answer_contract",
+      "prompt_variant": "baseline",
+      "provider_error": false,
+      "public_score": {
+        "method": "deterministic_mismatch",
+        "needs_manual_review": false,
+        "normalized_answer": "totallyunderstandabletokyolooksintimidatingonthemapbuthonestlyitsoneoftheeasiestbigcitiestogetaroundyoualreadyhavethehardestpartsortedyoursuicaafewthingsthatllmakeitfeelcalmertrustyoursuicatapinandoutatthegatesanditcoversjrmetroandbusestopupatanyticketmachinewithcashnopinnofaffgooglemapsisyourbestfrienditlltellyoutheexactplatformwhichtraincartoboardhandyforgettingneartheexitsandwhichstationexittoleavefromexitnumbersmattershinjukuhasdozensofexitssofollowthenumbernotyourinstinctsstationsignsarebilingualandeverystationhasanumbercodeevenwithzerojapaneseyoucanmatchcharactersontheplatformsignstowhatthemapshowsavoidrushhourifyoucanroughly730930amand57pmpackedbutfineyoullsurviveitsjustlessfunlasttrainsrunaroundmidnightifyoureoutlatecheckthelasttraintimebeforeyoucommitorjusttakeataxipriceythatshinjukutsukijirunwouldsetyouback¥40005000butagoodfallbackyoureinagreatbaseshinjukuisamajorhubsoalmosteverywhereisonetransferatmosteventsukijiisjustyamanotelinetoshimbashithenginzalineabouthalfanhourtheonetipidreallyemphasizeifyouevergetturnedaroundwalktotheneareststationandaskstafftheyreusedtotouristsandmostcanunderstandenoughenglishtopointyoutherightwaybydaytwoitllfeelcompletelynormalipromise",
+        "normalized_gold": "theuserwouldpreferresponsesthatutilizetheirexistingresourcessuchastheirsuicacardandtripitapptoprovidepersonalizedtipsfornavigatingtokyospublictransportationtheymightnotprefergeneraltipsorrecommendationsthatdonottakeintoaccounttheirpriorpreparations",
+        "passed": false
+      },
+      "question": "I’m a bit anxious about getting around Tokyo. Do you have any helpful tips?",
+      "repeat_index": 0,
+      "sent_evidence_gold_hit": false,
+      "source_id": "0a34ad58",
+      "timeout": false
+    },
+    {
+      "answer_debug_available": true,
+      "category": "single-session-preference",
+      "comprehensive_answer_rule_passed": true,
+      "evidence_render_metadata": [
+        {
+          "answer_window_fallback_reason": "",
+          "answer_window_source": "has_answer_turn",
+          "answer_window_turns": 2,
+          "effective_evidence_token_budget": 3000,
+          "evidence_render_mode": "answer_window",
+          "long_evidence_token_limit": 3000,
+          "memory_id": "54026fce_history_0001",
+          "model_context_window": 8192,
+          "reserved_prompt_token_budget": 2000
+        }
+      ],
+      "failures": [],
+      "gold_answer": "The user would prefer responses that acknowledge their desire for social interaction and collaboration while working remotely, utilizing their previous experiences with company initiatives and team collaborations. They might prefer suggestions of virtual team-building activities, regular check-ins, or joining interest-based groups within the company. The user may not prefer generic suggestions that do not take into account their specific work situation or previous attempts at staying connected with colleagues.",
+      "memory_grounding_passed": true,
+      "model_answer": "嗯，这话题之前聊过一点，我记得你挺喜欢 virtual coffee breaks 那个方向的。\n\n如果现在再拓展一下的话，我觉得核心是\"低门槛、不强迫\"。\n\n- **固定但不强制**：比如每周两次、每次 15 分钟，标注\"想来就来，不来也完全没关系\"。有空窗期反而让人没有压力。\n- **轮换主持**：每次换个同事挑话题，这样不是一个人扛着组织感，大家更容易觉得是共同的。\n- **结合已有节奏**：贴着周五下午那种大家都快收工的时候，或者周一早上开工前，不用额外挤时间。\n- **顺便干点正事**：比如\"边喝咖啡边过一遍下周排期\"这种半工作半闲聊，对不太习惯纯社交的人更友好。\n- 如果你感觉有些人还是放不开，可以私下先问一两个人愿不愿意做\"托\"，冷场的时候接一下。\n\n你之前担心的是\"怎么让大家舒服地参与\"，我觉得上面这些点基本是照着那个思路来的。你是想用它搞小范围、还是整个团队一起？",
+      "profile": "chain_tri_governed_answer_contract",
+      "prompt_variant": "baseline",
+      "provider_error": false,
+      "public_score": {
+        "method": "deterministic_mismatch",
+        "needs_manual_review": false,
+        "normalized_answer": "嗯这话题之前聊过1点我记得你挺喜欢virtualcoffeebreaks那个方向的如果现在再拓展1下的话我觉得核心是低门槛不强迫固定但不强制比如每周2次每次15分钟标注想来就来不来也完全没关系有空窗期反而让人没有压力轮换主持每次换个同事挑话题这样不是1个人扛着组织感大家更容易觉得是共同的结合已有节奏贴着周5下午那种大家都快收工的时候或者周1早上开工前不用额外挤时间顺便干点正事比如边喝咖啡边过1遍下周排期这种半工作半闲聊对不太习惯纯社交的人更友好如果你感觉有些人还是放不开可以私下先问12个人愿不愿意做托冷场的时候接1下你之前担心的是怎么让大家舒服地参与我觉得上面这些点基本是照着那个思路来的你是想用它搞小范围还是整个团队1起",
+        "normalized_gold": "theuserwouldpreferresponsesthatacknowledgetheirdesireforsocialinteractionandcollaborationwhileworkingremotelyutilizingtheirpreviousexperienceswithcompanyinitiativesandteamcollaborationstheymightprefersuggestionsofvirtualteambuildingactivitiesregularcheckinsorjoininginterestbasedgroupswithinthecompanytheusermaynotprefergenericsuggestionsthatdonottakeintoaccounttheirspecificworksituationorpreviousattemptsatstayingconnectedwithcolleagues",
+        "passed": false
+      },
+      "question": "I've been thinking about ways to stay connected with my colleagues. Any suggestions?",
+      "repeat_index": 0,
+      "sent_evidence_gold_hit": false,
+      "source_id": "54026fce",
+      "timeout": false
+    },
+    {
+      "answer_debug_available": true,
+      "category": "single-session-preference",
+      "comprehensive_answer_rule_passed": true,
+      "evidence_render_metadata": [
+        {
+          "answer_window_fallback_reason": "",
+          "answer_window_source": "has_answer_turn",
+          "answer_window_turns": 2,
+          "effective_evidence_token_budget": 3000,
+          "evidence_render_mode": "answer_window",
+          "long_evidence_token_limit": 3000,
+          "memory_id": "a89d7624_history_0001",
+          "model_context_window": 8192,
+          "reserved_prompt_token_budget": 2000
+        }
+      ],
+      "failures": [],
+      "gold_answer": "The user would prefer responses that take into account their previous experience in Denver, specifically their interest in live music and memorable encounter with Brandon Flowers. They might appreciate suggestions that revisit or build upon this experience, such as revisiting the same bar or exploring similar music venues in the area. The user may not prefer general tourist recommendations or activities unrelated to their interest in live music.",
+      "memory_grounding_passed": true,
+      "model_answer": "嗯，丹佛啊。按你之前聊过的路子，绕不开音乐。\n\n**场地**\n- Red Rocks 你肯定知道，露天 amphitheatre，去那里本身就是一半的体验\n- Ogden Theatre 和 Bluebird Theater，历史老场地，氛围好\n- 小场地可以去 Larimer Lounge，适合碰碰新乐队\n\n**节庆**\n- 赶上时间的话，Westword Music Showcase 一日音乐节\n- Riot Fest Denver 在九月，朋克和另类为主——看你什么时候去\n\n**其他**\n- Twist & Shout Records 黑胶店可以去逛逛\n- hi-dive 和 Marquis Theater 也都在城里\n\n另外你上回问的 Red Rocks 附近 BBQ，这点我没法给你确认哪家店，得查实时的。要我查的话说一声 (・ω・)",
+      "profile": "chain_tri_governed_answer_contract",
+      "prompt_variant": "baseline",
+      "provider_error": false,
+      "public_score": {
+        "method": "deterministic_mismatch",
+        "needs_manual_review": false,
+        "normalized_answer": "嗯丹佛啊按你之前聊过的路子绕不开音乐场地redrocks你肯定知道露天amphitheatre去那里本身就是1半的体验ogdentheatre和bluebirdtheater历史老场地氛围好小场地可以去larimerlounge适合碰碰新乐队节庆赶上时间的话westwordmusicshowcase1日音乐节riotfestdenver在9月朋克和另类为主看你什么时候去其他twistshoutrecords黑胶店可以去逛逛hidive和marquistheater也都在城里另外你上回问的redrocks附近bbq这点我没法给你确认哪家店得查实时的要我查的话说1声ω",
+        "normalized_gold": "theuserwouldpreferresponsesthattakeintoaccounttheirpreviousexperienceindenverspecificallytheirinterestinlivemusicandmemorableencounterwithbrandonflowerstheymightappreciatesuggestionsthatrevisitorbuilduponthisexperiencesuchasrevisitingthesamebarorexploringsimilarmusicvenuesintheareatheusermaynotprefergeneraltouristrecommendationsoractivitiesunrelatedtotheirinterestinlivemusic",
+        "passed": false
+      },
+      "question": "I'm planning a trip to Denver soon. Any suggestions on what to do there?",
+      "repeat_index": 0,
+      "sent_evidence_gold_hit": false,
+      "source_id": "a89d7624",
+      "timeout": false
+    },
+    {
+      "answer_debug_available": true,
+      "category": "single-session-user",
+      "comprehensive_answer_rule_passed": true,
+      "evidence_render_metadata": [
+        {
+          "answer_window_fallback_reason": "",
+          "answer_window_source": "has_answer_turn",
+          "answer_window_turns": 2,
+          "effective_evidence_token_budget": 3000,
+          "evidence_render_mode": "answer_window",
+          "long_evidence_token_limit": 3000,
+          "memory_id": "4100d0a0_history_0001",
+          "model_context_window": 8192,
+          "reserved_prompt_token_budget": 2000
+        }
+      ],
+      "failures": [],
+      "gold_answer": "A mix of Irish and Italian",
+      "memory_grounding_passed": true,
+      "model_answer": "你的血统是爱尔兰和意大利的混血。之前你自己提到过，mixed ethnicity——Irish and Italian。",
+      "profile": "chain_tri_governed_answer_contract",
+      "prompt_variant": "baseline",
+      "provider_error": false,
+      "public_score": {
+        "method": "deterministic_mismatch",
+        "needs_manual_review": false,
+        "normalized_answer": "你的血统是爱尔兰和意大利的混血之前你自己提到过mixedethnicityirishanditalian",
+        "normalized_gold": "amixofirishanditalian",
+        "passed": false
+      },
+      "question": "What is my ethnicity?",
+      "repeat_index": 0,
+      "sent_evidence_gold_hit": false,
+      "source_id": "4100d0a0",
+      "timeout": false
+    },
+    {
+      "answer_debug_available": true,
+      "category": "single-session-user",
+      "comprehensive_answer_rule_passed": true,
+      "evidence_render_metadata": [
+        {
+          "answer_window_fallback_reason": "",
+          "answer_window_source": "has_answer_turn",
+          "answer_window_turns": 2,
+          "effective_evidence_token_budget": 3000,
+          "evidence_render_mode": "answer_window",
+          "long_evidence_token_limit": 3000,
+          "memory_id": "6f9b354f_history_0001",
+          "model_context_window": 8192,
+          "reserved_prompt_token_budget": 2000
+        }
+      ],
+      "failures": [],
+      "gold_answer": "a lighter shade of gray",
+      "memory_grounding_passed": true,
+      "model_answer": "浅灰色。你在之前的对话里提到，重新粉刷后房间显得亮堂多了。",
+      "profile": "chain_tri_governed_answer_contract",
+      "prompt_variant": "baseline",
+      "provider_error": false,
+      "public_score": {
+        "method": "deterministic_mismatch",
+        "needs_manual_review": false,
+        "normalized_answer": "浅灰色你在之前的对话里提到重新粉刷后房间显得亮堂多了",
+        "normalized_gold": "alightershadeofgray",
+        "passed": false
+      },
+      "question": "What color did I repaint my bedroom walls?",
+      "repeat_index": 0,
+      "sent_evidence_gold_hit": true,
+      "source_id": "6f9b354f",
+      "timeout": false
+    },
+    {
+      "answer_debug_available": true,
+      "category": "single-session-user",
+      "comprehensive_answer_rule_passed": true,
+      "evidence_render_metadata": [
+        {
+          "answer_window_fallback_reason": "",
+          "answer_window_source": "has_answer_turn",
+          "answer_window_turns": 2,
+          "effective_evidence_token_budget": 3000,
+          "evidence_render_mode": "answer_window",
+          "long_evidence_token_limit": 3000,
+          "memory_id": "86b68151_history_0001",
+          "model_context_window": 8192,
+          "reserved_prompt_token_budget": 2000
+        }
+      ],
+      "failures": [],
+      "gold_answer": "IKEA",
+      "memory_grounding_passed": true,
+      "model_answer": "从 IKEA（宜家）买的。",
+      "profile": "chain_tri_governed_answer_contract",
+      "prompt_variant": "baseline",
+      "provider_error": false,
+      "public_score": {
+        "method": "exact",
+        "needs_manual_review": false,
+        "normalized_answer": "从ikea宜家买的",
+        "normalized_gold": "ikea",
+        "passed": true
+      },
+      "question": "Where did I buy my new bookshelf from?",
+      "repeat_index": 0,
+      "sent_evidence_gold_hit": true,
+      "source_id": "86b68151",
+      "timeout": false
+    },
+    {
+      "answer_debug_available": true,
+      "category": "single-session-user",
+      "comprehensive_answer_rule_passed": true,
+      "evidence_render_metadata": [
+        {
+          "answer_window_fallback_reason": "",
+          "answer_window_source": "has_answer_turn",
+          "answer_window_turns": 2,
+          "effective_evidence_token_budget": 3000,
+          "evidence_render_mode": "answer_window",
+          "long_evidence_token_limit": 3000,
+          "memory_id": "ad7109d1_history_0001",
+          "model_context_window": 8192,
+          "reserved_prompt_token_budget": 2000
+        }
+      ],
+      "failures": [],
+      "gold_answer": "500 Mbps",
+      "memory_grounding_passed": true,
+      "model_answer": "你的新套餐是 500 Mbps，大约三周前升级的。",
+      "profile": "chain_tri_governed_answer_contract",
+      "prompt_variant": "baseline",
+      "provider_error": false,
+      "public_score": {
+        "method": "exact",
+        "needs_manual_review": false,
+        "normalized_answer": "你的新套餐是500mbps大约3周前升级的",
+        "normalized_gold": "500mbps",
+        "passed": true
+      },
+      "question": "What speed is my new internet plan?",
+      "repeat_index": 0,
+      "sent_evidence_gold_hit": true,
+      "source_id": "ad7109d1",
+      "timeout": false
+    },
+    {
+      "answer_debug_available": true,
+      "category": "single-session-user",
+      "comprehensive_answer_rule_passed": true,
+      "evidence_render_metadata": [
+        {
+          "answer_window_fallback_reason": "",
+          "answer_window_source": "has_answer_turn",
+          "answer_window_turns": 2,
+          "effective_evidence_token_budget": 3000,
+          "evidence_render_mode": "answer_window",
+          "long_evidence_token_limit": 3000,
+          "memory_id": "caf9ead2_history_0001",
+          "model_context_window": 8192,
+          "reserved_prompt_token_budget": 2000
+        }
+      ],
+      "failures": [],
+      "gold_answer": "5 hours",
+      "memory_grounding_passed": true,
+      "model_answer": "大概 5 个小时，你和朋友一起搬完的。",
+      "profile": "chain_tri_governed_answer_contract",
+      "prompt_variant": "baseline",
+      "provider_error": false,
+      "public_score": {
+        "method": "deterministic_mismatch",
+        "needs_manual_review": false,
+        "normalized_answer": "大概5个小时你和朋友1起搬完的",
+        "normalized_gold": "5hours",
+        "passed": false
+      },
+      "question": "How long did it take to move to the new apartment?",
+      "repeat_index": 0,
+      "sent_evidence_gold_hit": true,
+      "source_id": "caf9ead2",
+      "timeout": false
+    },
+    {
+      "answer_debug_available": true,
+      "category": "single-session-user",
+      "comprehensive_answer_rule_passed": true,
+      "evidence_render_metadata": [
+        {
+          "answer_window_fallback_reason": "",
+          "answer_window_source": "has_answer_turn",
+          "answer_window_turns": 2,
+          "effective_evidence_token_budget": 3000,
+          "evidence_render_mode": "answer_window",
+          "long_evidence_token_limit": 3000,
+          "memory_id": "f4f1d8a4_history_0001",
+          "model_context_window": 8192,
+          "reserved_prompt_token_budget": 2000
+        }
+      ],
+      "failures": [],
+      "gold_answer": "my sister",
+      "memory_grounding_passed": true,
+      "model_answer": "你姐姐送的呀。上个月生日的时候，她送了你一台新的 stand mixer，说是个生日礼物。",
+      "profile": "chain_tri_governed_answer_contract",
+      "prompt_variant": "baseline",
+      "provider_error": false,
+      "public_score": {
+        "method": "deterministic_mismatch",
+        "needs_manual_review": false,
+        "normalized_answer": "你姐姐送的呀上个月生日的时候她送了你1台新的standmixer说是个生日礼物",
+        "normalized_gold": "mysister",
+        "passed": false
+      },
+      "question": "Who gave me a new stand mixer as a birthday gift?",
+      "repeat_index": 0,
+      "sent_evidence_gold_hit": true,
+      "source_id": "f4f1d8a4",
+      "timeout": false
+    },
+    {
+      "answer_debug_available": true,
+      "category": "temporal-reasoning",
+      "comprehensive_answer_rule_passed": true,
+      "evidence_render_metadata": [
+        {
+          "answer_window_fallback_reason": "oracle_missing_has_answer",
+          "answer_window_source": "last_third",
+          "answer_window_turns": 2,
+          "effective_evidence_token_budget": 3000,
+          "evidence_render_mode": "answer_window",
+          "long_evidence_token_limit": 3000,
+          "memory_id": "0bc8ad93_history_0001",
+          "model_context_window": 8192,
+          "reserved_prompt_token_budget": 2000
+        },
+        {
+          "answer_window_fallback_reason": "",
+          "answer_window_source": "has_answer_turn",
+          "answer_window_turns": 2,
+          "effective_evidence_token_budget": 3000,
+          "evidence_render_mode": "answer_window",
+          "long_evidence_token_limit": 3000,
+          "memory_id": "0bc8ad93_history_0002",
+          "model_context_window": 8192,
+          "reserved_prompt_token_budget": 2000
+        },
+        {
+          "answer_window_fallback_reason": "oracle_missing_has_answer",
+          "answer_window_source": "last_third",
+          "answer_window_turns": 2,
+          "effective_evidence_token_budget": 3000,
+          "evidence_render_mode": "answer_window",
+          "long_evidence_token_limit": 3000,
+          "memory_id": "0bc8ad93_history_0003",
+          "model_context_window": 8192,
+          "reserved_prompt_token_budget": 2000
+        }
+      ],
+      "failures": [],
+      "gold_answer": "No, you did not visit with a friend.",
+      "memory_grounding_passed": true,
+      "model_answer": "去了，是跟一位化学教授朋友一起的。你提到的是科学博物馆的幕后参观，你们一起看了稀有矿物藏品，还参加了教育团队的动手实验。",
+      "profile": "chain_tri_governed_answer_contract",
+      "prompt_variant": "baseline",
+      "provider_error": false,
+      "public_score": {
+        "method": "deterministic_mismatch",
+        "needs_manual_review": false,
+        "normalized_answer": "去了是跟1位化学教授朋友1起的你提到的是科学博物馆的幕后参观你们1起看了稀有矿物藏品还参加了教育团队的动手实验",
+        "normalized_gold": "noyoudidnotvisitwithafriend",
+        "passed": false
+      },
+      "question": "I mentioned visiting a museum two months ago. Did I visit with a friend or not?",
+      "repeat_index": 0,
+      "sent_evidence_gold_hit": false,
+      "source_id": "0bc8ad93",
+      "timeout": false
+    },
+    {
+      "answer_debug_available": true,
+      "category": "temporal-reasoning",
+      "comprehensive_answer_rule_passed": true,
+      "evidence_render_metadata": [
+        {
+          "answer_window_fallback_reason": "",
+          "answer_window_source": "has_answer_turn",
+          "answer_window_turns": 2,
+          "effective_evidence_token_budget": 3000,
+          "evidence_render_mode": "answer_window",
+          "long_evidence_token_limit": 3000,
+          "memory_id": "a3838d2b_history_0001",
+          "model_context_window": 8192,
+          "reserved_prompt_token_budget": 2000
+        },
+        {
+          "answer_window_fallback_reason": "",
+          "answer_window_source": "has_answer_turn",
+          "answer_window_turns": 2,
+          "effective_evidence_token_budget": 3000,
+          "evidence_render_mode": "answer_window",
+          "long_evidence_token_limit": 3000,
+          "memory_id": "a3838d2b_history_0002",
+          "model_context_window": 8192,
+          "reserved_prompt_token_budget": 2000
+        },
+        {
+          "answer_window_fallback_reason": "",
+          "answer_window_source": "has_answer_turn",
+          "answer_window_turns": 2,
+          "effective_evidence_token_budget": 3000,
+          "evidence_render_mode": "answer_window",
+          "long_evidence_token_limit": 3000,
+          "memory_id": "a3838d2b_history_0003",
+          "model_context_window": 8192,
+          "reserved_prompt_token_budget": 2000
+        },
+        {
+          "answer_window_fallback_reason": "",
+          "answer_window_source": "has_answer_turn",
+          "answer_window_turns": 2,
+          "effective_evidence_token_budget": 3000,
+          "evidence_render_mode": "answer_window",
+          "long_evidence_token_limit": 3000,
+          "memory_id": "a3838d2b_history_0004",
+          "model_context_window": 8192,
+          "reserved_prompt_token_budget": 2000
+        },
+        {
+          "answer_window_fallback_reason": "",
+          "answer_window_source": "has_answer_turn",
+          "answer_window_turns": 2,
+          "effective_evidence_token_budget": 3000,
+          "evidence_render_mode": "answer_window",
+          "long_evidence_token_limit": 3000,
+          "memory_id": "a3838d2b_history_0005",
+          "model_context_window": 8192,
+          "reserved_prompt_token_budget": 2000
+        },
+        {
+          "answer_window_fallback_reason": "",
+          "answer_window_source": "has_answer_turn",
+          "answer_window_turns": 2,
+          "effective_evidence_token_budget": 3000,
+          "evidence_render_mode": "answer_window",
+          "long_evidence_token_limit": 3000,
+          "memory_id": "a3838d2b_history_0006",
+          "model_context_window": 8192,
+          "reserved_prompt_token_budget": 2000
+        }
+      ],
+      "failures": [],
+      "gold_answer": "4",
+      "memory_grounding_passed": true,
+      "model_answer": "你在 Run for the Cure（10月15日）之前参加了 4 场慈善活动：\n\n1. Dance for a Cause – 5月1日\n2. Walk for Wildlife – 6月\n3. 慈善高尔夫锦标赛 – 7月17日\n4. Food for Thought 慈善晚宴 – 9月25日\n\nBike-a-Thon 是 11 月，在 Run for the Cure 之后，不算在内。",
+      "profile": "chain_tri_governed_answer_contract",
+      "prompt_variant": "baseline",
+      "provider_error": false,
+      "public_score": {
+        "method": "exact",
+        "needs_manual_review": false,
+        "normalized_answer": "你在runforthecure10月15日之前参加了4场慈善活动1danceforacause5月1日2walkforwildlife6月3慈善高尔夫锦标赛7月17日4foodforthought慈善晚宴9月25日bikeathon是11月在runforthecure之后不算在内",
+        "normalized_gold": "4",
+        "passed": true
+      },
+      "question": "How many charity events did I participate in before the 'Run for the Cure' event?",
+      "repeat_index": 0,
+      "sent_evidence_gold_hit": true,
+      "source_id": "a3838d2b",
+      "timeout": false
+    },
+    {
+      "answer_debug_available": true,
+      "category": "temporal-reasoning",
+      "comprehensive_answer_rule_passed": true,
+      "evidence_render_metadata": [
+        {
+          "answer_window_fallback_reason": "oracle_missing_has_answer",
+          "answer_window_source": "last_third",
+          "answer_window_turns": 2,
+          "effective_evidence_token_budget": 3000,
+          "evidence_render_mode": "answer_window",
+          "long_evidence_token_limit": 3000,
+          "memory_id": "b46e15ee_history_0001",
+          "model_context_window": 8192,
+          "reserved_prompt_token_budget": 2000
+        },
+        {
+          "answer_window_fallback_reason": "oracle_missing_has_answer",
+          "answer_window_source": "last_third",
+          "answer_window_turns": 2,
+          "effective_evidence_token_budget": 3000,
+          "evidence_render_mode": "answer_window",
+          "long_evidence_token_limit": 3000,
+          "memory_id": "b46e15ee_history_0002",
+          "model_context_window": 8192,
+          "reserved_prompt_token_budget": 2000
+        },
+        {
+          "answer_window_fallback_reason": "oracle_missing_has_answer",
+          "answer_window_source": "last_third",
+          "answer_window_turns": 2,
+          "effective_evidence_token_budget": 3000,
+          "evidence_render_mode": "answer_window",
+          "long_evidence_token_limit": 3000,
+          "memory_id": "b46e15ee_history_0003",
+          "model_context_window": 8192,
+          "reserved_prompt_token_budget": 2000
+        },
+        {
+          "answer_window_fallback_reason": "",
+          "answer_window_source": "has_answer_turn",
+          "answer_window_turns": 2,
+          "effective_evidence_token_budget": 3000,
+          "evidence_render_mode": "answer_window",
+          "long_evidence_token_limit": 3000,
+          "memory_id": "b46e15ee_history_0004",
+          "model_context_window": 8192,
+          "reserved_prompt_token_budget": 2000
+        }
+      ],
+      "failures": [],
+      "gold_answer": "the 'Walk for Hunger' charity event",
+      "memory_grounding_passed": true,
+      "model_answer": "按记忆看，一个月前你参加的是 **“24-Hour Bike Ride”慈善骑行活动**——为了给当地儿童医院筹款，你连续骑了 4 小时不间断，还借着这次经历为 Sierra Nevada 和 Lake Tahoe 的公路骑行做了体能准备。\n\n需要说明下：摘要里没标精确日期，我是靠内容判断的——Walk for Hunger 是你“今天”刚参加的，所以一个月前更可能对应的是那场骑行。",
+      "profile": "chain_tri_governed_answer_contract",
+      "prompt_variant": "baseline",
+      "provider_error": false,
+      "public_score": {
+        "method": "deterministic_mismatch",
+        "needs_manual_review": false,
+        "normalized_answer": "按记忆看1个月前你参加的是24hourbikeride慈善骑行活动为了给当地儿童医院筹款你连续骑了4小时不间断还借着这次经历为sierranevada和laketahoe的公路骑行做了体能准备需要说明下摘要里没标精确日期我是靠内容判断的walkforhunger是你今天刚参加的所以1个月前更可能对应的是那场骑行",
+        "normalized_gold": "thewalkforhungercharityevent",
+        "passed": false
+      },
+      "question": "What charity event did I participate in a month ago?",
+      "repeat_index": 0,
+      "sent_evidence_gold_hit": true,
+      "source_id": "b46e15ee",
+      "timeout": false
+    },
+    {
+      "answer_debug_available": true,
+      "category": "temporal-reasoning",
+      "comprehensive_answer_rule_passed": true,
+      "evidence_render_metadata": [
+        {
+          "answer_window_fallback_reason": "oracle_missing_has_answer",
+          "answer_window_source": "last_third",
+          "answer_window_turns": 2,
+          "effective_evidence_token_budget": 3000,
+          "evidence_render_mode": "answer_window",
+          "long_evidence_token_limit": 3000,
+          "memory_id": "eac54add_history_0001",
+          "model_context_window": 8192,
+          "reserved_prompt_token_budget": 2000
+        },
+        {
+          "answer_window_fallback_reason": "",
+          "answer_window_source": "has_answer_turn",
+          "answer_window_turns": 2,
+          "effective_evidence_token_budget": 3000,
+          "evidence_render_mode": "answer_window",
+          "long_evidence_token_limit": 3000,
+          "memory_id": "eac54add_history_0002",
+          "model_context_window": 8192,
+          "reserved_prompt_token_budget": 2000
+        }
+      ],
+      "failures": [],
+      "gold_answer": "I signed a contract with my first client.",
+      "memory_grounding_passed": true,
+      "model_answer": "根据我能看到的记录，你提过的业务里程碑是——**签下了你的第一个自由职业客户**，那天你刚签完合同，还来问怎么把合同条款做扎实。这个放在业务上确实算大节点。\n\n不过“四周前”这个时间点我在现有证据里核对不了，记忆里没有对应的日期，我只能确认这件事本身，没法确认它是不是正好发生在四周前。",
+      "profile": "chain_tri_governed_answer_contract",
+      "prompt_variant": "baseline",
+      "provider_error": false,
+      "public_score": {
+        "method": "deterministic_mismatch",
+        "needs_manual_review": false,
+        "normalized_answer": "根据我能看到的记录你提过的业务里程碑是签下了你的第1个自由职业客户那天你刚签完合同还来问怎么把合同条款做扎实这个放在业务上确实算大节点不过4周前这个时间点我在现有证据里核对不了记忆里没有对应的日期我只能确认这件事本身没法确认它是不是正好发生在4周前",
+        "normalized_gold": "isignedacontractwithmyfirstclient",
+        "passed": false
+      },
+      "question": "What was the significant buisiness milestone I mentioned four weeks ago?",
+      "repeat_index": 0,
+      "sent_evidence_gold_hit": false,
+      "source_id": "eac54add",
+      "timeout": false
+    },
+    {
+      "answer_debug_available": true,
+      "category": "temporal-reasoning",
+      "comprehensive_answer_rule_passed": true,
+      "evidence_render_metadata": [
+        {
+          "answer_window_fallback_reason": "",
+          "answer_window_source": "has_answer_turn",
+          "answer_window_turns": 2,
+          "effective_evidence_token_budget": 3000,
+          "evidence_render_mode": "answer_window",
+          "long_evidence_token_limit": 3000,
+          "memory_id": "gpt4_1d80365e_history_0001",
+          "model_context_window": 8192,
+          "reserved_prompt_token_budget": 2000
+        },
+        {
+          "answer_window_fallback_reason": "",
+          "answer_window_source": "has_answer_turn",
+          "answer_window_turns": 2,
+          "effective_evidence_token_budget": 3000,
+          "evidence_render_mode": "answer_window",
+          "long_evidence_token_limit": 3000,
+          "memory_id": "gpt4_1d80365e_history_0002",
+          "model_context_window": 8192,
+          "reserved_prompt_token_budget": 2000
+        }
+      ],
+      "failures": [],
+      "gold_answer": "2 days. 3 days (including the last day) is also acceptable.",
+      "memory_grounding_passed": true,
+      "model_answer": "我查到的记录里，只有你说\"今天刚开始 Yosemite 单人露营之旅\"、后来又提到\"今天刚从 Yosemite 回来\"，但没有写下具体待了几天。所以这个天数我没法从记录里确认，别让我瞎猜。",
+      "profile": "chain_tri_governed_answer_contract",
+      "prompt_variant": "baseline",
+      "provider_error": false,
+      "public_score": {
+        "method": "deterministic_mismatch",
+        "needs_manual_review": false,
+        "normalized_answer": "我查到的记录里只有你说今天刚开始yosemite单人露营之旅后来又提到今天刚从yosemite回来但没有写下具体待了几天所以这个天数我没法从记录里确认别让我瞎猜",
+        "normalized_gold": "2days3daysincludingthelastdayisalsoacceptable",
+        "passed": false
+      },
+      "question": "How many days did I spend on my solo camping trip to Yosemite National Park?",
+      "repeat_index": 0,
+      "sent_evidence_gold_hit": false,
+      "source_id": "gpt4_1d80365e",
+      "timeout": false
+    },
+    {
+      "answer_debug_available": true,
+      "category": "temporal-reasoning",
+      "comprehensive_answer_rule_passed": true,
+      "evidence_render_metadata": [
+        {
+          "answer_window_fallback_reason": "",
+          "answer_window_source": "has_answer_turn",
+          "answer_window_turns": 2,
+          "effective_evidence_token_budget": 3000,
+          "evidence_render_mode": "answer_window",
+          "long_evidence_token_limit": 3000,
+          "memory_id": "gpt4_2f56ae70_history_0001",
+          "model_context_window": 8192,
+          "reserved_prompt_token_budget": 2000
+        },
+        {
+          "answer_window_fallback_reason": "",
+          "answer_window_source": "has_answer_turn",
+          "answer_window_turns": 2,
+          "effective_evidence_token_budget": 3000,
+          "evidence_render_mode": "answer_window",
+          "long_evidence_token_limit": 3000,
+          "memory_id": "gpt4_2f56ae70_history_0002",
+          "model_context_window": 8192,
+          "reserved_prompt_token_budget": 2000
+        },
+        {
+          "answer_window_fallback_reason": "",
+          "answer_window_source": "has_answer_turn",
+          "answer_window_turns": 2,
+          "effective_evidence_token_budget": 3000,
+          "evidence_render_mode": "answer_window",
+          "long_evidence_token_limit": 3000,
+          "memory_id": "gpt4_2f56ae70_history_0003",
+          "model_context_window": 8192,
+          "reserved_prompt_token_budget": 2000
+        }
+      ],
+      "failures": [],
+      "gold_answer": "Disney+",
+      "memory_grounding_passed": true,
+      "model_answer": "最近开始用的是 **Disney+** —— 上个月开始的免费试用。\n\n按你之前提到的顺序排一下：Netflix / Hulu / Amazon Prime 是过去 6 个月一直在用的，Apple TV+ 是几个月前加的，Disney+ 的试用是最近的事。",
+      "profile": "chain_tri_governed_answer_contract",
+      "prompt_variant": "baseline",
+      "provider_error": false,
+      "public_score": {
+        "method": "exact",
+        "needs_manual_review": false,
+        "normalized_answer": "最近开始用的是disney+上个月开始的免费试用按你之前提到的顺序排1下netflixhuluamazonprime是过去6个月1直在用的appletv+是几个月前加的disney+的试用是最近的事",
+        "normalized_gold": "disney+",
+        "passed": true
+      },
+      "question": "Which streaming service did I start using most recently?",
+      "repeat_index": 0,
+      "sent_evidence_gold_hit": true,
+      "source_id": "gpt4_2f56ae70",
+      "timeout": false
+    },
+    {
+      "answer_debug_available": true,
+      "category": "temporal-reasoning",
+      "comprehensive_answer_rule_passed": true,
+      "evidence_render_metadata": [
+        {
+          "answer_window_fallback_reason": "",
+          "answer_window_source": "has_answer_turn",
+          "answer_window_turns": 2,
+          "effective_evidence_token_budget": 3000,
+          "evidence_render_mode": "answer_window",
+          "long_evidence_token_limit": 3000,
+          "memory_id": "gpt4_4929293a_history_0001",
+          "model_context_window": 8192,
+          "reserved_prompt_token_budget": 2000
+        },
+        {
+          "answer_window_fallback_reason": "",
+          "answer_window_source": "has_answer_turn",
+          "answer_window_turns": 2,
+          "effective_evidence_token_budget": 3000,
+          "evidence_render_mode": "answer_window",
+          "long_evidence_token_limit": 3000,
+          "memory_id": "gpt4_4929293a_history_0002",
+          "model_context_window": 8192,
+          "reserved_prompt_token_budget": 2000
+        }
+      ],
+      "failures": [],
+      "gold_answer": "Michael's engagement party",
+      "memory_grounding_passed": true,
+      "model_answer": "按记录顺序，Michael's engagement party 在先，cousin's wedding 在后。你早先那次说\"刚参加完 Michael 的 rooftop 订婚派对\"，后来那次才说\"今天在 cousin 婚礼上当伴娘\"。不过两条记录都没写绝对日期，所以这个先后是按对话顺序推的。",
+      "profile": "chain_tri_governed_answer_contract",
+      "prompt_variant": "baseline",
+      "provider_error": false,
+      "public_score": {
+        "method": "exact",
+        "needs_manual_review": false,
+        "normalized_answer": "按记录顺序michaelsengagementparty在先cousinswedding在后你早先那次说刚参加完michael的rooftop订婚派对后来那次才说今天在cousin婚礼上当伴娘不过2条记录都没写绝对日期所以这个先后是按对话顺序推的",
+        "normalized_gold": "michaelsengagementparty",
+        "passed": true
+      },
+      "question": "Which event happened first, my cousin's wedding or Michael's engagement party?",
+      "repeat_index": 0,
+      "sent_evidence_gold_hit": true,
+      "source_id": "gpt4_4929293a",
+      "timeout": false
+    },
+    {
+      "answer_debug_available": true,
+      "category": "temporal-reasoning",
+      "comprehensive_answer_rule_passed": true,
+      "evidence_render_metadata": [
+        {
+          "answer_window_fallback_reason": "",
+          "answer_window_source": "has_answer_turn",
+          "answer_window_turns": 2,
+          "effective_evidence_token_budget": 3000,
+          "evidence_render_mode": "answer_window",
+          "long_evidence_token_limit": 3000,
+          "memory_id": "gpt4_61e13b3c_history_0001",
+          "model_context_window": 8192,
+          "reserved_prompt_token_budget": 2000
+        },
+        {
+          "answer_window_fallback_reason": "",
+          "answer_window_source": "has_answer_turn",
+          "answer_window_turns": 2,
+          "effective_evidence_token_budget": 3000,
+          "evidence_render_mode": "answer_window",
+          "long_evidence_token_limit": 3000,
+          "memory_id": "gpt4_61e13b3c_history_0002",
+          "model_context_window": 8192,
+          "reserved_prompt_token_budget": 2000
+        }
+      ],
+      "failures": [],
+      "gold_answer": "3 weeks",
+      "memory_grounding_passed": true,
+      "model_answer": "这个我算不出来——证据里没有给出这两个事件的具体日期。\n\n能确定的只有：\n- Farmers' Market 卖烘焙那次，是在你当时那段对话里说的\"今天\"；\n- Spring Fling Market 卖首饰和蜡烛那次，是在另一段对话里说的\"昨天\"。\n\n但两段对话本身隔了多久、各自发生在哪一天，记忆里完全没有日期信息。而且这俩本来就是两条产品线（烘焙 vs 首饰/蜡烛），不能直接假设它们在同一时间线上衔接。\n\n所以\"隔了几周\"这个数，从现有证据推不出来，我不能瞎编一个。",
+      "profile": "chain_tri_governed_answer_contract",
+      "prompt_variant": "baseline",
+      "provider_error": false,
+      "public_score": {
+        "method": "deterministic_mismatch",
+        "needs_manual_review": false,
+        "normalized_answer": "这个我算不出来证据里没有给出这2个事件的具体日期能确定的只有farmersmarket卖烘焙那次是在你当时那段对话里说的今天springflingmarket卖首饰和蜡烛那次是在另1段对话里说的昨天但2段对话本身隔了多久各自发生在哪1天记忆里完全没有日期信息而且这俩本来就是2条产品线烘焙vs首饰蜡烛不能直接假设它们在同1时间线上衔接所以隔了几周这个数从现有证据推不出来我不能瞎编1个",
+        "normalized_gold": "3weeks",
+        "passed": false
+      },
+      "question": "How many weeks passed between the time I sold homemade baked goods at the Farmers' Market for the last time and the time I participated in the Spring Fling Market?",
+      "repeat_index": 0,
+      "sent_evidence_gold_hit": false,
+      "source_id": "gpt4_61e13b3c",
+      "timeout": false
+    },
+    {
+      "answer_debug_available": true,
+      "category": "temporal-reasoning",
+      "comprehensive_answer_rule_passed": true,
+      "evidence_render_metadata": [
+        {
+          "answer_window_fallback_reason": "",
+          "answer_window_source": "has_answer_turn",
+          "answer_window_turns": 2,
+          "effective_evidence_token_budget": 3000,
+          "evidence_render_mode": "answer_window",
+          "long_evidence_token_limit": 3000,
+          "memory_id": "gpt4_6dc9b45b_history_0001",
+          "model_context_window": 8192,
+          "reserved_prompt_token_budget": 2000
+        }
+      ],
+      "failures": [],
+      "gold_answer": "4 months ago",
+      "memory_grounding_passed": true,
+      "model_answer": "从记忆里看，你确实在 SIFF 现场看了《Coda》，当时你还说那是“今天”看的，另外那一周你总共看了 8 部电影，还听了关于发行和营销的小组讨论。\n\n但那份记忆没有记下当时的对话日期，我没法把那个“今天”换算成具体日子，所以算不出距今几个月。抱歉，这点我不确定。",
+      "profile": "chain_tri_governed_answer_contract",
+      "prompt_variant": "baseline",
+      "provider_error": false,
+      "public_score": {
+        "method": "deterministic_mismatch",
+        "needs_manual_review": false,
+        "normalized_answer": "从记忆里看你确实在siff现场看了coda当时你还说那是今天看的另外那1周你总共看了8部电影还听了关于发行和营销的小组讨论但那份记忆没有记下当时的对话日期我没法把那个今天换算成具体日子所以算不出距今几个月抱歉这点我不确定",
+        "normalized_gold": "4monthsago",
+        "passed": false
+      },
+      "question": "How many months ago did I attend the Seattle International Film Festival?",
+      "repeat_index": 0,
+      "sent_evidence_gold_hit": false,
+      "source_id": "gpt4_6dc9b45b",
+      "timeout": false
+    },
+    {
+      "answer_debug_available": true,
+      "category": "temporal-reasoning",
+      "comprehensive_answer_rule_passed": true,
+      "evidence_render_metadata": [
+        {
+          "answer_window_fallback_reason": "",
+          "answer_window_source": "has_answer_turn",
+          "answer_window_turns": 2,
+          "effective_evidence_token_budget": 3000,
+          "evidence_render_mode": "answer_window",
+          "long_evidence_token_limit": 3000,
+          "memory_id": "gpt4_8279ba02_history_0001",
+          "model_context_window": 8192,
+          "reserved_prompt_token_budget": 2000
+        }
+      ],
+      "failures": [],
+      "gold_answer": "10 days ago. 11 days (including the last day) is also acceptable.",
+      "memory_grounding_passed": true,
+      "model_answer": "这个我说不准。记忆里只留下你当时说\"今天刚收到 smoker\"这句话，但没有记录那天具体是哪一天，所以没法换算成\"几天前\"。\n\n如果你记得大概是什么时候买的，我可以帮你对一下。",
+      "profile": "chain_tri_governed_answer_contract",
+      "prompt_variant": "baseline",
+      "provider_error": false,
+      "public_score": {
+        "method": "deterministic_mismatch",
+        "needs_manual_review": false,
+        "normalized_answer": "这个我说不准记忆里只留下你当时说今天刚收到smoker这句话但没有记录那天具体是哪1天所以没法换算成几天前如果你记得大概是什么时候买的我可以帮你对1下",
+        "normalized_gold": "10daysago11daysincludingthelastdayisalsoacceptable",
+        "passed": false
+      },
+      "question": "How many days ago did I buy a smoker?",
+      "repeat_index": 0,
+      "sent_evidence_gold_hit": false,
+      "source_id": "gpt4_8279ba02",
+      "timeout": false
+    },
+    {
+      "answer_debug_available": true,
+      "category": "temporal-reasoning",
+      "comprehensive_answer_rule_passed": true,
+      "evidence_render_metadata": [
+        {
+          "answer_window_fallback_reason": "",
+          "answer_window_source": "has_answer_turn",
+          "answer_window_turns": 2,
+          "effective_evidence_token_budget": 3000,
+          "evidence_render_mode": "answer_window",
+          "long_evidence_token_limit": 3000,
+          "memory_id": "gpt4_93159ced_history_0001",
+          "model_context_window": 8192,
+          "reserved_prompt_token_budget": 2000
+        },
+        {
+          "answer_window_fallback_reason": "",
+          "answer_window_source": "has_answer_turn",
+          "answer_window_turns": 2,
+          "effective_evidence_token_budget": 3000,
+          "evidence_render_mode": "answer_window",
+          "long_evidence_token_limit": 3000,
+          "memory_id": "gpt4_93159ced_history_0002",
+          "model_context_window": 8192,
+          "reserved_prompt_token_budget": 2000
+        }
+      ],
+      "failures": [],
+      "gold_answer": "4 years and 9 months",
+      "memory_grounding_passed": true,
+      "model_answer": "按你能拿到的信息算：你工作总年限 9 年，在 NovaTech 已经工作了约 4 年 3 个月。所以在进 NovaTech 之前，你大概工作了 **4 年 9 个月**左右。",
+      "profile": "chain_tri_governed_answer_contract",
+      "prompt_variant": "baseline",
+      "provider_error": false,
+      "public_score": {
+        "method": "deterministic_mismatch",
+        "needs_manual_review": false,
+        "normalized_answer": "按你能拿到的信息算你工作总年限9年在novatech已经工作了约4年3个月所以在进novatech之前你大概工作了4年9个月左右",
+        "normalized_gold": "4yearsand9months",
+        "passed": false
+      },
+      "question": "How long have I been working before I started my current job at NovaTech?",
+      "repeat_index": 0,
+      "sent_evidence_gold_hit": false,
+      "source_id": "gpt4_93159ced",
+      "timeout": false
+    },
+    {
+      "answer_debug_available": true,
+      "category": "temporal-reasoning",
+      "comprehensive_answer_rule_passed": true,
+      "evidence_render_metadata": [
+        {
+          "answer_window_fallback_reason": "",
+          "answer_window_source": "has_answer_turn",
+          "answer_window_turns": 2,
+          "effective_evidence_token_budget": 3000,
+          "evidence_render_mode": "answer_window",
+          "long_evidence_token_limit": 3000,
+          "memory_id": "gpt4_d6585ce8_history_0001",
+          "model_context_window": 8192,
+          "reserved_prompt_token_budget": 2000
+        },
+        {
+          "answer_window_fallback_reason": "",
+          "answer_window_source": "has_answer_turn",
+          "answer_window_turns": 2,
+          "effective_evidence_token_budget": 3000,
+          "evidence_render_mode": "answer_window",
+          "long_evidence_token_limit": 3000,
+          "memory_id": "gpt4_d6585ce8_history_0002",
+          "model_context_window": 8192,
+          "reserved_prompt_token_budget": 2000
+        },
+        {
+          "answer_window_fallback_reason": "",
+          "answer_window_source": "has_answer_turn",
+          "answer_window_turns": 2,
+          "effective_evidence_token_budget": 3000,
+          "evidence_render_mode": "answer_window",
+          "long_evidence_token_limit": 3000,
+          "memory_id": "gpt4_d6585ce8_history_0003",
+          "model_context_window": 8192,
+          "reserved_prompt_token_budget": 2000
+        },
+        {
+          "answer_window_fallback_reason": "",
+          "answer_window_source": "has_answer_turn",
+          "answer_window_turns": 2,
+          "effective_evidence_token_budget": 3000,
+          "evidence_render_mode": "answer_window",
+          "long_evidence_token_limit": 3000,
+          "memory_id": "gpt4_d6585ce8_history_0004",
+          "model_context_window": 8192,
+          "reserved_prompt_token_budget": 2000
+        },
+        {
+          "answer_window_fallback_reason": "",
+          "answer_window_source": "has_answer_turn",
+          "answer_window_turns": 2,
+          "effective_evidence_token_budget": 3000,
+          "evidence_render_mode": "answer_window",
+          "long_evidence_token_limit": 3000,
+          "memory_id": "gpt4_d6585ce8_history_0005",
+          "model_context_window": 8192,
+          "reserved_prompt_token_budget": 2000
+        }
+      ],
+      "failures": [],
+      "gold_answer": "The order of the concerts I attended is: 1. Billie Eilish concert at the Wells Fargo Center in Philly, 2. Free outdoor concert series in the park, 3. Music festival in Brooklyn, 4. Jazz night at a local bar, 5. Queen + Adam Lambert concert at the Prudential Center in Newark, NJ.",
+      "memory_grounding_passed": true,
+      "model_answer": "按我这边记录到的信息，这些事件的顺序大致是（从最早开始）：\n\n1. **Billie Eilish 演唱会** —— 费城 Wells Fargo Center，和妹妹一起去的\n2. **公园免费户外音乐会** —— 低-key 的露天演出，发现了些新 talent\n3. **布鲁克林音乐节** —— 和朋友一起，现场看了 Glass Animals 等 indie 乐队\n4. **当地酒吧爵士之夜** —— 小场地、更私密的 live music\n5. **Queen（Adam Lambert 主唱）演唱会** —— 纽瓦克 Prudential Center，和父母一起\n\n不过得说明一下：这些记录里没有具体日期，只有\"今天\"\"刚回来\"\"最近\"这种相对时间，所以这个顺序是我根据对话先后和事件之间的交叉引用推断的，不是精确的日历顺序。尤其 2 和 4 这两场小型活动，相对位置我没有更强的证据。",
+      "profile": "chain_tri_governed_answer_contract",
+      "prompt_variant": "baseline",
+      "provider_error": false,
+      "public_score": {
+        "method": "deterministic_mismatch",
+        "needs_manual_review": false,
+        "normalized_answer": "按我这边记录到的信息这些事件的顺序大致是从最早开始1billieeilish演唱会费城wellsfargocenter和妹妹1起去的2公园免费户外音乐会低key的露天演出发现了些新talent3布鲁克林音乐节和朋友1起现场看了glassanimals等indie乐队4当地酒吧爵士之夜小场地更私密的livemusic5queenadamlambert主唱演唱会纽瓦克prudentialcenter和父母1起不过得说明1下这些记录里没有具体日期只有今天刚回来最近这种相对时间所以这个顺序是我根据对话先后和事件之间的交叉引用推断的不是精确的日历顺序尤其2和4这2场小型活动相对位置我没有更强的证据",
+        "normalized_gold": "theorderoftheconcertsiattendedis1billieeilishconcertatthewellsfargocenterinphilly2freeoutdoorconcertseriesinthepark3musicfestivalinbrooklyn4jazznightatalocalbar5queen+adamlambertconcertattheprudentialcenterinnewarknj",
+        "passed": false
+      },
+      "question": "What is the order of the concerts and musical events I attended in the past two months, starting from the earliest?",
+      "repeat_index": 0,
+      "sent_evidence_gold_hit": false,
+      "source_id": "gpt4_d6585ce8",
+      "timeout": false
+    },
+    {
+      "answer_debug_available": true,
+      "category": "temporal-reasoning",
+      "comprehensive_answer_rule_passed": true,
+      "evidence_render_metadata": [
+        {
+          "answer_window_fallback_reason": "oracle_missing_has_answer",
+          "answer_window_source": "last_third",
+          "answer_window_turns": 2,
+          "effective_evidence_token_budget": 3000,
+          "evidence_render_mode": "answer_window",
+          "long_evidence_token_limit": 3000,
+          "memory_id": "gpt4_f420262d_history_0001",
+          "model_context_window": 8192,
+          "reserved_prompt_token_budget": 2000
+        },
+        {
+          "answer_window_fallback_reason": "oracle_missing_has_answer",
+          "answer_window_source": "last_third",
+          "answer_window_turns": 2,
+          "effective_evidence_token_budget": 3000,
+          "evidence_render_mode": "answer_window",
+          "long_evidence_token_limit": 3000,
+          "memory_id": "gpt4_f420262d_history_0002",
+          "model_context_window": 8192,
+          "reserved_prompt_token_budget": 2000
+        },
+        {
+          "answer_window_fallback_reason": "",
+          "answer_window_source": "has_answer_turn",
+          "answer_window_turns": 2,
+          "effective_evidence_token_budget": 3000,
+          "evidence_render_mode": "answer_window",
+          "long_evidence_token_limit": 3000,
+          "memory_id": "gpt4_f420262d_history_0003",
+          "model_context_window": 8192,
+          "reserved_prompt_token_budget": 2000
+        },
+        {
+          "answer_window_fallback_reason": "",
+          "answer_window_source": "has_answer_turn",
+          "answer_window_turns": 2,
+          "effective_evidence_token_budget": 3000,
+          "evidence_render_mode": "answer_window",
+          "long_evidence_token_limit": 3000,
+          "memory_id": "gpt4_f420262d_history_0004",
+          "model_context_window": 8192,
+          "reserved_prompt_token_budget": 2000
+        },
+        {
+          "answer_window_fallback_reason": "oracle_missing_has_answer",
+          "answer_window_source": "last_third",
+          "answer_window_turns": 2,
+          "effective_evidence_token_budget": 3000,
+          "evidence_render_mode": "answer_window",
+          "long_evidence_token_limit": 3000,
+          "memory_id": "gpt4_f420262d_history_0005",
+          "model_context_window": 8192,
+          "reserved_prompt_token_budget": 2000
+        }
+      ],
+      "failures": [],
+      "gold_answer": "American Airlines",
+      "memory_grounding_passed": true,
+      "model_answer": "我翻了手头的记忆证据，里面没有情人节（2 月 14 日）那天的航班记录，这点我确认不了。\n\n能看到的航空相关线索是这几条，但都没标注是情人节：\n\n- American Airlines：LAX→JFK 延误 2 小时（天气原因）；还有一次 NY→LAX 娱乐系统体验很糟\n- Spirit Airlines：你三月春假去 Fort Lauderdale 的机票\n- Delta：你有 SkyMiles 卡，Boston→Miami 航线在考虑用它\n\n所以情人节那天坐的哪家，证据里没提，我不能瞎猜。",
+      "profile": "chain_tri_governed_answer_contract",
+      "prompt_variant": "baseline",
+      "provider_error": false,
+      "public_score": {
+        "method": "exact",
+        "needs_manual_review": false,
+        "normalized_answer": "我翻了手头的记忆证据里面没有情人节2月14日那天的航班记录这点我确认不了能看到的航空相关线索是这几条但都没标注是情人节americanairlineslax→jfk延误2小时天气原因还有1次ny→lax娱乐系统体验很糟spiritairlines你3月春假去fortlauderdale的机票delta你有skymiles卡boston→miami航线在考虑用它所以情人节那天坐的哪家证据里没提我不能瞎猜",
+        "normalized_gold": "americanairlines",
+        "passed": true
+      },
+      "question": "What was the airline that I flied with on Valentine's day?",
+      "repeat_index": 0,
+      "sent_evidence_gold_hit": true,
+      "source_id": "gpt4_f420262d",
+      "timeout": false
+    }
+  ],
+  "failure_records": [],
+  "generated_at": "2026-07-19T00:00:00+00:00",
+  "metrics": {
+    "actual_call_shape": "50 * 1 * 1 * 1 = 50",
+    "answer_post_check_shadow": {
+      "case_count": 50,
+      "conflict_evidence_included_count": 0,
+      "enabled_case_count": 50,
+      "forbidden_boundary_included_count": 0,
+      "insufficient_fallback_missing_count": 0,
+      "missing_likely_relevant_context_count": 0,
+      "needs_retry_count": 0,
+      "stale_evidence_included_count": 0
+    },
+    "answer_quality_missing_profiles": [
+      "chain_memory_base",
+      "chain_tri_retrieval",
+      "chain_graph_retrieval",
+      "chain_rerank_injection",
+      "chain_version_provenance",
+      "chain_all_on"
+    ],
+    "answer_quality_partial_matrix": true,
+    "answer_quality_passed": true,
+    "answer_quality_required_profiles": [
+      "chain_memory_base",
+      "chain_tri_retrieval",
+      "chain_graph_retrieval",
+      "chain_rerank_injection",
+      "chain_version_provenance",
+      "chain_all_on"
+    ],
+    "answer_rule_pass_rate": 100.0,
+    "answer_window_turns": 2,
+    "answer_writeback_policy": "model answers are not written back into memory",
+    "avg_latency_ms": 6403.58,
+    "avg_total_token_count": 8250.58,
+    "baseline_profile": "chain_memory_base",
+    "benchmark": "longmemeval",
+    "capture_provider_request": true,
+    "case_count": 50,
+    "chain_adjacent_uplift": {},
+    "chain_answer_quality_uplift_rows": [],
+    "checkpoint_provenance_mismatch_count": 0,
+    "command_shape_hash": "c3d3ab57433834a817927e869f60df2343a36da78d4482368a79ee637a8d343f",
+    "completed_call_count": 50,
+    "concurrency": 1,
+    "control_profile": "chain_off",
+    "dataset_case_count": 500,
+    "dataset_category_distribution": {
+      "abstention": 30,
+      "knowledge-update": 72,
+      "multi-session": 121,
+      "single-session-assistant": 56,
+      "single-session-preference": 30,
+      "single-session-user": 64,
+      "temporal-reasoning": 127
+    },
+    "dataset_path": "my_md/memory_optimization/datasets/public_long_memory/longmemeval_oracle.json",
+    "dataset_sha256": "821a2034d219ab45846873dd14c14f12cfe7776e73527a483f9dac095d38620c",
+    "effective_evidence_token_budget": 3000,
+    "evaluation_level": "comprehensive_online_agentloop",
+    "evidence_render_mode": "answer_window",
+    "failed_answer_case_count": 0,
+    "fake_provider_enabled": false,
+    "forbidden_violation_rate": 0.0,
+    "fresh_checkpoint_valid": true,
+    "full_answer_included": false,
+    "gold_answer_memory_policy": "gold answers are only used by scorer/report and are never written into memory",
+    "infra_passed": true,
+    "long_evidence_token_limit": 3000,
+    "malformed_checkpoint_line_count": 0,
+    "memory_grounding_pass_rate": 100.0,
+    "metric_sources": {
+      "offline_retrieval_proxy": "existing offline trace retrieval metrics",
+      "online_answer_level": "real AgentLoop answer scoring",
+      "online_balanced_proxy": "online answer-level fields converted into balanced proxy dimensions",
+      "real_db_readonly_sampling_background": "aggregate-only real memory DB sampling status"
+    },
+    "model_context_window": 8192,
+    "online_balanced_proxy_summaries": {},
+    "passed_case_count": 50,
+    "phase": "phase_a",
+    "profile": "chain_tri_governed_answer_contract",
+    "profile_answer_quality_uplift_vs_memory_base": {},
+    "profile_count": 1,
+    "profile_metadata": {
+      "chain_tri_governed_answer_contract": {
+        "candidate_governance_mode": "tiered",
+        "combines_candidate_governance": true,
+        "description": "Combines candidate-governed tri ids with a production-safe evidence contract to test whether input filtering plus evidence boundaries can preserve answer quality while reducing forbidden risk.",
+        "diagnostic_answer_contract": true,
+        "eval_only": true,
+        "oracle_protected": true,
+        "production_safe_evidence_contract": true,
+        "uses_fixture_answer_expectations": false,
+        "uses_fixture_expected_ids": true
+      }
+    },
+    "profile_summaries": {
+      "chain_tri_governed_answer_contract": {
+        "answer_rule_pass_rate": 100.0,
+        "answer_success_count": 50,
+        "avg_latency_ms": 6403.58,
+        "avg_total_token_count": 8250.58,
+        "case_count": 50,
+        "evidence_source": "tri_governed_answer_contract.governed_allowed_evidence_ids",
+        "forbidden_case_count": 0,
+        "forbidden_violation_rate": 0.0,
+        "grounding_success_count": 50,
+        "main_score": 100.0,
+        "memory_grounding_pass_rate": 100.0,
+        "token_metrics_available": true
+      }
+    },
+    "profile_uplift_vs_memory_base": {
+      "chain_tri_governed_answer_contract": "unavailable"
+    },
+    "profile_uplift_vs_off": {
+      "chain_tri_governed_answer_contract": "unavailable"
+    },
+    "prompt_included": false,
+    "prompt_variant_count": 1,
+    "prompt_variants": [
+      "baseline"
+    ],
+    "provider_error_count": 0,
+    "provider_request_debug_dir": "my_md/memory_optimization/eval_reports/public_long_memory_phase_a_p5_oracle_v3/workspace/public_long_memory_provider_requests",
+    "public_answer_pass_count": 21,
+    "public_answer_pass_rate": 42.0,
+    "raw_memory_summary_included": false,
+    "raw_query_included": false,
+    "real_llm_enabled": true,
+    "real_memory_sample_metrics": {},
+    "repeat_count": 1,
+    "repeats": 1,
+    "reserved_prompt_token_budget": 2000,
+    "result_boundary": "LongMemEval P5-only public benchmark; not a P1-P5 ablation.",
+    "sampled_case_count": 50,
+    "sampled_case_ids": [
+      "60bf93ed_abs",
+      "88432d0a_abs",
+      "c8090214_abs",
+      "031748ae",
+      "0f05491a",
+      "1cea1afa",
+      "830ce83f",
+      "852ce960",
+      "a2f3aa27",
+      "e493bb7c",
+      "2e6d26dc",
+      "60472f9c",
+      "61f8c8f8",
+      "6456829e",
+      "88432d0a",
+      "8e91e7d9",
+      "a3332713",
+      "b3c15d39",
+      "bb7c3b45",
+      "ef9cf60a",
+      "gpt4_2f91af09",
+      "gpt4_7fce9456",
+      "3249768e",
+      "3e321797",
+      "51b23612",
+      "8aef76bc",
+      "ceb54acb",
+      "e982271f",
+      "0a34ad58",
+      "54026fce",
+      "a89d7624",
+      "4100d0a0",
+      "6f9b354f",
+      "86b68151",
+      "ad7109d1",
+      "caf9ead2",
+      "f4f1d8a4",
+      "0bc8ad93",
+      "a3838d2b",
+      "b46e15ee",
+      "eac54add",
+      "gpt4_1d80365e",
+      "gpt4_2f56ae70",
+      "gpt4_4929293a",
+      "gpt4_61e13b3c",
+      "gpt4_6dc9b45b",
+      "gpt4_8279ba02",
+      "gpt4_93159ced",
+      "gpt4_d6585ce8",
+      "gpt4_f420262d"
+    ],
+    "sampled_category_distribution": {
+      "abstention": 3,
+      "knowledge-update": 7,
+      "multi-session": 12,
+      "single-session-assistant": 6,
+      "single-session-preference": 3,
+      "single-session-user": 6,
+      "temporal-reasoning": 13
+    },
+    "sampling": {
+      "requested_sample_size": 50,
+      "seed": 42,
+      "strategy": "stratified_by_category"
+    },
+    "scorer_unable_to_score_count": 0,
+    "scorer_unable_to_score_rate": 0.0,
+    "semantic_ambiguity_count": 0,
+    "sent_evidence_gold_hit_count": 27,
+    "sent_evidence_gold_hit_rate": 54.0,
+    "session_text_included": false,
+    "skipped_from_checkpoint_count": 0,
+    "timeout_count": 0,
+    "token_metrics_available": true,
+    "tool_call_only_count": 0,
+    "tool_call_style_output_case_ids": [],
+    "tool_call_style_output_count": 0,
+    "total_token_count": 412529,
+    "unique_case_count": 50
+  },
+  "run_id": "2e1e1a5eb8e466bb"
+}

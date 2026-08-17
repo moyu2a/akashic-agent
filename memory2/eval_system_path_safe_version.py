@@ -1098,6 +1098,8 @@ def _build_metrics(
     )
     return {
         "evaluation_level": "system_path_safe_version_governed",
+        "claim_boundary": "system_path_safe_version_independent_validation",
+        "not_same_table_with": "chain_tri_retrieval_37.5_baseline",
         "unique_case_count": unique_case_count,
         "mode_count": len(tuple(modes)),
         "case_count": len(records),

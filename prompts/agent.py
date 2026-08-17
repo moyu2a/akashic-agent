@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import platform
+import re
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -18,6 +19,13 @@ def _normalize_timestamp(message_timestamp: datetime | None = None) -> datetime:
 
 def _weekday_cn(ts: datetime) -> str:
     return ["周一", "周二", "周三", "周四", "周五", "周六", "周日"][ts.weekday()]
+
+
+def _looks_english_text(text: str | None) -> bool:
+    value = str(text or "")
+    latin_count = len(re.findall(r"[A-Za-z]", value))
+    cjk_count = len(re.findall(r"[\u3400-\u9fff]", value))
+    return latin_count > 0 and latin_count >= cjk_count * 2
 
 
 # ─── 静态身份层：工作区路径 + 文件索引 ──────────────────────────────────────────
@@ -79,7 +87,7 @@ def build_agent_behavior_rules_prompt(*, workspace: Path) -> str:
 - 注入记忆条目若带有 `发生于:` / `距今约` / `证据:` 元信息：`发生于` 是历史事件的本地时间锚点，`距今约` 只用于判断新旧，`证据: 记忆摘要` 不能单独当成历史事实结论；涉及具体历史时间线时，优先依赖 `证据: 可回源原文` 的条目或直接回源原始消息。
 
 ### 输出格式
-- 中文口语，短句，简洁。
+- 使用用户本轮语言；中文时口语、短句、简洁；英文时自然、简洁。
 - 用户称呼优先依据长期记忆、当前会话或用户本轮明确指定的偏好；没有明确偏好时，用自然的普通称呼，不要自造专名或硬套固定昵称。
 - 匹配用户这一轮任务：简单问题直接回答，不要为了“显得周到”额外加总结、鼓励、鸡汤或行动计划。
 - 用户在问时间线、日期、安排、是否记得、列事实、重新梳理这类事实型问题时，只回答事实、结论和必要的不确定项；除非用户明确要建议或安慰，否则不要追加鼓励、睡觉建议、备战计划、陪伴式抚慰。
@@ -169,13 +177,28 @@ def build_agent_session_context_prompt(
     return "\n\n".join(part for part in parts if part.strip())
 
 
-def build_current_message_time_envelope(*, message_timestamp: datetime | None = None) -> str:
+def build_current_message_time_envelope(
+    *,
+    message_timestamp: datetime | None = None,
+    user_text: str | None = None,
+) -> str:
     ts = _normalize_timestamp(message_timestamp)
     if ts.tzinfo is None:
         ts = ts.astimezone()
     yesterday = ts - timedelta(days=1)
     tomorrow = ts + timedelta(days=1)
     day_after_tomorrow = ts + timedelta(days=2)
+    if _looks_english_text(user_text):
+        return (
+            f"[Current message time: {ts.strftime('%Y-%m-%d %H:%M:%S %Z')} | "
+            f"request_time={ts.isoformat()} | "
+            f"today={ts.strftime('%Y-%m-%d')} ({ts.strftime('%A')}) | "
+            f"yesterday={yesterday.strftime('%Y-%m-%d')} ({yesterday.strftime('%A')}) | "
+            f"tomorrow={tomorrow.strftime('%Y-%m-%d')} ({tomorrow.strftime('%A')}) | "
+            f"day_after_tomorrow={day_after_tomorrow.strftime('%Y-%m-%d')} ({day_after_tomorrow.strftime('%A')}) | "
+            f"weekday={ts.strftime('%A')} | "
+            f"Use this as the anchor for relative time.]"
+        )
     return (
         f"[当前消息时间: {ts.strftime('%Y-%m-%d %H:%M:%S %Z')} | "
         f"request_time={ts.isoformat()} | "

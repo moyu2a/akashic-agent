@@ -729,6 +729,7 @@ class AgentLoop:
         stream_events: bool = False,
         disabled_tools: list[str] | None = None,
         turn_metadata: Mapping[str, object] | None = None,
+        message_timestamp: datetime | None = None,
     ) -> str:
         metadata: dict[str, object] = dict(turn_metadata or {})
         if omit_user_turn:
@@ -739,13 +740,16 @@ class AgentLoop:
             metadata["suppress_stream_events"] = True
         if disabled_tools:
             metadata["disabled_tools"] = list(disabled_tools)
-        msg = InboundMessage(
-            channel=channel,
-            sender="user",
-            chat_id=chat_id,
-            content=content,
-            metadata=metadata,
-        )
+        message_kwargs: dict[str, object] = {
+            "channel": channel,
+            "sender": "user",
+            "chat_id": chat_id,
+            "content": content,
+            "metadata": metadata,
+        }
+        if message_timestamp is not None:
+            message_kwargs["timestamp"] = message_timestamp
+        msg = InboundMessage(**message_kwargs)
         response = await self._process(
             msg,
             session_key=session_key,

@@ -126,6 +126,17 @@ def test_score_answer_text_accepts_any_expected_term_group() -> None:
     assert result.answer_rule_passed is True
 
 
+def test_score_answer_text_default_does_not_enable_semantic_judge() -> None:
+    result = score_answer_text(
+        "请继续中文输出",
+        AnswerExpectation(expected_answer_contains=("中文回答",)),
+        (),
+    )
+
+    assert result.answer_rule_passed is False
+    assert "semantic_ambiguity" not in result.failures
+
+
 def test_score_answer_text_accepts_calibrated_equivalent_terms() -> None:
     expectation = AnswerExpectation(
         expected_answer_contains=("清理",),

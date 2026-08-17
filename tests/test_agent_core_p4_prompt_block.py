@@ -122,6 +122,15 @@ def test_static_identity_prompt_defaults_to_casual_persona(tmp_path: Path):
     assert "## 工作模式" not in prompt
 
 
+def test_casual_persona_follows_current_user_language_by_default(tmp_path: Path):
+    prompt = build_agent_static_identity_prompt(workspace=tmp_path)
+
+    assert "使用用户本轮输入的语言回答" in prompt
+    assert "中文输入时" in prompt
+    assert "英文输入时" in prompt
+    assert "中文，口语。短句" not in prompt
+
+
 def test_static_identity_prompt_can_render_work_persona(tmp_path: Path):
     prompt = build_agent_static_identity_prompt(workspace=tmp_path, persona_mode="work")
 

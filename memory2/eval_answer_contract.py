@@ -8,6 +8,10 @@ from typing import Any
 
 from memory2.eval_quantitative_cases import EvalCase
 from memory2.eval_quantitative_uplift import _family_trace_for_case
+from memory2.eval_public_long_memory import (
+    build_public_evidence_render_config,
+    render_public_long_memory_evidence,
+)
 from memory2.version_chain_experiments import build_version_chain_shadow_result
 
 
@@ -60,6 +64,8 @@ class ProductionEvidenceContract:
     required_term_groups: tuple[tuple[str, ...], ...] = ()
     forbidden_terms: tuple[str, ...] = ()
     evidence_summaries: tuple[tuple[str, str], ...] = ()
+    evidence_render_metadata: tuple[dict[str, object], ...] = ()
+    public_long_memory_eval: bool = False
     raw_prompt: str = ""
     raw_answer: str = ""
 
@@ -183,6 +189,10 @@ def build_production_governed_tri_evidence_contract(
     likely_relevant_ids = tuple(
         item_id for item_id in allowed_ids if item_id not in requires_review_ids
     )
+    evidence_summaries, evidence_render_metadata = _summaries_for_ids(
+        case,
+        allowed_ids,
+    )
     return ProductionEvidenceContract(
         profile_name=profile_name,
         diagnostic_eval_only=True,
@@ -207,7 +217,9 @@ def build_production_governed_tri_evidence_contract(
         or bool(insufficient_evidence_ids),
         forbidden_boundary_ids=merged_forbidden_boundary_ids,
         deleted_evidence_ids=deleted_ids,
-        evidence_summaries=_summaries_for_ids(case, allowed_ids),
+        evidence_summaries=evidence_summaries,
+        evidence_render_metadata=evidence_render_metadata,
+        public_long_memory_eval=_is_public_long_memory_case(case),
     )
 
 
@@ -307,7 +319,7 @@ def _build_answer_contract(
         if item_id not in allowed_set and item_id not in should_not_ids
     )
     answer_expectations = case.expectations.get("answer_expectations") or {}
-    summaries = _summaries_for_ids(case, allowed_ids)
+    summaries, _metadata = _summaries_for_ids(case, allowed_ids)
     return AnswerContract(
         profile_name=profile_name,
         diagnostic_eval_only=True,
@@ -345,9 +357,16 @@ def render_answer_contract_block(contract: AnswerContract) -> str:
     lines = [
         f"Answer Contract: {contract.profile_name}",
         "diagnostic_eval_only=true",
-        "请只根据 allowed_evidence 回答；不要使用 forbidden_memory_ids 中的记忆。",
-        "如果 required_terms 或 required_term_groups 与证据一致，请在中文回答中保留这些关键术语。",
-        "如果证据不足以支持 required_terms，请说明无法确认，不要补写 forbidden_terms。",
+        "Use allowed_evidence as the only memory source for the answer.",
+        "Do not use forbidden_memory_ids.",
+        "Answer in the same language as the current user question unless the user explicitly requests another language.",
+        "Do not copy the language of retrieved evidence merely because evidence is written in that language.",
+        "If evidence and question use different languages, answer in the question language and preserve names, dates, and quoted facts as-is.",
+        "For advice, tips, recommendations, planning, or suggestions, use all salient user-specific evidence before giving generic guidance.",
+        "User-specific evidence includes preferences, prior preparation, constraints, anxieties, and goals.",
+        "Do not give generic advice while ignoring salient user-specific evidence.",
+        "If required_terms or required_term_groups are supported by allowed_evidence, preserve those key terms in the answer.",
+        "If allowed_evidence is insufficient for required_terms, say the available memory is insufficient and do not invent forbidden_terms.",
         "must_use_memory_ids: " + ", ".join(contract.must_use_ids),
         "forbidden_memory_ids: " + ", ".join(contract.forbidden_ids),
         "governance_dropped_memory_ids: " + ", ".join(contract.governance_dropped_ids),
@@ -368,8 +387,14 @@ def render_production_evidence_contract_block(
         f"Evidence Contract: {contract.profile_name}",
         "diagnostic_eval_only=true",
         "production_safe=true",
-        "请只根据 allowed_evidence 回答；如果 insufficient_evidence_fallback=true，请说明证据不足。",
-        "如果存在 forbidden boundary，表示有旧版本、越界或禁止使用的记忆边界；不要复述或引用这些边界内容。",
+        "Use allowed_evidence as the only memory source for the answer; if insufficient_evidence_fallback=true, say the available memory is insufficient.",
+        "Answer in the same language as the current user question unless the user explicitly requests another language.",
+        "Do not copy the language of retrieved evidence merely because evidence is written in that language.",
+        "If evidence and question use different languages, answer in the question language and preserve names, dates, and quoted facts as-is.",
+        "For advice, tips, recommendations, planning, or suggestions, use all salient user-specific evidence before giving generic guidance.",
+        "User-specific evidence includes preferences, prior preparation, constraints, anxieties, and goals.",
+        "Do not give generic advice while ignoring salient user-specific evidence.",
+        "If a forbidden boundary exists, it marks stale-version, out-of-scope, or forbidden memory boundaries; do not restate or cite those boundary contents.",
         "allowed_evidence: " + ", ".join(contract.allowed_evidence),
         "likely_relevant_evidence: " + ", ".join(contract.likely_relevant_evidence),
         "stale_warning: " + ", ".join(contract.stale_warning),
@@ -392,23 +417,62 @@ def render_production_evidence_contract_block(
         + ("true" if contract.insufficient_evidence_fallback else "false"),
         "allowed_evidence:",
     ]
+    if contract.public_long_memory_eval:
+        lines.append(
+            "Public long-memory benchmark constraint: no tools are executed in this evaluation; do not output tool_call, function calls, or XML; answer directly from allowed_evidence."
+        )
     for item_id, summary in contract.evidence_summaries:
         lines.append(f"- memory_id={item_id}; summary={summary}")
     return "\n".join(lines)
 
 
-def _summaries_for_ids(case: EvalCase, ids: tuple[str, ...]) -> tuple[tuple[str, str], ...]:
+def _summaries_for_ids(
+    case: EvalCase,
+    ids: tuple[str, ...],
+) -> tuple[tuple[tuple[str, str], ...], tuple[dict[str, object], ...]]:
     by_id = {
         str(item.get("id") or item.get("memory_id") or ""): item
         for item in case.setup.get("memory_items", ())
         if isinstance(item, dict)
     }
     rows: list[tuple[str, str]] = []
+    metadata_rows: list[dict[str, object]] = []
+    render_config = _public_evidence_render_config_from_case(case)
     for item_id in ids:
         item = by_id.get(item_id) or {}
         summary = str(item.get("summary") or item.get("content") or "")
-        rows.append((item_id, _compact(summary)))
-    return tuple(rows)
+        if render_config is not None and _is_public_long_memory_item(item):
+            rendered, metadata = render_public_long_memory_evidence(item, render_config)
+            rows.append((item_id, rendered))
+            metadata_rows.append({"memory_id": item_id, **metadata})
+        else:
+            rows.append((item_id, _compact(summary)))
+    return tuple(rows), tuple(metadata_rows)
+
+
+def _public_evidence_render_config_from_case(case: EvalCase) -> object | None:
+    raw = case.setup.get("public_long_memory_evidence_render")
+    if not isinstance(raw, Mapping):
+        return None
+    return build_public_evidence_render_config(
+        mode=str(raw.get("mode") or "answer_window"),  # type: ignore[arg-type]
+        long_evidence_token_limit=int(raw.get("long_evidence_token_limit") or 3000),
+        reserved_prompt_token_budget=int(raw.get("reserved_prompt_token_budget") or 2000),
+        model_context_window=int(raw.get("model_context_window") or 8192),
+        answer_window_turns=int(raw.get("answer_window_turns") or 2),
+    )
+
+
+def _is_public_long_memory_case(case: EvalCase) -> bool:
+    return str(case.setup.get("measurement_family") or "") == "public_long_memory"
+
+
+def _is_public_long_memory_item(item: Mapping[str, Any]) -> bool:
+    extra = item.get("extra_json")
+    return (
+        str(item.get("memory_type") or "") == "public_long_memory_history"
+        or (isinstance(extra, Mapping) and extra.get("benchmark") == "longmemeval")
+    )
 
 
 def _memory_items_by_id(case: EvalCase) -> dict[str, dict[str, Any]]:
