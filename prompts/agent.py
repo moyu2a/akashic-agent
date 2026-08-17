@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import platform
+import re
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -18,6 +19,13 @@ def _normalize_timestamp(message_timestamp: datetime | None = None) -> datetime:
 
 def _weekday_cn(ts: datetime) -> str:
     return ["周一", "周二", "周三", "周四", "周五", "周六", "周日"][ts.weekday()]
+
+
+def _looks_english_text(text: str | None) -> bool:
+    value = str(text or "")
+    latin_count = len(re.findall(r"[A-Za-z]", value))
+    cjk_count = len(re.findall(r"[\u3400-\u9fff]", value))
+    return latin_count > 0 and latin_count >= cjk_count * 2
 
 
 # ─── 静态身份层：工作区路径 + 文件索引 ──────────────────────────────────────────
@@ -169,13 +177,28 @@ def build_agent_session_context_prompt(
     return "\n\n".join(part for part in parts if part.strip())
 
 
-def build_current_message_time_envelope(*, message_timestamp: datetime | None = None) -> str:
+def build_current_message_time_envelope(
+    *,
+    message_timestamp: datetime | None = None,
+    user_text: str | None = None,
+) -> str:
     ts = _normalize_timestamp(message_timestamp)
     if ts.tzinfo is None:
         ts = ts.astimezone()
     yesterday = ts - timedelta(days=1)
     tomorrow = ts + timedelta(days=1)
     day_after_tomorrow = ts + timedelta(days=2)
+    if _looks_english_text(user_text):
+        return (
+            f"[Current message time: {ts.strftime('%Y-%m-%d %H:%M:%S %Z')} | "
+            f"request_time={ts.isoformat()} | "
+            f"today={ts.strftime('%Y-%m-%d')} ({ts.strftime('%A')}) | "
+            f"yesterday={yesterday.strftime('%Y-%m-%d')} ({yesterday.strftime('%A')}) | "
+            f"tomorrow={tomorrow.strftime('%Y-%m-%d')} ({tomorrow.strftime('%A')}) | "
+            f"day_after_tomorrow={day_after_tomorrow.strftime('%Y-%m-%d')} ({day_after_tomorrow.strftime('%A')}) | "
+            f"weekday={ts.strftime('%A')} | "
+            f"Use this as the anchor for relative time.]"
+        )
     return (
         f"[当前消息时间: {ts.strftime('%Y-%m-%d %H:%M:%S %Z')} | "
         f"request_time={ts.isoformat()} | "

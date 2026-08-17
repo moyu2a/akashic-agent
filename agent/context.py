@@ -196,9 +196,12 @@ class MessageEnvelopeBuilder:
             return build_current_message_time_envelope(
                 message_timestamp=message_timestamp
             )
-        if stripped.startswith("[当前消息时间:"):
+        if stripped.startswith(("[当前消息时间:", "[Current message time:")):
             return text
-        stamp = build_current_message_time_envelope(message_timestamp=message_timestamp)
+        stamp = build_current_message_time_envelope(
+            message_timestamp=message_timestamp,
+            user_text=text,
+        )
         return f"{stamp}\n{text}"
 
 

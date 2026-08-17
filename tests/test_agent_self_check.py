@@ -77,6 +77,20 @@ def test_build_current_message_time_envelope_contains_today_and_tomorrow():
     assert "明天=2026-04-09" in text
 
 
+def test_build_current_message_time_envelope_uses_english_for_english_message():
+    text = build_current_message_time_envelope(
+        message_timestamp=datetime.fromisoformat("2026-04-08T17:57:00+08:00"),
+        user_text="How many days did it take?",
+    )
+
+    assert text.startswith("[Current message time: 2026-04-08 17:57")
+    assert "today=2026-04-08" in text
+    assert "tomorrow=2026-04-09" in text
+    assert "Use this as the anchor for relative time." in text
+    assert "今天=" not in text
+    assert "相对时间以此为准" not in text
+
+
 @pytest.mark.asyncio
 async def test_trigger_memory_consolidation_uses_real_entrypoint(tmp_path: Path):
     loop = _make_loop(tmp_path)

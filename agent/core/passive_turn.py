@@ -344,7 +344,7 @@ def _should_use_simple_fast_path(user_text: str) -> bool:
 
 def _strip_model_time_anchor(user_text: str) -> str:
     text = (user_text or "").strip()
-    if text.startswith("[当前消息时间:") and "]\n" in text:
+    if text.startswith(("[当前消息时间:", "[Current message time:")) and "]\n" in text:
         return text.split("]\n", 1)[1].strip()
     return text
 

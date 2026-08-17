@@ -557,12 +557,12 @@ def test_context_builder_builds_prompt_messages_and_assistant_blocks(
     assert messages[-1]["role"] == "user"
     assert len(messages[-1]["content"]) == 3
     stamped_message = messages[-1]["content"][-1]["text"]
-    assert stamped_message.startswith("[当前消息时间:")
+    assert stamped_message.startswith("[Current message time:")
     assert "request_time=" in stamped_message
-    assert "今天=" in stamped_message
-    assert "昨天=" in stamped_message
-    assert "明天=" in stamped_message
-    assert "后天=" in stamped_message
+    assert "today=" in stamped_message
+    assert "yesterday=" in stamped_message
+    assert "tomorrow=" in stamped_message
+    assert "day_after_tomorrow=" in stamped_message
     assert "weekday=" in stamped_message
     assert builder.last_assembled_contexts["turn_injection_context"] == {}
 
@@ -709,6 +709,40 @@ def test_context_builder_reproduces_temporal_conflict_baseline(
     assert "weekday=Wednesday" in user_message
     assert "相对时间以此为准" in user_message
     assert user_message.endswith("你还记得明天什么时候面试吗")
+
+
+def test_context_render_uses_english_time_anchor_for_english_message(tmp_path: Path):
+    class _Memory:
+        def read_profile(self) -> str:
+            return ""
+
+        def read_self(self) -> str:
+            return ""
+
+        def read_recent_context(self) -> str:
+            return ""
+
+        def get_memory_context(self) -> str:
+            return ""
+
+    builder = ContextBuilder(tmp_path, _Memory())  # type: ignore[arg-type]
+
+    result = builder.render(
+        ContextRequest(
+            history=[],
+            current_message="How many days did it take?",
+            channel="public_long_memory_eval",
+            chat_id="case-en",
+            message_timestamp=datetime.fromisoformat("2026-04-08T17:57:00+08:00"),
+        )
+    )
+
+    user_message = result.messages[-1]["content"]
+    assert user_message.startswith("[Current message time: 2026-04-08 17:57:00")
+    assert "today=2026-04-08" in user_message
+    assert "tomorrow=2026-04-09" in user_message
+    assert "今天=" not in user_message
+    assert user_message.endswith("How many days did it take?")
 
 
 @pytest.mark.asyncio
