@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import re
 import time
 from dataclasses import asdict, dataclass, replace
 from datetime import datetime, timezone
@@ -1519,6 +1520,9 @@ def _message_timestamp_for_case(case: EvalCase) -> datetime | None:
         raw = f"{raw}T00:00:00+00:00"
     if raw.endswith("Z"):
         raw = raw[:-1] + "+00:00"
+    raw = re.sub(r"\s*\([^)]+\)", "", raw)
+    if "/" in raw:
+        raw = raw.replace("/", "-")
     try:
         parsed = datetime.fromisoformat(raw)
     except ValueError:
