@@ -34,6 +34,26 @@
 | 保守口径错误数，计入 preference partial | 34 |
 | 保守口径通过率，计入 preference partial 为错误 | 93.08% |
 
+## 错误场景与稳定性判断
+
+保守口径为 `457/491 = 93.08%`，其中 `34` 条错误由 `20` 条 true factual model error 加 `14` 条 preference partial 组成。主事实口径为 `471/491 = 95.93%`。
+
+| 场景 | 涉及数量/位置 | 典型表现 | 原因判断 | 稳定性 |
+| --- | ---: | --- | --- | --- |
+| 多 session 数量/金额汇总 | true error 中 `multi-session` 10 条 | 少算一个 item、漏掉一笔费用、漏掉一个项目/活动 | 模型在多证据计数、求和、集合合并时偏保守；当证据分散在多个 session 或有时间窗口限制时，容易把应计入项排除。 | 固定模式问题 |
+| knowledge-update 当前状态判断 | true error 中 `knowledge-update` 6 条 | 最新额度、当前保存位置、最近一次习惯变化、奖励积分等答成旧状态或反向 | 对 `current` / `now` / `most recently` / `usually` 的版本优先级不够硬；新旧证据冲突时仍可能选错旧状态。 | 固定模式问题 |
+| 时间推理边界 | true error 中 `temporal-reasoning` 2 条，gold boundary 3 条 | relative date、先后顺序、`last week` / `5 days ago` 等边界判断 | 系统大体能处理时间题，但复杂相对时间、数据集时间锚和 gold 边界混在一起时会产生少量错误。 | 混合：少量偶发推理错误 + 数据边界 |
+| 不足信息时的 abstention | true error 中 `abstention` 1 条，partial 4 条 | 应说信息不足时进行了估算，或拒答但没有指出关键已知对照 | 对“缺少价格/地点/目标对象”等不可推断字段的硬拒答还不够一致；有时会补估计值。 | 低频但可规则加固 |
+| preference / recommendation partial | partial 中主要集中在 `single-session-preference` 8 条 | 推荐题回答泛化，没有充分利用已有偏好或用户上下文 | 这不是事实召回失败，而是产品体验问题；模型过度要求用户补充信息，没有把记忆偏好转化为建议。 | 固定体验问题 |
+| static scorer 误判 | false negative 180 条 | 模型事实答对，但字符串、格式、语言或语义等价导致 static FAIL | strict/static scorer 明显低估真实能力；该问题属于评测器噪声，不是 agent 事实能力问题。 | 固定评分器问题 |
+
+复盘结论：
+
+- 真正需要优先修 agent 的稳定问题是：多证据聚合少算、当前状态/版本选择错误。
+- preference partial 应作为产品体验优化项处理，不应和事实召回错误混在一起。
+- 中英混搭和 static scorer false negative 不应继续作为核心错误看待；它们适合保留为语言指标和评分器噪声指标。
+- 当前错误不是纯随机抖动，主导问题可以归纳为几个链路弱点；后续修复应针对能力模式加固，而不是针对单个 case 写特例。
+
 ## Static Scorer 复盘
 
 | 项目 | 数量 |
