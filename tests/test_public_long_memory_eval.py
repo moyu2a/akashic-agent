@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
+from types import SimpleNamespace
 
 from memory2.eval_public_long_memory import (
     PublicEvidenceRenderConfig,
     PublicLongMemoryCase,
     build_public_evidence_render_config,
+    build_public_long_memory_report,
     load_longmemeval_cases,
     public_case_to_eval_case,
     render_public_long_memory_evidence,
@@ -15,6 +18,63 @@ from memory2.eval_public_long_memory import (
 
 
 FIXTURE = Path("tests/fixtures/longmemeval_sample.jsonl")
+
+
+def _report_for_public_answer(
+    tmp_path: Path,
+    *,
+    case: PublicLongMemoryCase,
+    answer_text: str,
+    evidence_text: str = "",
+) -> dict:
+    answer_debug_dir = tmp_path / "answer_debug"
+    answer_debug_dir.mkdir()
+    (answer_debug_dir / f"{case.source_id}.json").write_text(
+        json.dumps(
+            {
+                "case_id": case.source_id,
+                "answer_text": answer_text,
+                "evidence_block_text": evidence_text,
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    benchmark_report = SimpleNamespace(
+        run_id="run",
+        generated_at="2026-08-17T00:00:00+00:00",
+        metrics={"completed_call_count": 1},
+        case_records=[
+            {
+                "case_id": case.source_id,
+                "category": f"public_long_memory_{case.category}",
+                "profile_name": "chain_tri_governed_answer_contract",
+                "prompt_variant": "baseline",
+                "repeat_index": 0,
+                "answer_rule_passed": False,
+                "memory_grounding_passed": False,
+                "provider_error": False,
+                "timeout": False,
+                "failures": (),
+            }
+        ],
+        failure_records=(),
+    )
+    return build_public_long_memory_report(
+        benchmark_report=benchmark_report,
+        dataset_path=tmp_path / "dataset.jsonl",
+        dataset_hash="hash",
+        dataset_cases=(case,),
+        sampled_cases=(case,),
+        phase="phase_a",
+        profile="chain_tri_governed_answer_contract",
+        seed=42,
+        sample_size=1,
+        answer_debug_dir=answer_debug_dir,
+        command_shape_hash="shape",
+        real_llm_enabled=False,
+        fake_provider_enabled=True,
+    )
 
 
 def test_load_longmemeval_cases_normalizes_fixture_fields() -> None:
@@ -254,3 +314,98 @@ def test_score_public_answer_rejects_empty_and_tool_call_answers() -> None:
     )
     assert not tool_call.passed
     assert tool_call.method == "tool_call_style_output"
+
+
+def test_public_report_flags_language_mismatch_without_overwriting_score(tmp_path: Path) -> None:
+    case = PublicLongMemoryCase(
+        source_id="lang_001",
+        category="single-session-user",
+        question="What drink does Alice prefer?",
+        gold_answer="green tea",
+        history=({"role": "user", "content": "Alice prefers green tea."},),
+    )
+
+    report = _report_for_public_answer(
+        tmp_path,
+        case=case,
+        answer_text="绿茶。",
+        evidence_text="user: Alice prefers green tea.",
+    )
+    review = report["case_reviews"][0]
+
+    assert review["public_score"]["passed"] is False
+    assert review["public_score"]["method"] == "deterministic_mismatch"
+    assert review["question_language"] == "en"
+    assert review["response_language"] == "zh"
+    assert review["language_mismatch"] is True
+    assert "language_mismatch_scorer_false_negative_possible" in review["failure_attribution"]
+    assert report["metrics"]["language_mismatch_count"] == 1
+
+
+def test_public_report_marks_abstention_intent_as_secondary_pass(tmp_path: Path) -> None:
+    case = PublicLongMemoryCase(
+        source_id="abs_001",
+        category="abstention",
+        question="What is the passport number?",
+        gold_answer="unknown",
+        history=({"role": "user", "content": "No passport number was shared."},),
+    )
+
+    report = _report_for_public_answer(
+        tmp_path,
+        case=case,
+        answer_text="I don't know; the history does not provide it.",
+        evidence_text="user: No passport number was shared.",
+    )
+    review = report["case_reviews"][0]
+
+    assert review["public_score"]["passed"] is False
+    assert review["abstention_intent_passed"] is True
+    assert "abstention_intent_passed_deterministic_fail" in review["failure_attribution"]
+    assert report["metrics"]["abstention_intent_pass_count"] == 1
+
+
+def test_public_report_marks_preference_cases_for_semantic_review(tmp_path: Path) -> None:
+    case = PublicLongMemoryCase(
+        source_id="pref_001",
+        category="single-session-preference",
+        question="What kind of cafe does Alice prefer?",
+        gold_answer="quiet cafes",
+        history=({"role": "user", "content": "Alice likes calm places to work."},),
+    )
+
+    report = _report_for_public_answer(
+        tmp_path,
+        case=case,
+        answer_text="Alice prefers calm places for working.",
+        evidence_text="user: Alice likes calm places to work.",
+    )
+    review = report["case_reviews"][0]
+
+    assert review["semantic_review_needed"] is True
+    assert "semantic_review_needed" in review["failure_attribution"]
+    assert report["metrics"]["semantic_review_needed_count"] == 1
+
+
+def test_public_report_splits_literal_and_reasoning_evidence_support(tmp_path: Path) -> None:
+    case = PublicLongMemoryCase(
+        source_id="support_001",
+        category="multi-session",
+        question="Which city did Carol visit after Rome?",
+        gold_answer="Berlin",
+        history=({"role": "user", "content": "After Rome, Carol went to Berlin."},),
+    )
+
+    report = _report_for_public_answer(
+        tmp_path,
+        case=case,
+        answer_text="Berlin.",
+        evidence_text="user: After Rome, Carol went to Berlin.",
+    )
+    review = report["case_reviews"][0]
+
+    assert review["literal_gold_hit"] is True
+    assert review["supporting_fact_hit"] is True
+    assert review["requires_reasoning_gold"] is False
+    assert report["metrics"]["literal_gold_hit_count"] == 1
+    assert report["metrics"]["supporting_fact_hit_count"] == 1

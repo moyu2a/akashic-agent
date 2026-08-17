@@ -345,6 +345,13 @@ def build_public_long_memory_report(
     tool_call_style_count = 0
     tool_call_style_case_ids: list[str] = []
     sent_evidence_gold_hit_count = 0
+    language_mismatch_count = 0
+    abstention_intent_pass_count = 0
+    semantic_review_needed_count = 0
+    literal_gold_hit_count = 0
+    requires_reasoning_gold_count = 0
+    supporting_fact_hit_count = 0
+    failure_attribution_counts: Counter[str] = Counter()
     render_config = evidence_render_config or build_public_evidence_render_config()
 
     for record in getattr(benchmark_report, "case_records", ()):
@@ -357,6 +364,7 @@ def build_public_long_memory_report(
         evidence_text = str(debug.get("evidence_block_text") or "")
         evidence_gold_hit = False
         public_score = None
+        diagnostics: dict[str, Any] = _empty_public_diagnostics()
         if case is None:
             unable_to_score_count += 1
         else:
@@ -384,6 +392,27 @@ def build_public_long_memory_report(
                 tool_call_style_case_ids.append(case_id)
             if score.method in {"empty_answer", "tool_call_style_output"}:
                 unable_to_score_count += 1
+            diagnostics = _public_case_diagnostics(
+                case=case,
+                answer_text=answer_text,
+                evidence_text=evidence_text,
+                public_score=score,
+                provider_error=bool(record.get("provider_error", False)),
+                timeout=bool(record.get("timeout", False)),
+            )
+            if diagnostics["language_mismatch"]:
+                language_mismatch_count += 1
+            if diagnostics["abstention_intent_passed"]:
+                abstention_intent_pass_count += 1
+            if diagnostics["semantic_review_needed"]:
+                semantic_review_needed_count += 1
+            if diagnostics["literal_gold_hit"]:
+                literal_gold_hit_count += 1
+            if diagnostics["requires_reasoning_gold"]:
+                requires_reasoning_gold_count += 1
+            if diagnostics["supporting_fact_hit"]:
+                supporting_fact_hit_count += 1
+            failure_attribution_counts.update(diagnostics["failure_attribution"])
         render_metadata = record.get("evidence_render_metadata")
         case_reviews.append(
             {
@@ -406,6 +435,7 @@ def build_public_long_memory_report(
                 "timeout": record.get("timeout", False),
                 "failures": record.get("failures", ()),
                 "public_score": public_score,
+                **diagnostics,
             }
         )
 
@@ -452,6 +482,13 @@ def build_public_long_memory_report(
             "tool_call_style_output_case_ids": tool_call_style_case_ids,
             "sent_evidence_gold_hit_count": sent_evidence_gold_hit_count,
             "sent_evidence_gold_hit_rate": _rate(sent_evidence_gold_hit_count, completed),
+            "literal_gold_hit_count": literal_gold_hit_count,
+            "requires_reasoning_gold_count": requires_reasoning_gold_count,
+            "supporting_fact_hit_count": supporting_fact_hit_count,
+            "language_mismatch_count": language_mismatch_count,
+            "abstention_intent_pass_count": abstention_intent_pass_count,
+            "semantic_review_needed_count": semantic_review_needed_count,
+            "failure_attribution_counts": dict(sorted(failure_attribution_counts.items())),
             "scorer_unable_to_score_count": unable_to_score_count,
             "scorer_unable_to_score_rate": _rate(unable_to_score_count, completed),
             "command_shape_hash": command_shape_hash,
@@ -518,6 +555,143 @@ def _provider_request_capture_metrics(
         "provider_request_snapshot_clean_count": clean_count,
         "provider_request_snapshot_mutation_count": mutation_count,
     }
+
+
+def _empty_public_diagnostics() -> dict[str, Any]:
+    return {
+        "question_language": "unknown",
+        "response_language": "unknown",
+        "language_mismatch": False,
+        "abstention_intent_passed": False,
+        "semantic_review_needed": False,
+        "literal_gold_hit": False,
+        "requires_reasoning_gold": False,
+        "supporting_fact_hit": False,
+        "failure_attribution": [],
+    }
+
+
+def _public_case_diagnostics(
+    *,
+    case: PublicLongMemoryCase,
+    answer_text: str,
+    evidence_text: str,
+    public_score: PublicAnswerScore,
+    provider_error: bool,
+    timeout: bool,
+) -> dict[str, Any]:
+    question_language = _detect_public_language(case.question)
+    response_language = _detect_public_language(answer_text)
+    language_mismatch = (
+        question_language != "unknown"
+        and response_language != "unknown"
+        and question_language != response_language
+    )
+    normalized_gold = normalize_public_answer(case.gold_answer)
+    normalized_evidence = normalize_public_answer(evidence_text)
+    literal_gold_hit = bool(normalized_gold) and normalized_gold in normalized_evidence
+    supporting_fact_hit = literal_gold_hit or _supporting_fact_overlap(
+        case.gold_answer,
+        evidence_text,
+    )
+    requires_reasoning_gold = (
+        not literal_gold_hit
+        and bool(normalized_evidence)
+        and case.category
+        in {
+            "multi-session",
+            "temporal-reasoning",
+            "knowledge-update",
+            "single-session-preference",
+        }
+    )
+    abstention_intent_passed = (
+        case.category == "abstention" and _contains_public_abstention_intent(answer_text)
+    )
+    semantic_review_needed = (
+        not public_score.passed
+        and bool(str(answer_text or "").strip())
+        and public_score.method != "tool_call_style_output"
+        and (
+            "preference" in case.category
+            or len(str(case.gold_answer or "")) > 40
+            or len(str(answer_text or "")) > 160
+        )
+    )
+
+    attribution: list[str] = []
+    if provider_error:
+        attribution.append("provider_error")
+    if timeout:
+        attribution.append("timeout")
+    if public_score.method == "empty_answer":
+        attribution.append("empty_answer")
+    if public_score.method == "tool_call_style_output":
+        attribution.append("tool_call_style_output")
+    if language_mismatch and not public_score.passed:
+        attribution.append("language_mismatch_scorer_false_negative_possible")
+    if abstention_intent_passed and not public_score.passed:
+        attribution.append("abstention_intent_passed_deterministic_fail")
+    if semantic_review_needed:
+        attribution.append("semantic_review_needed")
+    if not supporting_fact_hit and not public_score.passed:
+        attribution.append("evidence_support_not_detected")
+    if supporting_fact_hit and not public_score.passed:
+        attribution.append("supported_but_deterministic_mismatch")
+
+    diagnostics = _empty_public_diagnostics()
+    diagnostics.update(
+        {
+            "question_language": question_language,
+            "response_language": response_language,
+            "language_mismatch": language_mismatch,
+            "abstention_intent_passed": abstention_intent_passed,
+            "semantic_review_needed": semantic_review_needed,
+            "literal_gold_hit": literal_gold_hit,
+            "requires_reasoning_gold": requires_reasoning_gold,
+            "supporting_fact_hit": supporting_fact_hit,
+            "failure_attribution": attribution,
+        }
+    )
+    return diagnostics
+
+
+def _detect_public_language(text: str) -> str:
+    value = str(text or "")
+    cjk_count = len(re.findall(r"[\u3400-\u9fff]", value))
+    latin_count = len(re.findall(r"[A-Za-z]", value))
+    if cjk_count == 0 and latin_count == 0:
+        return "unknown"
+    return "zh" if cjk_count > latin_count else "en"
+
+
+def _contains_public_abstention_intent(text: str) -> bool:
+    lowered = str(text or "").strip().lower()
+    if not lowered:
+        return False
+    markers = (
+        "unknown",
+        "don't know",
+        "do not know",
+        "not provided",
+        "does not provide",
+        "not shared",
+        "no evidence",
+        "cannot determine",
+        "can't determine",
+        "无法确认",
+        "不知道",
+        "没有提供",
+        "未提供",
+        "没有证据",
+    )
+    return any(marker in lowered for marker in markers)
+
+
+def _supporting_fact_overlap(gold_answer: str, evidence_text: str) -> bool:
+    normalized_evidence = normalize_public_answer(evidence_text)
+    tokens = re.findall(r"[A-Za-z0-9]{3,}|[\u3400-\u9fff]", str(gold_answer or ""))
+    return any(normalize_public_answer(token) in normalized_evidence for token in tokens)
 
 
 def write_public_long_memory_json(report: dict[str, Any], path: Path) -> None:
