@@ -109,17 +109,17 @@ Gate:
 
 ## Phase 5: Generate Review Package
 
-- [ ] Generate profile summary, case review index, pass/fail review docs, and external Judge instructions.
-- [ ] Include C/S/A flags, model answer, gold, evidence paths, provider request path, token fields, latency, language mismatch, and failure attribution for each row.
-- [ ] Commit.
+- [x] Generate profile summary, case review index, pass/fail review docs, and external Judge instructions.
+- [x] Include C/S/A flags, model answer, gold, evidence paths, provider request path, token fields, latency, language mismatch, and failure attribution for each row.
+- [x] Commit.
 
 ## Phase 6: External LLM Judge And Adjusted Metrics
 
-- [ ] Record external Judge raw output.
-- [ ] Generate case index and adjusted summary.
-- [ ] Report adjusted and conservative pass rate per profile.
-- [ ] Report prompt/completion/total token and avg/p50/p95 latency per profile.
-- [ ] Commit.
+- [ ] Record external Judge raw output. Pending external Judge output.
+- [ ] Generate case index and adjusted summary. Pending external Judge output.
+- [ ] Report adjusted and conservative pass rate per profile. Pending external Judge output.
+- [ ] Report prompt/completion/total token and avg/p50/p95 latency per profile. Cost/latency are available in static summary; adjusted correctness pending external Judge output.
+- [ ] Commit. Pending external Judge output.
 
 ## Phase 7: Final Verification And Push
 
