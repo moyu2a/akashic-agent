@@ -52,6 +52,80 @@
 | semantic_review_needed | 18 | 16 | -2 |
 | supported_but_deterministic_mismatch | 23 | 22 | -1 |
 
+## Static/Strict Failure Review Conclusion
+
+Manual review and the separate LLM-judge review show that most v5 static/strict failures are not retrieval or memory-governance failures. They are deterministic scorer false negatives caused by equivalent wording, longer explanations, acceptable alternative date-count formats, first-person/second-person perspective changes, or preference-rubric answers that cannot be judged by literal string matching.
+
+For follow-up implementation, do not treat every strict/static failure as a bug. The remaining true fix targets are narrowed to:
+
+| target | affected examples | conclusion | follow-up priority |
+| --- | --- | --- | --- |
+| Language compliance | `8aef76bc`, `6f9b354f`, `gpt4_93159ced`; mixed/unclean English answer in `ceb54acb` | Facts and evidence are mostly correct, but the answer language does not reliably follow the current user question language. | High |
+| Preference-answer quality | `0a34ad58` | The answer uses part of the user's available preference/context (`Suica`) but misses important prepared context (`TripIt`) and becomes too generic. | High |
+| Static scorer false negatives | abstention, knowledge-update, multi-session, temporal-reasoning, and most preference examples such as `54026fce`, `a89d7624` | The model answer is semantically correct or acceptable under human/LLM judge review; strict scorer is too rigid. | Not a governance bug |
+
+Therefore, the next repair scope should focus on true answer-quality defects only: language mismatch / mixed-language leakage, and weak preference-context utilization. The static strict score remains a conservative lower bound and should not be used alone to select all repair targets.
+
+## Full 50-Case Judge Consolidation
+
+This section combines the failed-case LLM judge review and the passed-case LLM judge review. It separates true errors from unclear/boundary samples and scorer artifacts.
+
+| bucket | count | cases | conclusion |
+| --- | ---: | --- | --- |
+| True errors | 6 | `852ce960`, `8aef76bc`, `ceb54acb`, `6f9b354f`, `gpt4_93159ced`, `0a34ad58` | These are real answer-quality failures that should drive follow-up fixes. |
+| Unclear / boundary samples | 2 | `a2f3aa27`, `6456829e` | Do not count as clean success or clean failure without an explicit rubric decision. |
+| Scorer false negatives / acceptable answers | 42 | all remaining cases | Most strict/static failures are semantically correct under human/LLM judge review, and most strict PASS cases are clean. |
+
+Clear real pass rate: `42/50 = 84.0%`. This excludes the 2 unclear/boundary samples from clean passes, and treats the 6 true errors as failures.
+
+True-error details:
+
+| case | original strict result | judge result | reason | fix target |
+| --- | --- | --- | --- | --- |
+| `852ce960` | PASS | false positive | The answer contains `$400,000`, but its final stance favors `$350,000`; substring matching incorrectly passed it. | Scorer should verify final answer stance when multiple candidate values appear. |
+| `8aef76bc` | FAIL | true error | English question answered in Chinese, despite correct evidence and fact. | Global language compliance. |
+| `ceb54acb` | FAIL | true error / mixed-language | The factual list is correct, but the answer uses Chinese framing around English terms for an English question. | Mixed-language leakage control. |
+| `6f9b354f` | FAIL | true error | English question answered in Chinese, despite correct evidence and fact. | Global language compliance. |
+| `gpt4_93159ced` | FAIL | true error | English question answered in Chinese; the numeric reasoning is otherwise correct. | Global language compliance. |
+| `0a34ad58` | FAIL | true error | The answer uses `Suica` but misses important available context (`TripIt`) and remains too generic for a preference/personalized advice question. | Preference-context utilization. |
+
+Unclear/boundary details:
+
+| case | original strict result | judge result | reason | handling |
+| --- | --- | --- | --- | --- |
+| `a2f3aa27` | PASS | boundary / gold questionable | Evidence says the user was `close to 1300`; gold simplifies this to `1300`, and the model cautiously reports the remembered wording instead of asserting an exact current count. | Record as unclear; do not use as a clean success or clean failure. |
+| `6456829e` | FAIL | boundary / answer-directness issue | Evidence and decomposition are correct (`5` tomato plants and `3` cucumber plants), but the answer does not explicitly state the total `8`. | Record as unclear unless the rubric requires an explicit final numeric answer. |
+
+Under this consolidated judge view, the clear real pass rate is `42/50 = 84.0%`, and the true observed error rate is `6/50 = 12.0%`. The remaining `2/50 = 4.0%` are unclear/boundary samples. If boundary samples are counted pessimistically as failures, the upper-bound issue rate is `8/50 = 16.0%`. The strict score `28/50 = 56.0%` is therefore a conservative static-scorer lower bound, not the best estimate of actual memory-system correctness.
+
+## Current True Error Cases And Repair Plan
+
+Current repair scope: fix real answer-quality problems only. Do not optimize against the strict/static failed set as a whole, because most of those failures are scorer false negatives.
+
+| error class | true-error cases | observed problem | root cause | repair plan |
+| --- | --- | --- | --- | --- |
+| Language mismatch | `8aef76bc`, `6f9b354f`, `gpt4_93159ced` | The question is English, but the model answers in Chinese. The factual content and retrieved evidence are otherwise correct. | Global prompt/context assembly still leaves enough Chinese style pressure that it can override the current user-question language. There is no hard post-check/retry gate for answer language. | Audit all system/static/context prompt assembly for language preference leakage; remove default Chinese-only wording; strengthen the global answer contract to use the current user question language unless the user explicitly asks otherwise; add answer-language post-check and retry when the final answer language differs from the question language. |
+| Mixed-language answer | `ceb54acb` | The answer contains the correct English terms, but wraps them in Chinese for an English question. | Language detector may classify the answer as English because the key terms are English, while the surrounding sentence frame is Chinese. | Treat mixed-language wrappers as language mismatch for English questions unless non-English text is only a quoted source/proper noun; add a stricter mixed-language diagnostic and retry path. |
+| Weak preference/personalization use | `0a34ad58` | The answer uses one recalled preparation item (`Suica`) but misses another important available item (`TripIt`) and becomes too generic. | Preference/advice questions are not forcing the answer stage to convert all salient governed preference/preparation evidence into response requirements. | Add a preference/advice answer contract: identify all salient user-specific evidence before drafting; require advice to explicitly use those facts when relevant; add tests with multiple preparation/preference facts where omitting one key fact is a failure. |
+| PASS false positive / scorer stance error | `852ce960` | The answer includes the gold value `$400,000`, but its final stance favors `$350,000`, so strict substring scoring incorrectly passes it. | The scorer accepts gold substring presence without checking whether the answer's final conclusion endorses or rejects that value. | Keep strict score for comparability, but add judge-adjusted diagnostics: when an answer contains multiple candidate values or contrast markers such as `but`, `however`, `earlier`, `latest`, run a final-answer-stance check before counting it as clean PASS in human-facing reports. |
+
+Boundary samples are recorded but not part of the current bug-fix scope:
+
+| boundary case | reason | optional future improvement |
+| --- | --- | --- |
+| `a2f3aa27` | Gold says `1300`, but evidence says `close to 1300`; the model's cautious wording is faithful to evidence. | Improve benchmark case/gold handling for approximate values. |
+| `6456829e` | The answer gives `5` and `3` but not the explicit total `8`. Evidence and decomposition are correct. | Add a direct-answer-first contract for numeric aggregate questions if we decide the rubric requires explicit final totals. |
+
+Implementation gates for the next run:
+
+| gate | target |
+| --- | --- |
+| Language mismatch on Phase A sample | `0/50` or at least no English-question answer with Chinese sentence frame |
+| Tool-call-style output | `0/50` |
+| Structured evidence snapshots | `50/50` |
+| True-error count after LLM/human judge | lower than current `6/50`; language-related true errors should be eliminated |
+| Strict/static scorer | recorded for comparability only, not used as the sole correctness metric |
+
 ## Passed Cases
 
 | source_id | category | method | answer |
@@ -96,3 +170,7 @@
 ## Conclusion
 
 v5 达到运行 gate：50 条完成、无 provider error、无 timeout、无 tool-call-style 输出，并新增 50 条结构化证据快照。strict pass 从 `27/50` 提升到 `28/50`，language mismatch 从 `12/50` 降到 `8/50`。secondary pass 为 `31/50`，新增通过主要来自合理 abstention intent。剩余失败主要仍是 deterministic scorer 与答案表达/长答案/偏好题不匹配，不是证据渲染截断。
+
+补充结论：结合人工审阅和 LLM Judge 审阅，后续不再按 strict/static 失败全集修复；只处理真实错误，即语言遵循问题，以及偏好题中对用户已有准备/偏好利用不足的问题。
+
+全量 50 条合并审阅后，清晰真实通过率约为 `42/50 = 84.0%`；真实错误按当前口径为 `6/50 = 12.0%`；另有 `2/50 = 4.0%` 是边界/不清晰样本，不计入清晰通过，也不直接算真实错误。
