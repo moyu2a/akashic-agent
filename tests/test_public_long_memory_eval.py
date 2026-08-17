@@ -26,6 +26,20 @@ def test_load_longmemeval_cases_normalizes_fixture_fields() -> None:
     assert cases[0].history[0]["content"] == "Alice says she prefers green tea."
 
 
+def test_load_longmemeval_cases_treats_abs_suffix_as_abstention(tmp_path: Path) -> None:
+    dataset = tmp_path / "longmemeval_abs.jsonl"
+    dataset.write_text(
+        '{"question_id":"case_001_abs","question_type":"single-session-user",'
+        '"question":"What is the passport number?","answer":"unknown",'
+        '"haystack_sessions":[[{"role":"user","content":"No passport number was shared."}]]}\n',
+        encoding="utf-8",
+    )
+
+    cases = load_longmemeval_cases(dataset)
+
+    assert cases[0].category == "abstention"
+
+
 def test_stratified_sample_cases_preserves_categories_with_seed() -> None:
     cases = load_longmemeval_cases(FIXTURE)
 

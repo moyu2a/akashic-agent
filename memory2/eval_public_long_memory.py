@@ -480,6 +480,8 @@ def _case_from_payload(payload: dict[str, Any], *, index: int) -> PublicLongMemo
         or payload.get("type")
         or "unknown"
     ).strip()
+    if source_id.endswith("_abs"):
+        category = "abstention"
     aliases = payload.get("answer_aliases") or payload.get("aliases") or ()
     if not question:
         raise ValueError(f"{source_id}: missing question")
