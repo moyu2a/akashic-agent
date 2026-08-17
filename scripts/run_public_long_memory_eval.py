@@ -186,6 +186,7 @@ async def _amain() -> int:
     out_dir = Path(args.out_dir)
     workspace = Path(args.workspace)
     answer_debug_dir = workspace / "public_long_memory_answer_debug"
+    structured_evidence_debug_dir = workspace / "public_long_memory_structured_evidence"
     dataset_hash = dataset_sha256(dataset_path)
     git_commit = _git_commit()
     config_hash = _file_hash(Path(args.config))
@@ -255,6 +256,7 @@ async def _amain() -> int:
             if bool(args.capture_provider_request)
             else None
         ),
+        structured_evidence_debug_dir=structured_evidence_debug_dir,
     )
     public_report = build_public_long_memory_report(
         benchmark_report=benchmark_report,
@@ -281,6 +283,7 @@ async def _amain() -> int:
         )
         if bool(args.capture_provider_request)
         else None,
+        structured_evidence_debug_dir=structured_evidence_debug_dir,
     )
     json_path = out_dir / "public_long_memory_eval.json"
     md_path = out_dir / "public_long_memory_eval.md"

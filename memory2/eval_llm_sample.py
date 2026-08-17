@@ -106,6 +106,7 @@ class LLMSampleAnswerDebugRecord:
     failures: tuple[str, ...]
     answer_rule_passed: bool
     memory_grounding_passed: bool
+    structured_evidence_snapshot_path: str = ""
 
 
 @dataclass(frozen=True)
@@ -597,6 +598,7 @@ def write_llm_sample_answer_debug(
         "failures": list(record.failures),
         "answer_rule_passed": record.answer_rule_passed,
         "memory_grounding_passed": record.memory_grounding_passed,
+        "structured_evidence_snapshot_path": record.structured_evidence_snapshot_path,
     }
     path.write_text(
         json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True),

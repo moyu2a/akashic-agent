@@ -137,11 +137,16 @@ def test_public_long_memory_runner_captures_sanitized_provider_requests(tmp_path
     )
 
     request_files = sorted(request_dir.glob("*.json"))
+    structured_files = sorted(
+        (workspace / "public_long_memory_structured_evidence").glob("*.json")
+    )
     assert len(request_files) == 1
+    assert len(structured_files) == 1
     report = json.loads((out_dir / "public_long_memory_eval.json").read_text())
     assert report["metrics"]["provider_request_capture_file_count"] == 1
     assert report["metrics"]["provider_request_snapshot_clean_count"] == 1
     assert report["metrics"]["provider_request_snapshot_mutation_count"] == 0
+    assert report["metrics"]["structured_evidence_snapshot_file_count"] == 1
     payload = json.loads(request_files[0].read_text(encoding="utf-8"))
     assert payload["case_id"]
     assert payload["provider_request"]["model"] == "fake-model"
@@ -149,6 +154,8 @@ def test_public_long_memory_runner_captures_sanitized_provider_requests(tmp_path
     assert "api_key" not in json.dumps(payload, ensure_ascii=False).lower()
     assert payload["user_question"]
     assert payload["evidence_block_text"]
+    assert payload["structured_evidence_snapshot_path"]
+    assert Path(payload["structured_evidence_snapshot_path"]).exists()
     request_text = json.dumps(payload["provider_request"], ensure_ascii=False)
     assert "request_time=2024-02-03T13:45:00+00:00" in request_text
     assert "green tea" not in [
@@ -156,3 +163,23 @@ def test_public_long_memory_runner_captures_sanitized_provider_requests(tmp_path
         for message in payload["provider_request"]["messages"]
         if message.get("role") == "assistant"
     ]
+
+    answer_debug_files = sorted(
+        (workspace / "public_long_memory_answer_debug").glob("*.json")
+    )
+    answer_debug = json.loads(answer_debug_files[0].read_text(encoding="utf-8"))
+    assert answer_debug["structured_evidence_snapshot_path"] == payload[
+        "structured_evidence_snapshot_path"
+    ]
+
+    structured = json.loads(structured_files[0].read_text(encoding="utf-8"))
+    assert structured["case_id"] == "capture_001"
+    assert structured["profile_name"] == "chain_tri_governed_answer_contract"
+    assert structured["rendered_evidence_block_text"] == payload["evidence_block_text"]
+    assert structured["raw_retrieved_items"][0]["id"] == "capture_001_history_0001"
+    assert structured["governed_structured_evidence"]["allowed_evidence_ids"] == [
+        "capture_001_history_0001"
+    ]
+    assert structured["truncation_applied"] is False
+    assert structured["answer_session_covered"] is True
+    assert structured["gold_supporting_fact_hit"] is True

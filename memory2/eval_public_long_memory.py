@@ -56,6 +56,14 @@ class PublicAnswerScore:
     needs_manual_review: bool = False
 
 
+@dataclass(frozen=True)
+class PublicSecondaryScore:
+    passed: bool
+    method: str
+    strict_passed: bool
+    needs_manual_review: bool = False
+
+
 SemanticJudge = Callable[..., Literal["pass", "fail", "uncertain"]]
 
 
@@ -295,6 +303,40 @@ def score_public_answer(
     return PublicAnswerScore(False, "semantic_judge_fail", normalized_gold, normalized_answer)
 
 
+def secondary_public_score(
+    *,
+    strict_score: PublicAnswerScore,
+    diagnostics: dict[str, Any],
+) -> PublicSecondaryScore:
+    if strict_score.passed:
+        return PublicSecondaryScore(
+            True,
+            "strict",
+            strict_passed=True,
+            needs_manual_review=False,
+        )
+    if bool(diagnostics.get("abstention_intent_passed")):
+        return PublicSecondaryScore(
+            True,
+            "abstention_intent",
+            strict_passed=False,
+            needs_manual_review=False,
+        )
+    if bool(diagnostics.get("semantic_review_needed")):
+        return PublicSecondaryScore(
+            False,
+            "semantic_review_needed",
+            strict_passed=False,
+            needs_manual_review=True,
+        )
+    return PublicSecondaryScore(
+        False,
+        strict_score.method,
+        strict_passed=False,
+        needs_manual_review=False,
+    )
+
+
 def normalize_public_answer(value: str) -> str:
     text = unicodedata.normalize("NFKC", str(value or "")).lower()
     text = _normalize_chinese_year(text)
@@ -331,12 +373,16 @@ def build_public_long_memory_report(
     evidence_render_config: PublicEvidenceRenderConfig | None = None,
     capture_provider_request: bool = False,
     provider_request_debug_dir: Path | None = None,
+    structured_evidence_debug_dir: Path | None = None,
 ) -> dict[str, Any]:
     case_by_id = {case.source_id: case for case in sampled_cases}
     answer_debug_by_case = _load_answer_debug_by_case(answer_debug_dir)
     provider_request_capture_metrics = _provider_request_capture_metrics(
         provider_request_debug_dir,
         answer_debug_by_case,
+    )
+    structured_evidence_metrics = _structured_evidence_snapshot_metrics(
+        structured_evidence_debug_dir,
     )
     case_reviews: list[dict[str, Any]] = []
     public_pass_count = 0
@@ -351,6 +397,8 @@ def build_public_long_memory_report(
     literal_gold_hit_count = 0
     requires_reasoning_gold_count = 0
     supporting_fact_hit_count = 0
+    secondary_pass_count = 0
+    secondary_manual_review_count = 0
     failure_attribution_counts: Counter[str] = Counter()
     render_config = evidence_render_config or build_public_evidence_render_config()
 
@@ -364,6 +412,7 @@ def build_public_long_memory_report(
         evidence_text = str(debug.get("evidence_block_text") or "")
         evidence_gold_hit = False
         public_score = None
+        secondary_score = None
         diagnostics: dict[str, Any] = _empty_public_diagnostics()
         if case is None:
             unable_to_score_count += 1
@@ -412,8 +461,22 @@ def build_public_long_memory_report(
                 requires_reasoning_gold_count += 1
             if diagnostics["supporting_fact_hit"]:
                 supporting_fact_hit_count += 1
+            secondary = secondary_public_score(
+                strict_score=score,
+                diagnostics=diagnostics,
+            )
+            secondary_score = asdict(secondary)
+            if secondary.passed:
+                secondary_pass_count += 1
+            if secondary.needs_manual_review:
+                secondary_manual_review_count += 1
             failure_attribution_counts.update(diagnostics["failure_attribution"])
         render_metadata = record.get("evidence_render_metadata")
+        structured_evidence_snapshot_path = str(
+            record.get("structured_evidence_snapshot_path")
+            or debug.get("structured_evidence_snapshot_path")
+            or ""
+        )
         case_reviews.append(
             {
                 "source_id": case_id,
@@ -429,12 +492,15 @@ def build_public_long_memory_report(
                 "evidence_render_metadata": render_metadata
                 if isinstance(render_metadata, list)
                 else [],
+                "structured_evidence_snapshot_path": structured_evidence_snapshot_path,
                 "comprehensive_answer_rule_passed": record.get("answer_rule_passed", False),
                 "memory_grounding_passed": record.get("memory_grounding_passed", False),
                 "provider_error": record.get("provider_error", False),
                 "timeout": record.get("timeout", False),
                 "failures": record.get("failures", ()),
                 "public_score": public_score,
+                "strict_public_score": public_score,
+                "secondary_public_score": secondary_score,
                 **diagnostics,
             }
         )
@@ -469,6 +535,8 @@ def build_public_long_memory_report(
             "capture_provider_request": capture_provider_request,
             "provider_request_debug_dir": str(provider_request_debug_dir or ""),
             **provider_request_capture_metrics,
+            "structured_evidence_debug_dir": str(structured_evidence_debug_dir or ""),
+            **structured_evidence_metrics,
             "sampling": {
                 "strategy": "stratified_by_category",
                 "seed": seed,
@@ -476,6 +544,11 @@ def build_public_long_memory_report(
             },
             "public_answer_pass_count": public_pass_count,
             "public_answer_pass_rate": _rate(public_pass_count, completed),
+            "strict_public_answer_pass_count": public_pass_count,
+            "strict_public_answer_pass_rate": _rate(public_pass_count, completed),
+            "secondary_public_answer_pass_count": secondary_pass_count,
+            "secondary_public_answer_pass_rate": _rate(secondary_pass_count, completed),
+            "secondary_public_manual_review_count": secondary_manual_review_count,
             "semantic_ambiguity_count": manual_review_count,
             "tool_call_only_count": tool_call_style_count,
             "tool_call_style_output_count": tool_call_style_count,
@@ -554,6 +627,31 @@ def _provider_request_capture_metrics(
         "provider_request_capture_file_count": file_count,
         "provider_request_snapshot_clean_count": clean_count,
         "provider_request_snapshot_mutation_count": mutation_count,
+    }
+
+
+def _structured_evidence_snapshot_metrics(
+    structured_evidence_debug_dir: Path | None,
+) -> dict[str, int]:
+    if (
+        structured_evidence_debug_dir is None
+        or not structured_evidence_debug_dir.exists()
+    ):
+        return {
+            "structured_evidence_snapshot_file_count": 0,
+            "structured_evidence_snapshot_parse_error_count": 0,
+        }
+    file_count = 0
+    parse_error_count = 0
+    for path in sorted(structured_evidence_debug_dir.glob("*.json")):
+        file_count += 1
+        try:
+            json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            parse_error_count += 1
+    return {
+        "structured_evidence_snapshot_file_count": file_count,
+        "structured_evidence_snapshot_parse_error_count": parse_error_count,
     }
 
 
@@ -729,6 +827,8 @@ def write_public_long_memory_markdown(report: dict[str, Any], path: Path) -> Non
         "sent_evidence_gold_hit_count",
         "evidence_render_mode",
         "effective_evidence_token_budget",
+        "structured_evidence_snapshot_file_count",
+        "structured_evidence_snapshot_parse_error_count",
         "scorer_unable_to_score_rate",
         "real_llm_enabled",
         "fake_provider_enabled",
@@ -890,6 +990,10 @@ def render_public_long_memory_evidence(
         "effective_evidence_token_budget": config.effective_token_budget,
         "answer_window_source": "",
         "answer_window_fallback_reason": "",
+        "source_token_count": 0,
+        "rendered_token_count": 0,
+        "truncation_applied": False,
+        "truncation_reason": "",
     }
     mode = config.mode
     if mode == "auto":
@@ -899,6 +1003,7 @@ def render_public_long_memory_evidence(
     if mode == "compact":
         metadata["answer_window_source"] = "compact"
         text = _compact_text(str(item.get("summary") or item.get("content") or ""))
+        metadata.update(_render_token_metadata(text, text, config.effective_token_budget))
         return _with_session_header(item, text), metadata
 
     turns = _turns_from_item(item)
@@ -907,10 +1012,12 @@ def render_public_long_memory_evidence(
         if not turns:
             metadata["answer_window_fallback_reason"] = "missing_turn_metadata"
         text = _format_turns(turns) if turns else str(item.get("summary") or item.get("content") or "")
+        rendered = _trim_text_to_token_budget(text, config.effective_token_budget)
+        metadata.update(_render_token_metadata(text, rendered, config.effective_token_budget))
         return (
             _with_session_header(
                 item,
-                _trim_text_to_token_budget(text, config.effective_token_budget),
+                rendered,
             ),
             metadata,
         )
@@ -921,13 +1028,16 @@ def render_public_long_memory_evidence(
     else:
         metadata["answer_window_source"] = "last_third"
         metadata["answer_window_fallback_reason"] = "oracle_missing_has_answer"
+    source_text = _format_turns(selected[0])
+    rendered = _trim_text_to_token_budget(
+        source_text,
+        config.effective_token_budget,
+    )
+    metadata.update(_render_token_metadata(source_text, rendered, config.effective_token_budget))
     return (
         _with_session_header(
             item,
-            _trim_text_to_token_budget(
-                _format_turns(selected[0]),
-                config.effective_token_budget,
-            ),
+            rendered,
         ),
         metadata,
     )
@@ -1078,6 +1188,22 @@ def _trim_text_to_token_budget(text: str, token_budget: int) -> str:
     if len(tokens) <= token_budget:
         return compact
     return " ".join(tokens[-token_budget:])
+
+
+def _render_token_metadata(
+    source_text: str,
+    rendered_text: str,
+    token_budget: int,
+) -> dict[str, object]:
+    source_token_count = len(_rough_tokens(source_text))
+    rendered_token_count = len(_rough_tokens(rendered_text))
+    truncated = source_token_count > max(0, int(token_budget))
+    return {
+        "source_token_count": source_token_count,
+        "rendered_token_count": rendered_token_count,
+        "truncation_applied": truncated,
+        "truncation_reason": "token_budget_exceeded" if truncated else "",
+    }
 
 
 def _rough_tokens(text: str) -> list[str]:

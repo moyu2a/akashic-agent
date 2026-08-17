@@ -44,6 +44,7 @@ from memory2.eval_llm_sample import (
     score_answer_text,
     write_llm_sample_answer_debug,
 )
+from memory2.eval_public_long_memory import normalize_public_answer
 from memory2.eval_answer_contract import (
     build_production_governed_tri_evidence_contract,
     build_tri_answer_contract,
@@ -262,6 +263,7 @@ class ComprehensiveCaseResult:
     failures: tuple[str, ...]
     answer_post_check_shadow: dict[str, object] | None = None
     evidence_render_metadata: tuple[dict[str, object], ...] = ()
+    structured_evidence_snapshot_path: str = ""
 
 
 @dataclass(frozen=True)
@@ -1039,6 +1041,7 @@ async def run_comprehensive_online_eval(
     report_metadata: dict[str, object] | None = None,
     run_provenance: EvalRunProvenance | None = None,
     provider_request_debug_dir: Path | None = None,
+    structured_evidence_debug_dir: Path | None = None,
 ) -> ComprehensiveOnlineReport:
     if concurrency < 1:
         raise ValueError("concurrency must be at least 1")
@@ -1079,6 +1082,7 @@ async def run_comprehensive_online_eval(
                 case_index=index,
                 answer_debug_dir=answer_debug_dir,
                 provider_request_debug_dir=provider_request_debug_dir,
+                structured_evidence_debug_dir=structured_evidence_debug_dir,
             )
             results.append(result)
             _append_checkpoint_result(checkpoint_jsonl, key, result, run_provenance)
@@ -1103,6 +1107,7 @@ async def run_comprehensive_online_eval(
                         case_index=index,
                         answer_debug_dir=answer_debug_dir,
                         provider_request_debug_dir=provider_request_debug_dir,
+                        structured_evidence_debug_dir=structured_evidence_debug_dir,
                     ),
                 )
 
@@ -1357,6 +1362,7 @@ async def _run_comprehensive_case(
     case_index: int,
     answer_debug_dir: Path | None,
     provider_request_debug_dir: Path | None = None,
+    structured_evidence_debug_dir: Path | None = None,
 ) -> ComprehensiveCaseResult:
     workspace.mkdir(parents=True, exist_ok=True)
     memory = ComprehensiveOnlineMemoryEngine(
@@ -1440,6 +1446,25 @@ async def _run_comprehensive_case(
             evidence_render_metadata = tuple(
                 dict(item) for item in raw_metadata if isinstance(item, dict)
             )
+    structured_evidence_snapshot_path = ""
+    if structured_evidence_debug_dir is not None:
+        structured_evidence_snapshot_path = str(
+            _write_structured_evidence_snapshot(
+                structured_evidence_debug_dir
+                / f"{case_index:04d}-{_safe_name(spec.profile_name)}-{_safe_name(spec.prompt_variant)}-{_safe_name(spec.case.id)}.json",
+                case=spec.case,
+                case_id=spec.case.id,
+                case_index=case_index,
+                profile_name=spec.profile_name,
+                prompt_variant=spec.prompt_variant,
+                repeat_index=spec.repeat_index,
+                session_key=scope["session_key"],
+                used_memory_ids=tuple(memory.used_memory_ids),
+                raw=memory.last_raw,
+                rendered_evidence_block_text=memory.last_text_block,
+                evidence_render_metadata=evidence_render_metadata,
+            )
+        )
     failures.extend(score.failures)
     token_counts = _extract_token_counts(
         recording_provider.responses[-1] if recording_provider.responses else None
@@ -1468,6 +1493,7 @@ async def _run_comprehensive_case(
         failures=tuple(failures),
         answer_post_check_shadow=answer_post_check_shadow,
         evidence_render_metadata=evidence_render_metadata,
+        structured_evidence_snapshot_path=structured_evidence_snapshot_path,
     )
     if answer_debug_dir is not None:
         write_llm_sample_answer_debug(
@@ -1487,6 +1513,7 @@ async def _run_comprehensive_case(
                 failures=tuple(failures),
                 answer_rule_passed=score.answer_rule_passed,
                 memory_grounding_passed=score.memory_grounding_passed,
+                structured_evidence_snapshot_path=structured_evidence_snapshot_path,
             ),
             answer_debug_dir
             / f"{case_index:04d}-{_safe_name(spec.profile_name)}-{_safe_name(spec.prompt_variant)}-{_safe_name(spec.case.id)}.json",
@@ -1505,6 +1532,7 @@ async def _run_comprehensive_case(
             provider_request=(
                 recording_provider.requests[-1] if recording_provider.requests else {}
             ),
+            structured_evidence_snapshot_path=structured_evidence_snapshot_path,
         )
     return result
 
@@ -1530,6 +1558,206 @@ def _message_timestamp_for_case(case: EvalCase) -> datetime | None:
     if parsed.tzinfo is None:
         parsed = parsed.replace(tzinfo=timezone.utc)
     return parsed
+
+
+def _write_structured_evidence_snapshot(
+    path: Path,
+    *,
+    case: EvalCase,
+    case_id: str,
+    case_index: int,
+    profile_name: str,
+    prompt_variant: str,
+    repeat_index: int,
+    session_key: str,
+    used_memory_ids: tuple[str, ...],
+    raw: dict[str, object],
+    rendered_evidence_block_text: str,
+    evidence_render_metadata: tuple[dict[str, object], ...],
+) -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    memory_items = [
+        dict(item)
+        for item in case.setup.get("memory_items", ())
+        if isinstance(item, dict)
+    ]
+    by_id = {
+        str(item.get("id") or item.get("memory_id") or ""): item
+        for item in memory_items
+    }
+    raw_retrieved_ids = _raw_retrieved_ids(raw, used_memory_ids)
+    raw_retrieved_items = [
+        _snapshot_memory_item(by_id[item_id])
+        for item_id in raw_retrieved_ids
+        if item_id in by_id
+    ]
+    governed_structured_evidence = _governed_structured_evidence(raw)
+    public_meta = case.expectations.get("public_long_memory")
+    gold_answer = (
+        str(public_meta.get("gold_answer") or "")
+        if isinstance(public_meta, dict)
+        else ""
+    )
+    payload = {
+        "case_id": case_id,
+        "case_index": case_index,
+        "profile_name": profile_name,
+        "prompt_variant": prompt_variant,
+        "repeat_index": repeat_index,
+        "session_key": session_key,
+        "evidence_render_mode": _public_evidence_render_mode(case),
+        "model_context_window": _public_evidence_render_value(
+            case,
+            "model_context_window",
+        ),
+        "effective_evidence_token_budget": _effective_evidence_token_budget(
+            case,
+            evidence_render_metadata,
+        ),
+        "raw_retrieved_items": raw_retrieved_items,
+        "governed_structured_evidence": governed_structured_evidence,
+        "rendered_evidence_block_text": rendered_evidence_block_text,
+        "rendered_token_count": _rough_eval_token_count(rendered_evidence_block_text),
+        "truncation_applied": any(
+            bool(item.get("truncation_applied")) for item in evidence_render_metadata
+        ),
+        "truncation_reason": _truncation_reason(evidence_render_metadata),
+        "answer_session_covered": _answer_session_covered(
+            raw_retrieved_items,
+            used_memory_ids,
+        ),
+        "gold_supporting_fact_hit": bool(
+            normalize_public_answer(gold_answer)
+            and normalize_public_answer(gold_answer)
+            in normalize_public_answer(rendered_evidence_block_text)
+        ),
+        "evidence_render_metadata": list(evidence_render_metadata),
+    }
+    path.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True),
+        encoding="utf-8",
+    )
+    return path
+
+
+def _raw_retrieved_ids(
+    raw: dict[str, object],
+    used_memory_ids: tuple[str, ...],
+) -> tuple[str, ...]:
+    ids: list[str] = []
+    tiers = raw.get("candidate_risk_tiers")
+    if isinstance(tiers, list):
+        for item in tiers:
+            if not isinstance(item, dict):
+                continue
+            item_id = str(item.get("candidate_id") or item.get("id") or "").strip()
+            if item_id:
+                ids.append(item_id)
+    if not ids:
+        ids.extend(str(item) for item in raw.get("ids", ()) if str(item))
+    if not ids:
+        ids.extend(used_memory_ids)
+    return _dedupe_preserve_order(ids)
+
+
+def _governed_structured_evidence(raw: dict[str, object]) -> dict[str, object]:
+    contract = raw.get("answer_contract")
+    if isinstance(contract, dict):
+        return dict(contract)
+    return {
+        "ids": list(raw.get("ids", ())) if isinstance(raw.get("ids"), list) else [],
+        "structured_evidence_only": bool(raw.get("structured_evidence_only")),
+        "candidate_governance_mode": raw.get("candidate_governance_mode", ""),
+    }
+
+
+def _snapshot_memory_item(item: dict[str, object]) -> dict[str, object]:
+    extra = item.get("extra_json") if isinstance(item.get("extra_json"), dict) else {}
+    return {
+        "id": str(item.get("id") or item.get("memory_id") or ""),
+        "memory_type": str(item.get("memory_type") or ""),
+        "summary": str(item.get("summary") or ""),
+        "content": str(item.get("content") or ""),
+        "status": str(item.get("status") or ""),
+        "source_ref": str(item.get("source_ref") or ""),
+        "confidence": str(item.get("confidence") or ""),
+        "scope_channel": str(item.get("scope_channel") or ""),
+        "scope_chat_id": str(item.get("scope_chat_id") or ""),
+        "extra_json": dict(extra),
+    }
+
+
+def _public_evidence_render_mode(case: EvalCase) -> str:
+    raw = case.setup.get("public_long_memory_evidence_render")
+    if not isinstance(raw, dict):
+        return ""
+    return str(raw.get("mode") or "")
+
+
+def _public_evidence_render_value(case: EvalCase, key: str) -> object:
+    raw = case.setup.get("public_long_memory_evidence_render")
+    if not isinstance(raw, dict):
+        return ""
+    return raw.get(key, "")
+
+
+def _effective_evidence_token_budget(
+    case: EvalCase,
+    metadata: tuple[dict[str, object], ...],
+) -> int:
+    for item in metadata:
+        value = item.get("effective_evidence_token_budget")
+        if isinstance(value, int):
+            return value
+    value = _public_evidence_render_value(case, "long_evidence_token_limit")
+    return int(value) if isinstance(value, int) else 0
+
+
+def _truncation_reason(metadata: tuple[dict[str, object], ...]) -> str:
+    reasons = [
+        str(item.get("truncation_reason") or "")
+        for item in metadata
+        if bool(item.get("truncation_applied"))
+    ]
+    return ", ".join(reason for reason in reasons if reason)
+
+
+def _answer_session_covered(
+    raw_retrieved_items: list[dict[str, object]],
+    used_memory_ids: tuple[str, ...],
+) -> bool:
+    used = set(used_memory_ids)
+    has_answer_item_ids: set[str] = set()
+    for item in raw_retrieved_items:
+        item_id = str(item.get("id") or "")
+        extra = item.get("extra_json")
+        if not isinstance(extra, dict):
+            continue
+        if bool(extra.get("has_answer")):
+            has_answer_item_ids.add(item_id)
+        turns = extra.get("turns")
+        if isinstance(turns, list) and any(
+            isinstance(turn, dict) and bool(turn.get("has_answer"))
+            for turn in turns
+        ):
+            has_answer_item_ids.add(item_id)
+    return bool(has_answer_item_ids) and bool(has_answer_item_ids & used)
+
+
+def _rough_eval_token_count(text: str) -> int:
+    return len(re.findall(r"[\u3400-\u9fff]|[A-Za-z0-9_.$/-]+|[^\w\s]", text))
+
+
+def _dedupe_preserve_order(values: Sequence[str]) -> tuple[str, ...]:
+    seen: set[str] = set()
+    result: list[str] = []
+    for value in values:
+        item = str(value)
+        if not item or item in seen:
+            continue
+        seen.add(item)
+        result.append(item)
+    return tuple(result)
 
 
 def _build_comprehensive_report(
@@ -2174,6 +2402,7 @@ def _case_record(result: ComprehensiveCaseResult) -> dict[str, object]:
         "failures": [_sanitize_failure(failure) for failure in result.failures],
         "answer_post_check_shadow": result.answer_post_check_shadow,
         "evidence_render_metadata": list(result.evidence_render_metadata),
+        "structured_evidence_snapshot_path": result.structured_evidence_snapshot_path,
     }
 
 
@@ -2188,6 +2417,7 @@ def _write_provider_request_debug(
     user_question: str,
     evidence_block_text: str,
     provider_request: dict[str, object],
+    structured_evidence_snapshot_path: str = "",
 ) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     payload = {
@@ -2198,6 +2428,7 @@ def _write_provider_request_debug(
         "repeat_index": repeat_index,
         "user_question": user_question,
         "evidence_block_text": evidence_block_text,
+        "structured_evidence_snapshot_path": structured_evidence_snapshot_path,
         "provider_request": _sanitize_provider_request(provider_request),
     }
     path.write_text(
@@ -2287,6 +2518,12 @@ def _load_checkpoint_rows(
                                     [],
                                 )
                                 if isinstance(item, dict)
+                            ),
+                            "structured_evidence_snapshot_path": str(
+                                result_payload.get(
+                                    "structured_evidence_snapshot_path",
+                                )
+                                or ""
                             ),
                         }
                     ),

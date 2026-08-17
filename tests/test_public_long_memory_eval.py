@@ -360,9 +360,14 @@ def test_public_report_marks_abstention_intent_as_secondary_pass(tmp_path: Path)
     review = report["case_reviews"][0]
 
     assert review["public_score"]["passed"] is False
+    assert review["strict_public_score"]["passed"] is False
+    assert review["secondary_public_score"]["passed"] is True
+    assert review["secondary_public_score"]["method"] == "abstention_intent"
     assert review["abstention_intent_passed"] is True
     assert "abstention_intent_passed_deterministic_fail" in review["failure_attribution"]
     assert report["metrics"]["abstention_intent_pass_count"] == 1
+    assert report["metrics"]["secondary_public_answer_pass_count"] == 1
+    assert report["metrics"]["strict_public_answer_pass_count"] == 0
 
 
 def test_public_report_marks_preference_cases_for_semantic_review(tmp_path: Path) -> None:
