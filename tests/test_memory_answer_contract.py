@@ -99,6 +99,18 @@ def test_rendered_answer_contract_does_not_force_chinese() -> None:
     assert "请只根据" not in text
 
 
+def test_rendered_answer_contract_instructs_advice_to_use_salient_user_context() -> None:
+    case = _case_with_should_not_in_tri()
+    contract = build_tri_answer_contract(case)
+
+    text = render_answer_contract_block(contract)
+
+    assert "For advice, tips, recommendations, planning, or suggestions" in text
+    assert "use all salient user-specific evidence" in text
+    assert "preferences, prior preparation, constraints, anxieties, and goals" in text
+    assert "Do not give generic advice while ignoring salient user-specific evidence" in text
+
+
 def test_governed_contract_uses_supplied_allowed_ids_and_marks_dropped_tri_ids() -> None:
     case = _case_with_should_not_in_tri()
     base_contract = build_tri_answer_contract(case)

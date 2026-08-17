@@ -256,7 +256,8 @@ def test_system_path_answer_guidance_is_production_safe_and_private() -> None:
     assert "Answer Guidance:" in text
     assert "Use allowed_evidence as the only source for the answer." in text
     assert "State concrete facts from allowed_evidence directly." in text
-    assert "Answer in the user's language." in text
+    assert "same language as the current user question" in text
+    assert "use all salient user-specific evidence" in text
     assert "blocked-id" not in text
 
 

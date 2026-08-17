@@ -392,6 +392,10 @@ def build_public_long_memory_report(
     tool_call_style_case_ids: list[str] = []
     sent_evidence_gold_hit_count = 0
     language_mismatch_count = 0
+    mixed_language_mismatch_count = 0
+    answer_language_contract_failed_count = 0
+    missed_salient_context_possible_count = 0
+    final_stance_review_needed_count = 0
     abstention_intent_pass_count = 0
     semantic_review_needed_count = 0
     literal_gold_hit_count = 0
@@ -451,6 +455,14 @@ def build_public_long_memory_report(
             )
             if diagnostics["language_mismatch"]:
                 language_mismatch_count += 1
+            if diagnostics["mixed_language_mismatch"]:
+                mixed_language_mismatch_count += 1
+            if diagnostics["answer_language_contract_failed"]:
+                answer_language_contract_failed_count += 1
+            if diagnostics["missed_salient_context_possible"]:
+                missed_salient_context_possible_count += 1
+            if diagnostics["final_stance_review_needed"]:
+                final_stance_review_needed_count += 1
             if diagnostics["abstention_intent_passed"]:
                 abstention_intent_pass_count += 1
             if diagnostics["semantic_review_needed"]:
@@ -559,6 +571,10 @@ def build_public_long_memory_report(
             "requires_reasoning_gold_count": requires_reasoning_gold_count,
             "supporting_fact_hit_count": supporting_fact_hit_count,
             "language_mismatch_count": language_mismatch_count,
+            "mixed_language_mismatch_count": mixed_language_mismatch_count,
+            "answer_language_contract_failed_count": answer_language_contract_failed_count,
+            "missed_salient_context_possible_count": missed_salient_context_possible_count,
+            "final_stance_review_needed_count": final_stance_review_needed_count,
             "abstention_intent_pass_count": abstention_intent_pass_count,
             "semantic_review_needed_count": semantic_review_needed_count,
             "failure_attribution_counts": dict(sorted(failure_attribution_counts.items())),
@@ -660,11 +676,24 @@ def _empty_public_diagnostics() -> dict[str, Any]:
         "question_language": "unknown",
         "response_language": "unknown",
         "language_mismatch": False,
+        "mixed_language_mismatch": False,
+        "answer_language_contract_failed": False,
+        "language_retry_needed": False,
+        "language_retry_failed": False,
         "abstention_intent_passed": False,
         "semantic_review_needed": False,
         "literal_gold_hit": False,
         "requires_reasoning_gold": False,
         "supporting_fact_hit": False,
+        "advice_context_required": False,
+        "salient_user_context_count": 0,
+        "salient_user_context_used_count": 0,
+        "preference_context_used": False,
+        "missed_salient_context_possible": False,
+        "strict_pass_clean": False,
+        "multiple_candidate_values_detected": False,
+        "contrast_marker_detected": False,
+        "final_stance_review_needed": False,
         "failure_attribution": [],
     }
 
@@ -680,11 +709,16 @@ def _public_case_diagnostics(
 ) -> dict[str, Any]:
     question_language = _detect_public_language(case.question)
     response_language = _detect_public_language(answer_text)
+    mixed_language_mismatch = _mixed_language_mismatch(
+        question_language=question_language,
+        answer_text=answer_text,
+    )
     language_mismatch = (
         question_language != "unknown"
         and response_language != "unknown"
-        and question_language != response_language
+        and (question_language != response_language or mixed_language_mismatch)
     )
+    answer_language_contract_failed = language_mismatch or mixed_language_mismatch
     normalized_gold = normalize_public_answer(case.gold_answer)
     normalized_evidence = normalize_public_answer(evidence_text)
     literal_gold_hit = bool(normalized_gold) and normalized_gold in normalized_evidence
@@ -716,6 +750,25 @@ def _public_case_diagnostics(
             or len(str(answer_text or "")) > 160
         )
     )
+    advice_context_required = _is_advice_context_required(case)
+    salient_user_contexts = _salient_user_contexts(evidence_text)
+    salient_used_count = sum(
+        1 for context in salient_user_contexts if _salient_context_used(context, answer_text)
+    )
+    preference_context_used = salient_used_count > 0
+    missed_salient_context_possible = (
+        advice_context_required
+        and len(salient_user_contexts) > 1
+        and 0 < salient_used_count < len(salient_user_contexts)
+    )
+    multiple_candidate_values_detected = _multiple_candidate_values_detected(answer_text)
+    contrast_marker_detected = _contrast_marker_detected(answer_text)
+    final_stance_review_needed = (
+        public_score.passed
+        and multiple_candidate_values_detected
+        and contrast_marker_detected
+    )
+    strict_pass_clean = public_score.passed and not final_stance_review_needed
 
     attribution: list[str] = []
     if provider_error:
@@ -728,6 +781,12 @@ def _public_case_diagnostics(
         attribution.append("tool_call_style_output")
     if language_mismatch and not public_score.passed:
         attribution.append("language_mismatch_scorer_false_negative_possible")
+    if mixed_language_mismatch:
+        attribution.append("mixed_language_mismatch")
+    if missed_salient_context_possible:
+        attribution.append("missed_salient_context_possible")
+    if final_stance_review_needed:
+        attribution.append("final_stance_review_needed")
     if abstention_intent_passed and not public_score.passed:
         attribution.append("abstention_intent_passed_deterministic_fail")
     if semantic_review_needed:
@@ -743,11 +802,24 @@ def _public_case_diagnostics(
             "question_language": question_language,
             "response_language": response_language,
             "language_mismatch": language_mismatch,
+            "mixed_language_mismatch": mixed_language_mismatch,
+            "answer_language_contract_failed": answer_language_contract_failed,
+            "language_retry_needed": answer_language_contract_failed,
+            "language_retry_failed": False,
             "abstention_intent_passed": abstention_intent_passed,
             "semantic_review_needed": semantic_review_needed,
             "literal_gold_hit": literal_gold_hit,
             "requires_reasoning_gold": requires_reasoning_gold,
             "supporting_fact_hit": supporting_fact_hit,
+            "advice_context_required": advice_context_required,
+            "salient_user_context_count": len(salient_user_contexts),
+            "salient_user_context_used_count": salient_used_count,
+            "preference_context_used": preference_context_used,
+            "missed_salient_context_possible": missed_salient_context_possible,
+            "strict_pass_clean": strict_pass_clean,
+            "multiple_candidate_values_detected": multiple_candidate_values_detected,
+            "contrast_marker_detected": contrast_marker_detected,
+            "final_stance_review_needed": final_stance_review_needed,
             "failure_attribution": attribution,
         }
     )
@@ -760,7 +832,142 @@ def _detect_public_language(text: str) -> str:
     latin_count = len(re.findall(r"[A-Za-z]", value))
     if cjk_count == 0 and latin_count == 0:
         return "unknown"
+    if cjk_count >= 2 and latin_count >= 6:
+        return "mixed"
     return "zh" if cjk_count > latin_count else "en"
+
+
+def _mixed_language_mismatch(*, question_language: str, answer_text: str) -> bool:
+    if question_language != "en":
+        return False
+    value = str(answer_text or "")
+    cjk_count = len(re.findall(r"[\u3400-\u9fff]", value))
+    latin_count = len(re.findall(r"[A-Za-z]", value))
+    if cjk_count < 2 or latin_count < 6:
+        return False
+    unquoted = _strip_quoted_spans(value)
+    unquoted_cjk_count = len(re.findall(r"[\u3400-\u9fff]", unquoted))
+    return unquoted_cjk_count >= 2
+
+
+def _strip_quoted_spans(value: str) -> str:
+    text = str(value or "")
+    patterns = (
+        r'"[^"]*"',
+        r"'[^']*'",
+        r"“[^”]*”",
+        r"‘[^’]*’",
+        r"`[^`]*`",
+    )
+    for pattern in patterns:
+        text = re.sub(pattern, "", text)
+    return text
+
+
+_ADVICE_QUESTION_RE = re.compile(
+    r"\b(advice|tips?|recommend(?:ation|ations)?|suggest(?:ion|ions)?|planning|plan|helpful|ideas?)\b",
+    re.I,
+)
+
+_CONTEXT_STOPWORDS = {
+    "about",
+    "after",
+    "already",
+    "also",
+    "and",
+    "any",
+    "are",
+    "around",
+    "been",
+    "before",
+    "bought",
+    "downloaded",
+    "for",
+    "from",
+    "have",
+    "having",
+    "into",
+    "just",
+    "like",
+    "need",
+    "not",
+    "organized",
+    "prefer",
+    "preferred",
+    "prefers",
+    "stay",
+    "the",
+    "this",
+    "that",
+    "trip",
+    "use",
+    "used",
+    "user",
+    "with",
+}
+
+
+def _is_advice_context_required(case: PublicLongMemoryCase) -> bool:
+    category = str(case.category or "")
+    return "preference" in category or bool(_ADVICE_QUESTION_RE.search(case.question))
+
+
+def _salient_user_contexts(evidence_text: str) -> tuple[tuple[str, ...], ...]:
+    contexts: list[tuple[str, ...]] = []
+    for raw_line in str(evidence_text or "").splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        if line.lower().startswith("user:"):
+            line = line.split(":", 1)[1]
+        tokens = tuple(_salient_tokens(line))
+        if tokens:
+            contexts.append(tokens)
+    return tuple(contexts)
+
+
+def _salient_tokens(text: str) -> tuple[str, ...]:
+    tokens = [
+        token.lower()
+        for token in re.findall(r"[A-Za-z][A-Za-z0-9+-]{2,}|[\u3400-\u9fff]{2,}", text)
+    ]
+    return tuple(
+        token
+        for token in tokens
+        if token not in _CONTEXT_STOPWORDS and not token.isdigit()
+    )
+
+
+def _salient_context_used(context_tokens: tuple[str, ...], answer_text: str) -> bool:
+    normalized_answer = normalize_public_answer(answer_text)
+    if not normalized_answer:
+        return False
+    return any(normalize_public_answer(token) in normalized_answer for token in context_tokens)
+
+
+_CONTRAST_MARKER_RE = re.compile(
+    r"\b(but|however|although|though|earlier|latest|later|instead|rather than|not|if you mean)\b|但是|不过|然而|之前|更早|最新|后来|而不是",
+    re.I,
+)
+
+
+def _multiple_candidate_values_detected(answer_text: str) -> bool:
+    value = str(answer_text or "")
+    money = re.findall(r"[$€£]\s?\d[\d,]*(?:\.\d+)?", value)
+    if len(set(money)) > 1:
+        return True
+    dates = re.findall(
+        r"\b(?:\d{4}[-/]\d{1,2}[-/]\d{1,2}|\d{1,2}[-/]\d{1,2}(?:[-/]\d{2,4})?)\b",
+        value,
+    )
+    if len(set(dates)) > 1:
+        return True
+    numbers = re.findall(r"\b\d+(?:\.\d+)?\b", value)
+    return len(set(numbers)) > 1
+
+
+def _contrast_marker_detected(answer_text: str) -> bool:
+    return bool(_CONTRAST_MARKER_RE.search(str(answer_text or "")))
 
 
 def _contains_public_abstention_intent(text: str) -> bool:
@@ -831,6 +1038,11 @@ def write_public_long_memory_markdown(report: dict[str, Any], path: Path) -> Non
         "public_answer_pass_rate",
         "tool_call_style_output_count",
         "sent_evidence_gold_hit_count",
+        "language_mismatch_count",
+        "mixed_language_mismatch_count",
+        "answer_language_contract_failed_count",
+        "missed_salient_context_possible_count",
+        "final_stance_review_needed_count",
         "evidence_render_mode",
         "effective_evidence_token_budget",
         "structured_evidence_snapshot_file_count",

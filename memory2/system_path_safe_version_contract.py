@@ -290,7 +290,8 @@ def render_system_path_evidence_contract_block(
                 "  Prefer active versions when active_version_count is greater than 0.",
                 "  If the evidence is insufficient, say the available memory is insufficient.",
                 "  Do not mention deleted, superseded, or forbidden boundary evidence.",
-                "  Answer in the user's language.",
+                "  Answer in the same language as the current user question unless the user explicitly requests another language.",
+                "  For advice, tips, recommendations, planning, or suggestions, use all salient user-specific evidence before giving generic guidance.",
             ]
         )
     elif variant == "structured_guided":
@@ -306,7 +307,8 @@ def render_system_path_evidence_contract_block(
                 "  State concrete facts from allowed_evidence directly.",
                 "  If answer_critical_evidence is empty or insufficient, say the available memory is insufficient.",
                 "  Do not mention deleted, superseded, or forbidden boundary evidence.",
-                "  Answer in the user's language.",
+                "  Answer in the same language as the current user question unless the user explicitly requests another language.",
+                "  For advice, tips, recommendations, planning, or suggestions, use all salient user-specific evidence before giving generic guidance.",
             ]
         )
     elif variant == "near_query_block":
@@ -318,7 +320,8 @@ def render_system_path_evidence_contract_block(
                 "  Prefer active versions when active_version_count is greater than 0.",
                 "  If the evidence is insufficient, say the available memory is insufficient.",
                 "  Do not use deleted, superseded, cross-scope, or forbidden boundary evidence.",
-                "  Answer in the user's language.",
+                "  Answer in the same language as the current user question unless the user explicitly requests another language.",
+                "  For advice, tips, recommendations, planning, or suggestions, use all salient user-specific evidence before giving generic guidance.",
             ]
         )
     elif variant == "guided_retry_shadow":
@@ -338,7 +341,8 @@ def render_system_path_evidence_contract_block(
                 "  If the user explicitly asks about old preferences, conflicts, or why something changed, say \"旧版本已失效\" without naming the old value.",
                 "  Do not answer with only an acknowledgement, meta action, or clarification question.",
                 "  Do not output code blocks unless the user explicitly asks for code.",
-                "  Answer in the user's language.",
+                "  Answer in the same language as the current user question unless the user explicitly requests another language.",
+                "  For advice, tips, recommendations, planning, or suggestions, use all salient user-specific evidence before giving generic guidance.",
                 "Answer Candidate Contract:",
                 "current_truth:",
                 *_indent_lines(candidate.current_truth_lines),
@@ -364,7 +368,8 @@ def render_system_path_evidence_contract_block(
                 "  Do not expose JSON, schema fields, memory ids, or internal selection notes.",
                 "  Prefer current_truth facts when available.",
                 "  Do not answer with only an acknowledgement, meta action, or clarification question.",
-                "  Answer in the user's language.",
+                "  Answer in the same language as the current user question unless the user explicitly requests another language.",
+                "  For advice, tips, recommendations, planning, or suggestions, use all salient user-specific evidence before giving generic guidance.",
                 "current_truth:",
                 *_indent_lines(candidate.current_truth_lines),
                 "must_include_term_count: " + str(candidate.must_include_term_count),

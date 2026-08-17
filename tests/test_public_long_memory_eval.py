@@ -342,6 +342,116 @@ def test_public_report_flags_language_mismatch_without_overwriting_score(tmp_pat
     assert report["metrics"]["language_mismatch_count"] == 1
 
 
+def test_public_report_flags_mixed_language_frame_for_english_question(tmp_path: Path) -> None:
+    case = PublicLongMemoryCase(
+        source_id="mixed_lang_001",
+        category="single-session-assistant",
+        question="What were the four terms you suggested?",
+        gold_answer="sexual fixations",
+        history=({"role": "assistant", "content": "I suggested sexual fixations."},),
+    )
+
+    report = _report_for_public_answer(
+        tmp_path,
+        case=case,
+        answer_text="另外四个选项是 sexual fixations, sexual impulsivity, and compulsive sexuality.",
+        evidence_text="assistant: I suggested sexual fixations.",
+    )
+    review = report["case_reviews"][0]
+
+    assert review["question_language"] == "en"
+    assert review["response_language"] == "mixed"
+    assert review["language_mismatch"] is True
+    assert review["mixed_language_mismatch"] is True
+    assert review["answer_language_contract_failed"] is True
+    assert review["language_retry_needed"] is True
+    assert "mixed_language_mismatch" in review["failure_attribution"]
+    assert report["metrics"]["mixed_language_mismatch_count"] == 1
+    assert report["metrics"]["answer_language_contract_failed_count"] == 1
+
+
+def test_public_report_allows_quoted_foreign_terms_in_english_answer(tmp_path: Path) -> None:
+    case = PublicLongMemoryCase(
+        source_id="quoted_lang_001",
+        category="single-session-assistant",
+        question="What cartoon did you mention?",
+        gold_answer="Nu, pogodi!",
+        history=({"role": "assistant", "content": "The cartoon was Nu, pogodi! / Ну, погоди!"},),
+    )
+
+    report = _report_for_public_answer(
+        tmp_path,
+        case=case,
+        answer_text='The cartoon was "Ну, погоди!" (Nu, pogodi!).',
+        evidence_text="assistant: The cartoon was Nu, pogodi! / Ну, погоди!",
+    )
+    review = report["case_reviews"][0]
+
+    assert review["question_language"] == "en"
+    assert review["language_mismatch"] is False
+    assert review["mixed_language_mismatch"] is False
+    assert review["answer_language_contract_failed"] is False
+
+
+def test_public_report_marks_advice_answer_missing_salient_user_context(tmp_path: Path) -> None:
+    case = PublicLongMemoryCase(
+        source_id="advice_001",
+        category="single-session-preference",
+        question="I'm anxious about getting around a new city. Any helpful tips?",
+        gold_answer="Use your transit card and itinerary app",
+        history=(
+            {"role": "user", "content": "I bought a transit card for the trip."},
+            {"role": "user", "content": "I downloaded an itinerary app to stay organized."},
+        ),
+    )
+
+    report = _report_for_public_answer(
+        tmp_path,
+        case=case,
+        answer_text="Use your transit card so you do not need to buy individual tickets.",
+        evidence_text=(
+            "user: I bought a transit card for the trip.\n"
+            "user: I downloaded an itinerary app to stay organized."
+        ),
+    )
+    review = report["case_reviews"][0]
+
+    assert review["advice_context_required"] is True
+    assert review["salient_user_context_count"] == 2
+    assert review["preference_context_used"] is True
+    assert review["missed_salient_context_possible"] is True
+    assert "missed_salient_context_possible" in review["failure_attribution"]
+    assert report["metrics"]["missed_salient_context_possible_count"] == 1
+
+
+def test_public_report_marks_strict_pass_with_multiple_candidate_stance_risk(tmp_path: Path) -> None:
+    case = PublicLongMemoryCase(
+        source_id="stance_001",
+        category="knowledge-update",
+        question="What amount was approved?",
+        gold_answer="$400,000",
+        history=({"role": "user", "content": "Earlier it was $350,000, later it was $400,000."},),
+    )
+
+    report = _report_for_public_answer(
+        tmp_path,
+        case=case,
+        answer_text=(
+            "The record mentions $350,000 and $400,000, but if you mean the initial approval, "
+            "the answer is $350,000."
+        ),
+        evidence_text="user: Earlier it was $350,000, later it was $400,000.",
+    )
+    review = report["case_reviews"][0]
+
+    assert review["public_score"]["passed"] is True
+    assert review["strict_pass_clean"] is False
+    assert review["multiple_candidate_values_detected"] is True
+    assert review["contrast_marker_detected"] is True
+    assert review["final_stance_review_needed"] is True
+    assert report["metrics"]["final_stance_review_needed_count"] == 1
+
+
 def test_public_report_marks_abstention_intent_as_secondary_pass(tmp_path: Path) -> None:
     case = PublicLongMemoryCase(
         source_id="abs_001",
