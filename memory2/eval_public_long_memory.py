@@ -121,7 +121,10 @@ def stratified_sample_cases(
         by_category.setdefault(case.category, []).append(case)
     categories = sorted(by_category)
     if sample_size < len(categories):
-        raise ValueError("sample_size must be at least the category count")
+        rows = sorted(cases, key=lambda case: case.source_id)
+        rng = random.Random(seed)
+        rng.shuffle(rows)
+        return tuple(sorted(rows[:sample_size], key=lambda case: case.source_id))
 
     raw_allocations = {
         category: len(rows) * sample_size / len(cases)
@@ -362,6 +365,7 @@ def build_public_long_memory_report(
     sampled_cases: tuple[PublicLongMemoryCase, ...],
     phase: str,
     profile: str,
+    profiles: tuple[str, ...] | None = None,
     seed: int,
     sample_size: int,
     answer_debug_dir: Path | None,
@@ -375,11 +379,12 @@ def build_public_long_memory_report(
     provider_request_debug_dir: Path | None = None,
     structured_evidence_debug_dir: Path | None = None,
 ) -> dict[str, Any]:
+    profile_list = tuple(profiles or (profile,))
     case_by_id = {case.source_id: case for case in sampled_cases}
-    answer_debug_by_case = _load_answer_debug_by_case(answer_debug_dir)
+    answer_debug_by_call = _load_answer_debug_by_call(answer_debug_dir)
     provider_request_capture_metrics = _provider_request_capture_metrics(
         provider_request_debug_dir,
-        answer_debug_by_case,
+        answer_debug_by_call,
     )
     structured_evidence_metrics = _structured_evidence_snapshot_metrics(
         structured_evidence_debug_dir,
@@ -411,7 +416,16 @@ def build_public_long_memory_report(
             continue
         case_id = str(record.get("case_id") or "")
         case = case_by_id.get(case_id)
-        debug = answer_debug_by_case.get(case_id, {})
+        profile_name = str(record.get("profile_name") or "")
+        prompt_variant = str(record.get("prompt_variant") or "")
+        repeat_index = int(record.get("repeat_index") or 0)
+        debug = _answer_debug_for_record(
+            answer_debug_by_call,
+            case_id=case_id,
+            profile_name=profile_name,
+            prompt_variant=prompt_variant,
+            repeat_index=repeat_index,
+        )
         answer_text = str(debug.get("answer_text") or "")
         evidence_text = str(debug.get("evidence_block_text") or "")
         evidence_gold_hit = False
@@ -495,11 +509,17 @@ def build_public_long_memory_report(
                 "category": case.category if case is not None else record.get("category", ""),
                 "question": case.question if case is not None else "",
                 "gold_answer": case.gold_answer if case is not None else "",
-                "profile": record.get("profile_name", ""),
-                "prompt_variant": record.get("prompt_variant", ""),
-                "repeat_index": record.get("repeat_index", 0),
+                "profile": profile_name,
+                "prompt_variant": prompt_variant,
+                "repeat_index": repeat_index,
                 "answer_debug_available": bool(debug),
                 "model_answer": answer_text,
+                "prompt_token_count": int(record.get("prompt_token_count") or 0),
+                "completion_token_count": int(
+                    record.get("completion_token_count") or 0
+                ),
+                "total_token_count": int(record.get("total_token_count") or 0),
+                "latency_ms": int(record.get("latency_ms") or 0),
                 "sent_evidence_gold_hit": evidence_gold_hit,
                 "evidence_render_metadata": render_metadata
                 if isinstance(render_metadata, list)
@@ -519,12 +539,21 @@ def build_public_long_memory_report(
 
     metrics = dict(getattr(benchmark_report, "metrics", {}) or {})
     completed = int(metrics.get("completed_call_count") or 0)
-    actual_call_count = len(sampled_cases) * 1 * len(prompt_variants) * int(repeats)
+    actual_call_count = (
+        len(sampled_cases) * len(profile_list) * len(prompt_variants) * int(repeats)
+    )
+    profile_summary_rows = _public_profile_summary_rows(
+        case_reviews,
+        metrics.get("profile_summaries"),
+        profile_list,
+    )
     metrics.update(
         {
             "benchmark": "longmemeval",
             "phase": phase,
             "profile": profile,
+            "profiles": list(profile_list),
+            "profile_count": len(profile_list),
             "dataset_path": str(dataset_path),
             "dataset_sha256": dataset_hash,
             "dataset_case_count": len(dataset_cases),
@@ -535,9 +564,11 @@ def build_public_long_memory_report(
             "prompt_variants": list(prompt_variants),
             "repeats": int(repeats),
             "actual_call_shape": (
-                f"{len(sampled_cases)} * 1 * {len(prompt_variants)} * {int(repeats)}"
+                f"{len(sampled_cases)} * {len(profile_list)} * "
+                f"{len(prompt_variants)} * {int(repeats)}"
                 f" = {actual_call_count}"
             ),
+            "profile_summary_rows": profile_summary_rows,
             "evidence_render_mode": render_config.mode,
             "long_evidence_token_limit": render_config.long_evidence_token_limit,
             "reserved_prompt_token_budget": render_config.reserved_prompt_token_budget,
@@ -583,7 +614,11 @@ def build_public_long_memory_report(
             "command_shape_hash": command_shape_hash,
             "real_llm_enabled": real_llm_enabled,
             "fake_provider_enabled": fake_provider_enabled,
-            "result_boundary": "LongMemEval P5-only public benchmark; not a P1-P5 ablation.",
+            "result_boundary": (
+                "LongMemEval Phase A factorial governance benchmark; not a P1-P5 ablation."
+                if len(profile_list) > 1
+                else "LongMemEval P5-only public benchmark; not a P1-P5 ablation."
+            ),
             "gold_answer_memory_policy": "gold answers are only used by scorer/report and are never written into memory",
             "answer_writeback_policy": "model answers are not written back into memory",
         }
@@ -599,7 +634,7 @@ def build_public_long_memory_report(
 
 def _provider_request_capture_metrics(
     provider_request_debug_dir: Path | None,
-    answer_debug_by_case: dict[str, dict[str, Any]],
+    answer_debug_by_call: dict[str, dict[str, Any]],
 ) -> dict[str, int]:
     if provider_request_debug_dir is None or not provider_request_debug_dir.exists():
         return {
@@ -618,8 +653,18 @@ def _provider_request_capture_metrics(
             mutation_count += 1
             continue
         case_id = str(payload.get("case_id") or "")
+        profile_name = str(payload.get("profile_name") or "")
+        prompt_variant = str(payload.get("prompt_variant") or "")
+        repeat_index = int(payload.get("repeat_index") or 0)
         answer_text = str(
-            answer_debug_by_case.get(case_id, {}).get("answer_text") or ""
+            _answer_debug_for_record(
+                answer_debug_by_call,
+                case_id=case_id,
+                profile_name=profile_name,
+                prompt_variant=prompt_variant,
+                repeat_index=repeat_index,
+            ).get("answer_text")
+            or ""
         ).strip()
         provider_request = payload.get("provider_request")
         messages = (
@@ -669,6 +714,123 @@ def _structured_evidence_snapshot_metrics(
         "structured_evidence_snapshot_file_count": file_count,
         "structured_evidence_snapshot_parse_error_count": parse_error_count,
     }
+
+
+def _public_profile_summary_rows(
+    case_reviews: list[dict[str, Any]],
+    raw_profile_summaries: object,
+    profiles: tuple[str, ...],
+) -> list[dict[str, Any]]:
+    raw = raw_profile_summaries if isinstance(raw_profile_summaries, dict) else {}
+    baseline_profile = "tri_rrf" if "tri_rrf" in profiles else (profiles[0] if profiles else "")
+    baseline = raw.get(baseline_profile) if isinstance(raw.get(baseline_profile), dict) else {}
+    rows: list[dict[str, Any]] = []
+    for profile in profiles:
+        reviews = [row for row in case_reviews if row.get("profile") == profile]
+        summary = raw.get(profile) if isinstance(raw.get(profile), dict) else {}
+        passed = sum(
+            1
+            for row in reviews
+            if isinstance(row.get("public_score"), dict)
+            and row["public_score"].get("passed") is True
+        )
+        count = int(summary.get("case_count") or len(reviews))
+        prompt_total = int(
+            summary.get("total_prompt_token_count")
+            or sum(int(row.get("prompt_token_count") or 0) for row in reviews)
+        )
+        completion_total = int(
+            summary.get("total_completion_token_count")
+            or sum(int(row.get("completion_token_count") or 0) for row in reviews)
+        )
+        total_tokens = int(
+            summary.get("total_token_count")
+            or sum(int(row.get("total_token_count") or 0) for row in reviews)
+        )
+        avg_latency = float(
+            summary.get("avg_latency_ms")
+            or _avg_number(row.get("latency_ms") for row in reviews)
+        )
+        p50_latency = float(
+            summary.get("p50_latency_ms")
+            or _percentile_number((row.get("latency_ms") for row in reviews), 50)
+        )
+        p95_latency = float(
+            summary.get("p95_latency_ms")
+            or _percentile_number((row.get("latency_ms") for row in reviews), 95)
+        )
+        row = {
+            "profile": profile,
+            "case_count": count,
+            "public_answer_pass_count": passed,
+            "public_answer_pass_rate": _rate(passed, count),
+            "total_prompt_token_count": prompt_total,
+            "avg_prompt_token_count": float(
+                summary.get("avg_prompt_token_count") or _avg_total(prompt_total, count)
+            ),
+            "total_completion_token_count": completion_total,
+            "avg_completion_token_count": float(
+                summary.get("avg_completion_token_count")
+                or _avg_total(completion_total, count)
+            ),
+            "total_token_count": total_tokens,
+            "avg_total_token_count": float(
+                summary.get("avg_total_token_count") or _avg_total(total_tokens, count)
+            ),
+            "avg_latency_ms": avg_latency,
+            "p50_latency_ms": p50_latency,
+            "p95_latency_ms": p95_latency,
+        }
+        if isinstance(baseline, dict) and profile != baseline_profile:
+            row["prompt_token_delta_vs_tri_rrf"] = (
+                prompt_total - int(baseline.get("total_prompt_token_count") or 0)
+            )
+            row["completion_token_delta_vs_tri_rrf"] = (
+                completion_total
+                - int(baseline.get("total_completion_token_count") or 0)
+            )
+            row["total_token_delta_vs_tri_rrf"] = (
+                total_tokens - int(baseline.get("total_token_count") or 0)
+            )
+            row["avg_latency_delta_vs_tri_rrf"] = round(
+                avg_latency - float(baseline.get("avg_latency_ms") or 0.0),
+                4,
+            )
+        else:
+            row["prompt_token_delta_vs_tri_rrf"] = 0
+            row["completion_token_delta_vs_tri_rrf"] = 0
+            row["total_token_delta_vs_tri_rrf"] = 0
+            row["avg_latency_delta_vs_tri_rrf"] = 0.0
+        rows.append(row)
+    return rows
+
+
+def _avg_total(total: int | float, count: int) -> float:
+    if count <= 0:
+        return 0.0
+    return round(float(total) / count, 4)
+
+
+def _avg_number(values: object) -> float:
+    numbers = [float(value) for value in values if _is_number(value)]  # type: ignore[arg-type]
+    return round(sum(numbers) / len(numbers), 4) if numbers else 0.0
+
+
+def _percentile_number(values: object, percentile: int) -> float:
+    numbers = sorted(float(value) for value in values if _is_number(value))  # type: ignore[arg-type]
+    if not numbers:
+        return 0.0
+    if len(numbers) == 1:
+        return round(numbers[0], 4)
+    rank = (len(numbers) - 1) * (percentile / 100.0)
+    lower = int(rank)
+    upper = min(lower + 1, len(numbers) - 1)
+    weight = rank - lower
+    return round(numbers[lower] * (1 - weight) + numbers[upper] * weight, 4)
+
+
+def _is_number(value: object) -> bool:
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
 
 
 def _empty_public_diagnostics() -> dict[str, Any]:
@@ -1052,6 +1214,54 @@ def write_public_long_memory_markdown(report: dict[str, Any], path: Path) -> Non
         "fake_provider_enabled",
     ):
         lines.append(f"- `{key}`: `{metrics.get(key, '')}`")
+    profile_rows = metrics.get("profile_summary_rows")
+    if isinstance(profile_rows, list) and profile_rows:
+        lines.extend(
+            [
+                "",
+                "## Profile Accuracy And Cost",
+                "",
+                "| profile | cases | static_pass_rate | prompt_tokens | completion_tokens | total_tokens | avg_prompt | avg_completion | avg_total | avg_latency_ms | p50_latency_ms | p95_latency_ms | total_token_delta_vs_tri_rrf | avg_latency_delta_vs_tri_rrf |",
+                "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+            ]
+        )
+        for row in profile_rows:
+            if not isinstance(row, dict):
+                continue
+            lines.append(
+                "| "
+                + " | ".join(
+                    [
+                        str(row.get("profile", "")),
+                        str(row.get("case_count", "")),
+                        str(row.get("public_answer_pass_rate", "")),
+                        str(row.get("total_prompt_token_count", "")),
+                        str(row.get("total_completion_token_count", "")),
+                        str(row.get("total_token_count", "")),
+                        str(row.get("avg_prompt_token_count", "")),
+                        str(row.get("avg_completion_token_count", "")),
+                        str(row.get("avg_total_token_count", "")),
+                        str(row.get("avg_latency_ms", "")),
+                        str(row.get("p50_latency_ms", "")),
+                        str(row.get("p95_latency_ms", "")),
+                        str(row.get("total_token_delta_vs_tri_rrf", "")),
+                        str(row.get("avg_latency_delta_vs_tri_rrf", "")),
+                    ]
+                )
+                + " |"
+            )
+        lines.extend(
+            [
+                "",
+                "## Cost Metric Definitions",
+                "",
+                "- `prompt_tokens`: provider-reported input tokens for system prompt, user question, and rendered evidence.",
+                "- `completion_tokens`: provider-reported output tokens.",
+                "- `total_tokens`: provider-reported prompt plus completion tokens.",
+                "- `latency_ms`: runner-observed per-call end-to-end wall-clock latency measured around `AgentLoop.process_direct`; it is not provider-only latency.",
+                "- `p50_latency_ms` and `p95_latency_ms`: percentile latency across calls in the same profile.",
+            ]
+        )
     lines.extend(
         [
             "",
@@ -1498,7 +1708,7 @@ def _strip_punct_and_space(text: str) -> str:
     )
 
 
-def _load_answer_debug_by_case(answer_debug_dir: Path | None) -> dict[str, dict[str, Any]]:
+def _load_answer_debug_by_call(answer_debug_dir: Path | None) -> dict[str, dict[str, Any]]:
     if answer_debug_dir is None or not answer_debug_dir.exists():
         return {}
     rows: dict[str, dict[str, Any]] = {}
@@ -1511,8 +1721,68 @@ def _load_answer_debug_by_case(answer_debug_dir: Path | None) -> dict[str, dict[
             continue
         case_id = str(payload.get("case_id") or "")
         if case_id:
+            profile_name = str(payload.get("profile_name") or "")
+            prompt_variant = str(payload.get("prompt_variant") or "")
+            if not profile_name or not prompt_variant:
+                parsed = _call_identity_from_debug_payload_or_path(payload, path)
+                profile_name = profile_name or parsed["profile_name"]
+                prompt_variant = prompt_variant or parsed["prompt_variant"]
+                payload.setdefault("profile_name", profile_name)
+                payload.setdefault("prompt_variant", prompt_variant)
+                payload.setdefault("repeat_index", parsed["repeat_index"])
+            repeat_index = int(payload.get("repeat_index") or 0)
+            if profile_name and prompt_variant:
+                rows[_call_key(case_id, profile_name, prompt_variant, repeat_index)] = payload
             rows[case_id] = payload
     return rows
+
+
+def _answer_debug_for_record(
+    answer_debug_by_call: dict[str, dict[str, Any]],
+    *,
+    case_id: str,
+    profile_name: str,
+    prompt_variant: str,
+    repeat_index: int,
+) -> dict[str, Any]:
+    key = _call_key(case_id, profile_name, prompt_variant, repeat_index)
+    return dict(answer_debug_by_call.get(key) or answer_debug_by_call.get(case_id) or {})
+
+
+def _call_key(
+    case_id: str,
+    profile_name: str,
+    prompt_variant: str,
+    repeat_index: int,
+) -> str:
+    return f"{case_id}:{profile_name}:{prompt_variant}:{int(repeat_index)}"
+
+
+def _call_identity_from_debug_payload_or_path(
+    payload: dict[str, Any],
+    path: Path,
+) -> dict[str, Any]:
+    prompt_variant = str(payload.get("prompt_variant") or "")
+    profile_name = str(payload.get("profile_name") or "")
+    repeat_index = int(payload.get("repeat_index") or 0)
+    if prompt_variant and "-" in prompt_variant and not profile_name:
+        maybe_profile, maybe_variant = prompt_variant.rsplit("-", 1)
+        if maybe_variant in {"baseline", "coached"}:
+            profile_name = maybe_profile
+            prompt_variant = maybe_variant
+    if not profile_name or not prompt_variant:
+        match = re.match(
+            r"^\d+-(?P<profile>.+)-(?P<variant>baseline|coached)-",
+            path.name,
+        )
+        if match:
+            profile_name = profile_name or match.group("profile")
+            prompt_variant = prompt_variant or match.group("variant")
+    return {
+        "profile_name": profile_name,
+        "prompt_variant": prompt_variant,
+        "repeat_index": repeat_index,
+    }
 
 
 def _rate(numerator: int, denominator: int) -> float:

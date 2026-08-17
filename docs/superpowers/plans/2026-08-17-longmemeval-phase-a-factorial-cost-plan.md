@@ -26,7 +26,7 @@
 
 - [x] Create branch/worktree from `main`.
 - [x] Save this plan.
-- [ ] Commit the plan file.
+- [x] Commit the plan file.
 
 Gate:
 - Current branch is `feature/longmemeval-phase-a-factorial-cost`.
@@ -47,27 +47,27 @@ Profiles:
 | `tri_rrf_structured_answer` | 0 | 1 | 1 |
 | `tri_rrf_candidate_structured_answer` | 1 | 1 | 1 |
 
-- [ ] Add profile specs and compatibility aliases.
-- [ ] Add tests for profile flags and unknown profile validation.
-- [ ] Commit.
+- [x] Add profile specs and compatibility aliases.
+- [x] Add tests for profile flags and unknown profile validation.
+- [x] Commit.
 
 ## Phase 2: Implement Factorial Evidence Rendering
 
-- [ ] Implement evidence behavior for all 8 profiles.
-- [ ] Keep provider request snapshots gold-free.
-- [ ] Ensure debug artifact names include profile.
-- [ ] Add fake-provider tests for `1 case * 8 profiles`.
-- [ ] Commit.
+- [x] Implement evidence behavior for all 8 profiles.
+- [x] Keep provider request snapshots gold-free.
+- [x] Ensure debug artifact names include profile.
+- [x] Add fake-provider tests for `1 case * 8 profiles`.
+- [x] Commit.
 
 ## Phase 3: Extend Public LongMemEval Runner
 
-- [ ] Add `--profiles` while keeping `--profile`.
-- [ ] Update call shape and checkpoint provenance for profile lists.
-- [ ] Add per-profile summaries with prompt/completion/total token and avg/p50/p95 latency.
-- [ ] Add profile deltas vs `tri_rrf`.
-- [ ] Update Markdown report with cost/accuracy tables and metric definitions.
-- [ ] Run `pytest tests/test_public_long_memory_eval.py tests/test_public_long_memory_runner.py`.
-- [ ] Commit.
+- [x] Add `--profiles` while keeping `--profile`.
+- [x] Update call shape and checkpoint provenance for profile lists.
+- [x] Add per-profile summaries with prompt/completion/total token and avg/p50/p95 latency.
+- [x] Add profile deltas vs `tri_rrf`.
+- [x] Update Markdown report with cost/accuracy tables and metric definitions.
+- [x] Run `pytest tests/test_public_long_memory_eval.py tests/test_public_long_memory_runner.py`.
+- [x] Commit.
 
 ## Phase 4: Run Phase A 400-Call Online Test
 
@@ -127,4 +127,3 @@ Gate:
 - [ ] Run full pytest if time allows.
 - [ ] Verify report assertions.
 - [ ] Push `feature/longmemeval-phase-a-factorial-cost`.
-

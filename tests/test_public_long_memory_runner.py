@@ -183,3 +183,69 @@ def test_public_long_memory_runner_captures_sanitized_provider_requests(tmp_path
     assert structured["truncation_applied"] is False
     assert structured["answer_session_covered"] is True
     assert structured["gold_supporting_fact_hit"] is True
+
+
+def test_public_long_memory_runner_writes_multi_profile_factorial_report(tmp_path: Path) -> None:
+    out_dir = tmp_path / "out"
+    checkpoint = tmp_path / "checkpoint.jsonl"
+    workspace = tmp_path / "workspace"
+    profiles = (
+        "tri_rrf,tri_rrf_candidate,tri_rrf_structured,tri_rrf_answer,"
+        "tri_rrf_candidate_structured,tri_rrf_candidate_answer,"
+        "tri_rrf_structured_answer,tri_rrf_candidate_structured_answer"
+    )
+
+    subprocess.run(
+        [
+            sys.executable,
+            "scripts/run_public_long_memory_eval.py",
+            "--dataset",
+            "tests/fixtures/longmemeval_sample.jsonl",
+            "--phase",
+            "phase_a",
+            "--sample-size",
+            "1",
+            "--seed",
+            "42",
+            "--workspace",
+            str(workspace),
+            "--out-dir",
+            str(out_dir),
+            "--checkpoint-jsonl",
+            str(checkpoint),
+            "--fresh-checkpoint",
+            "--fake-provider",
+            "--profiles",
+            profiles,
+            "--prompt-variants",
+            "baseline",
+            "--repeats",
+            "1",
+            "--evidence-render-mode",
+            "answer_window",
+            "--capture-provider-request",
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    report = json.loads((out_dir / "public_long_memory_eval.json").read_text())
+    assert report["metrics"]["profile_count"] == 8
+    assert report["metrics"]["profile"] == "tri_rrf_candidate_structured_answer"
+    assert report["metrics"]["profiles"] == profiles.split(",")
+    assert report["metrics"]["actual_call_shape"] == "1 * 8 * 1 * 1 = 8"
+    assert report["metrics"]["sampling"]["seed"] == 42
+    assert len(report["case_reviews"]) == 8
+    assert len(report["metrics"]["profile_summary_rows"]) == 8
+    assert all(
+        "avg_prompt_token_count" in row
+        and "avg_completion_token_count" in row
+        and "avg_total_token_count" in row
+        and "p50_latency_ms" in row
+        and "p95_latency_ms" in row
+        for row in report["metrics"]["profile_summary_rows"]
+    )
+    assert len(list((workspace / "public_long_memory_answer_debug").glob("*.json"))) == 8
+    assert len(list((workspace / "public_long_memory_structured_evidence").glob("*.json"))) == 8
+    assert report["metrics"]["provider_request_capture_file_count"] == 8

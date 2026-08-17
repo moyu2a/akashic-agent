@@ -58,7 +58,10 @@ from memory2.eval_answer_post_check import (
     build_answer_post_check_shadow,
 )
 from memory2.eval_memory_governance_profiles import (
+    FACTORIAL_GOVERNANCE_PROFILE_ORDER,
     MEMORY_GOVERNANCE_PROFILE_ORDER,
+    MemoryGovernanceProfileSpec,
+    get_memory_governance_profile,
     render_structured_evidence_only_block,
 )
 from memory2.eval_memory_governance_dataset import (
@@ -106,6 +109,8 @@ TRI_VERSION_GOVERNED_ANSWER_CONTRACT_PROFILE = (
 TRI_RERANK_VERSION_GOVERNED_ANSWER_CONTRACT_PROFILE = (
     "chain_tri_rerank_version_governed_answer_contract"
 )
+FACTORIAL_GOVERNANCE_PROFILES: tuple[str, ...] = FACTORIAL_GOVERNANCE_PROFILE_ORDER
+FACTORIAL_FULL_PROFILE = "tri_rrf_candidate_structured_answer"
 PRODUCTION_GOVERNED_ANSWER_CONTRACT_PROFILES: tuple[str, ...] = (
     TRI_GOVERNED_ANSWER_CONTRACT_PROFILE,
     TRI_RERANK_GOVERNED_ANSWER_CONTRACT_PROFILE,
@@ -120,6 +125,7 @@ OPTIONAL_ANSWER_QUALITY_PROFILES: tuple[str, ...] = (
     TRI_RERANK_GOVERNED_ANSWER_CONTRACT_PROFILE,
     TRI_VERSION_GOVERNED_ANSWER_CONTRACT_PROFILE,
     TRI_RERANK_VERSION_GOVERNED_ANSWER_CONTRACT_PROFILE,
+    *FACTORIAL_GOVERNANCE_PROFILES,
 )
 PROFILE_METADATA: dict[str, dict[str, object]] = {
     TRI_CANDIDATE_GOVERNANCE_PROFILE: {
@@ -329,6 +335,8 @@ class ComprehensiveOnlineMemoryEngine:
         request: MemoryEngineRetrieveRequest,
     ) -> MemoryEngineRetrieveResult:
         self.retrieve_requests.append(request)
+        if self.profile_name in FACTORIAL_GOVERNANCE_PROFILES:
+            return self._retrieve_factorial_profile()
         governed_trace: dict[str, object] | None = None
         if self.profile_name in {
             TRI_CANDIDATE_GOVERNANCE_PROFILE,
@@ -686,6 +694,215 @@ class ComprehensiveOnlineMemoryEngine:
             raw=raw,
         )
 
+    def _retrieve_factorial_profile(self) -> MemoryEngineRetrieveResult:
+        spec = get_memory_governance_profile(self.profile_name)
+        summaries = _memory_summaries_by_id(self.case)
+        governed_trace: dict[str, object] | None = None
+        if spec.candidate_governance:
+            governed_trace = governed_tri_trace_for_case(self.case)
+            ids = list(tuple(governed_trace.get("ids", ())))
+        else:
+            ids = list(_ids_from_trace(self.case, "tri_retrieval", "fused_ids"))
+        if self.profile_name == FACTORIAL_FULL_PROFILE:
+            assert governed_trace is not None
+            trace = dict(governed_trace.get("trace", {}))
+            contract = build_production_governed_tri_evidence_contract(
+                self.case,
+                governed_trace,
+                profile_name=TRI_GOVERNED_ANSWER_CONTRACT_PROFILE,
+            )
+            self.used_memory_ids = list(contract.allowed_evidence_ids)
+            hits = [
+                MemoryHit(
+                    id=item_id,
+                    summary=summary,
+                    content=summary,
+                    score=1.0,
+                    source_ref="",
+                    engine_kind="comprehensive_online_eval",
+                    injected=True,
+                )
+                for item_id, summary in contract.evidence_summaries
+            ]
+            self.last_text_block = render_production_evidence_contract_block(contract)
+            raw = {
+                "ids": list(contract.allowed_evidence_ids),
+                "evidence_source": profile_evidence_source(self.profile_name),
+                "candidate_governance_mode": trace.get("candidate_governance_mode"),
+                "candidate_risk_tier_counts": trace.get(
+                    "candidate_risk_tier_counts",
+                    {},
+                ),
+                "accepted_candidate_risk_tier_counts": trace.get(
+                    "accepted_candidate_risk_tier_counts",
+                    {},
+                ),
+                "tiered_deleted_risks_by_reason": trace.get(
+                    "tiered_deleted_risks_by_reason",
+                    {},
+                ),
+                "candidate_risk_tiers": trace.get("candidate_risk_tiers", []),
+                "factorial_profile": _factorial_profile_metadata(spec),
+                "answer_contract": {
+                    "diagnostic_eval_only": contract.diagnostic_eval_only,
+                    "production_safe": contract.production_safe,
+                    "production_safe_evidence_contract": True,
+                    "uses_fixture_answer_expectations": (
+                        contract.uses_fixture_answer_expectations
+                    ),
+                    "combines_candidate_governance": True,
+                    "combines_rerank_injection": False,
+                    "combines_version_boundary": False,
+                    "does_not_expand_recall": True,
+                    "candidate_governance_mode": contract.candidate_governance_mode,
+                    "allowed_evidence": list(contract.allowed_evidence),
+                    "likely_relevant_evidence": list(contract.likely_relevant_evidence),
+                    "stale_warning": list(contract.stale_warning),
+                    "conflict_warning": list(contract.conflict_warning),
+                    "active_version": list(contract.active_version),
+                    "forbidden_boundary": list(contract.forbidden_boundary),
+                    "allowed_evidence_ids": list(contract.allowed_evidence_ids),
+                    "likely_relevant_evidence_ids": list(
+                        contract.likely_relevant_evidence_ids
+                    ),
+                    "downgrade_ids": list(contract.downgrade_ids),
+                    "requires_review_ids": list(contract.requires_review_ids),
+                    "stale_warning_ids": list(contract.stale_warning_ids),
+                    "conflict_warning_ids": list(contract.conflict_warning_ids),
+                    "active_version_ids": list(contract.active_version_ids),
+                    "insufficient_evidence_ids": list(
+                        contract.insufficient_evidence_ids
+                    ),
+                    "insufficient_evidence_fallback": (
+                        contract.insufficient_evidence_fallback
+                    ),
+                    "forbidden_boundary_ids": list(contract.forbidden_boundary_ids),
+                    "deleted_evidence_ids": list(contract.deleted_evidence_ids),
+                    "evidence_render_metadata": list(contract.evidence_render_metadata),
+                    "public_long_memory_eval": contract.public_long_memory_eval,
+                },
+            }
+            self.last_raw = dict(raw)
+            return MemoryEngineRetrieveResult(
+                text_block=self.last_text_block,
+                hits=hits,
+                raw=raw,
+            )
+
+        self.used_memory_ids = ids
+        hits = [
+            MemoryHit(
+                id=item_id,
+                summary=summaries.get(item_id, ""),
+                content=summaries.get(item_id, ""),
+                score=1.0,
+                source_ref="",
+                engine_kind="comprehensive_online_eval",
+                injected=True,
+            )
+            for item_id in ids
+        ]
+        if spec.structured_evidence:
+            memory_items = [
+                dict(item)
+                for item in self.case.setup.get("memory_items", ())
+                if isinstance(item, dict)
+            ]
+            by_id = {
+                str(item.get("id") or item.get("memory_id") or ""): item
+                for item in memory_items
+            }
+            should_not_ids = (
+                {str(item) for item in self.case.expectations.get("should_not_recall_ids", ())}
+                if spec.candidate_governance
+                else set()
+            )
+            allowed_evidence = [
+                {
+                    "id": item_id,
+                    "summary": summaries.get(item_id, ""),
+                    "status": by_id.get(item_id, {}).get("status", ""),
+                    "confidence": by_id.get(item_id, {}).get("confidence", ""),
+                }
+                for item_id in ids
+            ]
+            forbidden_evidence = [
+                {
+                    "id": item_id,
+                    "summary": summaries.get(item_id, ""),
+                    "status": by_id.get(item_id, {}).get("status", ""),
+                    "confidence": by_id.get(item_id, {}).get("confidence", ""),
+                }
+                for item_id in should_not_ids
+                if item_id in by_id
+            ]
+            version_boundaries = [
+                dict(item)
+                for item in self.case.setup.get("memory_replacements", ())
+                if isinstance(item, dict)
+            ]
+            evidence_block = render_structured_evidence_only_block(
+                allowed_evidence=allowed_evidence,
+                forbidden_evidence=forbidden_evidence,
+                conflict_evidence=[],
+                version_boundaries=version_boundaries,
+            )
+        else:
+            lines = [
+                f"- memory_id={item_id}; summary={summaries.get(item_id, '')}"
+                for item_id in ids
+            ]
+            evidence_block = "\n".join(lines)
+        if spec.answer_guidance:
+            evidence_block = _factorial_answer_guidance_block() + "\n\n" + evidence_block
+        self.last_text_block = evidence_block
+        trace = dict(governed_trace.get("trace", {})) if governed_trace else {}
+        raw: dict[str, object] = {
+            "ids": ids,
+            "evidence_source": profile_evidence_source(self.profile_name),
+            "factorial_profile": _factorial_profile_metadata(spec),
+            "structured_evidence_only": spec.structured_evidence
+            and not spec.answer_guidance,
+            "answer_contract": {
+                "diagnostic_eval_only": True,
+                "production_safe": False,
+                "combines_candidate_governance": spec.candidate_governance,
+                "candidate_governance_mode": "tiered"
+                if spec.candidate_governance
+                else "none",
+                "answer_guidance_only": spec.answer_guidance,
+            }
+            if spec.answer_guidance
+            else None,
+        }
+        if spec.candidate_governance:
+            raw.update(
+                {
+                    "candidate_governance_mode": trace.get(
+                        "candidate_governance_mode"
+                    ),
+                    "candidate_risk_tier_counts": trace.get(
+                        "candidate_risk_tier_counts",
+                        {},
+                    ),
+                    "accepted_candidate_risk_tier_counts": trace.get(
+                        "accepted_candidate_risk_tier_counts",
+                        {},
+                    ),
+                    "tiered_deleted_risks_by_reason": trace.get(
+                        "tiered_deleted_risks_by_reason",
+                        {},
+                    ),
+                    "candidate_risk_tiers": trace.get("candidate_risk_tiers", []),
+                }
+            )
+        self.last_raw = dict(raw)
+        return MemoryEngineRetrieveResult(
+            text_block=self.last_text_block,
+            hits=hits,
+            raw=raw,
+        )
+
     async def retrieve_explicit(
         self,
         request: ExplicitRetrievalRequest,
@@ -727,6 +944,11 @@ class ComprehensiveOnlineMemoryEngine:
 
 
 def evidence_ids_for_profile(case: EvalCase, profile_name: str) -> tuple[str, ...]:
+    if profile_name in FACTORIAL_GOVERNANCE_PROFILES:
+        spec = get_memory_governance_profile(profile_name)
+        if spec.candidate_governance:
+            return governed_tri_evidence_ids_for_case(case)
+        return _ids_from_trace(case, "tri_retrieval", "fused_ids")
     if profile_name == "chain_off":
         return ()
     if profile_name == "chain_memory_base":
@@ -764,6 +986,34 @@ def evidence_ids_for_profile(case: EvalCase, profile_name: str) -> tuple[str, ..
     if profile_name in {"chain_sleep_consolidation", "chain_all_on"}:
         return _sleep_filtered_ids(case)
     return ()
+
+
+def _factorial_profile_metadata(
+    spec: MemoryGovernanceProfileSpec,
+) -> dict[str, object]:
+    return {
+        "profile": spec.name,
+        "tri_rrf_enabled": spec.tri_rrf_enabled,
+        "candidate_governance": spec.candidate_governance,
+        "structured_evidence": spec.structured_evidence,
+        "answer_guidance": spec.answer_guidance,
+        "answer_contract": spec.answer_contract,
+        "production_safe_contract": spec.production_safe_contract,
+        "legacy_equivalent_profile": spec.legacy_equivalent_profile,
+    }
+
+
+def _factorial_answer_guidance_block() -> str:
+    return "\n".join(
+        (
+            "Answer Guidance: factorial_governance_eval",
+            "- Use only the memory evidence provided in this block.",
+            "- For count or sum questions, enumerate candidate items, mark include/exclude/uncertain, then give one final answer.",
+            "- For current, now, latest, usually, or most recently questions, order evidence by time and choose the latest supported current state.",
+            "- If a key field is missing, say the available memory is insufficient; do not estimate.",
+            "- Answer in the same language as the user question unless the user explicitly asks otherwise.",
+        )
+    )
 
 
 def governed_tri_evidence_ids_for_case(case: EvalCase) -> tuple[str, ...]:
@@ -923,6 +1173,22 @@ def _ordered_candidates_for_governed_tri(
 
 def profile_evidence_source(profile_name: str) -> str:
     sources = {
+        "tri_rrf": "tri_rrf.fused_ids",
+        "tri_rrf_candidate": "tri_rrf_candidate.governed_ids",
+        "tri_rrf_structured": "tri_rrf_structured.structured_tri_ids",
+        "tri_rrf_answer": "tri_rrf_answer.guided_tri_ids",
+        "tri_rrf_candidate_structured": (
+            "tri_rrf_candidate_structured.governed_structured_ids"
+        ),
+        "tri_rrf_candidate_answer": (
+            "tri_rrf_candidate_answer.governed_guided_ids"
+        ),
+        "tri_rrf_structured_answer": (
+            "tri_rrf_structured_answer.structured_guided_ids"
+        ),
+        "tri_rrf_candidate_structured_answer": (
+            "tri_rrf_candidate_structured_answer.governed_structured_answer_ids"
+        ),
         "chain_off": "none",
         "chain_memory_base": "original_memory_baseline",
         "chain_write_value": "none_write_policy_only",
@@ -2003,11 +2269,41 @@ def _profile_summaries(
                 forbidden_violation_rate=forbidden,
             ),
             "avg_latency_ms": _avg(row.latency_ms for row in rows),
+            "p50_latency_ms": _percentile(
+                [row.latency_ms for row in rows],
+                50,
+            ),
+            "p95_latency_ms": _percentile(
+                [row.latency_ms for row in rows],
+                95,
+            ),
+            "total_prompt_token_count": sum(row.prompt_token_count for row in rows),
+            "avg_prompt_token_count": _avg(row.prompt_token_count for row in rows),
+            "total_completion_token_count": sum(
+                row.completion_token_count for row in rows
+            ),
+            "avg_completion_token_count": _avg(
+                row.completion_token_count for row in rows
+            ),
+            "total_token_count": sum(row.total_token_count for row in rows),
             "avg_total_token_count": _avg(row.total_token_count for row in rows),
             "token_metrics_available": any(row.token_metrics_available for row in rows),
             "evidence_source": profile_evidence_source(profile),
         }
     return summaries
+
+
+def _percentile(values: Sequence[int | float], percentile: int) -> float:
+    ordered = sorted(float(value) for value in values)
+    if not ordered:
+        return 0.0
+    if len(ordered) == 1:
+        return round(ordered[0], 4)
+    rank = (len(ordered) - 1) * (percentile / 100.0)
+    lower = int(rank)
+    upper = min(lower + 1, len(ordered) - 1)
+    weight = rank - lower
+    return round(ordered[lower] * (1 - weight) + ordered[upper] * weight, 4)
 
 
 def _answer_post_check_shadow_metrics(

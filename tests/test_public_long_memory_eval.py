@@ -546,3 +546,136 @@ def test_public_report_splits_literal_and_reasoning_evidence_support(tmp_path: P
     assert review["requires_reasoning_gold"] is False
     assert report["metrics"]["literal_gold_hit_count"] == 1
     assert report["metrics"]["supporting_fact_hit_count"] == 1
+
+
+def test_public_report_keeps_multi_profile_answers_and_cost_rows(tmp_path: Path) -> None:
+    case = PublicLongMemoryCase(
+        source_id="multi_profile_001",
+        category="single-session-user",
+        question="What drink does Alice prefer?",
+        gold_answer="green tea",
+        history=({"role": "user", "content": "Alice prefers green tea."},),
+    )
+    answer_debug_dir = tmp_path / "answer_debug"
+    answer_debug_dir.mkdir()
+    for profile, answer in (
+        ("tri_rrf", "green tea"),
+        ("tri_rrf_candidate_structured_answer", "black tea"),
+    ):
+        (answer_debug_dir / f"0000-{profile}-baseline-multi_profile_001.json").write_text(
+            json.dumps(
+                {
+                    "case_id": case.source_id,
+                    "profile_name": profile,
+                    "prompt_variant": "baseline",
+                    "repeat_index": 0,
+                    "answer_text": answer,
+                    "evidence_block_text": "user: Alice prefers green tea.",
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+    benchmark_report = SimpleNamespace(
+        run_id="run",
+        generated_at="2026-08-17T00:00:00+00:00",
+        metrics={
+            "completed_call_count": 2,
+            "profile_count": 2,
+            "profile_summaries": {
+                "tri_rrf": {
+                    "case_count": 1,
+                    "avg_prompt_token_count": 100,
+                    "total_prompt_token_count": 100,
+                    "avg_completion_token_count": 10,
+                    "total_completion_token_count": 10,
+                    "avg_total_token_count": 110,
+                    "total_token_count": 110,
+                    "avg_latency_ms": 1000,
+                    "p50_latency_ms": 1000,
+                    "p95_latency_ms": 1000,
+                },
+                "tri_rrf_candidate_structured_answer": {
+                    "case_count": 1,
+                    "avg_prompt_token_count": 130,
+                    "total_prompt_token_count": 130,
+                    "avg_completion_token_count": 20,
+                    "total_completion_token_count": 20,
+                    "avg_total_token_count": 150,
+                    "total_token_count": 150,
+                    "avg_latency_ms": 1500,
+                    "p50_latency_ms": 1500,
+                    "p95_latency_ms": 1500,
+                },
+            },
+        },
+        case_records=[
+            {
+                "case_id": case.source_id,
+                "category": f"public_long_memory_{case.category}",
+                "profile_name": "tri_rrf",
+                "prompt_variant": "baseline",
+                "repeat_index": 0,
+                "answer_rule_passed": True,
+                "memory_grounding_passed": True,
+                "provider_error": False,
+                "timeout": False,
+                "failures": (),
+                "prompt_token_count": 100,
+                "completion_token_count": 10,
+                "total_token_count": 110,
+                "latency_ms": 1000,
+            },
+            {
+                "case_id": case.source_id,
+                "category": f"public_long_memory_{case.category}",
+                "profile_name": "tri_rrf_candidate_structured_answer",
+                "prompt_variant": "baseline",
+                "repeat_index": 0,
+                "answer_rule_passed": False,
+                "memory_grounding_passed": True,
+                "provider_error": False,
+                "timeout": False,
+                "failures": (),
+                "prompt_token_count": 130,
+                "completion_token_count": 20,
+                "total_token_count": 150,
+                "latency_ms": 1500,
+            },
+        ],
+        failure_records=(),
+    )
+
+    report = build_public_long_memory_report(
+        benchmark_report=benchmark_report,
+        dataset_path=tmp_path / "dataset.jsonl",
+        dataset_hash="hash",
+        dataset_cases=(case,),
+        sampled_cases=(case,),
+        phase="phase_a",
+        profile="tri_rrf",
+        profiles=("tri_rrf", "tri_rrf_candidate_structured_answer"),
+        seed=42,
+        sample_size=1,
+        answer_debug_dir=answer_debug_dir,
+        command_shape_hash="shape",
+        real_llm_enabled=False,
+        fake_provider_enabled=True,
+        prompt_variants=("baseline",),
+        repeats=1,
+    )
+
+    answers = {
+        review["profile"]: review["model_answer"]
+        for review in report["case_reviews"]
+    }
+    assert answers == {
+        "tri_rrf": "green tea",
+        "tri_rrf_candidate_structured_answer": "black tea",
+    }
+    assert report["metrics"]["actual_call_shape"] == "1 * 2 * 1 * 1 = 2"
+    rows = {row["profile"]: row for row in report["metrics"]["profile_summary_rows"]}
+    assert rows["tri_rrf"]["avg_prompt_token_count"] == 100
+    assert rows["tri_rrf"]["avg_completion_token_count"] == 10
+    assert rows["tri_rrf_candidate_structured_answer"]["total_token_delta_vs_tri_rrf"] == 40
+    assert rows["tri_rrf_candidate_structured_answer"]["avg_latency_delta_vs_tri_rrf"] == 500

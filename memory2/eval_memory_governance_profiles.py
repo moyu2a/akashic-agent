@@ -12,6 +12,25 @@ MEMORY_GOVERNANCE_PROFILE_ORDER: tuple[str, ...] = (
     "chain_tri_governed_answer_contract",
 )
 
+FACTORIAL_GOVERNANCE_PROFILE_ORDER: tuple[str, ...] = (
+    "tri_rrf",
+    "tri_rrf_candidate",
+    "tri_rrf_structured",
+    "tri_rrf_answer",
+    "tri_rrf_candidate_structured",
+    "tri_rrf_candidate_answer",
+    "tri_rrf_structured_answer",
+    "tri_rrf_candidate_structured_answer",
+)
+
+FACTORIAL_PROFILE_ALIASES: dict[str, str] = {
+    "chain_tri_retrieval": "tri_rrf",
+    "chain_tri_candidate_governance": "tri_rrf_candidate",
+    "chain_tri_evidence_only": "tri_rrf_candidate_structured",
+    "chain_tri_answer_contract": "tri_rrf_structured_answer",
+    "chain_tri_governed_answer_contract": "tri_rrf_candidate_structured_answer",
+}
+
 
 @dataclass(frozen=True)
 class MemoryGovernanceProfileSpec:
@@ -21,6 +40,8 @@ class MemoryGovernanceProfileSpec:
     answer_contract: bool
     production_safe_contract: bool
     answer_guidance: bool
+    tri_rrf_enabled: bool = True
+    legacy_equivalent_profile: str = ""
 
 
 _PROFILES: dict[str, MemoryGovernanceProfileSpec] = {
@@ -31,6 +52,7 @@ _PROFILES: dict[str, MemoryGovernanceProfileSpec] = {
         answer_contract=False,
         production_safe_contract=False,
         answer_guidance=False,
+        legacy_equivalent_profile="tri_rrf",
     ),
     "chain_tri_candidate_governance": MemoryGovernanceProfileSpec(
         name="chain_tri_candidate_governance",
@@ -39,6 +61,7 @@ _PROFILES: dict[str, MemoryGovernanceProfileSpec] = {
         answer_contract=False,
         production_safe_contract=False,
         answer_guidance=False,
+        legacy_equivalent_profile="tri_rrf_candidate",
     ),
     "chain_tri_evidence_only": MemoryGovernanceProfileSpec(
         name="chain_tri_evidence_only",
@@ -47,6 +70,7 @@ _PROFILES: dict[str, MemoryGovernanceProfileSpec] = {
         answer_contract=False,
         production_safe_contract=False,
         answer_guidance=False,
+        legacy_equivalent_profile="tri_rrf_candidate_structured",
     ),
     "chain_tri_answer_contract": MemoryGovernanceProfileSpec(
         name="chain_tri_answer_contract",
@@ -55,6 +79,7 @@ _PROFILES: dict[str, MemoryGovernanceProfileSpec] = {
         answer_contract=True,
         production_safe_contract=False,
         answer_guidance=True,
+        legacy_equivalent_profile="tri_rrf_structured_answer",
     ),
     "chain_tri_governed_answer_contract": MemoryGovernanceProfileSpec(
         name="chain_tri_governed_answer_contract",
@@ -63,6 +88,74 @@ _PROFILES: dict[str, MemoryGovernanceProfileSpec] = {
         answer_contract=True,
         production_safe_contract=True,
         answer_guidance=True,
+        legacy_equivalent_profile="tri_rrf_candidate_structured_answer",
+    ),
+    "tri_rrf": MemoryGovernanceProfileSpec(
+        name="tri_rrf",
+        candidate_governance=False,
+        structured_evidence=False,
+        answer_contract=False,
+        production_safe_contract=False,
+        answer_guidance=False,
+    ),
+    "tri_rrf_candidate": MemoryGovernanceProfileSpec(
+        name="tri_rrf_candidate",
+        candidate_governance=True,
+        structured_evidence=False,
+        answer_contract=False,
+        production_safe_contract=False,
+        answer_guidance=False,
+    ),
+    "tri_rrf_structured": MemoryGovernanceProfileSpec(
+        name="tri_rrf_structured",
+        candidate_governance=False,
+        structured_evidence=True,
+        answer_contract=False,
+        production_safe_contract=False,
+        answer_guidance=False,
+    ),
+    "tri_rrf_answer": MemoryGovernanceProfileSpec(
+        name="tri_rrf_answer",
+        candidate_governance=False,
+        structured_evidence=False,
+        answer_contract=True,
+        production_safe_contract=False,
+        answer_guidance=True,
+    ),
+    "tri_rrf_candidate_structured": MemoryGovernanceProfileSpec(
+        name="tri_rrf_candidate_structured",
+        candidate_governance=True,
+        structured_evidence=True,
+        answer_contract=False,
+        production_safe_contract=False,
+        answer_guidance=False,
+        legacy_equivalent_profile="chain_tri_evidence_only",
+    ),
+    "tri_rrf_candidate_answer": MemoryGovernanceProfileSpec(
+        name="tri_rrf_candidate_answer",
+        candidate_governance=True,
+        structured_evidence=False,
+        answer_contract=True,
+        production_safe_contract=False,
+        answer_guidance=True,
+    ),
+    "tri_rrf_structured_answer": MemoryGovernanceProfileSpec(
+        name="tri_rrf_structured_answer",
+        candidate_governance=False,
+        structured_evidence=True,
+        answer_contract=True,
+        production_safe_contract=False,
+        answer_guidance=True,
+        legacy_equivalent_profile="chain_tri_answer_contract",
+    ),
+    "tri_rrf_candidate_structured_answer": MemoryGovernanceProfileSpec(
+        name="tri_rrf_candidate_structured_answer",
+        candidate_governance=True,
+        structured_evidence=True,
+        answer_contract=True,
+        production_safe_contract=True,
+        answer_guidance=True,
+        legacy_equivalent_profile="chain_tri_governed_answer_contract",
     ),
 }
 

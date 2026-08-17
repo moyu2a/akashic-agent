@@ -101,6 +101,7 @@ async def _amain() -> int:
     parser.add_argument("--temperature", type=float, default=0.0)
     parser.add_argument("--top-p", type=float, default=1.0)
     parser.add_argument("--profile", default=PUBLIC_LONG_MEMORY_PROFILE)
+    parser.add_argument("--profiles", default="")
     parser.add_argument("--prompt-variants", default="baseline")
     parser.add_argument("--repeats", type=int, default=1)
     parser.add_argument(
@@ -117,11 +118,10 @@ async def _amain() -> int:
     args = parser.parse_args()
 
     prompt_variants = _parse_prompt_variants(str(args.prompt_variants))
-    if str(args.profile) != PUBLIC_LONG_MEMORY_PROFILE:
-        parser.error(
-            "--profile currently supports only "
-            f"{PUBLIC_LONG_MEMORY_PROFILE} for public LongMemEval"
-        )
+    profile_list = _parse_profiles(
+        str(args.profiles) if str(args.profiles).strip() else str(args.profile)
+    )
+    report_profile = profile_list[-1]
     if int(args.repeats) < 1:
         parser.error("--repeats must be at least 1")
     try:
@@ -164,7 +164,7 @@ async def _amain() -> int:
         public_case_to_eval_case(
             case,
             phase=str(args.phase),
-            profile=str(args.profile),
+            profile=report_profile,
             evidence_render_config=evidence_render_config,
         )
         for case in sampled_cases
@@ -173,7 +173,7 @@ async def _amain() -> int:
         eval_cases,
         repeats=int(args.repeats),
         prompt_variants=prompt_variants,
-        profiles=(str(args.profile),),
+        profiles=profile_list,
     )
     provider, model, provider_name = _build_provider(args)
     if bool(args.deterministic):
@@ -194,7 +194,7 @@ async def _amain() -> int:
         dataset_path=str(dataset_path),
         dataset_hash=dataset_hash,
         phase=str(args.phase),
-        profile=PUBLIC_LONG_MEMORY_PROFILE,
+        profiles=profile_list,
         sampled_case_ids=tuple(case.source_id for case in sampled_cases),
         seed=int(args.seed),
         sample_size=sample_size,
@@ -221,7 +221,8 @@ async def _amain() -> int:
         report_metadata={
             "benchmark": "longmemeval",
             "phase": str(args.phase),
-            "profile": PUBLIC_LONG_MEMORY_PROFILE,
+            "profile": report_profile,
+            "profiles": list(profile_list),
             "prompt_variants": list(prompt_variants),
             "repeats": int(args.repeats),
             "evidence_render_mode": evidence_render_config.mode,
@@ -240,7 +241,11 @@ async def _amain() -> int:
         run_provenance=EvalRunProvenance(
             command_shape_hash=command_shape_hash,
             dataset_path=str(dataset_path),
-            profile_ladder="public_long_memory_p5_only",
+            profile_ladder=(
+                "public_long_memory_phase_a_factorial"
+                if len(profile_list) > 1
+                else "public_long_memory_p5_only"
+            ),
             provider_name=provider_name,
             model=model,
             config_hash=config_hash,
@@ -265,7 +270,8 @@ async def _amain() -> int:
         dataset_cases=dataset_cases,
         sampled_cases=sampled_cases,
         phase=str(args.phase),
-        profile=PUBLIC_LONG_MEMORY_PROFILE,
+        profile=report_profile,
+        profiles=profile_list,
         seed=int(args.seed),
         sample_size=sample_size,
         answer_debug_dir=answer_debug_dir,
@@ -336,6 +342,13 @@ def _parse_prompt_variants(value: str) -> tuple[str, ...]:
     return variants
 
 
+def _parse_profiles(value: str) -> tuple[str, ...]:
+    profiles = tuple(item.strip() for item in value.split(",") if item.strip())
+    if not profiles:
+        raise SystemExit("--profile/--profiles must not be empty")
+    return profiles
+
+
 def _validate_fresh_checkpoint_args(
     *,
     checkpoint_jsonl: Path | None,
@@ -357,7 +370,7 @@ def _command_shape_hash(
     dataset_path: str,
     dataset_hash: str,
     phase: str,
-    profile: str,
+    profiles: tuple[str, ...],
     sampled_case_ids: tuple[str, ...],
     seed: int,
     sample_size: int,
@@ -374,7 +387,7 @@ def _command_shape_hash(
         "dataset_path": dataset_path,
         "dataset_hash": dataset_hash,
         "phase": phase,
-        "profile": profile,
+        "profiles": list(profiles),
         "sampled_case_ids": list(sampled_case_ids),
         "seed": seed,
         "sample_size": sample_size,
