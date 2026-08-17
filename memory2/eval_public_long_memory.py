@@ -334,6 +334,10 @@ def build_public_long_memory_report(
 ) -> dict[str, Any]:
     case_by_id = {case.source_id: case for case in sampled_cases}
     answer_debug_by_case = _load_answer_debug_by_case(answer_debug_dir)
+    provider_request_capture_metrics = _provider_request_capture_metrics(
+        provider_request_debug_dir,
+        answer_debug_by_case,
+    )
     case_reviews: list[dict[str, Any]] = []
     public_pass_count = 0
     manual_review_count = 0
@@ -434,6 +438,7 @@ def build_public_long_memory_report(
             "effective_evidence_token_budget": render_config.effective_token_budget,
             "capture_provider_request": capture_provider_request,
             "provider_request_debug_dir": str(provider_request_debug_dir or ""),
+            **provider_request_capture_metrics,
             "sampling": {
                 "strategy": "stratified_by_category",
                 "seed": seed,
@@ -463,6 +468,55 @@ def build_public_long_memory_report(
         "metrics": metrics,
         "case_reviews": case_reviews,
         "failure_records": list(getattr(benchmark_report, "failure_records", ())),
+    }
+
+
+def _provider_request_capture_metrics(
+    provider_request_debug_dir: Path | None,
+    answer_debug_by_case: dict[str, dict[str, Any]],
+) -> dict[str, int]:
+    if provider_request_debug_dir is None or not provider_request_debug_dir.exists():
+        return {
+            "provider_request_capture_file_count": 0,
+            "provider_request_snapshot_clean_count": 0,
+            "provider_request_snapshot_mutation_count": 0,
+        }
+    file_count = 0
+    clean_count = 0
+    mutation_count = 0
+    for path in sorted(provider_request_debug_dir.glob("*.json")):
+        file_count += 1
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            mutation_count += 1
+            continue
+        case_id = str(payload.get("case_id") or "")
+        answer_text = str(
+            answer_debug_by_case.get(case_id, {}).get("answer_text") or ""
+        ).strip()
+        provider_request = payload.get("provider_request")
+        messages = (
+            provider_request.get("messages")
+            if isinstance(provider_request, dict)
+            else None
+        )
+        mutated = False
+        if answer_text and isinstance(messages, list):
+            mutated = any(
+                isinstance(message, dict)
+                and str(message.get("role") or "") == "assistant"
+                and str(message.get("content") or "").strip() == answer_text
+                for message in messages
+            )
+        if mutated:
+            mutation_count += 1
+        else:
+            clean_count += 1
+    return {
+        "provider_request_capture_file_count": file_count,
+        "provider_request_snapshot_clean_count": clean_count,
+        "provider_request_snapshot_mutation_count": mutation_count,
     }
 
 

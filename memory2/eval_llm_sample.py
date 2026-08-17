@@ -249,7 +249,8 @@ class _RecordingProvider:
 
     async def chat(self, **kwargs: Any) -> LLMResponse:
         chat = getattr(self.provider, "chat")
-        self.requests.append(dict(kwargs))
+        snapshot = _snapshot_provider_request(kwargs)
+        self.requests.append(snapshot if isinstance(snapshot, dict) else {})
         try:
             response = await chat(**kwargs)
         except Exception as exc:
@@ -257,6 +258,27 @@ class _RecordingProvider:
             raise
         self.responses.append(response)
         return response
+
+
+def _snapshot_provider_request(value: object) -> object:
+    if isinstance(value, dict):
+        sanitized: dict[str, object] = {}
+        for key, item in value.items():
+            key_text = str(key)
+            lowered = key_text.lower()
+            if any(secret in lowered for secret in ("api_key", "authorization", "token")):
+                continue
+            if callable(item):
+                continue
+            sanitized[key_text] = _snapshot_provider_request(item)
+        return sanitized
+    if isinstance(value, list):
+        return [_snapshot_provider_request(item) for item in value]
+    if isinstance(value, tuple):
+        return [_snapshot_provider_request(item) for item in value]
+    if isinstance(value, (str, int, float, bool)) or value is None:
+        return value
+    return str(value)
 
 
 def answer_expectation_from_case(case: EvalCase) -> AnswerExpectation:

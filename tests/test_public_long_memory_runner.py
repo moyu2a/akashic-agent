@@ -138,6 +138,10 @@ def test_public_long_memory_runner_captures_sanitized_provider_requests(tmp_path
 
     request_files = sorted(request_dir.glob("*.json"))
     assert len(request_files) == 1
+    report = json.loads((out_dir / "public_long_memory_eval.json").read_text())
+    assert report["metrics"]["provider_request_capture_file_count"] == 1
+    assert report["metrics"]["provider_request_snapshot_clean_count"] == 1
+    assert report["metrics"]["provider_request_snapshot_mutation_count"] == 0
     payload = json.loads(request_files[0].read_text(encoding="utf-8"))
     assert payload["case_id"]
     assert payload["provider_request"]["model"] == "fake-model"
@@ -147,3 +151,8 @@ def test_public_long_memory_runner_captures_sanitized_provider_requests(tmp_path
     assert payload["evidence_block_text"]
     request_text = json.dumps(payload["provider_request"], ensure_ascii=False)
     assert "request_time=2024-02-03T00:00:00+00:00" in request_text
+    assert "green tea" not in [
+        message.get("content")
+        for message in payload["provider_request"]["messages"]
+        if message.get("role") == "assistant"
+    ]

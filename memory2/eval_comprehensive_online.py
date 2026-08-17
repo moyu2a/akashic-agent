@@ -37,6 +37,7 @@ from memory2.eval_llm_sample import (
     _memory_summaries_by_id,
     _query,
     _RecordingProvider,
+    _snapshot_provider_request,
     _scope,
     answer_expectation_from_case,
     score_answer_text,
@@ -2202,24 +2203,7 @@ def _write_provider_request_debug(
 
 
 def _sanitize_provider_request(value: object) -> object:
-    if isinstance(value, dict):
-        sanitized: dict[str, object] = {}
-        for key, item in value.items():
-            key_text = str(key)
-            lowered = key_text.lower()
-            if any(secret in lowered for secret in ("api_key", "authorization", "token")):
-                continue
-            if callable(item):
-                continue
-            sanitized[key_text] = _sanitize_provider_request(item)
-        return sanitized
-    if isinstance(value, list):
-        return [_sanitize_provider_request(item) for item in value]
-    if isinstance(value, tuple):
-        return [_sanitize_provider_request(item) for item in value]
-    if isinstance(value, (str, int, float, bool)) or value is None:
-        return value
-    return str(value)
+    return _snapshot_provider_request(value)
 
 
 def _failure_records(
