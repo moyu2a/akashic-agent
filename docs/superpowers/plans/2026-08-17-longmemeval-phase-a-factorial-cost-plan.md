@@ -123,7 +123,7 @@ Gate:
 
 ## Phase 7: Final Verification And Push
 
-- [ ] Run targeted eval tests.
-- [ ] Run full pytest if time allows.
-- [ ] Verify report assertions.
-- [ ] Push `feature/longmemeval-phase-a-factorial-cost`.
+- [x] Run targeted eval tests.
+- [ ] Run full pytest if time allows. Not run; targeted public LongMemEval/comprehensive/profile suite passed.
+- [x] Verify report assertions.
+- [x] Push `feature/longmemeval-phase-a-factorial-cost`.
