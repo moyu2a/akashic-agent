@@ -58,6 +58,37 @@ def test_system_path_contract_uses_tiered_governance_without_fixture_ids() -> No
     assert result.contract.accepted_candidate_risk_tier_counts["allow"] == 1
 
 
+def test_system_path_governance_runs_after_rrf_and_keeps_fused_trace() -> None:
+    result = build_system_path_safe_version_contract(
+        query="当前测试框架是什么？",
+        baseline_items=[],
+        route_trace={
+            "candidates_by_lane": {
+                "semantic": [
+                    _item("m-old", "旧版本使用 nose。", status="superseded"),
+                    _item("m-current", "当前版本使用 pytest。"),
+                ],
+                "keyword": [
+                    _item("m-old", "旧版本使用 nose。", status="superseded"),
+                ],
+                "provenance": [],
+                "graph": [],
+            }
+        },
+        replacements=[],
+        top_k=8,
+    )
+
+    fused_ids = [
+        str(item.get("id") or "")
+        for item in result.trace["fused_items"]
+    ]
+    assert fused_ids == ["m-old", "m-current"]
+    assert result.contract.allowed_evidence_ids == ("m-current",)
+    assert result.contract.deleted_evidence_ids == ("m-old",)
+    assert result.trace["post_rrf_candidate_governance"]["input_count"] == 2
+
+
 def test_system_path_render_hides_raw_forbidden_and_deleted_ids() -> None:
     result = build_system_path_safe_version_contract(
         query="测试偏好是什么？",
@@ -170,7 +201,7 @@ def test_system_path_contract_enforces_replacement_version_boundary() -> None:
     assert "用户旧偏好使用 nose。" not in text
 
 
-def test_system_path_contract_retains_downgrade_and_requires_review_candidates() -> None:
+def test_system_path_contract_separates_downgrade_and_requires_review_candidates() -> None:
     downgrade = _item(
         "m-downgrade",
         "用户可能偏好 pytest。",
@@ -198,13 +229,14 @@ def test_system_path_contract_retains_downgrade_and_requires_review_candidates()
         top_k=8,
     )
 
-    assert result.contract.allowed_evidence_ids == ("m-downgrade", "m-review")
+    assert result.contract.allowed_evidence_ids == ("m-downgrade",)
+    assert result.contract.uncertain_evidence_ids == ("m-review",)
     assert result.contract.downgrade_ids == ("m-downgrade",)
     assert result.contract.requires_review_ids == ("m-review",)
     assert result.contract.candidate_risk_tier_counts["downgrade"] == 1
     assert result.contract.candidate_risk_tier_counts["requires_review"] == 1
     assert result.contract.accepted_candidate_risk_tier_counts["downgrade"] == 1
-    assert result.contract.accepted_candidate_risk_tier_counts["requires_review"] == 1
+    assert "requires_review" not in result.contract.accepted_candidate_risk_tier_counts
 
 
 def test_system_path_answer_guidance_is_default_off() -> None:

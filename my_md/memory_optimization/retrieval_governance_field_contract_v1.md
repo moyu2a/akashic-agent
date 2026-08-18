@@ -72,6 +72,12 @@ scattered if/else blocks.
 `--enable-eval-mode`. In production, `protected_ids` must be empty in effect and
 every candidate must pass the same governance path as all other candidates.
 
+The production `Retriever` defaults to `enabled=true, mode=tiered`. The
+standalone `build_retrieval_routing_decision()` compatibility wrapper keeps
+candidate governance disabled because it represents lane routing only; callers
+that execute a retrieval request must apply governance after RRF through
+`apply_candidate_governance()`.
+
 ## 4. Lane Output Contract
 
 Each lane may retrieve differently, but each lane should output a compatible
@@ -155,6 +161,9 @@ Candidate governance classifies fused candidates into three output groups:
 | `allowed_candidates` | Candidates allowed to become answer evidence. |
 | `uncertain_candidates` | Candidates retained for audit/review context but not strong answer evidence. |
 | `dropped_candidates` | Candidates removed from evidence and prompt. |
+
+`requires_review` candidates are not returned in `allowed_candidates`; they are
+recorded in the trace and mapped to `uncertain_evidence_ids` for audit only.
 
 Risk labels include:
 

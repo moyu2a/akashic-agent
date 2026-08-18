@@ -85,7 +85,12 @@ class Retriever:
         self._high_inject_delta = max(0.0, float(high_inject_delta))
         self._hotness_alpha = max(0.0, min(1.0, float(hotness_alpha)))
         self._hotness_half_life_days = max(1.0, float(hotness_half_life_days))
-        self._candidate_governance = candidate_governance or CandidateGovernancePolicy()
+        # Production uses the safe tiered policy by default. Eval callers may
+        # still pass an explicit policy, including an eval-only protected one.
+        self._candidate_governance = candidate_governance or CandidateGovernancePolicy(
+            enabled=True,
+            mode="tiered",
+        )
 
     # 统一检索入口：recall_memory 和被动预检索都复用这条查库路径。
     async def retrieve(
@@ -198,6 +203,9 @@ class Retriever:
         ]
         trace["candidate_drop_counts"] = dict(
             cast(dict[str, int], trace["dropped_by_reason"])
+        )
+        trace["post_rrf_candidate_drop_counts"] = dict(
+            cast(dict[str, int], governance_trace["dropped_risks_by_reason"])
         )
         trace["graph_used"] = bool(graph_items)
         trace["candidates_by_lane"] = candidates_by_lane

@@ -17,6 +17,13 @@ Implemented changes:
 - `uncertain_candidates` are mapped to `uncertain_evidence_ids`.
 - RRF fused candidates now retain a `retrieval` metadata block.
 - Provenance lane is constrained to structured metadata-based recall.
+- Production `Retriever` now enables `tiered` candidate governance by default;
+  eval-only protected ids remain opt-in and are ignored outside eval mode.
+- System-path safe-version contracts and the tri candidate-governance report now
+  execute lane routing, RRF, and candidate governance as separate stages. Their
+  traces retain the pre-governance fused list and the post-RRF decision groups.
+- `requires_review` / uncertain candidates are no longer returned as allowed
+  answer evidence; they are exposed through `uncertain_evidence_ids` only.
 
 ## Code Changes
 
@@ -34,6 +41,9 @@ Implemented changes:
     `retrieval.lane_hits`, `retrieval.lane_ranks`, `retrieval.lane_scores`, and
     `retrieval.lane_submitted_counts`.
   - Provenance lane was narrowed to structured metadata based routing.
+  - Default production policy is `CandidateGovernancePolicy(enabled=True,
+    mode="tiered")`; the route-stage policy is explicitly disabled so filtering
+    cannot happen before RRF.
 
 - `memory2/retrieval_experiments.py`
   - RRF experiment helper now emits the same retrieval metadata block.
@@ -48,6 +58,12 @@ Implemented changes:
 
 - `memory2/eval_tri_candidate_governance.py`
   - Eval-only protected governance calls now explicitly set `eval_mode=True`.
+  - The report now compares governance policies on the same post-RRF fused
+    candidate list rather than applying policy before fusion.
+
+- `memory2/system_path_safe_version_contract.py`
+  - Migrated from pre-RRF governance to the production order:
+    `lane route -> RRF -> candidate governance -> evidence contract`.
 
 ## Tests
 

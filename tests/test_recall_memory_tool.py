@@ -561,16 +561,63 @@ async def test_retriever_applies_candidate_governance_after_rrf() -> None:
 
 
 @pytest.mark.asyncio
+async def test_retriever_default_policy_governs_after_rrf() -> None:
+    store = _FusionStore(
+        vector_groups=[
+            [
+                {
+                    "id": "active",
+                    "memory_type": "event",
+                    "summary": "当前支付方案",
+                    "score": 0.9,
+                    "source_ref": "cli:local:1",
+                    "scope_channel": "cli",
+                    "scope_chat_id": "local",
+                    "status": "active",
+                },
+                {
+                    "id": "old",
+                    "memory_type": "event",
+                    "summary": "旧支付方案",
+                    "score": 0.85,
+                    "source_ref": "cli:local:2",
+                    "scope_channel": "cli",
+                    "scope_chat_id": "local",
+                    "status": "superseded",
+                },
+            ]
+        ],
+        keyword_hits=[],
+    )
+    retriever = Retriever(cast(MemoryStore2, store), cast(Embedder, _StaticEmbedder()))
+
+    items, trace = await retriever.retrieve_with_trace(
+        "精确找一下支付方案",
+        top_k=3,
+        scope_channel="cli",
+        scope_chat_id="local",
+    )
+
+    assert trace["retrieval_plan"]["candidate_governance"]["enabled"] is True
+    assert [item["id"] for item in trace["fused_items"]] == ["active", "old"]
+    assert [item["id"] for item in items] == ["active"]
+    assert [item["candidate_id"] for item in trace["final_dropped_candidates"]] == [
+        "old"
+    ]
+
+
+@pytest.mark.asyncio
 async def test_retriever_returns_keyword_hits_when_vector_empty() -> None:
     store = _FusionStore(
         vector_groups=[[]],
         keyword_hits=[
-            {
-                "id": "kw1",
-                "memory_type": "event",
-                "summary": "用户处理过支付问题",
-                "keyword_score": 1.0,
-            }
+                {
+                    "id": "kw1",
+                    "memory_type": "event",
+                    "summary": "用户处理过支付问题",
+                    "keyword_score": 1.0,
+                    "source_ref": "fixture:keyword:1",
+                }
         ],
     )
     retriever = Retriever(cast(MemoryStore2, store), cast(Embedder, _StaticEmbedder()))
@@ -586,25 +633,28 @@ async def test_retriever_keeps_strong_vector_order_when_keyword_hits_are_low_ran
     None
 ):
     vector_hits: list[_MemoryHit] = [
+            {
+                "id": "vec1",
+                "memory_type": "event",
+                "summary": "高质量向量命中 1",
+                "score": 0.95,
+                "source_ref": "fixture:semantic:1",
+            },
         {
-            "id": "vec1",
-            "memory_type": "event",
-            "summary": "高质量向量命中 1",
-            "score": 0.95,
-        },
-        {
-            "id": "vec2",
-            "memory_type": "event",
-            "summary": "高质量向量命中 2",
-            "score": 0.9,
+                "id": "vec2",
+                "memory_type": "event",
+                "summary": "高质量向量命中 2",
+                "score": 0.9,
+                "source_ref": "fixture:semantic:2",
         },
     ]
     keyword_hits: list[_MemoryHit] = [
         {
-            "id": f"kw{i}",
-            "memory_type": "event",
-            "summary": f"低排名关键词命中 {i}",
-            "keyword_score": 1.0,
+                "id": f"kw{i}",
+                "memory_type": "event",
+                "summary": f"低排名关键词命中 {i}",
+                "keyword_score": 1.0,
+                "source_ref": f"fixture:keyword:{i}",
         }
         for i in range(12)
     ]

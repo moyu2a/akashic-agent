@@ -808,6 +808,9 @@ class DefaultMemoryEngine:
                     "requires_review_count": len(
                         safe_result.contract.requires_review_ids
                     ),
+                    "uncertain_evidence_count": len(
+                        safe_result.contract.uncertain_evidence_ids
+                    ),
                     "forbidden_boundary_count": len(
                         safe_result.contract.forbidden_boundary_ids
                     ),

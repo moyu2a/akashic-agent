@@ -1568,9 +1568,12 @@ def test_p6o4_post_check_shadow_does_not_change_scoring_or_provider_calls(
     assert record["answer_rule_passed"] is True
     assert record["memory_grounding_passed"] is True
     assert record["failures"] == []
-    assert shadow["needs_retry"] is True
-    assert "insufficient_evidence_fallback_missing" in shadow["retry_reasons"]
-    assert report.metrics["answer_post_check_shadow"]["needs_retry_count"] == 1
+    # An insufficient-evidence candidate is now review-only and never enters
+    # allowed evidence, so the post-check must not treat it as an omitted
+    # answerable fact.
+    assert shadow["needs_retry"] is False
+    assert shadow["retry_reasons"] == []
+    assert report.metrics["answer_post_check_shadow"]["needs_retry_count"] == 0
 
 
 def test_p6o4_non_governed_rows_have_no_post_check_shadow(

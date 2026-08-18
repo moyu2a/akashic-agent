@@ -8,9 +8,11 @@ from memory2.eval_comprehensive_online import evidence_ids_for_profile
 from memory2.eval_quantitative_cases import build_quantitative_eval_cases
 from memory2.retrieval_governance import (
     CandidateGovernancePolicy,
+    apply_candidate_governance,
     apply_retrieval_route,
     build_retrieval_routing_decision,
 )
+from memory2.retriever import _rrf_merge_lanes
 
 
 DEFAULT_TRI_FAILURE_ATTRIBUTION_JSON = (
@@ -57,41 +59,59 @@ def build_tri_candidate_governance_report(
         baseline_decision = build_retrieval_routing_decision(
             str(case.setup.get("query") or "")
         )
-        protected_decision = baseline_decision.with_candidate_governance(
+        candidates_by_lane = _fixture_candidates_by_lane(case, should_not_ids)
+        route_decision = baseline_decision.with_candidate_governance(
+            CandidateGovernancePolicy(enabled=False)
+        )
+        _routed, route_trace = apply_retrieval_route(
+            route_decision,
+            candidates_by_lane,
+        )
+        accepted_by_lane = route_trace.get("accepted_items_by_lane", {})
+        if not isinstance(accepted_by_lane, Mapping):
+            accepted_by_lane = {}
+        fused_candidates = _rrf_merge_lanes(
+            {
+                str(lane): [dict(item) for item in lane_items]
+                for lane, lane_items in accepted_by_lane.items()
+                if isinstance(lane_items, list)
+            },
+            top_n=max(8, len(candidates_by_lane.get("semantic", []))),
+        )
+        baseline_candidates = list(fused_candidates)
+        protected_candidates, protected_trace = apply_candidate_governance(
+            fused_candidates,
             CandidateGovernancePolicy(
                 enabled=True,
                 protected_expected_ids=expected_ids,
                 eval_mode=True,
-            )
+            ),
         )
-        unprotected_decision = baseline_decision.with_candidate_governance(
-            CandidateGovernancePolicy(enabled=True)
+        unprotected_candidates, unprotected_trace = apply_candidate_governance(
+            fused_candidates,
+            CandidateGovernancePolicy(enabled=True),
         )
-        candidates_by_lane = _fixture_candidates_by_lane(case, should_not_ids)
-        tiered_decision = baseline_decision.with_candidate_governance(
+        tiered_candidates, tiered_trace = apply_candidate_governance(
+            fused_candidates,
             CandidateGovernancePolicy(
                 enabled=True,
                 mode="tiered",
                 protected_expected_ids=expected_ids,
                 eval_mode=True,
-            )
+            ),
         )
-        baseline_candidates, _baseline_trace = apply_retrieval_route(
-            baseline_decision,
-            candidates_by_lane,
-        )
-        protected_candidates, protected_trace = apply_retrieval_route(
-            protected_decision,
-            candidates_by_lane,
-        )
-        unprotected_candidates, unprotected_trace = apply_retrieval_route(
-            unprotected_decision,
-            candidates_by_lane,
-        )
-        tiered_candidates, tiered_trace = apply_retrieval_route(
-            tiered_decision,
-            candidates_by_lane,
-        )
+        protected_trace = {
+            "scene": baseline_decision.scene,
+            **protected_trace,
+        }
+        unprotected_trace = {
+            "scene": baseline_decision.scene,
+            **unprotected_trace,
+        }
+        tiered_trace = {
+            "scene": baseline_decision.scene,
+            **tiered_trace,
+        }
         baseline_ids = _candidate_ids(baseline_candidates)
         protected_ids = _candidate_ids(protected_candidates)
         unprotected_ids = _candidate_ids(unprotected_candidates)

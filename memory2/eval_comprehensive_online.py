@@ -8,7 +8,7 @@ import time
 from dataclasses import asdict, dataclass, replace
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any, Mapping, Sequence
 from unittest.mock import MagicMock
 
 from agent.looping.core import AgentLoop
@@ -76,6 +76,7 @@ from memory2.eval_quantitative_uplift import (
 )
 from memory2.retrieval_governance import (
     CandidateGovernancePolicy,
+    apply_candidate_governance,
     apply_retrieval_route,
     build_retrieval_routing_decision,
 )
@@ -784,24 +785,29 @@ def governed_tri_trace_for_case(case: EvalCase) -> dict[str, object]:
         str(item) for item in case.expectations.get("should_not_recall_ids", ())
     }
     candidates = _ordered_candidates_for_governed_tri(case, tri_ids, should_not_ids)
-    decision = build_retrieval_routing_decision(str(case.setup.get("query") or ""))
-    decision = replace(
-        decision,
-        allowed_lanes=("semantic",),
-        max_per_lane={"semantic": max(len(candidates), 1)},
-        require_source_ref=False,
-        require_scope_match=False,
-        graph_enabled=False,
+    for fused_rank, candidate in enumerate(candidates, start=1):
+        candidate["retrieval"] = {
+            **dict(candidate.get("retrieval") or {}),
+            "fused_rank": fused_rank,
+        }
+    policy = CandidateGovernancePolicy(
+        enabled=True,
+        mode="tiered",
+        protected_expected_ids=expected_ids,
+        eval_mode=True,
     )
-    decision = decision.with_candidate_governance(
-        CandidateGovernancePolicy(
-            enabled=True,
-            mode="tiered",
-            protected_expected_ids=expected_ids,
-            eval_mode=True,
-        )
-    )
-    governed, trace = apply_retrieval_route(decision, {"semantic": candidates})
+    governed, trace = apply_candidate_governance(candidates, policy)
+    trace = {
+        **trace,
+        "fused_items": candidates,
+        "post_rrf_candidate_governance": trace,
+        "candidate_governance_mode": trace["candidate_governance_mode"],
+        "candidate_risk_tier_counts": _count_candidate_tiers(
+            trace.get("candidate_risk_tiers", ())
+        ),
+        "accepted_candidate_risk_tier_counts": _count_item_tiers(governed),
+        "tiered_deleted_risks_by_reason": trace["dropped_risks_by_reason"],
+    }
     ids = tuple(
         str(candidate.get("id") or candidate.get("memory_id") or "")
         for candidate in governed
@@ -923,6 +929,27 @@ def _ordered_candidates_for_governed_tri(
         candidate["should_not_recall"] = item_id in should_not_ids
         candidates.append(candidate)
     return candidates
+
+
+def _count_candidate_tiers(value: object) -> dict[str, int]:
+    if not isinstance(value, Sequence) or isinstance(value, (str, bytes)):
+        return {}
+    counts: dict[str, int] = {}
+    for record in value:
+        if not isinstance(record, Mapping):
+            continue
+        tier = str(record.get("tier") or "").strip()
+        if tier:
+            counts[tier] = counts.get(tier, 0) + 1
+    return counts
+
+
+def _count_item_tiers(items: Sequence[Mapping[str, object]]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for item in items:
+        tier = str(item.get("candidate_risk_tier") or "allow").strip()
+        counts[tier] = counts.get(tier, 0) + 1
+    return counts
 
 
 def profile_evidence_source(profile_name: str) -> str:

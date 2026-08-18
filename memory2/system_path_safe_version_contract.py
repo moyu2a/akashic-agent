@@ -6,9 +6,11 @@ from typing import Any
 
 from memory2.retrieval_governance import (
     CandidateGovernancePolicy,
+    apply_candidate_governance,
     apply_retrieval_route,
     build_retrieval_routing_decision,
 )
+from memory2.retriever import _rrf_merge_lanes
 from memory2.version_chain_experiments import build_version_chain_shadow_result
 
 
@@ -51,6 +53,7 @@ class SystemPathEvidenceContract:
     likely_relevant_evidence_ids: tuple[str, ...]
     downgrade_ids: tuple[str, ...]
     requires_review_ids: tuple[str, ...]
+    uncertain_evidence_ids: tuple[str, ...]
     stale_warning_ids: tuple[str, ...]
     conflict_warning_ids: tuple[str, ...]
     active_version_ids: tuple[str, ...]
@@ -88,10 +91,41 @@ def build_system_path_safe_version_contract(
         answer_guidance_enabled=answer_guidance_enabled,
     )
     candidates_by_lane = _candidate_lanes(route_trace, baseline_items)
-    decision = build_retrieval_routing_decision(query).with_candidate_governance(
-        CandidateGovernancePolicy(enabled=True, mode="tiered")
+    route_decision = build_retrieval_routing_decision(query).with_candidate_governance(
+        CandidateGovernancePolicy(enabled=False)
     )
-    accepted, trace = apply_retrieval_route(decision, candidates_by_lane)
+    _routed, route_trace = apply_retrieval_route(route_decision, candidates_by_lane)
+    accepted_by_lane = route_trace.get("accepted_items_by_lane", {})
+    if not isinstance(accepted_by_lane, Mapping):
+        accepted_by_lane = {}
+    fused_items = _rrf_merge_lanes(
+        {
+            str(lane): [dict(item) for item in lane_items]
+            for lane, lane_items in accepted_by_lane.items()
+            if isinstance(lane_items, Sequence)
+            and not isinstance(lane_items, (str, bytes))
+        },
+        top_n=max(1, int(top_k)),
+    )
+    governance_policy = CandidateGovernancePolicy(enabled=True, mode="tiered")
+    accepted, governance_trace = apply_candidate_governance(
+        fused_items,
+        governance_policy,
+    )
+    trace = dict(route_trace)
+    trace["fused_items"] = fused_items
+    trace["post_rrf_candidate_governance"] = governance_trace
+    trace["final_allowed_candidates"] = governance_trace["allowed_candidates"]
+    trace["final_uncertain_candidates"] = governance_trace["uncertain_candidates"]
+    trace["final_dropped_candidates"] = governance_trace["dropped_candidates"]
+    trace["candidate_governance_mode"] = governance_trace["candidate_governance_mode"]
+    trace["candidate_risk_tier_counts"] = _count_tier_records(
+        governance_trace.get("candidate_risk_tiers", ())
+    )
+    trace["accepted_candidate_risk_tier_counts"] = _count_tiers(accepted)
+    trace["tiered_deleted_risks_by_reason"] = governance_trace[
+        "dropped_risks_by_reason"
+    ]
     accepted = accepted[: max(1, int(top_k))]
     items_by_id = _item_by_id(candidates_by_lane)
     allowed_ids = _ids(accepted)
@@ -100,7 +134,7 @@ def build_system_path_safe_version_contract(
         replacements=[dict(item) for item in replacements],
         recalled_items=[dict(item) for item in accepted],
     )
-    records = _tier_records(trace)
+    records = _tier_records(governance_trace)
     deleted_ids = tuple(
         item_id
         for item_id, record in records.items()
@@ -121,6 +155,11 @@ def build_system_path_safe_version_contract(
         item_id
         for item_id in allowed_ids
         if str(records.get(item_id, {}).get("tier") or "") == "requires_review"
+    )
+    uncertain_ids = _ids(
+        governance_trace.get("uncertain_candidates", ())
+        if isinstance(governance_trace.get("uncertain_candidates"), Sequence)
+        else ()
     )
     conflict_warning_ids = tuple(
         item_id
@@ -187,7 +226,8 @@ def build_system_path_safe_version_contract(
         allowed_evidence_ids=allowed_ids,
         likely_relevant_evidence_ids=likely_ids,
         downgrade_ids=downgrade_ids,
-        requires_review_ids=requires_review_ids,
+        requires_review_ids=uncertain_ids or requires_review_ids,
+        uncertain_evidence_ids=uncertain_ids,
         stale_warning_ids=stale_ids,
         conflict_warning_ids=conflict_warning_ids,
         active_version_ids=active_ids,
@@ -229,6 +269,7 @@ def build_system_path_safe_version_contract(
         ),
         accepted_items=tuple(dict(item) for item in accepted),
         trace={
+            **trace,
             "safe_version_governed": system_path_contract_to_dict(
                 contract,
                 answer_guidance_enabled=guidance_enabled,
@@ -271,6 +312,7 @@ def render_system_path_evidence_contract_block(
         "active_version_count: " + str(len(contract.active_version_ids)),
         "stale_warning_count: " + str(len(contract.stale_warning_ids)),
         "conflict_warning_count: " + str(len(contract.conflict_warning_ids)),
+        "uncertain_evidence_count: " + str(len(contract.uncertain_evidence_ids)),
         "forbidden_boundary_count: " + str(len(contract.forbidden_boundary_ids)),
         "deleted_evidence_count: " + str(len(contract.deleted_evidence_ids)),
         "insufficient_evidence_fallback: "
@@ -402,6 +444,7 @@ def system_path_contract_to_dict(
         "likely_relevant_evidence_ids": list(contract.likely_relevant_evidence_ids),
         "downgrade_ids": list(contract.downgrade_ids),
         "requires_review_ids": list(contract.requires_review_ids),
+        "uncertain_evidence_ids": list(contract.uncertain_evidence_ids),
         "stale_warning_ids": list(contract.stale_warning_ids),
         "conflict_warning_ids": list(contract.conflict_warning_ids),
         "active_version_ids": list(contract.active_version_ids),
@@ -545,6 +588,27 @@ def _int_dict(value: object) -> dict[str, int]:
     if not isinstance(value, Mapping):
         return {}
     return {str(key): int(count or 0) for key, count in value.items()}
+
+
+def _count_tier_records(value: object) -> dict[str, int]:
+    if not isinstance(value, Sequence) or isinstance(value, (str, bytes)):
+        return {}
+    counts: dict[str, int] = {}
+    for record in value:
+        if not isinstance(record, Mapping):
+            continue
+        tier = str(record.get("tier") or "").strip()
+        if tier:
+            counts[tier] = counts.get(tier, 0) + 1
+    return counts
+
+
+def _count_tiers(items: Sequence[Mapping[str, object]]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for item in items:
+        tier = str(item.get("candidate_risk_tier") or "allow").strip()
+        counts[tier] = counts.get(tier, 0) + 1
+    return counts
 
 
 def _evidence_lines(items: Sequence[Mapping[str, Any]]) -> tuple[str, ...]:

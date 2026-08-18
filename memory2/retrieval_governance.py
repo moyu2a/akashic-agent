@@ -17,7 +17,12 @@ _LOW_CONFIDENCE_PHRASES = (
     "未找到",
     "不确定",
 )
-_DELETE_RISKS = ("forbidden_candidate", "superseded_candidate", "scope_mismatch")
+_DELETE_RISKS = (
+    "forbidden_candidate",
+    "superseded_candidate",
+    "expired_candidate",
+    "scope_mismatch",
+)
 _DOWNGRADE_RISKS = ("weak_source_ref", "low_confidence")
 _REQUIRES_REVIEW_RISKS = (
     "conflict_candidate",
@@ -28,7 +33,7 @@ _REQUIRES_REVIEW_RISKS = (
 
 @dataclass(frozen=True)
 class CandidateGovernancePolicy:
-    """可选候选治理策略；默认关闭以保持旧路由行为。"""
+    """候选治理决策表；生产默认由 ``Retriever`` 选择 tiered 模式。"""
 
     enabled: bool = False
     mode: str = "strict"
@@ -42,6 +47,7 @@ class CandidateGovernancePolicy:
     drop_risks: tuple[str, ...] = (
         "forbidden_candidate",
         "superseded_candidate",
+        "expired_candidate",
         "conflict_candidate",
         "scope_mismatch",
         "missing_source_ref",
@@ -51,6 +57,7 @@ class CandidateGovernancePolicy:
     fatal_risks: tuple[str, ...] = (
         "forbidden_candidate",
         "superseded_candidate",
+        "expired_candidate",
         "conflict_candidate",
         "scope_mismatch",
     )
@@ -71,6 +78,7 @@ class CandidateGovernancePolicy:
         if explicit_drop_rules and self.fatal_risks == (
             "forbidden_candidate",
             "superseded_candidate",
+            "expired_candidate",
             "conflict_candidate",
             "scope_mismatch",
         ):
@@ -489,9 +497,11 @@ def apply_candidate_governance(
     uncertain_candidates: list[dict[str, Any]] = []
     dropped_candidates: list[dict[str, object]] = []
     dropped_risks_by_reason: dict[str, int] = {}
+    would_drop_protected_by_reason: dict[str, int] = {}
     protected_risky_candidate_count = 0
     accepted_risky_candidate_count = 0
 
+    protected_ids = set(policy.protected_ids)
     for candidate in candidates:
         item = dict(candidate)
         if not policy.enabled:
@@ -502,7 +512,7 @@ def apply_candidate_governance(
         candidate_risk_tiers.append(tier_record)
         risks = tuple(str(risk) for risk in tier_record["risks"])
         candidate_id = _candidate_id(item)
-        protected = candidate_id in set(policy.protected_ids)
+        protected = candidate_id in protected_ids
         tier = str(tier_record["tier"])
 
         if tier == "delete":
@@ -513,6 +523,8 @@ def apply_candidate_governance(
                 item["candidate_risks"] = risks
                 allowed_candidates.append(item)
                 protected_risky_candidate_count += 1
+                for risk in risks:
+                    _count(would_drop_protected_by_reason, risk)
                 continue
             dropped_candidates.append(
                 {
@@ -534,15 +546,31 @@ def apply_candidate_governance(
         else:
             allowed_candidates.append(item)
 
+    candidate_risk_tier_counts: dict[str, int] = {}
+    for record in candidate_risk_tiers:
+        tier = str(record.get("tier") or "")
+        if tier:
+            _count(candidate_risk_tier_counts, tier)
+    accepted_candidate_risk_tier_counts: dict[str, int] = {}
+    for item in allowed_candidates:
+        _count(
+            accepted_candidate_risk_tier_counts,
+            str(item.get("candidate_risk_tier") or "allow"),
+        )
+
     return allowed_candidates, {
         "candidate_governance_enabled": policy.enabled,
         "candidate_governance_mode": policy.mode,
         "candidate_governance": policy.to_dict(),
         "candidate_risk_tiers": candidate_risk_tiers,
+        "candidate_risk_tier_counts": candidate_risk_tier_counts,
+        "accepted_candidate_risk_tier_counts": accepted_candidate_risk_tier_counts,
+        "tiered_deleted_risks_by_reason": dict(dropped_risks_by_reason),
         "allowed_candidates": allowed_candidates,
         "uncertain_candidates": uncertain_candidates,
         "dropped_candidates": dropped_candidates,
         "dropped_risks_by_reason": dropped_risks_by_reason,
+        "would_drop_protected_by_reason": would_drop_protected_by_reason,
         "protected_risky_candidate_count": protected_risky_candidate_count,
         "accepted_risky_candidate_count": accepted_risky_candidate_count,
         "input_count": len(candidates),
@@ -558,6 +586,8 @@ def classify_candidate_risks(candidate: Mapping[str, Any]) -> tuple[str, ...]:
         risks.append("forbidden_candidate")
     if str(candidate.get("status") or "").lower() == "superseded":
         risks.append("superseded_candidate")
+    if str(candidate.get("status") or "").lower() == "expired":
+        risks.append("expired_candidate")
     if _is_conflict_candidate(candidate):
         risks.append("conflict_candidate")
     if candidate.get("scope_match") is False:

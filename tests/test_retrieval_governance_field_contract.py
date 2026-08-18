@@ -213,6 +213,12 @@ def test_post_rrf_candidate_governance_separates_allowed_uncertain_and_dropped()
             "risks": ("superseded_candidate",),
         },
     ]
+    assert trace["candidate_risk_tier_counts"] == {
+        "allow": 1,
+        "requires_review": 1,
+        "delete": 1,
+    }
+    assert trace["accepted_candidate_risk_tier_counts"] == {"allow": 1}
 
 
 def test_rrf_merge_lanes_attaches_retrieval_metadata() -> None:
