@@ -9,6 +9,7 @@ evidence rendering, and prompt contract behavior.
 Implemented changes:
 
 - `score_threshold` now remains semantic-lane-only in the documented contract.
+- `retrieval_plan` is now a real runtime object and appears in retriever trace.
 - `candidate_governance` now has explicit decision-table fields.
 - `protected_ids` are eval-only in effect.
 - `uncertain_candidates` are mapped to `uncertain_evidence_ids`.
@@ -24,6 +25,7 @@ Implemented changes:
   - Governance traces now expose allowed, uncertain, and dropped candidate groups.
 
 - `memory2/retriever.py`
+  - `retrieve_with_trace()` now builds and records `retrieval_plan`.
   - RRF fused candidates now carry `retrieval.fused_rank`, `retrieval.rrf_score`,
     `retrieval.lane_hits`, `retrieval.lane_ranks`, `retrieval.lane_scores`, and
     `retrieval.lane_submitted_counts`.

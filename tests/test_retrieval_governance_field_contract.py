@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import datetime
+
 from memory2.eval_answer_contract import (
     ProductionEvidenceContract,
     build_production_governed_tri_evidence_contract,
@@ -16,6 +18,7 @@ from memory2.retrieval_experiments import (
 from memory2.retrieval_governance import (
     CandidateGovernancePolicy,
     apply_retrieval_route,
+    build_retrieval_plan,
     build_retrieval_routing_decision,
 )
 from memory2.retriever import _rrf_merge_lanes
@@ -58,6 +61,34 @@ def test_production_mode_ignores_protected_ids_for_strict_governance() -> None:
         "weak_source_ref": 1,
         "low_confidence": 1,
     }
+
+
+def test_build_retrieval_plan_merges_request_and_route_fields() -> None:
+    plan = build_retrieval_plan(
+        "这条记忆的来源是什么？",
+        scope_channel="telegram",
+        scope_chat_id="room-1",
+        memory_types=("event", "profile"),
+        top_k=5,
+        aux_queries=("来源",),
+        score_threshold=0.55,
+        time_start=datetime(2026, 8, 1),
+        time_end=datetime(2026, 8, 18),
+        keyword_enabled=True,
+    )
+
+    assert plan.query == "这条记忆的来源是什么？"
+    assert plan.scope_channel == "telegram"
+    assert plan.scope_chat_id == "room-1"
+    assert plan.memory_types == ("event", "profile")
+    assert plan.top_k == 5
+    assert plan.score_threshold == 0.55
+    assert plan.scene == "source_lookup"
+    assert plan.allowed_lanes == ("provenance", "keyword", "semantic")
+    assert plan.require_source_ref is True
+    assert plan.require_scope_match is True
+    assert plan.candidate_governance.enabled is False
+    assert plan.to_routing_decision().scene == plan.scene
 
 
 def test_eval_mode_allows_protected_ids_for_non_fatal_strict_governance() -> None:

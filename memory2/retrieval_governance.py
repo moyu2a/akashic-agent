@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+from datetime import datetime
 from dataclasses import asdict, dataclass, field
 import re
 from typing import Any
@@ -97,6 +98,67 @@ class CandidateGovernancePolicy:
 
 
 @dataclass(frozen=True)
+class RetrievalPlan:
+    query: str
+    scope_channel: str | None = None
+    scope_chat_id: str | None = None
+    memory_types: tuple[str, ...] = ()
+    top_k: int = 8
+    aux_queries: tuple[str, ...] = ()
+    time_start: datetime | None = None
+    time_end: datetime | None = None
+    score_threshold: float | None = None
+    keyword_enabled: bool = True
+    scene: str = "unknown"
+    allowed_lanes: tuple[str, ...] = ()
+    max_per_lane: dict[str, int] = field(default_factory=dict)
+    require_source_ref: bool = False
+    require_scope_match: bool = False
+    graph_enabled: bool = False
+    drop_low_confidence: bool = True
+    candidate_governance: CandidateGovernancePolicy = field(
+        default_factory=CandidateGovernancePolicy
+    )
+    reason: str = ""
+
+    def to_routing_decision(self) -> "RetrievalRoutingDecision":
+        return RetrievalRoutingDecision(
+            scene=self.scene,
+            allowed_lanes=self.allowed_lanes,
+            max_per_lane=dict(self.max_per_lane),
+            require_source_ref=self.require_source_ref,
+            require_scope_match=self.require_scope_match,
+            graph_enabled=self.graph_enabled,
+            drop_low_confidence=self.drop_low_confidence,
+            reason=self.reason,
+            candidate_governance=self.candidate_governance,
+        )
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "query": self.query,
+            "scope_channel": self.scope_channel,
+            "scope_chat_id": self.scope_chat_id,
+            "memory_types": list(self.memory_types),
+            "top_k": self.top_k,
+            "aux_queries": list(self.aux_queries),
+            "time_start": self.time_start.isoformat() if self.time_start else None,
+            "time_end": self.time_end.isoformat() if self.time_end else None,
+            "score_threshold": self.score_threshold,
+            "keyword_enabled": self.keyword_enabled,
+            "scene": self.scene,
+            "allowed_lanes": list(self.allowed_lanes),
+            "max_per_lane": dict(self.max_per_lane),
+            "require_source_ref": self.require_source_ref,
+            "require_scope_match": self.require_scope_match,
+            "graph_enabled": self.graph_enabled,
+            "drop_low_confidence": self.drop_low_confidence,
+            "candidate_governance": self.candidate_governance.to_dict(),
+            "reason": self.reason,
+        }
+
+
+@dataclass(frozen=True)
 class RetrievalRoutingDecision:
     """某个查询可使用的召回通道及其治理约束。"""
 
@@ -135,6 +197,45 @@ class RetrievalRoutingDecision:
         )
 
 
+def build_retrieval_plan(
+    query: str,
+    *,
+    scope_channel: str | None = None,
+    scope_chat_id: str | None = None,
+    memory_types: Sequence[str] | None = None,
+    top_k: int | None = None,
+    aux_queries: Sequence[str] | None = None,
+    time_start: datetime | None = None,
+    time_end: datetime | None = None,
+    score_threshold: float | None = None,
+    keyword_enabled: bool = True,
+    candidate_governance: CandidateGovernancePolicy | None = None,
+) -> RetrievalPlan:
+    scene = classify_retrieval_scene(query)
+    policy = _SCENE_POLICIES[scene]
+    return RetrievalPlan(
+        query=query,
+        scope_channel=scope_channel,
+        scope_chat_id=scope_chat_id,
+        memory_types=tuple(str(item) for item in (memory_types or ())),
+        top_k=max(1, int(top_k)) if top_k is not None else 8,
+        aux_queries=tuple(str(item) for item in (aux_queries or ())),
+        time_start=time_start,
+        time_end=time_end,
+        score_threshold=score_threshold,
+        keyword_enabled=bool(keyword_enabled),
+        scene=scene,
+        allowed_lanes=tuple(str(item) for item in policy["allowed_lanes"]),
+        max_per_lane=dict(policy["max_per_lane"]),
+        require_source_ref=bool(policy["require_source_ref"]),
+        require_scope_match=bool(policy["require_scope_match"]),
+        graph_enabled=bool(policy["graph_enabled"]),
+        drop_low_confidence=bool(policy["drop_low_confidence"]),
+        candidate_governance=candidate_governance or CandidateGovernancePolicy(),
+        reason=str(policy["reason"]),
+    )
+
+
 def classify_retrieval_scene(query: str) -> str:
     text = _normalize_query(query)
     if _contains_any(text, ("来源", "出处", "source", "哪条消息", "消息记录")):
@@ -166,9 +267,7 @@ def classify_retrieval_scene(query: str) -> str:
 
 
 def build_retrieval_routing_decision(query: str) -> RetrievalRoutingDecision:
-    scene = classify_retrieval_scene(query)
-    policy = _SCENE_POLICIES[scene]
-    return RetrievalRoutingDecision(scene=scene, **policy)
+    return build_retrieval_plan(query).to_routing_decision()
 
 
 def apply_retrieval_route(

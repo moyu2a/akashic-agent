@@ -15,7 +15,7 @@ from memory2.store import MemoryStore2
 from memory2.embedder import Embedder
 from memory2.retrieval_governance import (
     apply_retrieval_route,
-    build_retrieval_routing_decision,
+    build_retrieval_plan,
 )
 
 logger = logging.getLogger(__name__)
@@ -129,6 +129,16 @@ class Retriever:
     ) -> tuple[list[dict], dict[str, object]]:
         """返回治理后的召回结果及其路由 trace；不改变 ``retrieve`` 的旧契约。"""
         actual_top_k = self._top_k if top_k is None else max(1, int(top_k))
+        plan = build_retrieval_plan(
+            query,
+            scope_channel=scope_channel,
+            scope_chat_id=scope_chat_id,
+            memory_types=memory_types,
+            top_k=actual_top_k,
+            aux_queries=aux_queries,
+            score_threshold=score_threshold,
+            keyword_enabled=keyword_enabled,
+        )
         semantic_items, keyword_items = await self._retrieve_semantic_keyword_lanes(
             query,
             memory_types=memory_types,
@@ -142,7 +152,7 @@ class Retriever:
             time_end=time_end,
             keyword_enabled=keyword_enabled,
         )
-        decision = build_retrieval_routing_decision(query)
+        decision = plan.to_routing_decision()
         provenance_items, graph_items = self._retrieve_evidence_lanes(
             query,
             decision_graph_enabled=decision.graph_enabled,
@@ -165,6 +175,7 @@ class Retriever:
         _accepted, trace = apply_retrieval_route(decision, candidates_by_lane)
         accepted_by_lane = cast(dict[str, list[dict]], trace["accepted_items_by_lane"])
         items = _rrf_merge_lanes(accepted_by_lane, top_n=actual_top_k)
+        trace["retrieval_plan"] = plan.to_dict()
         trace["candidate_drop_counts"] = dict(
             cast(dict[str, int], trace["dropped_by_reason"])
         )
