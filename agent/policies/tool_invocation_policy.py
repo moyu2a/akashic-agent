@@ -61,6 +61,7 @@ class ToolInvocationContext:
     arguments: Mapping[str, Any] = field(default_factory=dict)
     registered: bool = True
     registry_risk: str = "unknown"
+    registry_resource_scope: str = "unknown"
     capabilities: frozenset[str] = field(default_factory=frozenset)
     source: ToolInvocationSource = "passive"
     session_key: str = ""
@@ -174,6 +175,7 @@ class ToolInvocationPolicyEngine:
             RiskStrategyContext(
                 tool_name=context.tool_name,
                 registry_risk=risk,
+                registry_resource_scope=context.registry_resource_scope,
                 capabilities=context.capabilities,
                 source=context.source,
                 task_execution_active=context.task_execution_active,
@@ -188,6 +190,7 @@ class ToolInvocationPolicyEngine:
                 policy_name=self.policy_name,
                 metadata={
                     **metadata,
+                    **dict(strategy_decision.metadata),
                     "risk_strategy": strategy_decision.to_trace_metadata(),
                     "approval_scope": strategy_decision.approval_scope,
                     "approval_user_prompt": strategy_decision.user_prompt,
@@ -213,6 +216,7 @@ def _base_metadata(
     return {
         "tool_name": context.tool_name,
         "risk": risk,
+        "resource_scope": context.registry_resource_scope,
         "source": context.source,
         "registered": context.registered,
         "capabilities": sorted(context.capabilities),
@@ -244,13 +248,23 @@ def _task_execution_work_decision(
             policy_name=policy_name,
             metadata=metadata,
         )
-    if context.tool_name != "shell" and risk == "read-only":
+    if context.tool_name != "shell" and (
+        risk == "read-only"
+        or (risk == "write" and context.registry_resource_scope == "ephemeral")
+    ):
         return ToolInvocationDecision(
             action="allow",
-            reason="tool_invocation_task_execution_read_only_allowed",
+            reason=(
+                "tool_invocation_task_execution_read_only_allowed"
+                if risk == "read-only"
+                else "tool_invocation_task_execution_write_ephemeral_allowed"
+            ),
             risk=risk,
             policy_name=policy_name,
-            metadata=metadata,
+            metadata={
+                **metadata,
+                "approval_skipped_by_resource_scope": risk == "write",
+            },
         )
     return ToolInvocationDecision(
         action="defer",

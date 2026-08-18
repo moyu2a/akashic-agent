@@ -20,6 +20,7 @@ class ToolAccessContext:
     registered_tools: frozenset[str] = frozenset()
     tool_capabilities: Mapping[str, frozenset[str]] = field(default_factory=dict)
     tool_risks: Mapping[str, str] = field(default_factory=dict)
+    tool_resource_scopes: Mapping[str, str] = field(default_factory=dict)
     tool_discovery_enabled: bool = True
 
 

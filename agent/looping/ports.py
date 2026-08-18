@@ -42,10 +42,10 @@ class LLMConfig:
 @dataclass
 class MemoryConfig:
     window: int = 40
-    safe_version_governed_mode: str = "off"
-    safe_version_governed_replace_allowed: bool = False
-    safe_version_answer_guidance_enabled: bool = False
-    safe_version_answer_prompt_variant: str = "standard"
+    safe_version_governed_mode: str = "replace"
+    safe_version_governed_replace_allowed: bool = True
+    safe_version_answer_guidance_enabled: bool = True
+    safe_version_answer_prompt_variant: str = "guided"
 
     @property
     def keep_count(self) -> int:
@@ -104,3 +104,5 @@ class AgentLoopConfig:
     llm: LLMConfig = field(default_factory=LLMConfig)
     memory: MemoryConfig = field(default_factory=MemoryConfig)
     optimization: OptimizationConfig = field(default_factory=OptimizationConfig)
+    tool_governance_mode: str = "unified"
+    tool_governance_timeout_ms: int = 500
