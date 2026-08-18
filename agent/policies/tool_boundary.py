@@ -246,6 +246,9 @@ class TurnToolBoundaryManager:
                 tool_name=tool_name,
                 registered=registered,
                 registry_risk=context.access_context.tool_risks.get(tool_name, "unknown"),
+                registry_resource_scope=context.access_context.tool_resource_scopes.get(
+                    tool_name, "unknown"
+                ),
                 registry_capabilities=context.access_context.tool_capabilities.get(
                     tool_name,
                     frozenset(),
@@ -528,6 +531,9 @@ class TurnToolBoundaryManager:
                 "matched_terms": list(context.access_plan.matched_terms),
                 "filter_error": context.access_plan.filter_error,
                 "policy_metadata": dict(context.access_plan.policy_metadata),
+                "tool_resource_scopes": dict(
+                    context.access_context.tool_resource_scopes
+                ),
             },
             "decisions": list(context.decisions),
             "ledger_summary": context.ledger.summary(),

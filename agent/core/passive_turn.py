@@ -413,6 +413,8 @@ class AgentCoreDeps:
     outbound_port: "OutboundPort | None" = None
     history_window: int = 500
     optimization: OptimizationConfig = field(default_factory=OptimizationConfig)
+    tool_governance_mode: str = "unified"
+    tool_governance_timeout_ms: int = 500
     before_turn_plugin_modules: list[object] | None = None
     before_reasoning_plugin_modules: list[object] | None = None
     before_step_plugin_modules: list[object] | None = None
@@ -904,6 +906,8 @@ class DefaultReasoner(Reasoner):
         task_plan_service: "TaskPlanService | None" = None,
         task_execution_coordinator: TaskExecutionRuntimeCoordinator | None = None,
         optimization: OptimizationConfig | None = None,
+        tool_governance_mode: str = "unified",
+        tool_governance_timeout_ms: int = 500,
     ) -> None:
         self._llm = llm
         self._llm_config = llm_config
@@ -926,7 +930,11 @@ class DefaultReasoner(Reasoner):
         self._tool_search_tool: ToolSearchTool | None = (
             _ts if isinstance(_ts, ToolSearchTool) else None
         )
-        self._tool_executor = ToolExecutor([])
+        self._tool_executor = ToolExecutor(
+            [],
+            governance_mode=tool_governance_mode,
+            governance_timeout_ms=tool_governance_timeout_ms,
+        )
         self._tool_boundary = TurnToolBoundaryManager()
         self._turn_completion = TurnCompletionController()
         self._evidence_contract = EvidenceContractManager()
@@ -1130,6 +1138,16 @@ class DefaultReasoner(Reasoner):
             if callable(get_tool_risks)
             else {}
         )
+        get_tool_resource_scopes = getattr(
+            self._tools,
+            "get_resource_scopes_by_name",
+            None,
+        )
+        tool_resource_scopes: Mapping[str, str] = (
+            cast(Mapping[str, str], get_tool_resource_scopes())
+            if callable(get_tool_resource_scopes)
+            else {}
+        )
         preloaded: set[str] | None = None
         tool_boundary_context: ToolBoundaryContext | None = None
         visible_names: set[str] | None = None
@@ -1154,6 +1172,7 @@ class DefaultReasoner(Reasoner):
             registered_tools=registered_tools,
             tool_capabilities=tool_capabilities,
             tool_risks=tool_risks,
+            tool_resource_scopes=tool_resource_scopes,
             tool_discovery_enabled=self._tool_search_enabled,
         )
         candidate_boundary_context = self._tool_boundary.build_context(
@@ -2156,14 +2175,30 @@ class DefaultReasoner(Reasoner):
                         if runtime_call_decision is not None
                         else None
                     )
+                    protected_context = {
+                        "_session_key": tool_event_session_key,
+                        "_channel": tool_event_channel,
+                        "_chat_id": tool_event_chat_id,
+                    }
+                    if execution_context is None:
+                        execution_context = ToolExecutionContext(
+                            protected=protected_context
+                        )
+                    else:
+                        execution_context = ToolExecutionContext(
+                            protected={
+                                **protected_context,
+                                **dict(execution_context.protected),
+                            },
+                            propagate_tool_errors=
+                            execution_context.propagate_tool_errors,
+                        )
                     execution_contract = (
                         tool_boundary_context.access_plan.task_execution_contract
                         if tool_boundary_context is not None
                         else None
                     )
                     if (
-                        execution_context is None
-                        and
                         tool_call.name == "tool_search"
                         and execution_contract is not None
                         and execution_contract.active
@@ -2171,9 +2206,11 @@ class DefaultReasoner(Reasoner):
                     ):
                         execution_context = ToolExecutionContext(
                             protected={
-                                "_session_key": tool_event_session_key,
+                                **dict(execution_context.protected),
                                 "_task_execution_read_only": True,
-                            }
+                            },
+                            propagate_tool_errors=
+                            execution_context.propagate_tool_errors,
                         )
 
                     async def _invoke_tool(
@@ -2197,6 +2234,14 @@ class DefaultReasoner(Reasoner):
                             "registered": self._tools.has_tool(tool_call.name),
                             "registry_risk": (
                                 tool_boundary_context.access_context.tool_risks.get(
+                                    tool_call.name,
+                                    "unknown",
+                                )
+                                if tool_boundary_context is not None
+                                else "unknown"
+                            ),
+                            "resource_scope": (
+                                tool_boundary_context.access_context.tool_resource_scopes.get(
                                     tool_call.name,
                                     "unknown",
                                 )
@@ -2227,6 +2272,9 @@ class DefaultReasoner(Reasoner):
                         registered=bool(invocation_metadata.get("registered")),
                         registry_risk=str(
                             invocation_metadata.get("registry_risk", "unknown")
+                        ),
+                        registry_resource_scope=str(
+                            invocation_metadata.get("resource_scope", "unknown")
                         ),
                         registry_capabilities=_invocation_capabilities(
                             invocation_metadata.get("registry_capabilities", ())

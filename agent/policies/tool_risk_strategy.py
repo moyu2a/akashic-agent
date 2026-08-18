@@ -17,6 +17,7 @@ _TASK_PLAN_CONTROL_CAPABILITIES = frozenset(
 class RiskStrategyContext:
     tool_name: str
     registry_risk: str = "unknown"
+    registry_resource_scope: str = "unknown"
     capabilities: frozenset[str] = field(default_factory=frozenset)
     source: str = "passive"
     task_execution_active: bool = False
@@ -60,6 +61,7 @@ class DefaultToolRiskStrategy:
 
     def evaluate(self, context: RiskStrategyContext) -> RiskStrategyDecision:
         risk = context.registry_risk or "unknown"
+        resource_scope = context.registry_resource_scope or "unknown"
         if context.source != "passive":
             return RiskStrategyDecision(
                 action="not_applicable",
@@ -79,32 +81,47 @@ class DefaultToolRiskStrategy:
                 risk=risk,
                 approval_scope="tool_call",
                 user_prompt="This shell command needs explicit approval before execution.",
+                metadata={"registry_resource_scope": resource_scope},
             )
         if context.capabilities & _TASK_PLAN_CONTROL_CAPABILITIES:
             return RiskStrategyDecision(
                 action="allow",
                 reason="risk_strategy_task_plan_control_allowed",
                 risk=risk,
+                metadata={"registry_resource_scope": resource_scope},
             )
         if risk == "destructive":
             return RiskStrategyDecision(
                 action="deny",
                 reason="risk_strategy_destructive_denied",
                 risk=risk,
+                metadata={"registry_resource_scope": resource_scope},
             )
         if risk == "read-only":
             return RiskStrategyDecision(
                 action="allow",
                 reason="risk_strategy_read_only_allowed",
                 risk=risk,
+                metadata={"registry_resource_scope": resource_scope},
             )
         if risk == "write":
+            if resource_scope == "ephemeral":
+                return RiskStrategyDecision(
+                    action="allow",
+                    reason="risk_strategy_write_ephemeral_allowed",
+                    risk=risk,
+                    metadata={
+                        "registry_resource_scope": resource_scope,
+                        "approval_skipped_by_resource_scope": True,
+                    },
+                )
             return RiskStrategyDecision(
                 action="defer",
                 reason="risk_strategy_write_requires_approval",
                 risk=risk,
                 approval_scope="tool_call",
                 user_prompt="This write operation needs explicit approval before execution.",
+                metadata={"registry_resource_scope": resource_scope},
             )
         if risk == "external-side-effect":
             return RiskStrategyDecision(
@@ -113,6 +130,7 @@ class DefaultToolRiskStrategy:
                 risk=risk,
                 approval_scope="tool_call",
                 user_prompt="This external side effect needs explicit approval before execution.",
+                metadata={"registry_resource_scope": resource_scope},
             )
         return RiskStrategyDecision(
             action="defer",
@@ -120,4 +138,5 @@ class DefaultToolRiskStrategy:
             risk=risk,
             approval_scope="tool_call",
             user_prompt="This tool has unknown execution risk and needs approval.",
+            metadata={"registry_resource_scope": resource_scope},
         )
