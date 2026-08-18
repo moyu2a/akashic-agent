@@ -144,6 +144,21 @@ def test_non_task_execution_write_external_and_unknown_require_approval() -> Non
     assert write.metadata["approval_scope"] == "tool_call"
 
 
+def test_write_with_ephemeral_scope_is_allowed_without_approval() -> None:
+    decision = ToolInvocationPolicyEngine().evaluate(
+        ToolInvocationContext(
+            tool_name="update_ui_state",
+            registry_risk="write",
+            registry_resource_scope="ephemeral",
+        )
+    )
+
+    assert decision.action == "allow"
+    assert decision.reason == "risk_strategy_write_ephemeral_allowed"
+    assert decision.metadata["approval_skipped_by_resource_scope"] is True
+    assert decision.metadata["resource_scope"] == "ephemeral"
+
+
 def test_passive_read_only_shell_capability_requires_approval() -> None:
     decision = ToolInvocationPolicyEngine().evaluate(
         ToolInvocationContext(
@@ -236,6 +251,23 @@ def test_task_execution_work_defers_write_shell_external_and_unknown() -> None:
     assert unknown.action == "defer"
     assert write.reason == "tool_invocation_task_execution_authorization_required"
     assert write.metadata["durable_transition"] == "waiting_authorization"
+
+
+def test_task_execution_work_allows_write_with_ephemeral_scope() -> None:
+    decision = ToolInvocationPolicyEngine().evaluate(
+        ToolInvocationContext(
+            tool_name="update_ui_state",
+            registry_risk="write",
+            registry_resource_scope="ephemeral",
+            source="task_execution",
+            task_execution_active=True,
+            task_execution_phase="work",
+        )
+    )
+
+    assert decision.action == "allow"
+    assert decision.reason == "tool_invocation_task_execution_write_ephemeral_allowed"
+    assert decision.metadata["approval_skipped_by_resource_scope"] is True
 
 
 def test_task_execution_unregistered_and_destructive_precedence() -> None:

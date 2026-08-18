@@ -249,6 +249,7 @@ def test_registry_returns_invocation_metadata_for_registered_tool() -> None:
     assert metadata == {
         "registered": True,
         "registry_risk": "read-only",
+        "resource_scope": "unknown",
         "registry_capabilities": frozenset({"dummy.read"}),
         "recovery_ref": None,
         "pollable": False,
@@ -264,6 +265,7 @@ def test_registry_returns_closed_metadata_for_missing_tool() -> None:
     assert metadata == {
         "registered": False,
         "registry_risk": "unknown",
+        "resource_scope": "unknown",
         "registry_capabilities": frozenset(),
         "recovery_ref": None,
         "pollable": False,
