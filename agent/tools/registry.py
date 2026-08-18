@@ -70,6 +70,7 @@ def _with_progress_description(schema: dict[str, Any], tool: Tool) -> dict[str, 
 @dataclass
 class ToolMeta:
     risk: str = "unknown"
+    resource_scope: str = "unknown"
     always_on: bool = False
     # 可选：3–10 词短语，补充工具名和描述中没有的别名或口语化表达。
     # 不需要重复名称或描述里已有的词——搜索后端自动索引 name + description。
@@ -95,6 +96,7 @@ class ToolDocument:
     name: str
     description: str
     risk: str
+    resource_scope: str
     always_on: bool
     search_hint: str | None
     non_lru: bool
@@ -113,6 +115,7 @@ class ToolDocument:
             name=tool.name,
             description=tool.description,
             risk=meta.risk,
+            resource_scope=meta.resource_scope,
             always_on=meta.always_on,
             search_hint=meta.search_hint,
             non_lru=meta.non_lru,
@@ -146,6 +149,7 @@ class ToolRegistry:
         tool: Tool,
         *,
         risk: str = "unknown",
+        resource_scope: str = "unknown",
         always_on: bool = False,
         search_hint: str | None = None,
         non_lru: bool = False,
@@ -165,6 +169,7 @@ class ToolRegistry:
             raise ValueError("tool capabilities must be non-empty strings")
         meta = ToolMeta(
             risk=risk,
+            resource_scope=resource_scope,
             always_on=always_on,
             search_hint=search_hint,
             non_lru=non_lru,
@@ -246,12 +251,19 @@ class ToolRegistry:
         """Return a defensive snapshot for runtime access decisions."""
         return {name: meta.risk for name, meta in self._metadata.items()}
 
+    def get_resource_scopes_by_name(self) -> dict[str, str]:
+        """Return a defensive snapshot for resource-scope-based governance."""
+        return {name: meta.resource_scope for name, meta in self._metadata.items()}
+
     def get_invocation_metadata(self, name: str) -> dict[str, object]:
         """Return the registry metadata needed by invocation-time policy."""
         meta = self._metadata.get(name)
         return {
             "registered": name in self._tools,
             "registry_risk": meta.risk if meta is not None else "unknown",
+            "resource_scope": (
+                meta.resource_scope if meta is not None else "unknown"
+            ),
             "registry_capabilities": (
                 frozenset(meta.capabilities) if meta is not None else frozenset()
             ),

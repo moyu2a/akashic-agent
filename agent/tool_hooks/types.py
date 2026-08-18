@@ -26,6 +26,7 @@ class ToolExecutionRequest:
     tool_batch_index: int = 0
     registered: bool = True
     registry_risk: str = "unknown"
+    registry_resource_scope: str = "unknown"
     registry_capabilities: frozenset[str] = field(default_factory=frozenset)
     task_execution_active: bool = False
     task_execution_phase: str = ""

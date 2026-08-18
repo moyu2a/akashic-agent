@@ -382,6 +382,8 @@ class AgentLoop:
             task_plan_service=deps.task_plan_service,
             task_execution_coordinator=deps.task_execution_coordinator,
             optimization=config.optimization,
+            tool_governance_mode=config.tool_governance_mode,
+            tool_governance_timeout_ms=config.tool_governance_timeout_ms,
         )
 
         # 3. 最后串 passive prepare / execute / commit 主链。
@@ -419,6 +421,8 @@ class AgentLoop:
                 outbound_port=outbound_port,
                 history_window=config.memory.keep_count,
                 optimization=config.optimization,
+                tool_governance_mode=config.tool_governance_mode,
+                tool_governance_timeout_ms=config.tool_governance_timeout_ms,
             )
         )
         self._agent_core = agent_core

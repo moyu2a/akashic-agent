@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from collections.abc import Sequence
 from typing import Any, Awaitable, Callable, Protocol
 
@@ -54,11 +55,15 @@ class ToolExecutor:
         policy_engine: ToolInvocationPolicy | None = None,
         approval_runtime: ToolApprovalRuntime | None = None,
         audit_ledger_store: ToolAuditLedgerStore | None = None,
+        governance_mode: str = "unified",
+        governance_timeout_ms: int = 500,
     ) -> None:
         self._hooks = list(hooks or [])
         self._policy_engine = policy_engine or ToolInvocationPolicyEngine()
         self._approval_runtime = approval_runtime
         self._audit_ledger_store = audit_ledger_store
+        self._governance_mode = _normalize_governance_mode(governance_mode)
+        self._governance_timeout_ms = max(0, int(governance_timeout_ms))
 
     def add_hooks(self, hooks: Sequence[ToolHook]) -> None:
         self._hooks.extend(hooks)
@@ -139,9 +144,7 @@ class ToolExecutor:
                 post_hook_trace=post_trace,
             )
 
-        policy_decision = self._policy_engine.evaluate(
-            _build_policy_context(request, final_arguments)
-        )
+        policy_decision = self._evaluate_policy_decision(request, final_arguments)
         policy_trace = _policy_trace(request, policy_decision)
         if policy_decision.action == "deny":
             return ToolExecutionResult(
@@ -561,11 +564,128 @@ class ToolExecutor:
                         "resource_decision": str(
                             policy_decision.metadata.get("resource_decision") or ""
                         ),
-                    },
-                ),
-                logger,
-            )
+                    "resource_scope": str(
+                        policy_decision.metadata.get("resource_scope") or ""
+                    ),
+                    "governance_degraded": bool(
+                        policy_decision.metadata.get("governance_degraded") or False
+                    ),
+                    "governance_pipeline_mode": str(
+                        policy_decision.metadata.get("governance_pipeline_mode") or ""
+                    ),
+                },
+            ),
+            logger,
+        )
         return trace
+
+    def _evaluate_policy_decision(
+        self,
+        request: ToolExecutionRequest,
+        final_arguments: dict[str, Any],
+    ) -> ToolInvocationDecision:
+        if self._governance_mode == "legacy_compat":
+            return self._legacy_policy_decision(request, final_arguments)
+        context = _build_policy_context(request, final_arguments)
+        start = time.perf_counter()
+        try:
+            decision = self._policy_engine.evaluate(context)
+        except Exception as exc:
+            return self._degraded_policy_decision(
+                request=request,
+                final_arguments=final_arguments,
+                fallback_reason="tool_governance_policy_exception",
+                fallback_error=exc,
+            )
+        elapsed_ms = (time.perf_counter() - start) * 1000.0
+        if elapsed_ms > self._governance_timeout_ms:
+            return self._degraded_policy_decision(
+                request=request,
+                final_arguments=final_arguments,
+                fallback_reason="tool_governance_policy_timeout",
+                elapsed_ms=elapsed_ms,
+            )
+        return decision
+
+    def _legacy_policy_decision(
+        self,
+        request: ToolExecutionRequest,
+        final_arguments: dict[str, Any],
+    ) -> ToolInvocationDecision:
+        risk = request.registry_risk or "unknown"
+        metadata = _policy_metadata(
+            request=request,
+            final_arguments=final_arguments,
+            extra_metadata={
+                "governance_pipeline_mode": "legacy_compat",
+                "governance_degraded": False,
+            },
+        )
+        if not request.registered:
+            return ToolInvocationDecision(
+                action="deny",
+                reason="tool_invocation_unregistered_tool",
+                risk=risk,
+                metadata=metadata,
+            )
+        if risk == "destructive":
+            return ToolInvocationDecision(
+                action="deny",
+                reason="tool_invocation_destructive_denied",
+                risk=risk,
+                metadata=metadata,
+            )
+        if risk == "read-only":
+            return ToolInvocationDecision(
+                action="allow",
+                reason="legacy_governance_read_only_allowed",
+                risk=risk,
+                metadata=metadata,
+            )
+        return ToolInvocationDecision(
+            action="defer",
+            reason="legacy_governance_side_effect_deferred",
+            risk=risk,
+            metadata=metadata,
+        )
+
+    def _degraded_policy_decision(
+        self,
+        *,
+        request: ToolExecutionRequest,
+        final_arguments: dict[str, Any],
+        fallback_reason: str,
+        fallback_error: BaseException | None = None,
+        elapsed_ms: float | None = None,
+    ) -> ToolInvocationDecision:
+        risk = request.registry_risk or "unknown"
+        action = "allow" if risk == "read-only" else "defer"
+        reason = (
+            "tool_governance_degraded_read_only_allowed"
+            if action == "allow"
+            else "tool_governance_degraded_side_effect_deferred"
+        )
+        metadata = _policy_metadata(
+            request=request,
+            final_arguments=final_arguments,
+            extra_metadata={
+                "governance_degraded": True,
+                "governance_degraded_reason": fallback_reason,
+                "governance_degraded_error": (
+                    type(fallback_error).__name__ if fallback_error is not None else ""
+                ),
+                "governance_degraded_elapsed_ms": (
+                    round(elapsed_ms, 3) if elapsed_ms is not None else None
+                ),
+                "governance_pipeline_mode": self._governance_mode,
+            },
+        )
+        return ToolInvocationDecision(
+            action=action,
+            reason=reason,
+            risk=risk,
+            metadata=metadata,
+        )
 
     async def preflight(
         self,
@@ -745,6 +865,44 @@ def _policy_source(request: ToolExecutionRequest) -> ToolInvocationSource:
     return "passive"
 
 
+def _normalize_governance_mode(value: str) -> str:
+    normalized = str(value or "unified").strip().casefold()
+    if normalized in {"unified", "legacy", "legacy_compat"}:
+        return "legacy_compat" if normalized == "legacy" else normalized
+    raise ValueError(f"unsupported governance mode: {value}")
+
+
+def _policy_metadata(
+    *,
+    request: ToolExecutionRequest,
+    final_arguments: dict[str, Any],
+    extra_metadata: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    metadata = _base_metadata_for_policy(
+        request=request,
+        final_arguments=final_arguments,
+    )
+    if extra_metadata:
+        metadata.update(extra_metadata)
+    return metadata
+
+
+def _base_metadata_for_policy(
+    *,
+    request: ToolExecutionRequest,
+    final_arguments: dict[str, Any],
+) -> dict[str, Any]:
+    return {
+        "tool_name": request.tool_name,
+        "risk": request.registry_risk or "unknown",
+        "resource_scope": request.registry_resource_scope or "unknown",
+        "source": _policy_source(request),
+        "session_key": request.session_key,
+        "request_id": request.call_id,
+        "arguments": dict(final_arguments),
+    }
+
+
 def _public_final_arguments(
     request: ToolExecutionRequest,
     arguments: dict[str, Any],
@@ -794,6 +952,7 @@ def _build_policy_context(
         arguments=arguments,
         registered=request.registered,
         registry_risk=request.registry_risk,
+        registry_resource_scope=request.registry_resource_scope,
         capabilities=request.registry_capabilities,
         source=_policy_source(request),
         session_key=request.session_key,
@@ -806,6 +965,7 @@ def _build_policy_context(
             "chat_id": request.chat_id,
             "tool_batch_index": request.tool_batch_index,
             "resource_roots": tuple(request.resource_roots),
+            "resource_scope": request.registry_resource_scope,
         },
     )
 

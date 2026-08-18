@@ -400,15 +400,17 @@ async def test_agent_loop_afterstep_fires_with_turn_lifecycle_wiring(tmp_path: P
 
 
 @pytest.mark.asyncio
-async def test_retrieval_pipeline_defaults_safe_version_mode_off() -> None:
+async def test_retrieval_pipeline_enables_safe_version_governance_by_default() -> None:
     engine = _RecordingMemoryEngine()
     pipeline = DefaultMemoryRetrievalPipeline(MemoryServices(engine=engine))
 
     result = await pipeline.retrieve(_retrieval_request("请记得我的测试偏好"))
 
-    assert "safe_version_governed_mode" not in engine.requests[-1].hints
-    assert "safe_version_governed_replace_allowed" not in engine.requests[-1].hints
-    assert "safe_version_governed_mode" not in result.metadata
+    assert engine.requests[-1].hints["safe_version_governed_mode"] == "replace"
+    assert engine.requests[-1].hints["safe_version_governed_replace_allowed"] is True
+    assert engine.requests[-1].hints["safe_version_answer_guidance_enabled"] is True
+    assert engine.requests[-1].hints["safe_version_answer_prompt_variant"] == "guided"
+    assert result.metadata["safe_version_governed_mode"] == "replace"
 
 
 @pytest.mark.asyncio

@@ -41,6 +41,7 @@ class TaskExecutionRiskPolicy:
         tool_name: str,
         registered: bool,
         registry_risk: str,
+        registry_resource_scope: str = "unknown",
         registry_capabilities: frozenset[str] | None = None,
     ) -> TaskExecutionRiskDecision | None:
         if contract is None or not contract.active or contract.phase != "work":
@@ -56,6 +57,7 @@ class TaskExecutionRiskPolicy:
                 tool_name=tool_name,
                 registered=registered,
                 registry_risk=registry_risk,
+                registry_resource_scope=registry_resource_scope,
                 capabilities=registry_capabilities or frozenset(),
                 source="task_execution",
                 task_execution_active=True,
