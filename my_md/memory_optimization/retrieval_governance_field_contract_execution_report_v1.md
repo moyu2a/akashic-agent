@@ -10,6 +10,8 @@ Implemented changes:
 
 - `score_threshold` now remains semantic-lane-only in the documented contract.
 - `retrieval_plan` is now a real runtime object and appears in retriever trace.
+- The main `Retriever.retrieve_with_trace()` path now performs lane routing,
+  RRF fusion, and candidate governance in that order.
 - `candidate_governance` now has explicit decision-table fields.
 - `protected_ids` are eval-only in effect.
 - `uncertain_candidates` are mapped to `uncertain_evidence_ids`.
@@ -23,9 +25,11 @@ Implemented changes:
   - Kept legacy compatibility with `drop_risks` / `protected_expected_ids`.
   - Eval-only protected ids now require `eval_mode=True`.
   - Governance traces now expose allowed, uncertain, and dropped candidate groups.
+  - Added post-RRF `apply_candidate_governance()`.
 
 - `memory2/retriever.py`
   - `retrieve_with_trace()` now builds and records `retrieval_plan`.
+  - Candidate governance is applied after `fused_items` are produced.
   - RRF fused candidates now carry `retrieval.fused_rank`, `retrieval.rrf_score`,
     `retrieval.lane_hits`, `retrieval.lane_ranks`, `retrieval.lane_scores`, and
     `retrieval.lane_submitted_counts`.

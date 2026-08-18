@@ -14,6 +14,8 @@ from typing import cast
 from memory2.store import MemoryStore2
 from memory2.embedder import Embedder
 from memory2.retrieval_governance import (
+    CandidateGovernancePolicy,
+    apply_candidate_governance,
     apply_retrieval_route,
     build_retrieval_plan,
 )
@@ -58,6 +60,7 @@ class Retriever:
         high_inject_delta: float = 0.15,
         hotness_alpha: float = 0.20,
         hotness_half_life_days: float = 14.0,
+        candidate_governance: CandidateGovernancePolicy | None = None,
     ) -> None:
         self._store = store
         self._embedder = embedder
@@ -82,6 +85,7 @@ class Retriever:
         self._high_inject_delta = max(0.0, float(high_inject_delta))
         self._hotness_alpha = max(0.0, min(1.0, float(hotness_alpha)))
         self._hotness_half_life_days = max(1.0, float(hotness_half_life_days))
+        self._candidate_governance = candidate_governance or CandidateGovernancePolicy()
 
     # 统一检索入口：recall_memory 和被动预检索都复用这条查库路径。
     async def retrieve(
@@ -138,6 +142,7 @@ class Retriever:
             aux_queries=aux_queries,
             score_threshold=score_threshold,
             keyword_enabled=keyword_enabled,
+            candidate_governance=self._candidate_governance,
         )
         semantic_items, keyword_items = await self._retrieve_semantic_keyword_lanes(
             query,
@@ -152,7 +157,9 @@ class Retriever:
             time_end=time_end,
             keyword_enabled=keyword_enabled,
         )
-        decision = plan.to_routing_decision()
+        decision = plan.to_routing_decision().with_candidate_governance(
+            CandidateGovernancePolicy(enabled=False)
+        )
         provenance_items, graph_items = self._retrieve_evidence_lanes(
             query,
             decision_graph_enabled=decision.graph_enabled,
@@ -174,8 +181,21 @@ class Retriever:
         }
         _accepted, trace = apply_retrieval_route(decision, candidates_by_lane)
         accepted_by_lane = cast(dict[str, list[dict]], trace["accepted_items_by_lane"])
-        items = _rrf_merge_lanes(accepted_by_lane, top_n=actual_top_k)
+        fused_items = _rrf_merge_lanes(accepted_by_lane, top_n=actual_top_k)
+        items, governance_trace = apply_candidate_governance(
+            fused_items,
+            plan.candidate_governance,
+        )
         trace["retrieval_plan"] = plan.to_dict()
+        trace["fused_items"] = fused_items
+        trace["post_rrf_candidate_governance"] = governance_trace
+        trace["final_allowed_candidates"] = governance_trace["allowed_candidates"]
+        trace["final_uncertain_candidates"] = governance_trace[
+            "uncertain_candidates"
+        ]
+        trace["final_dropped_candidates"] = governance_trace[
+            "dropped_candidates"
+        ]
         trace["candidate_drop_counts"] = dict(
             cast(dict[str, int], trace["dropped_by_reason"])
         )

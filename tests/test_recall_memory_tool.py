@@ -16,6 +16,7 @@ from agent.provider import LLMProvider, LLMResponse
 from agent.tools.recall_memory import RecallMemoryTool
 from plugins.default_memory.engine import DefaultMemoryEngine
 from memory2.embedder import Embedder
+from memory2.retrieval_governance import CandidateGovernancePolicy
 from memory2.retriever import Retriever
 from memory2.store import MemoryStore2
 
@@ -491,6 +492,72 @@ async def test_retriever_retrieve_with_trace_governs_all_lanes_before_rrf() -> N
     assert trace["candidate_drop_counts"] == trace["dropped_by_reason"]
     assert set(trace["input_counts"]) == {"semantic", "keyword", "provenance", "graph"}
     assert set(item["id"] for item in items) >= {"semantic1", "keyword1", "prov1"}
+
+
+@pytest.mark.asyncio
+async def test_retriever_applies_candidate_governance_after_rrf() -> None:
+    store = _FusionStore(
+        vector_groups=[
+            [
+                {
+                    "id": "active",
+                    "memory_type": "event",
+                    "summary": "当前支付方案",
+                    "score": 0.95,
+                    "source_ref": "cli:local:1",
+                    "scope_channel": "cli",
+                    "scope_chat_id": "local",
+                },
+                {
+                    "id": "conflict",
+                    "memory_type": "event",
+                    "summary": "冲突支付方案",
+                    "score": 0.90,
+                    "source_ref": "cli:local:2",
+                    "scope_channel": "cli",
+                    "scope_chat_id": "local",
+                    "conflict": True,
+                },
+                {
+                    "id": "old",
+                    "memory_type": "event",
+                    "summary": "旧支付方案",
+                    "score": 0.85,
+                    "source_ref": "cli:local:3",
+                    "scope_channel": "cli",
+                    "scope_chat_id": "local",
+                    "status": "superseded",
+                },
+            ]
+        ],
+        keyword_hits=[],
+    )
+    retriever = Retriever(
+        cast(MemoryStore2, store),
+        cast(Embedder, _StaticEmbedder()),
+        candidate_governance=CandidateGovernancePolicy(enabled=True, mode="tiered"),
+    )
+
+    items, trace = await retriever.retrieve_with_trace(
+        "精确找一下支付方案",
+        top_k=3,
+        scope_channel="cli",
+        scope_chat_id="local",
+    )
+
+    assert [item["id"] for item in items] == ["active"]
+    assert [item["id"] for item in trace["fused_items"]] == [
+        "active",
+        "conflict",
+        "old",
+    ]
+    post_trace = trace["post_rrf_candidate_governance"]
+    assert [item["id"] for item in post_trace["uncertain_candidates"]] == [
+        "conflict"
+    ]
+    assert [item["candidate_id"] for item in post_trace["dropped_candidates"]] == [
+        "old"
+    ]
 
 
 @pytest.mark.asyncio

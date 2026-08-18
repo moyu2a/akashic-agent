@@ -473,6 +473,85 @@ def apply_retrieval_route(
     return accepted, trace
 
 
+def apply_candidate_governance(
+    candidates: Sequence[Mapping[str, Any]],
+    policy: CandidateGovernancePolicy,
+) -> tuple[list[dict[str, Any]], dict[str, object]]:
+    """Apply candidate governance to already RRF-fused candidates.
+
+    Lane routing and RRF are intentionally complete before this function runs.
+    The returned list contains only answer-eligible candidates; review-only
+    candidates remain in the trace as ``uncertain_candidates``.
+    """
+
+    candidate_risk_tiers: list[dict[str, object]] = []
+    allowed_candidates: list[dict[str, Any]] = []
+    uncertain_candidates: list[dict[str, Any]] = []
+    dropped_candidates: list[dict[str, object]] = []
+    dropped_risks_by_reason: dict[str, int] = {}
+    protected_risky_candidate_count = 0
+    accepted_risky_candidate_count = 0
+
+    for candidate in candidates:
+        item = dict(candidate)
+        if not policy.enabled:
+            allowed_candidates.append(item)
+            continue
+
+        tier_record = dict(classify_candidate_risk_tier(item, policy))
+        candidate_risk_tiers.append(tier_record)
+        risks = tuple(str(risk) for risk in tier_record["risks"])
+        candidate_id = _candidate_id(item)
+        protected = candidate_id in set(policy.protected_ids)
+        tier = str(tier_record["tier"])
+
+        if tier == "delete":
+            fatal = any(risk in policy.fatal_risks for risk in risks)
+            if protected and policy.eval_mode and not fatal:
+                item["candidate_risk_tier"] = "downgrade"
+                item["candidate_governance_action"] = "downgrade"
+                item["candidate_risks"] = risks
+                allowed_candidates.append(item)
+                protected_risky_candidate_count += 1
+                continue
+            dropped_candidates.append(
+                {
+                    **tier_record,
+                    "action": "delete",
+                }
+            )
+            for risk in risks:
+                _count(dropped_risks_by_reason, risk)
+            continue
+
+        item["candidate_risk_tier"] = tier
+        item["candidate_governance_action"] = tier
+        item["candidate_risks"] = risks
+        if risks:
+            accepted_risky_candidate_count += 1
+        if tier == "requires_review":
+            uncertain_candidates.append(item)
+        else:
+            allowed_candidates.append(item)
+
+    return allowed_candidates, {
+        "candidate_governance_enabled": policy.enabled,
+        "candidate_governance_mode": policy.mode,
+        "candidate_governance": policy.to_dict(),
+        "candidate_risk_tiers": candidate_risk_tiers,
+        "allowed_candidates": allowed_candidates,
+        "uncertain_candidates": uncertain_candidates,
+        "dropped_candidates": dropped_candidates,
+        "dropped_risks_by_reason": dropped_risks_by_reason,
+        "protected_risky_candidate_count": protected_risky_candidate_count,
+        "accepted_risky_candidate_count": accepted_risky_candidate_count,
+        "input_count": len(candidates),
+        "allowed_count": len(allowed_candidates),
+        "uncertain_count": len(uncertain_candidates),
+        "dropped_count": len(dropped_candidates),
+    }
+
+
 def classify_candidate_risks(candidate: Mapping[str, Any]) -> tuple[str, ...]:
     risks: list[str] = []
     if _is_forbidden_candidate(candidate):

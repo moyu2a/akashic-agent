@@ -17,6 +17,7 @@ from memory2.retrieval_experiments import (
 )
 from memory2.retrieval_governance import (
     CandidateGovernancePolicy,
+    apply_candidate_governance,
     apply_retrieval_route,
     build_retrieval_plan,
     build_retrieval_routing_decision,
@@ -170,6 +171,48 @@ def test_allow_threshold_drops_candidate_with_low_fused_rank() -> None:
 
     assert candidates == []
     assert trace["dropped_risks_by_reason"] == {"low_rrf_rank": 1}
+
+
+def test_post_rrf_candidate_governance_separates_allowed_uncertain_and_dropped() -> None:
+    policy = CandidateGovernancePolicy(enabled=True, mode="tiered")
+    allowed, trace = apply_candidate_governance(
+        [
+            _candidate(
+                "active",
+                retrieval={"fused_rank": 1, "lane_hits": ["semantic"]},
+            ),
+            _candidate(
+                "conflict",
+                conflict=True,
+                retrieval={"fused_rank": 2, "lane_hits": ["semantic", "keyword"]},
+            ),
+            _candidate(
+                "old",
+                status="superseded",
+                retrieval={"fused_rank": 3, "lane_hits": ["semantic"]},
+            ),
+        ],
+        policy,
+    )
+
+    assert [item["id"] for item in allowed] == ["active"]
+    assert [item["id"] for item in trace["uncertain_candidates"]] == ["conflict"]
+    assert [item["candidate_id"] for item in trace["dropped_candidates"]] == ["old"]
+    assert trace["candidate_risk_tiers"] == [
+        {"candidate_id": "active", "tier": "allow", "action": "allow", "risks": ()},
+        {
+            "candidate_id": "conflict",
+            "tier": "requires_review",
+            "action": "requires_review",
+            "risks": ("conflict_candidate",),
+        },
+        {
+            "candidate_id": "old",
+            "tier": "delete",
+            "action": "delete",
+            "risks": ("superseded_candidate",),
+        },
+    ]
 
 
 def test_rrf_merge_lanes_attaches_retrieval_metadata() -> None:
