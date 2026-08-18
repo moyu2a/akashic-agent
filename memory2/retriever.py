@@ -840,6 +840,9 @@ def _rrf_merge_lanes(
     id_to_rrf: dict[str, float] = {}
     id_to_best_score: dict[str, float] = {}
     id_to_lane_hits: dict[str, list[str]] = {}
+    id_to_lane_ranks: dict[str, dict[str, int]] = {}
+    id_to_lane_scores: dict[str, dict[str, float]] = {}
+    lane_submitted_counts = {lane: len(items) for lane, items in items_by_lane.items()}
 
     for lane, items in items_by_lane.items():
         weight = weights.get(lane, 1.0)
@@ -860,6 +863,11 @@ def _rrf_merge_lanes(
                 id_to_best_score.get(item_id, 0.0), _hit_score(item)
             )
             id_to_lane_hits.setdefault(item_id, []).append(lane)
+            id_to_lane_ranks.setdefault(item_id, {})[lane] = index + 1
+            id_to_lane_scores.setdefault(item_id, {})[lane] = _hit_score(
+                item,
+                fallback_key=f"{lane}_score",
+            )
 
     ordered_ids = sorted(
         id_to_rrf,
@@ -872,10 +880,18 @@ def _rrf_merge_lanes(
         reverse=True,
     )
     result: list[dict] = []
-    for item_id in ordered_ids[:top_n]:
+    for fused_index, item_id in enumerate(ordered_ids[:top_n], start=1):
         item = dict(id_to_item[item_id])
         item["rrf_score"] = id_to_rrf[item_id]
         item["lane_hits"] = id_to_lane_hits[item_id]
+        item["retrieval"] = {
+            "fused_rank": fused_index,
+            "rrf_score": id_to_rrf[item_id],
+            "lane_hits": list(id_to_lane_hits[item_id]),
+            "lane_ranks": dict(id_to_lane_ranks.get(item_id, {})),
+            "lane_scores": dict(id_to_lane_scores.get(item_id, {})),
+            "lane_submitted_counts": dict(lane_submitted_counts),
+        }
         result.append(item)
     return result
 

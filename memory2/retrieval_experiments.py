@@ -41,6 +41,9 @@ def rrf_fuse_lanes(
     id_to_lanes: dict[str, list[str]] = {}
     id_to_rrf: dict[str, float] = {}
     id_to_best_score: dict[str, float] = {}
+    id_to_lane_ranks: dict[str, dict[str, int]] = {}
+    id_to_lane_scores: dict[str, dict[str, float]] = {}
+    lane_submitted_counts = {lane.lane_name: len(lane.items) for lane in lanes}
 
     for lane in lanes:
         weight = float(lane_weights.get(lane.lane_name, 1.0))
@@ -59,6 +62,10 @@ def rrf_fuse_lanes(
                 id_to_best_score.get(item_id, 0.0),
                 _item_score(item),
             )
+            id_to_lane_ranks.setdefault(item_id, {})[lane.lane_name] = index + 1
+            id_to_lane_scores.setdefault(item_id, {})[lane.lane_name] = _item_score(
+                item
+            )
 
     ordered = sorted(
         id_to_rrf,
@@ -71,10 +78,18 @@ def rrf_fuse_lanes(
         reverse=True,
     )
     fused: list[dict[str, object]] = []
-    for item_id in ordered[:safe_top_n]:
+    for fused_index, item_id in enumerate(ordered[:safe_top_n], start=1):
         item = dict(id_to_item[item_id])
         item["rrf_score"] = round(id_to_rrf[item_id], 6)
         item["lane_hits"] = id_to_lanes[item_id]
+        item["retrieval"] = {
+            "fused_rank": fused_index,
+            "rrf_score": round(id_to_rrf[item_id], 6),
+            "lane_hits": list(id_to_lanes[item_id]),
+            "lane_ranks": dict(id_to_lane_ranks.get(item_id, {})),
+            "lane_scores": dict(id_to_lane_scores.get(item_id, {})),
+            "lane_submitted_counts": dict(lane_submitted_counts),
+        }
         fused.append(item)
     return fused
 
@@ -112,29 +127,27 @@ def build_provenance_lane(
     scope_chat_id: str = "",
     limit: int = 20,
 ) -> RetrievalLaneResult:
-    query_terms = _terms(query)
-    fuzzy = _contains_fuzzy_reference(query)
     scored: list[tuple[float, str, dict[str, object]]] = []
     for index, item in enumerate(active_items):
         item_id = _hit_id(item)
         source_ref = str(item.get("source_ref") or "").strip()
         if not item_id or not source_ref:
             continue
-        summary_terms = _terms(str(item.get("summary") or ""))
-        overlap = len(query_terms & summary_terms)
         scope_match = (
             bool(scope_channel or scope_chat_id)
             and str(item.get("scope_channel") or "") == str(scope_channel or "")
             and str(item.get("scope_chat_id") or "") == str(scope_chat_id or "")
         )
+        has_structured_position = any(
+            str(item.get(key) or "").strip()
+            for key in ("session_id", "speaker", "turn_index", "message_id")
+        )
         score = 0.0
-        if overlap:
-            score += min(1.0, overlap / max(1, len(query_terms)))
-        if fuzzy:
-            score += 0.35
         if scope_match:
+            score += 0.75
+        if has_structured_position:
             score += 0.25
-        if not (overlap or fuzzy or scope_match):
+        if not (scope_match or has_structured_position):
             continue
         score += max(0.0, 0.1 - index * 0.001)
         if score <= 0.0:

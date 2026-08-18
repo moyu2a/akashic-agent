@@ -61,6 +61,7 @@ def build_tri_candidate_governance_report(
             CandidateGovernancePolicy(
                 enabled=True,
                 protected_expected_ids=expected_ids,
+                eval_mode=True,
             )
         )
         unprotected_decision = baseline_decision.with_candidate_governance(
@@ -72,6 +73,7 @@ def build_tri_candidate_governance_report(
                 enabled=True,
                 mode="tiered",
                 protected_expected_ids=expected_ids,
+                eval_mode=True,
             )
         )
         baseline_candidates, _baseline_trace = apply_retrieval_route(

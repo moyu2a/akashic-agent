@@ -280,22 +280,23 @@ def test_production_governed_contract_uses_tiered_metadata_not_answer_expectatio
     assert contract.profile_name == "chain_tri_governed_answer_contract"
     assert contract.production_safe is True
     assert contract.uses_fixture_answer_expectations is False
-    assert contract.allowed_evidence == ("target", "weak", "conflict", "gap")
+    assert contract.allowed_evidence == ("target", "weak")
     assert contract.likely_relevant_evidence == ("target", "weak")
     assert contract.stale_warning == ("old",)
     assert contract.conflict_warning == ("conflict",)
-    assert contract.active_version == ("target", "weak", "conflict", "gap")
+    assert contract.active_version == ("target", "weak")
     assert contract.forbidden_boundary == ("blocked",)
-    assert contract.allowed_evidence_ids == ("target", "weak", "conflict", "gap")
+    assert contract.allowed_evidence_ids == ("target", "weak")
     assert contract.likely_relevant_evidence_ids == ("target", "weak")
     assert contract.downgrade_ids == ("weak",)
     assert contract.requires_review_ids == ("conflict", "gap")
+    assert contract.uncertain_evidence_ids == ("conflict", "gap")
     assert contract.conflict_warning_ids == ("conflict",)
     assert contract.insufficient_evidence_ids == ("gap",)
-    assert contract.insufficient_evidence_fallback is True
+    assert contract.insufficient_evidence_fallback is False
     assert contract.forbidden_boundary_ids == ("blocked",)
     assert contract.stale_warning_ids == ("old",)
-    assert contract.active_version_ids == ("target", "weak", "conflict", "gap")
+    assert contract.active_version_ids == ("target", "weak")
     assert contract.required_terms == ()
     assert contract.required_term_groups == ()
     assert contract.forbidden_terms == ()

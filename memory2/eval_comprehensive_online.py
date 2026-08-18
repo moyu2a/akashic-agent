@@ -539,6 +539,9 @@ class ComprehensiveOnlineMemoryEngine:
                         ),
                         "downgrade_ids": list(contract.downgrade_ids),
                         "requires_review_ids": list(contract.requires_review_ids),
+                        "uncertain_evidence_ids": list(
+                            contract.uncertain_evidence_ids
+                        ),
                         "stale_warning_ids": list(contract.stale_warning_ids),
                         "conflict_warning_ids": list(contract.conflict_warning_ids),
                         "active_version_ids": list(contract.active_version_ids),
@@ -795,6 +798,7 @@ def governed_tri_trace_for_case(case: EvalCase) -> dict[str, object]:
             enabled=True,
             mode="tiered",
             protected_expected_ids=expected_ids,
+            eval_mode=True,
         )
     )
     governed, trace = apply_retrieval_route(decision, {"semantic": candidates})

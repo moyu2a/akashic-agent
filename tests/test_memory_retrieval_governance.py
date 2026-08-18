@@ -304,6 +304,7 @@ def test_candidate_governance_protects_expected_ids_from_non_fatal_noise_filters
         CandidateGovernancePolicy(
             enabled=True,
             protected_expected_ids=("target",),
+            eval_mode=True,
         )
     )
 

@@ -53,6 +53,7 @@ class ProductionEvidenceContract:
     likely_relevant_evidence_ids: tuple[str, ...]
     downgrade_ids: tuple[str, ...]
     requires_review_ids: tuple[str, ...]
+    uncertain_evidence_ids: tuple[str, ...]
     stale_warning_ids: tuple[str, ...]
     conflict_warning_ids: tuple[str, ...]
     active_version_ids: tuple[str, ...]
@@ -113,24 +114,25 @@ def build_production_governed_tri_evidence_contract(
     )
     trace = trace_info.get("trace", {})
     trace = dict(trace) if isinstance(trace, Mapping) else {}
-    allowed_ids = _string_tuple(trace_info.get("ids", ()))
+    raw_allowed_ids = _string_tuple(trace_info.get("ids", ()))
     tier_records = _tier_records_by_id(trace.get("candidate_risk_tiers", ()))
     by_id = _memory_items_by_id(case)
+    uncertain_ids = _uncertain_candidate_ids(trace, tier_records)
+    uncertain_set = set(uncertain_ids)
+    allowed_ids = tuple(
+        item_id for item_id in raw_allowed_ids if item_id not in uncertain_set
+    )
 
     downgrade_ids = _ids_with_tier(allowed_ids, tier_records, "downgrade")
-    requires_review_ids = _ids_with_tier(
-        allowed_ids,
-        tier_records,
-        "requires_review",
-    )
+    requires_review_ids = uncertain_ids
     conflict_warning_ids = _ids_with_risk(
-        allowed_ids,
+        raw_allowed_ids,
         tier_records,
         "conflict_candidate",
     )
     insufficient_evidence_ids = tuple(
         item_id
-        for item_id in allowed_ids
+        for item_id in raw_allowed_ids
         if _record_has_risk(tier_records.get(item_id, {}), "insufficient_evidence")
         or _item_truthy(by_id.get(item_id, {}), "insufficient_evidence")
     )
@@ -209,12 +211,12 @@ def build_production_governed_tri_evidence_contract(
         likely_relevant_evidence_ids=likely_relevant_ids,
         downgrade_ids=downgrade_ids,
         requires_review_ids=requires_review_ids,
+        uncertain_evidence_ids=uncertain_ids,
         stale_warning_ids=merged_stale_warning_ids,
         conflict_warning_ids=merged_conflict_warning_ids,
         active_version_ids=merged_active_version_ids,
         insufficient_evidence_ids=insufficient_evidence_ids,
-        insufficient_evidence_fallback=not allowed_ids
-        or bool(insufficient_evidence_ids),
+        insufficient_evidence_fallback=not allowed_ids,
         forbidden_boundary_ids=merged_forbidden_boundary_ids,
         deleted_evidence_ids=deleted_ids,
         evidence_summaries=evidence_summaries,
@@ -387,7 +389,8 @@ def render_production_evidence_contract_block(
         f"Evidence Contract: {contract.profile_name}",
         "diagnostic_eval_only=true",
         "production_safe=true",
-        "Use allowed_evidence as the only memory source for the answer; if insufficient_evidence_fallback=true, say the available memory is insufficient.",
+        "Use allowed_evidence as the only memory source for the answer; if allowed_evidence is empty and insufficient_evidence_fallback=true, say the available memory cannot confirm the answer.",
+        "Do not use uncertain_evidence as an answer source; uncertain evidence is audit-only and must not introduce unique facts.",
         "Answer in the same language as the current user question unless the user explicitly requests another language.",
         "Do not copy the language of retrieved evidence merely because evidence is written in that language.",
         "If evidence and question use different languages, answer in the question language and preserve names, dates, and quoted facts as-is.",
@@ -408,6 +411,7 @@ def render_production_evidence_contract_block(
         + ", ".join(contract.likely_relevant_evidence_ids),
         "downgrade_ids: " + ", ".join(contract.downgrade_ids),
         "requires_review_ids: " + ", ".join(contract.requires_review_ids),
+        "uncertain_evidence_ids: " + ", ".join(contract.uncertain_evidence_ids),
         "stale_warning_ids: " + ", ".join(contract.stale_warning_ids),
         "conflict_warning_ids: " + ", ".join(contract.conflict_warning_ids),
         "active_version_ids: " + ", ".join(contract.active_version_ids),
@@ -424,6 +428,29 @@ def render_production_evidence_contract_block(
     for item_id, summary in contract.evidence_summaries:
         lines.append(f"- memory_id={item_id}; summary={summary}")
     return "\n".join(lines)
+
+
+def _uncertain_candidate_ids(
+    trace: Mapping[str, object],
+    tier_records: Mapping[str, Mapping[str, object]],
+) -> tuple[str, ...]:
+    raw = trace.get("uncertain_candidates")
+    ids: list[str] = []
+    if isinstance(raw, (list, tuple)):
+        for item in raw:
+            if isinstance(item, Mapping):
+                item_id = str(item.get("id") or item.get("candidate_id") or "")
+            else:
+                item_id = str(item or "")
+            if item_id:
+                ids.append(item_id)
+    if ids:
+        return _dedupe_ids(ids)
+    return tuple(
+        item_id
+        for item_id, record in tier_records.items()
+        if str(record.get("tier") or "") == "requires_review"
+    )
 
 
 def _summaries_for_ids(

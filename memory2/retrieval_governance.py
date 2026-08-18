@@ -31,6 +31,12 @@ class CandidateGovernancePolicy:
 
     enabled: bool = False
     mode: str = "strict"
+    drop_rules: tuple[str, ...] | None = None
+    downgrade_rules: tuple[str, ...] = _DOWNGRADE_RISKS
+    review_rules: tuple[str, ...] = _REQUIRES_REVIEW_RISKS
+    allow_threshold: int | None = None
+    protected_ids: tuple[str, ...] = ()
+    eval_mode: bool = False
     protected_expected_ids: tuple[str, ...] = ()
     drop_risks: tuple[str, ...] = (
         "forbidden_candidate",
@@ -51,11 +57,39 @@ class CandidateGovernancePolicy:
     def __post_init__(self) -> None:
         if self.mode not in {"strict", "tiered"}:
             raise ValueError(f"unknown candidate governance mode: {self.mode}")
+        explicit_drop_rules = self.drop_rules is not None
+        if explicit_drop_rules:
+            effective_drop_rules = self.drop_rules or ()
+        elif self.mode == "tiered":
+            effective_drop_rules = _DELETE_RISKS
+        else:
+            effective_drop_rules = self.drop_risks
+        object.__setattr__(self, "drop_rules", tuple(effective_drop_rules))
+        if explicit_drop_rules:
+            object.__setattr__(self, "drop_risks", tuple(effective_drop_rules))
+        if explicit_drop_rules and self.fatal_risks == (
+            "forbidden_candidate",
+            "superseded_candidate",
+            "conflict_candidate",
+            "scope_mismatch",
+        ):
+            object.__setattr__(self, "fatal_risks", tuple(effective_drop_rules))
+        protected = self.protected_ids or self.protected_expected_ids
+        if not self.eval_mode:
+            protected = ()
+        object.__setattr__(self, "protected_ids", tuple(protected))
+        object.__setattr__(self, "protected_expected_ids", tuple(protected))
 
     def to_dict(self) -> dict[str, object]:
         return {
             "enabled": self.enabled,
             "mode": self.mode,
+            "drop_rules": list(self.drop_rules),
+            "downgrade_rules": list(self.downgrade_rules),
+            "review_rules": list(self.review_rules),
+            "allow_threshold": self.allow_threshold,
+            "protected_ids": list(self.protected_ids),
+            "eval_mode": self.eval_mode,
             "protected_expected_ids": list(self.protected_expected_ids),
             "drop_risks": list(self.drop_risks),
             "fatal_risks": list(self.fatal_risks),
@@ -155,9 +189,10 @@ def apply_retrieval_route(
     accepted_candidate_risk_tier_counts: dict[str, int] = {}
     tiered_deleted_risks_by_reason: dict[str, int] = {}
     candidate_risk_tiers: list[dict[str, object]] = []
+    dropped_candidates: list[dict[str, object]] = []
     protected_risky_candidate_count = 0
     accepted_risky_candidate_count = 0
-    protected_expected_ids = set(decision.candidate_governance.protected_expected_ids)
+    protected_expected_ids = set(decision.candidate_governance.protected_ids)
 
     for lane, lane_candidates in candidates_by_lane.items():
         if lane not in decision.allowed_lanes or (
@@ -174,19 +209,25 @@ def apply_retrieval_route(
                 _count(dropped_by_reason, "lane_cap")
                 continue
             item = dict(candidate)
-            risks = classify_candidate_risks(item)
+            risks = _candidate_risks_for_policy(item, decision.candidate_governance)
             protected = _candidate_id(item) in protected_expected_ids
 
             if decision.candidate_governance.enabled:
                 mode = decision.candidate_governance.mode
                 if mode == "tiered":
-                    tier_record = dict(classify_candidate_risk_tier(item))
+                    tier_record = dict(
+                        classify_candidate_risk_tier(
+                            item,
+                            decision.candidate_governance,
+                        )
+                    )
                     tier_record["lane"] = lane
                     candidate_risk_tiers.append(tier_record)
                     tier = str(tier_record["tier"])
                     _count(candidate_risk_tier_counts, tier)
                     risks = tuple(str(risk) for risk in tier_record["risks"])
                     if tier == "delete":
+                        dropped_candidates.append(dict(tier_record))
                         for risk in risks:
                             if risk in _DELETE_RISKS:
                                 _count(tiered_deleted_risks_by_reason, risk)
@@ -206,6 +247,15 @@ def apply_retrieval_route(
                         for risk in drop_risks
                     )
                     if drop_risks and (fatal or not protected):
+                        dropped_candidates.append(
+                            {
+                                "candidate_id": _candidate_id(item),
+                                "tier": "delete",
+                                "action": "delete",
+                                "risks": tuple(drop_risks),
+                                "lane": lane,
+                            }
+                        )
                         for risk in drop_risks:
                             _count(dropped_risks_by_reason, risk)
                         continue
@@ -217,12 +267,39 @@ def apply_retrieval_route(
                     raise ValueError(f"unknown candidate governance mode: {mode}")
             else:
                 if decision.require_source_ref and "missing_source_ref" in risks:
+                    dropped_candidates.append(
+                        {
+                            "candidate_id": _candidate_id(item),
+                            "tier": "delete",
+                            "action": "delete",
+                            "risks": ("missing_source_ref",),
+                            "lane": lane,
+                        }
+                    )
                     _count(dropped_by_reason, "missing_source_ref")
                     continue
                 if decision.require_scope_match and "scope_mismatch" in risks:
+                    dropped_candidates.append(
+                        {
+                            "candidate_id": _candidate_id(item),
+                            "tier": "delete",
+                            "action": "delete",
+                            "risks": ("scope_mismatch",),
+                            "lane": lane,
+                        }
+                    )
                     _count(dropped_by_reason, "scope_mismatch")
                     continue
                 if decision.drop_low_confidence and "low_confidence" in risks:
+                    dropped_candidates.append(
+                        {
+                            "candidate_id": _candidate_id(item),
+                            "tier": "delete",
+                            "action": "delete",
+                            "risks": ("low_confidence",),
+                            "lane": lane,
+                        }
+                    )
                     _count(dropped_by_reason, "low_confidence")
                     continue
 
@@ -248,6 +325,15 @@ def apply_retrieval_route(
 
     input_count = sum(len(candidates_by_lane.get(lane, ())) for lane in _LANES)
     output_count = len(accepted)
+    uncertain_candidates = [
+        item
+        for item in accepted
+        if any(
+            risk in _REQUIRES_REVIEW_RISKS
+            for risk in classify_candidate_risks(item)
+        )
+    ]
+    allowed_candidates = [item for item in accepted if item not in uncertain_candidates]
     trace: dict[str, object] = {
         "scene": decision.scene,
         "reason": decision.reason,
@@ -264,6 +350,9 @@ def apply_retrieval_route(
         },
         "accepted_by_lane": accepted_by_lane,
         "accepted_items_by_lane": accepted_items_by_lane,
+        "allowed_candidates": allowed_candidates,
+        "uncertain_candidates": uncertain_candidates,
+        "dropped_candidates": dropped_candidates,
         "dropped_by_reason": dropped_by_reason,
         "candidate_governance_enabled": decision.candidate_governance.enabled,
         "candidate_governance_mode": decision.candidate_governance.mode,
@@ -306,13 +395,27 @@ def classify_candidate_risks(candidate: Mapping[str, Any]) -> tuple[str, ...]:
     return tuple(risks)
 
 
-def classify_candidate_risk_tier(candidate: Mapping[str, Any]) -> dict[str, object]:
+def classify_candidate_risk_tier(
+    candidate: Mapping[str, Any],
+    policy: CandidateGovernancePolicy | None = None,
+) -> dict[str, object]:
     risks = classify_candidate_risks(candidate)
-    if any(risk in _DELETE_RISKS for risk in risks):
+    if policy is not None and _is_below_allow_threshold(candidate, policy):
+        risks = (*risks, "low_rrf_rank")
+    drop_rules = (
+        policy.drop_rules if policy is not None else _DELETE_RISKS
+    )
+    downgrade_rules = (
+        policy.downgrade_rules if policy is not None else _DOWNGRADE_RISKS
+    )
+    review_rules = (
+        policy.review_rules if policy is not None else _REQUIRES_REVIEW_RISKS
+    )
+    if any(risk in drop_rules for risk in risks):
         tier = "delete"
-    elif any(risk in _REQUIRES_REVIEW_RISKS for risk in risks):
+    elif any(risk in review_rules for risk in risks):
         tier = "requires_review"
-    elif any(risk in _DOWNGRADE_RISKS for risk in risks):
+    elif any(risk in downgrade_rules for risk in risks):
         tier = "downgrade"
     else:
         tier = "allow"
@@ -322,6 +425,31 @@ def classify_candidate_risk_tier(candidate: Mapping[str, Any]) -> dict[str, obje
         "action": tier,
         "risks": risks,
     }
+
+
+def _candidate_risks_for_policy(
+    candidate: Mapping[str, Any],
+    policy: CandidateGovernancePolicy,
+) -> tuple[str, ...]:
+    risks = classify_candidate_risks(candidate)
+    if _is_below_allow_threshold(candidate, policy):
+        return (*risks, "low_rrf_rank")
+    return risks
+
+
+def _is_below_allow_threshold(
+    candidate: Mapping[str, Any],
+    policy: CandidateGovernancePolicy,
+) -> bool:
+    if policy.allow_threshold is None:
+        return False
+    rank: object = candidate.get("fused_rank")
+    retrieval = candidate.get("retrieval")
+    if rank is None and isinstance(retrieval, Mapping):
+        rank = retrieval.get("fused_rank")
+    if not isinstance(rank, int):
+        return False
+    return rank > policy.allow_threshold
 
 
 _SCENE_POLICIES: dict[str, dict[str, object]] = {
