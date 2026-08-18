@@ -2175,6 +2175,18 @@ class DefaultReasoner(Reasoner):
                                 "_task_execution_read_only": True,
                             }
                         )
+                    if tool_call.name == "recall_memory":
+                        protected = dict(
+                            execution_context.protected if execution_context is not None else {}
+                        )
+                        protected.update(
+                            {
+                                "_session_key": tool_event_session_key,
+                                "_channel": tool_event_channel,
+                                "_chat_id": tool_event_chat_id,
+                            }
+                        )
+                        execution_context = ToolExecutionContext(protected=protected)
 
                     async def _invoke_tool(
                         tool_name: str, arguments: dict[str, Any]

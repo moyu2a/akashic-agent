@@ -165,9 +165,8 @@ class Retriever:
         decision = plan.to_routing_decision().with_candidate_governance(
             CandidateGovernancePolicy(enabled=False)
         )
-        provenance_items, graph_items = self._retrieve_evidence_lanes(
+        provenance_items = self._retrieve_evidence_lanes(
             query,
-            decision_graph_enabled=decision.graph_enabled,
             memory_types=memory_types,
             scope_channel=scope_channel,
             scope_chat_id=scope_chat_id,
@@ -182,7 +181,6 @@ class Retriever:
                 keyword_items, scope_channel=scope_channel, scope_chat_id=scope_chat_id
             ),
             "provenance": provenance_items,
-            "graph": graph_items,
         }
         _accepted, trace = apply_retrieval_route(decision, candidates_by_lane)
         accepted_by_lane = cast(dict[str, list[dict]], trace["accepted_items_by_lane"])
@@ -207,15 +205,14 @@ class Retriever:
         trace["post_rrf_candidate_drop_counts"] = dict(
             cast(dict[str, int], governance_trace["dropped_risks_by_reason"])
         )
-        trace["graph_used"] = bool(graph_items)
         trace["candidates_by_lane"] = candidates_by_lane
         trace["final_count"] = len(items)
         logger.debug(
-            "memory2 governed retrieve: query=%r scene=%s fused=%d graph=%d",
+            "memory2 governed retrieve: query=%r scene=%s fused=%d provenance=%d",
             query[:60],
             decision.scene,
             len(items),
-            len(graph_items),
+            len(provenance_items),
         )
         return items, trace
 
@@ -303,13 +300,12 @@ class Retriever:
         self,
         query: str,
         *,
-        decision_graph_enabled: bool,
         memory_types: list[str] | None,
         scope_channel: str | None,
         scope_chat_id: str | None,
         require_scope_match: bool,
         top_k: int,
-    ) -> tuple[list[dict], list[dict]]:
+    ) -> list[dict]:
         try:
             active_items, _total = self._store.list_items_for_dashboard(
                 status="active",
@@ -317,7 +313,7 @@ class Retriever:
             )
         except Exception as exc:
             logger.debug("memory2 retrieve: evidence lanes unavailable: %s", exc)
-            return [], []
+            return []
 
         filtered_items = [
             dict(item)
@@ -344,22 +340,7 @@ class Retriever:
             scope_channel=scope_channel,
             scope_chat_id=scope_chat_id,
         )
-        graph_items: list[dict] = []
-        if decision_graph_enabled:
-            from memory2.retrieval_graph_experiments import build_graph_lane
-
-            graph_items = _mark_scope_matches(
-                build_graph_lane(
-                    query,
-                    filtered_items,
-                    scope_channel=scope_channel or "",
-                    scope_chat_id=scope_chat_id or "",
-                    limit=max(20, top_k * 2),
-                ).items,
-                scope_channel=scope_channel,
-                scope_chat_id=scope_chat_id,
-            )
-        return provenance_items, graph_items
+        return provenance_items
 
     async def _retrieve_vector_lanes(
         self,

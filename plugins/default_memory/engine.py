@@ -46,10 +46,6 @@ from memory2.retrieval_experiments import (
     build_provenance_lane,
     build_tri_retrieval_shadow_result,
 )
-from memory2.retrieval_graph_experiments import (
-    build_graph_lane,
-    build_graph_retrieval_shadow_result,
-)
 from memory2.rerank_experiments import (
     RerankShadowResult,
     build_rerank_shadow_result,
@@ -555,9 +551,7 @@ class DefaultMemoryEngine:
                 ],
             )
         self._experiment_runner = experiment_runner
-        self._graph_retrieval_enabled = (
-            default_config.memory_experiments.graph_retrieval_enabled
-        )
+        self._graph_retrieval_enabled = False
         self._graph_retrieval_max_nodes = (
             default_config.memory_experiments.graph_retrieval_max_nodes
         )
@@ -1275,19 +1269,23 @@ class DefaultMemoryEngine:
         hyp1, hyp2 = await asyncio.gather(hyp1_task, hyp2_task)
         aux_queries = [text for text in (hyp1, hyp2) if text]
         types = [request.memory_type] if request.memory_type else None
-        hits = await self._retrieve_related(
-            request.query,
-            memory_types=types,
-            top_k=max(request.limit, _VECTOR_TOP_K),
-            scope_channel=request.scope.channel or None,
-            scope_chat_id=request.scope.chat_id or None,
-            require_scope_match=bool(request.scope.channel and request.scope.chat_id),
-            aux_queries=aux_queries,
-            score_threshold=_VECTOR_SCORE_THRESHOLD,
-            time_start=request.time_start,
-            time_end=request.time_end,
-            keyword_enabled=True,
-        )
+        route_trace: dict[str, object] = {}
+        if self._retriever is None:
+            hits = []
+        else:
+            hits, route_trace = await self._retriever.retrieve_with_trace(
+                request.query,
+                memory_types=types,
+                top_k=max(request.limit, _VECTOR_TOP_K),
+                scope_channel=request.scope.channel or None,
+                scope_chat_id=request.scope.chat_id or None,
+                require_scope_match=bool(request.scope.channel and request.scope.chat_id),
+                aux_queries=aux_queries,
+                score_threshold=_VECTOR_SCORE_THRESHOLD,
+                time_start=request.time_start,
+                time_end=request.time_end,
+                keyword_enabled=True,
+            )
         sliced = list(hits)[: request.limit]
         return ExplicitRetrievalResult(
             hits=sliced,
@@ -1296,6 +1294,8 @@ class DefaultMemoryEngine:
                 "mode": "semantic",
                 "hit_count": len(sliced),
                 "hyde_hypotheses": aux_queries,
+                "scope": self._scope_trace(request.scope),
+                "route_trace": route_trace,
             },
             raw={"hits": sliced},
         )
@@ -1319,9 +1319,17 @@ class DefaultMemoryEngine:
                 "source": self.DESCRIPTOR.name,
                 "mode": "grep",
                 "hit_count": len(hits),
+                "scope": self._scope_trace(request.scope),
             },
             raw={"hits": list(hits)},
         )
+
+    def _scope_trace(self, scope: MemoryScope) -> dict[str, str]:
+        return {
+            "session_key": scope.session_key,
+            "channel": scope.channel,
+            "chat_id": scope.chat_id,
+        }
 
     async def _retrieve_related(
         self,
@@ -1505,6 +1513,11 @@ class DefaultMemoryEngine:
         if not bool(getattr(self, "_graph_retrieval_enabled", False)):
             return
         try:
+            from memory2.retrieval_graph_experiments import (
+                build_graph_lane,
+                build_graph_retrieval_shadow_result,
+            )
+
             top_k = max(1, int(request.top_k or len(baseline_items) or 8))
             max_nodes = max(1, int(getattr(self, "_graph_retrieval_max_nodes", 400)))
             max_hops = max(1, int(getattr(self, "_graph_retrieval_max_hops", 2)))
@@ -1588,6 +1601,8 @@ class DefaultMemoryEngine:
         )
         graph_items: list[dict[str, object]] = []
         if bool(getattr(self, "_graph_retrieval_enabled", False)):
+            from memory2.retrieval_graph_experiments import build_graph_lane
+
             graph_lane = build_graph_lane(
                 request.query,
                 active_items,

@@ -693,9 +693,7 @@ async def test_default_memory_engine_records_tri_retrieval_shadow_without_changi
 
 
 @pytest.mark.asyncio
-async def test_default_memory_engine_records_graph_retrieval_shadow_without_changing_hits() -> (
-    None
-):
+async def test_default_memory_engine_does_not_record_graph_retrieval_shadow() -> None:
     records: list[dict[str, object]] = []
 
     class _Runner:
@@ -738,7 +736,6 @@ async def test_default_memory_engine_records_graph_retrieval_shadow_without_chan
     )
     engine = _make_default_engine(retriever=cast(Any, retriever))
     engine._experiment_runner = _Runner()
-    engine._graph_retrieval_enabled = True
     engine._graph_retrieval_max_nodes = 200
     engine._graph_retrieval_max_hops = 2
     engine._v2_store = store
@@ -753,9 +750,7 @@ async def test_default_memory_engine_records_graph_retrieval_shadow_without_chan
     )
 
     assert [hit.id for hit in result.hits] == ["baseline"]
-    assert records
-    assert records[0]["experimental_result"]["graph_hit_count"] >= 1
-    assert records[0]["experimental_result"]["graph_ids"] == ["g1"]
+    assert records == []
 
 
 @pytest.mark.asyncio

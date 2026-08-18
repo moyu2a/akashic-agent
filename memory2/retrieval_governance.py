@@ -9,7 +9,7 @@ import re
 from typing import Any
 
 
-_LANES = ("semantic", "keyword", "provenance", "graph")
+_LANES = ("semantic", "keyword", "provenance")
 _LOW_CONFIDENCE_PHRASES = (
     "未在对话中明确记录",
     "无法凭记忆确认",
@@ -302,9 +302,7 @@ def apply_retrieval_route(
     protected_expected_ids = set(decision.candidate_governance.protected_ids)
 
     for lane, lane_candidates in candidates_by_lane.items():
-        if lane not in decision.allowed_lanes or (
-            lane == "graph" and not decision.graph_enabled
-        ):
+        if lane not in decision.allowed_lanes:
             _count(dropped_by_reason, "lane_not_allowed", len(lane_candidates))
 
     for lane in lane_order:
@@ -450,7 +448,6 @@ def apply_retrieval_route(
         "max_per_lane": dict(decision.max_per_lane),
         "require_source_ref": decision.require_source_ref,
         "require_scope_match": decision.require_scope_match,
-        "graph_enabled": decision.graph_enabled,
         "drop_low_confidence": decision.drop_low_confidence,
         "input_counts": {
             lane: len(candidates_by_lane.get(lane, ())) for lane in _LANES
@@ -662,13 +659,13 @@ def _is_below_allow_threshold(
 
 _SCENE_POLICIES: dict[str, dict[str, object]] = {
     "fuzzy_reference": {
-        "allowed_lanes": ("semantic", "keyword", "provenance", "graph"),
-        "max_per_lane": {"semantic": 4, "keyword": 3, "provenance": 2, "graph": 2},
+        "allowed_lanes": ("semantic", "keyword", "provenance"),
+        "max_per_lane": {"semantic": 4, "keyword": 3, "provenance": 2},
         "require_source_ref": False,
         "require_scope_match": False,
-        "graph_enabled": True,
+        "graph_enabled": False,
         "drop_low_confidence": True,
-        "reason": "模糊指代需要语义扩展，允许少量图谱邻接候选补全上下文。",
+        "reason": "模糊指代需要语义扩展，允许少量来源候选补全上下文。",
     },
     "tool_preference": {
         "allowed_lanes": ("semantic", "keyword"),

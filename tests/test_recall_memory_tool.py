@@ -488,9 +488,8 @@ async def test_retriever_retrieve_with_trace_governs_all_lanes_before_rrf() -> N
     assert trace["scene"] == "fuzzy_reference"
     assert trace["retrieval_plan"]["query"] == "上次支付方案是什么？"
     assert trace["retrieval_plan"]["scene"] == "fuzzy_reference"
-    assert trace["graph_used"] is True
     assert trace["candidate_drop_counts"] == trace["dropped_by_reason"]
-    assert set(trace["input_counts"]) == {"semantic", "keyword", "provenance", "graph"}
+    assert set(trace["input_counts"]) == {"semantic", "keyword", "provenance"}
     assert set(item["id"] for item in items) >= {"semantic1", "keyword1", "prov1"}
 
 

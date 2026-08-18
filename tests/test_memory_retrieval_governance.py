@@ -22,43 +22,43 @@ def _candidate(
     return {"id": item_id, "summary": item_id, "score": score, **extra}
 
 
-def test_fuzzy_reference_enables_graph_and_keeps_graph_candidates() -> None:
+def test_fuzzy_reference_allows_provenance_candidates() -> None:
     decision = build_retrieval_routing_decision("上次提到的那个方案是什么？")
     candidates, trace = apply_retrieval_route(
         decision,
         {
             "semantic": [_candidate("semantic-1")],
-            "graph": [_candidate("graph-1")],
+            "provenance": [_candidate("provenance-1", source_ref="msg-1")],
         },
     )
 
     assert decision.scene == "fuzzy_reference"
-    assert decision.graph_enabled is True
-    assert "graph" in decision.allowed_lanes
-    assert [item["id"] for item in candidates] == ["semantic-1", "graph-1"]
+    assert decision.graph_enabled is False
+    assert "provenance" in decision.allowed_lanes
+    assert [item["id"] for item in candidates] == ["semantic-1", "provenance-1"]
     assert trace["scene"] == "fuzzy_reference"
-    assert trace["accepted_by_lane"]["graph"] == 1
+    assert trace["accepted_by_lane"]["provenance"] == 1
 
 
-def test_graph_route_query_enables_graph_candidates() -> None:
-    decision = build_retrieval_routing_decision("那个图谱路由怎么接？")
+def test_fuzzy_reference_route_query_keeps_provenance_candidates() -> None:
+    decision = build_retrieval_routing_decision("上次提到的那个方案怎么接？")
     candidates, trace = apply_retrieval_route(
         decision,
         {
             "semantic": [_candidate("semantic-1")],
             "keyword": [_candidate("keyword-1")],
-            "graph": [_candidate("graph-1")],
+            "provenance": [_candidate("provenance-1", source_ref="msg-1")],
         },
     )
 
     assert decision.scene == "fuzzy_reference"
-    assert decision.graph_enabled is True
+    assert decision.graph_enabled is False
     assert [item["id"] for item in candidates] == [
         "semantic-1",
         "keyword-1",
-        "graph-1",
+        "provenance-1",
     ]
-    assert trace["accepted_by_lane"]["graph"] == 1
+    assert trace["accepted_by_lane"]["provenance"] == 1
 
 
 def test_tool_preference_routes_to_semantic_and_keyword_without_graph() -> None:
@@ -118,11 +118,14 @@ def test_partial_conflict_prefers_provenance_and_requires_evidence() -> None:
     assert trace["dropped_by_reason"]["scope_mismatch"] == 1
 
 
-def test_graph_is_rejected_outside_fuzzy_reference() -> None:
+def test_provenance_is_rejected_outside_exact_recall() -> None:
     decision = build_retrieval_routing_decision("精确找一下 Python 版本")
     candidates, trace = apply_retrieval_route(
         decision,
-        {"graph": [_candidate("graph-1")], "keyword": [_candidate("keyword-1")]},
+        {
+            "provenance": [_candidate("provenance-1", source_ref="msg-1")],
+            "keyword": [_candidate("keyword-1")],
+        },
     )
 
     assert decision.scene == "exact_recall"

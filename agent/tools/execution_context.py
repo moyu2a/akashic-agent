@@ -8,6 +8,8 @@ from types import MappingProxyType
 TASK_EXECUTION_PROTECTED_KEYS = frozenset(
     {
         "_session_key",
+        "_channel",
+        "_chat_id",
         "_task_execution_request_id",
         "_task_execution_action",
         "_task_execution_target_step_id",

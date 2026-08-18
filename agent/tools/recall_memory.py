@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, Any, cast
 from zoneinfo import ZoneInfo
 
 from agent.tools.base import Tool
-from core.memory.engine import ExplicitRetrievalRequest
+from core.memory.engine import ExplicitRetrievalRequest, MemoryScope
 
 if TYPE_CHECKING:
     from core.memory.engine import MemoryRetrievalApi
@@ -114,6 +114,9 @@ class RecallMemoryTool(Tool):
         search_mode: str = "semantic",
         time_filter: str = "",
         limit: int = 8,
+        _session_key: str = "",
+        _channel: str = "",
+        _chat_id: str = "",
         **_: Any,
     ) -> str:
         query = (query or "").strip()
@@ -144,9 +147,22 @@ class RecallMemoryTool(Tool):
                 limit=limit,
                 time_start=start,
                 time_end=end,
+                scope=MemoryScope(
+                    session_key=_session_key,
+                    channel=_channel,
+                    chat_id=_chat_id,
+                ),
             )
         )
-        return _build_response(cast(list[_MemoryHit], result.hits))
+        return _build_response(
+            cast(list[_MemoryHit], result.hits),
+            trace=result.trace,
+            scope={
+                "session_key": _session_key,
+                "channel": _channel,
+                "chat_id": _chat_id,
+            },
+        )
 
 
 def _hit_score(item: _MemoryHit, fallback_key: str = "score") -> float:
@@ -196,7 +212,12 @@ def _parse_time_filter(value: str) -> tuple[datetime, datetime] | None:
     return day, day + timedelta(days=1)
 
 
-def _build_response(raw_items: list[_MemoryHit]) -> str:
+def _build_response(
+    raw_items: list[_MemoryHit],
+    *,
+    trace: dict[str, object] | None = None,
+    scope: dict[str, str] | None = None,
+) -> str:
     items: list[_MemoryHit] = []
     for item in raw_items:
         entry: _MemoryHit = {
@@ -214,6 +235,8 @@ def _build_response(raw_items: list[_MemoryHit]) -> str:
         {
             "count": len(items),
             "items": items,
+            "trace": trace or {},
+            "scope": scope or {},
             "citation_required": True,
             "citation_format": "§cited:[id1,id2,...]§",
             "cited_item_ids": cited_item_ids,
