@@ -3467,3 +3467,31 @@
   - `PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -m compileall -q miniroute tests/test_miniroute_v1.py tests/test_miniroute_v2.py` -> passed;
   - V2 validation -> `ok=true`, `total_records=1520`, `high_risk_test_count=35`, `issues=[]`;
   - V1 validation -> `ok=true`, `total_records=1250`, `high_risk_test_count=30`, `issues=[]`.
+## 2026-08-20 记忆召回链路统一进展
+
+- 当前生产召回侧已经统一到同一条治理链路：
+  - `query -> retrieval_plan -> semantic / keyword / provenance 三路召回 -> lane route -> RRF -> candidate_governance -> structured_evidence -> prompt evidence block -> LLM answer`
+- 主动召回 `recall_memory` 已绑定真实运行时 scope：
+  - 从受保护上下文字段读取 `_session_key / _channel / _chat_id`
+  - 不允许模型自己伪造会话边界
+  - 主动召回现在也返回治理 trace
+- 默认记忆引擎已把扩展实验路线封存为非生产路径：
+  - 生产有效 lane 仅保留 `semantic / keyword / provenance`
+  - graph 相关逻辑只保留历史兼容与实验代码，不作为当前有效召回路线
+- 当前验证状态：
+  - `tests/test_memory_retrieval_governance.py` 通过
+  - `tests/test_recall_memory_tool.py tests/test_memory_engine_contract.py` 通过
+  - 相关编译检查通过
+  - feature 分支已提交并推送，`main` 已 fast-forward 到同一提交
+- 当前自建 memory 测试集的维度：
+  - 场景维度：`preference_recall / temporary_memory_pollution / duplicate_memory / conflict_memory / injection_governance_budget / cross_scope_isolation / stale_memory_sleep / provenance_trace / vague_reference`
+  - 阶段维度：`phase1` 到 `phase5` 的子阶段目标
+  - 配置维度：`off / phase1 / phase2 / phase3 / phase4 / phase5 / all`
+  - 合同维度：`scope / memory_items / memory_replacements / query or conversation / should_recall_ids / should_not_recall_ids / expected_trace_features / expected_metric_keys / answer_expectations / profile_expectations`
+- 当前建议的继续方向：
+  - 把三路召回与 `structured_evidence`、`answer_guidance` 的文档合同再整理成一版可复用的评测说明
+  - 如果继续做测试，应优先区分“召回能力”与“回答治理能力”，不要把它们混成一个分数
+
+## 续作提示词
+
+> 继续当前记忆治理工作：先阅读 `progress.md`、`task_plan.md`、`findings.md`，然后沿着已统一的链路检查 `retrieval_plan -> 三路召回 -> RRF -> candidate_governance -> structured_evidence -> prompt` 是否还有文档和测试断言未同步。优先补齐当前自建测试集的场景维度、阶段维度、配置维度和合同维度说明，再确认主动召回 `recall_memory` 的 scope 绑定、trace 返回和生产三路收口是否在文档中完整记录。最后给出下一步可执行的最小增量计划，并在改动前先做审阅再实施。
